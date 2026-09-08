@@ -750,8 +750,8 @@ impl<'a> ModuleLowerer<'a> {
                     },
                     GateRuntimePipeStageKind::TruthyFalsy { truthy, falsy } => {
                         PipeStageKindSpec::TruthyFalsy {
-                            truthy: TruthyFalsyArmSpec::from_hir(truthy),
-                            falsy: TruthyFalsyArmSpec::from_hir(falsy),
+                            truthy: Box::new(TruthyFalsyArmSpec::from_hir(truthy)),
+                            falsy: Box::new(TruthyFalsyArmSpec::from_hir(falsy)),
                         }
                     }
                     GateRuntimePipeStageKind::FanOut { .. } => PipeStageKindSpec::FanOut,
@@ -823,7 +823,7 @@ impl<'a> ModuleLowerer<'a> {
                 validation
                     .into_errors()
                     .into_iter()
-                    .map(LoweringError::Validation),
+                    .map(|error| LoweringError::Validation(Box::new(error))),
             );
             return Err(LoweringErrors::new(self.errors));
         }
@@ -1085,7 +1085,7 @@ impl<'a> ModuleLowerer<'a> {
                     owner: hir_owner,
                     body_expr,
                     span,
-                    blocked,
+                    blocked: Box::new(blocked),
                 });
             }
         }
@@ -1109,13 +1109,13 @@ impl<'a> ModuleLowerer<'a> {
                 .iter()
                 .filter_map(|dependency| self.map_dependency(hir_id, *dependency))
                 .collect::<Vec<_>>();
-            if dependencies.is_empty() {
-                if let Some(body) = signal.body {
-                    dependencies = aivi_hir::collect_signal_dependencies_for_expr(self.hir, body)
-                        .iter()
-                        .filter_map(|dependency| self.map_dependency(hir_id, *dependency))
-                        .collect::<Vec<_>>();
-                }
+            if dependencies.is_empty()
+                && let Some(body) = signal.body
+            {
+                dependencies = aivi_hir::collect_signal_dependencies_for_expr(self.hir, body)
+                    .iter()
+                    .filter_map(|dependency| self.map_dependency(hir_id, *dependency))
+                    .collect::<Vec<_>>();
             }
             // Also include imported workspace signal dependencies.
             // These are tracked in import_item_map by ImportId, not in item_map.
@@ -1238,7 +1238,7 @@ impl<'a> ModuleLowerer<'a> {
                         pipe_expr: stage.pipe_expr,
                         stage_index: stage.stage_index,
                         span: stage.stage_span,
-                        blocked,
+                        blocked: Box::new(blocked),
                     });
                     continue;
                 }
@@ -1314,7 +1314,7 @@ impl<'a> ModuleLowerer<'a> {
                         truthy_stage_index: stage.truthy_stage_index,
                         falsy_stage_index: stage.falsy_stage_index,
                         span: join_spans(stage.truthy_stage_span, stage.falsy_stage_span),
-                        blocked,
+                        blocked: Box::new(blocked),
                     });
                     continue;
                 }
@@ -1417,7 +1417,7 @@ impl<'a> ModuleLowerer<'a> {
                         pipe_expr: segment.pipe_expr,
                         map_stage_index: segment.map_stage_index,
                         span: segment.map_stage_span,
-                        blocked,
+                        blocked: Box::new(blocked),
                     });
                     continue;
                 }
@@ -1544,7 +1544,7 @@ impl<'a> ModuleLowerer<'a> {
                         pipe_expr: stage.pipe_expr,
                         stage_index: stage.stage_index,
                         span: stage.stage_span,
-                        blocked,
+                        blocked: Box::new(blocked),
                     });
                     continue;
                 }
@@ -1652,7 +1652,7 @@ impl<'a> ModuleLowerer<'a> {
                         pipe_expr: node.pipe_expr,
                         start_stage_index: node.start_stage_index,
                         span: node.start_stage_span,
-                        blocked,
+                        blocked: Box::new(blocked),
                     });
                     continue;
                 }
@@ -1746,7 +1746,7 @@ impl<'a> ModuleLowerer<'a> {
                     self.errors.push(LoweringError::BlockedSourceLifecycle {
                         owner: node.owner,
                         span: node.source_span,
-                        blocked,
+                        blocked: Box::new(blocked),
                     });
                     continue;
                 }
@@ -1865,7 +1865,7 @@ impl<'a> ModuleLowerer<'a> {
                         self.errors.push(LoweringError::BlockedDecodeProgram {
                             owner: node.owner,
                             span: node.source_span,
-                            blocked,
+                            blocked: Box::new(blocked),
                         });
                     }
                 }
@@ -1890,7 +1890,7 @@ impl<'a> ModuleLowerer<'a> {
                     self.errors.push(LoweringError::BlockedDecodeProgram {
                         owner: node.owner,
                         span: node.source_span,
-                        blocked,
+                        blocked: Box::new(blocked),
                     });
                     continue;
                 }
@@ -2002,105 +2002,245 @@ impl<'a> ModuleLowerer<'a> {
         pattern_id: HirPatternId,
         subject: Option<&aivi_hir::GateType>,
     ) -> Pattern {
-        let pattern = self.hir.patterns()[pattern_id].clone();
-        let kind = match pattern.kind {
-            aivi_hir::PatternKind::Wildcard => PatternKind::Wildcard,
-            aivi_hir::PatternKind::Binding(binding) => PatternKind::Binding(PatternBinding {
-                binding: binding.binding,
-                name: binding.name.text().into(),
-            }),
-            aivi_hir::PatternKind::Integer(literal) => PatternKind::Integer(literal),
-            aivi_hir::PatternKind::Text(text) => PatternKind::Text(lower_text_pattern(&text)),
-            aivi_hir::PatternKind::Tuple(elements) => {
-                let subject_elements = match subject {
-                    Some(aivi_hir::GateType::Tuple(elements)) => Some(elements.as_slice()),
-                    _ => None,
-                };
-                PatternKind::Tuple(
-                    elements
-                        .iter()
-                        .enumerate()
-                        .map(|(index, element)| {
-                            self.lower_pattern(
-                                *element,
-                                subject_elements.and_then(|elements| elements.get(index)),
-                            )
-                        })
-                        .collect(),
-                )
-            }
-            aivi_hir::PatternKind::List { elements, rest } => {
-                let subject_element = match subject {
-                    Some(aivi_hir::GateType::List(element)) => Some(element.as_ref()),
-                    _ => None,
-                };
-                PatternKind::List {
-                    elements: elements
-                        .iter()
-                        .map(|element| self.lower_pattern(*element, subject_element))
-                        .collect(),
-                    rest: rest.map(|rest| Box::new(self.lower_pattern(rest, subject))),
-                }
-            }
-            aivi_hir::PatternKind::Record(fields) => {
-                let subject_fields = match subject {
-                    Some(aivi_hir::GateType::Record(fields)) => Some(fields.as_slice()),
-                    _ => None,
-                };
-                PatternKind::Record(
-                    fields
-                        .into_iter()
-                        .map(|field| {
-                            let field_subject = subject_fields.and_then(|subject_fields| {
-                                subject_fields
-                                    .iter()
-                                    .find(|candidate| candidate.name.as_str() == field.label.text())
-                                    .map(|field_ty| &field_ty.ty)
-                            });
-                            RecordPatternField {
-                                label: field.label.text().into(),
-                                pattern: self.lower_pattern(field.pattern, field_subject),
-                            }
-                        })
-                        .collect(),
-                )
-            }
-            aivi_hir::PatternKind::Constructor { callee, arguments } => {
-                let hir_field_types = subject.and_then(|subject| {
-                    aivi_hir::case_pattern_field_types(self.hir, &callee, subject)
-                });
-                let field_types = self.pattern_field_types(&callee, subject);
-                PatternKind::Constructor {
-                    callee: PatternConstructor {
-                        display: callee.path.to_string().into_boxed_str(),
-                        reference: self.lower_term_reference(&callee),
-                        field_types: field_types.clone(),
-                    },
-                    arguments: arguments
-                        .into_iter()
-                        .enumerate()
-                        .map(|(index, argument)| {
-                            let field_subject = hir_field_types
-                                .as_ref()
-                                .and_then(|field_types| field_types.get(index));
-                            self.lower_pattern(argument, field_subject)
-                        })
-                        .collect(),
-                }
-            }
-            aivi_hir::PatternKind::UnresolvedName(callee) => PatternKind::Constructor {
-                callee: PatternConstructor {
-                    display: callee.path.to_string().into_boxed_str(),
-                    reference: self.lower_term_reference(&callee),
-                    field_types: self.pattern_field_types(&callee, subject),
-                },
-                arguments: Vec::new(),
+        enum Task {
+            Visit {
+                pattern: HirPatternId,
+                subject: Option<aivi_hir::GateType>,
             },
-        };
-        Pattern {
-            span: pattern.span,
-            kind,
+            Build {
+                span: SourceSpan,
+                kind: BuildKind,
+            },
         }
+
+        enum BuildKind {
+            Tuple {
+                child_count: usize,
+            },
+            List {
+                element_count: usize,
+                has_rest: bool,
+            },
+            Record {
+                labels: Vec<Box<str>>,
+            },
+            Constructor {
+                callee: PatternConstructor,
+                argument_count: usize,
+            },
+        }
+
+        fn take_children(patterns: &mut Vec<Pattern>, count: usize) -> Vec<Pattern> {
+            let start = patterns
+                .len()
+                .checked_sub(count)
+                .expect("pattern build task must follow all of its child visits");
+            patterns.split_off(start)
+        }
+
+        let mut tasks = vec![Task::Visit {
+            pattern: pattern_id,
+            subject: subject.cloned(),
+        }];
+        let mut lowered = Vec::new();
+        while let Some(task) = tasks.pop() {
+            match task {
+                Task::Visit { pattern, subject } => {
+                    let pattern = self.hir.patterns()[pattern].clone();
+                    let span = pattern.span;
+                    match pattern.kind {
+                        aivi_hir::PatternKind::Wildcard => lowered.push(Pattern {
+                            span,
+                            kind: PatternKind::Wildcard,
+                        }),
+                        aivi_hir::PatternKind::Binding(binding) => lowered.push(Pattern {
+                            span,
+                            kind: PatternKind::Binding(PatternBinding {
+                                binding: binding.binding,
+                                name: binding.name.text().into(),
+                            }),
+                        }),
+                        aivi_hir::PatternKind::Integer(literal) => lowered.push(Pattern {
+                            span,
+                            kind: PatternKind::Integer(literal),
+                        }),
+                        aivi_hir::PatternKind::Text(text) => lowered.push(Pattern {
+                            span,
+                            kind: PatternKind::Text(lower_text_pattern(&text)),
+                        }),
+                        aivi_hir::PatternKind::Tuple(elements) => {
+                            let elements = elements.iter().copied().collect::<Vec<_>>();
+                            let subject_elements = match &subject {
+                                Some(aivi_hir::GateType::Tuple(elements)) => {
+                                    Some(elements.as_slice())
+                                }
+                                _ => None,
+                            };
+                            let child_count = elements.len();
+                            tasks.push(Task::Build {
+                                span,
+                                kind: BuildKind::Tuple { child_count },
+                            });
+                            for (index, element) in elements.into_iter().enumerate().rev() {
+                                tasks.push(Task::Visit {
+                                    pattern: element,
+                                    subject: subject_elements
+                                        .and_then(|elements| elements.get(index))
+                                        .cloned(),
+                                });
+                            }
+                        }
+                        aivi_hir::PatternKind::List { elements, rest } => {
+                            let element_subject = match &subject {
+                                Some(aivi_hir::GateType::List(element)) => {
+                                    Some(element.as_ref().clone())
+                                }
+                                _ => None,
+                            };
+                            let element_count = elements.len();
+                            let has_rest = rest.is_some();
+                            tasks.push(Task::Build {
+                                span,
+                                kind: BuildKind::List {
+                                    element_count,
+                                    has_rest,
+                                },
+                            });
+                            if let Some(rest) = rest {
+                                tasks.push(Task::Visit {
+                                    pattern: rest,
+                                    subject: subject.clone(),
+                                });
+                            }
+                            for element in elements.into_iter().rev() {
+                                tasks.push(Task::Visit {
+                                    pattern: element,
+                                    subject: element_subject.clone(),
+                                });
+                            }
+                        }
+                        aivi_hir::PatternKind::Record(fields) => {
+                            let subject_fields = match &subject {
+                                Some(aivi_hir::GateType::Record(fields)) => {
+                                    Some(fields.as_slice())
+                                }
+                                _ => None,
+                            };
+                            let labels = fields
+                                .iter()
+                                .map(|field| field.label.text().into())
+                                .collect();
+                            tasks.push(Task::Build {
+                                span,
+                                kind: BuildKind::Record { labels },
+                            });
+                            for field in fields.into_iter().rev() {
+                                let field_subject = subject_fields.and_then(|subject_fields| {
+                                    subject_fields
+                                        .iter()
+                                        .find(|candidate| {
+                                            candidate.name.as_str() == field.label.text()
+                                        })
+                                        .map(|field_ty| field_ty.ty.clone())
+                                });
+                                tasks.push(Task::Visit {
+                                    pattern: field.pattern,
+                                    subject: field_subject,
+                                });
+                            }
+                        }
+                        aivi_hir::PatternKind::Constructor { callee, arguments } => {
+                            let hir_field_types = subject.as_ref().and_then(|subject| {
+                                aivi_hir::case_pattern_field_types(self.hir, &callee, subject)
+                            });
+                            let lowered_callee = PatternConstructor {
+                                display: callee.path.to_string().into_boxed_str(),
+                                reference: self.lower_term_reference(&callee),
+                                field_types: self.pattern_field_types(&callee, subject.as_ref()),
+                            };
+                            let argument_count = arguments.len();
+                            tasks.push(Task::Build {
+                                span,
+                                kind: BuildKind::Constructor {
+                                    callee: lowered_callee,
+                                    argument_count,
+                                },
+                            });
+                            for (index, argument) in arguments.into_iter().enumerate().rev() {
+                                tasks.push(Task::Visit {
+                                    pattern: argument,
+                                    subject: hir_field_types
+                                        .as_ref()
+                                        .and_then(|field_types| field_types.get(index))
+                                        .cloned(),
+                                });
+                            }
+                        }
+                        aivi_hir::PatternKind::UnresolvedName(callee) => lowered.push(Pattern {
+                            span,
+                            kind: PatternKind::Constructor {
+                                callee: PatternConstructor {
+                                    display: callee.path.to_string().into_boxed_str(),
+                                    reference: self.lower_term_reference(&callee),
+                                    field_types: self
+                                        .pattern_field_types(&callee, subject.as_ref()),
+                                },
+                                arguments: Vec::new(),
+                            },
+                        }),
+                    }
+                }
+                Task::Build { span, kind } => {
+                    let kind = match kind {
+                        BuildKind::Tuple { child_count } => {
+                            PatternKind::Tuple(take_children(&mut lowered, child_count))
+                        }
+                        BuildKind::List {
+                            element_count,
+                            has_rest,
+                        } => {
+                            let mut children = take_children(
+                                &mut lowered,
+                                element_count + usize::from(has_rest),
+                            );
+                            let rest = has_rest.then(|| {
+                                Box::new(
+                                    children
+                                        .pop()
+                                        .expect("list rest visit must precede its build task"),
+                                )
+                            });
+                            PatternKind::List {
+                                elements: children,
+                                rest,
+                            }
+                        }
+                        BuildKind::Record { labels } => {
+                            let children = take_children(&mut lowered, labels.len());
+                            PatternKind::Record(
+                                labels
+                                    .into_iter()
+                                    .zip(children)
+                                    .map(|(label, pattern)| RecordPatternField { label, pattern })
+                                    .collect(),
+                            )
+                        }
+                        BuildKind::Constructor {
+                            callee,
+                            argument_count,
+                        } => PatternKind::Constructor {
+                            callee,
+                            arguments: take_children(&mut lowered, argument_count),
+                        },
+                    };
+                    lowered.push(Pattern { span, kind });
+                }
+            }
+        }
+        debug_assert_eq!(lowered.len(), 1);
+        lowered
+            .pop()
+            .expect("root pattern visit must produce one lowered pattern")
     }
 
     fn pattern_field_types(
@@ -2843,11 +2983,10 @@ impl<'a> ModuleLowerer<'a> {
             suffix_name,
             ..
         } = &binding.metadata
+            && let Some(core_id) = self.find_domain_suffix_member(domain_name, suffix_name)
         {
-            if let Some(core_id) = self.find_domain_suffix_member(domain_name, suffix_name) {
-                self.import_item_map.insert(import, core_id);
-                return Ok(core_id);
-            }
+            self.import_item_map.insert(import, core_id);
+            return Ok(core_id);
         }
 
         // Use a deterministic synthetic origin for Signal imports so that the runtime assembly
@@ -3822,7 +3961,7 @@ impl<'a> ModuleLowerer<'a> {
                                     }
                                     PipeStageKindSpec::TruthyFalsy { truthy, falsy } => {
                                         let mut bodies = children.into_iter();
-                                        crate::expr::PipeStageKind::TruthyFalsy(
+                                        crate::expr::PipeStageKind::TruthyFalsy(Box::new(
                                             PipeTruthyFalsyStage {
                                                 truthy: PipeTruthyFalsyBranch {
                                                     span: truthy.span,
@@ -3847,7 +3986,7 @@ impl<'a> ModuleLowerer<'a> {
                                                         .expect("falsy body should exist"),
                                                 },
                                             },
-                                        )
+                                        ))
                                     }
                                     PipeStageKindSpec::FanOut => {
                                         let map_expr = children[0];
@@ -4071,8 +4210,8 @@ enum PipeStageKindSpec {
         arms: Vec<CaseArmSpec>,
     },
     TruthyFalsy {
-        truthy: TruthyFalsyArmSpec,
-        falsy: TruthyFalsyArmSpec,
+        truthy: Box<TruthyFalsyArmSpec>,
+        falsy: Box<TruthyFalsyArmSpec>,
     },
     FanOut,
 }
@@ -4111,5 +4250,72 @@ impl TruthyFalsyArmSpec {
             payload_subject: branch.payload_subject.clone(),
             result_type: branch.result_type.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod pattern_stack_safety_tests {
+    use std::{mem, thread};
+
+    use aivi_base::{FileId, SourceSpan};
+
+    use super::ModuleLowerer;
+    use crate::{Pattern, PatternKind};
+
+    fn drop_pattern_iteratively(root: Pattern) {
+        let mut work = vec![root];
+        while let Some(mut pattern) = work.pop() {
+            match mem::replace(&mut pattern.kind, PatternKind::Wildcard) {
+                PatternKind::Tuple(elements) => work.extend(elements),
+                PatternKind::List { elements, rest } => {
+                    work.extend(elements);
+                    if let Some(rest) = rest {
+                        work.push(*rest);
+                    }
+                }
+                PatternKind::Record(fields) => {
+                    work.extend(fields.into_iter().map(|field| field.pattern));
+                }
+                PatternKind::Constructor { arguments, .. } => work.extend(arguments),
+                PatternKind::Wildcard
+                | PatternKind::Binding(_)
+                | PatternKind::Integer(_)
+                | PatternKind::Text(_) => {}
+            }
+        }
+    }
+
+    #[test]
+    fn lowers_deep_hir_patterns_without_using_the_rust_call_stack() {
+        thread::Builder::new()
+            .name("core-pattern-lowering-stack-safety".to_owned())
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let mut hir = aivi_hir::Module::new(FileId::new(0));
+                let mut root = hir
+                    .alloc_pattern(aivi_hir::Pattern {
+                        span: SourceSpan::default(),
+                        kind: aivi_hir::PatternKind::Wildcard,
+                    })
+                    .expect("test pattern arena should have capacity");
+                for _ in 0..16_384 {
+                    root = hir
+                        .alloc_pattern(aivi_hir::Pattern {
+                            span: SourceSpan::default(),
+                            kind: aivi_hir::PatternKind::List {
+                                elements: Vec::new(),
+                                rest: Some(root),
+                            },
+                        })
+                        .expect("test pattern arena should have capacity");
+                }
+
+                let mut lowerer = ModuleLowerer::new(&hir);
+                let pattern = lowerer.lower_pattern(root, None);
+                drop_pattern_iteratively(pattern);
+            })
+            .expect("stack-safety test thread should spawn")
+            .join()
+            .expect("typed-core pattern lowering should not overflow the stack");
     }
 }

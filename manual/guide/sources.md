@@ -4,7 +4,7 @@ Pure functions cannot read files, make HTTP requests, or listen for keyboard inp
 
 But a desktop application needs to talk to the outside world. **Sources** are how AIVI bridges that gap. A source is a typed, declared entry point that feeds external data into the reactive graph:
 
-```
+```text
 Outside world  →  @source  →  Signal  →  Pure derivations  →  UI
   (keyboard,      (typed      (reactive    (your functions)    (GTK
    HTTP,           boundary)   graph)                          widgets)
@@ -20,19 +20,23 @@ For the current compiler-and-runtime-backed reference of every built-in source k
 
 Built-in capability handles are now the public external surface for the built-in families that have
 both reactive reads and one-shot commands. Modules such as `aivi.fs`, `aivi.http`, `aivi.env`,
-`aivi.log`, `aivi.stdio`, `aivi.random`, and `aivi.data.json` remain as shared type/helper
-vocabularies, but they no longer expose parallel effectful entry points.
+`aivi.log`, `aivi.stdio`, and `aivi.random` provide shared vocabulary for those handles.
+Some older task helpers, notably [JSON-as-text helpers](/stdlib/json), still exist; the
+capability model is the preferred external-integration path, not a claim that all legacy
+effectful exports have been removed.
 
 Current shape:
 
 ```aivi
+value projectRoot : Text = "/tmp/demo"
+value configPath : Text = "config.json"
+
 @source fs projectRoot
 signal files : FsSource
 
-signal config : Result FsError AppConfig = files.read configPath
-signal changes : FsEvent = files.watch configPath
+signal config : Signal (Result FsError Text) = files.read configPath
 
-value cleanup : Task Text Unit = files.delete "cache.txt"
+value cleanup : Task Text Unit = files.deleteFile "cache.txt"
 ```
 
 In that model:
@@ -51,14 +55,14 @@ The compiler lowers those forms onto the existing built-in source providers, tas
 pure host-context intrinsics:
 
 ```aivi
-signal projectRoot : Text = "/tmp/demo"
+value projectRoot : Text = "/tmp/demo"
 
 @source fs projectRoot
 signal files : FsSource
 
-signal config : Result FsError Text = files.read "config.json"
+signal config : Signal (Result FsError Text) = files.read "config.json"
 
-value cleanup = files.delete "cache.txt"
+value cleanup = files.deleteFile "cache.txt"
 ```
 
 Today this lowering is implemented for `fs`, `http`, `db`, `env`, `log`, `stdio`, `random`,
@@ -117,33 +121,15 @@ value view =
 ## HTTP requests
 
 ```aivi
-type HttpError =
-  | Timeout
-  | DecodeFailure Text
-
 type User = {
     id: Int,
     name: Text
 }
 
-type DecodeMode =
-  | Strict
-  | Permissive
+@source http "https://api.example.com"
+signal api : HttpSource
 
-type Map K V =
-  | EmptyMap
-
-value authHeaders : Map Text Text = EmptyMap
-
-signal apiHost = "https://api.example.com"
-
-@source http.get "{apiHost}/users" with {
-    headers: authHeaders,
-    decode: Strict,
-    retry: 3times,
-    timeout: 5sec
-}
-signal users : Signal (Result HttpError (List User))
+signal users : Signal (HttpResponse (List User)) = api.get "/users"
 
 value view =
     <Window title="Users">

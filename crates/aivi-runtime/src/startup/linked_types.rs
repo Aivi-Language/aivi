@@ -37,7 +37,13 @@ fn stage_subject_value(
                 },
             ),
         },
-        _ => match (&backend.layout(layout).expect("linked runtime layout should exist").kind, value) {
+        _ => match (
+            &backend
+                .layout(layout)
+                .expect("linked runtime layout should exist")
+                .kind,
+            value,
+        ) {
             (LayoutKind::Signal { .. }, RuntimeValue::Signal(_)) => value.clone(),
             (LayoutKind::Signal { .. }, other) => RuntimeValue::Signal(Box::new(other.clone())),
             (_, RuntimeValue::Signal(inner)) => inner.as_ref().clone(),
@@ -51,7 +57,13 @@ fn unwrap_signal_layout_result(
     layout: aivi_backend::LayoutId,
     value: RuntimeValue,
 ) -> RuntimeValue {
-    match (&backend.layout(layout).expect("linked runtime layout should exist").kind, value) {
+    match (
+        &backend
+            .layout(layout)
+            .expect("linked runtime layout should exist")
+            .kind,
+        value,
+    ) {
         (LayoutKind::Signal { .. }, RuntimeValue::Signal(inner)) => *inner,
         (_, value) => value,
     }
@@ -212,7 +224,7 @@ impl TemporalWorkerHandle {
         schedule: TemporalWorkerSchedule,
     ) -> Result<(), mpsc::SendError<TemporalWorkerCommand>> {
         self.commands
-            .send(TemporalWorkerCommand::Schedule(schedule))
+            .send(TemporalWorkerCommand::Schedule(Box::new(schedule)))
     }
 
     fn stop(&mut self) {
@@ -225,7 +237,7 @@ impl TemporalWorkerHandle {
 
 #[derive(Clone, Debug)]
 enum TemporalWorkerCommand {
-    Schedule(TemporalWorkerSchedule),
+    Schedule(Box<TemporalWorkerSchedule>),
     Stop,
 }
 
@@ -396,19 +408,19 @@ pub enum LinkedTaskWorkerError {
         instance: TaskInstanceId,
         owner: hir::ItemId,
         backend_item: BackendItemId,
-        error: EvaluationError,
+        error: Box<EvaluationError>,
     },
     TaskExecution {
         instance: TaskInstanceId,
         owner: hir::ItemId,
         backend_item: BackendItemId,
-        error: crate::task_executor::RuntimeTaskExecutionError,
+        error: Box<crate::task_executor::RuntimeTaskExecutionError>,
     },
     Disconnected {
         instance: TaskInstanceId,
         owner: hir::ItemId,
         stamp: crate::PublicationStamp,
-        value: DetachedRuntimeValue,
+        value: Box<DetachedRuntimeValue>,
     },
 }
 
@@ -454,6 +466,8 @@ pub struct DetachedRuntimePublicationPort {
     inner: SourcePublicationPort<RuntimeValue>,
 }
 
+pub type DetachedPublicationPortError = PublicationPortError<Box<DetachedRuntimeValue>>;
+
 impl DetachedRuntimePublicationPort {
     #[cfg(test)]
     pub(crate) fn from_source_port(inner: SourcePublicationPort<RuntimeValue>) -> Self {
@@ -472,10 +486,7 @@ impl DetachedRuntimePublicationPort {
         self.inner.is_cancelled()
     }
 
-    pub fn publish(
-        &self,
-        value: DetachedRuntimeValue,
-    ) -> Result<(), PublicationPortError<DetachedRuntimeValue>> {
+    pub fn publish(&self, value: DetachedRuntimeValue) -> Result<(), DetachedPublicationPortError> {
         self.inner
             .publish(value.into_runtime())
             .map_err(map_detached_publication_port_error)
@@ -499,10 +510,7 @@ impl DetachedRuntimeCompletionPort {
         self.inner.is_cancelled()
     }
 
-    pub fn complete(
-        self,
-        value: DetachedRuntimeValue,
-    ) -> Result<(), PublicationPortError<DetachedRuntimeValue>> {
+    pub fn complete(self, value: DetachedRuntimeValue) -> Result<(), DetachedPublicationPortError> {
         self.inner
             .complete(value.into_runtime())
             .map_err(map_detached_publication_port_error)

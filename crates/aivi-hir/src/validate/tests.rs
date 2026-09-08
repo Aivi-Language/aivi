@@ -1060,6 +1060,42 @@ fun statusLabel:Text = status:Status=>    status
 }
 
 #[test]
+fn resolved_validation_rejects_constructor_pattern_arity_mismatches() {
+    let report = validate_resolved_text(
+        "pattern_constructor_arity.aivi",
+        r#"type Shape =
+  | Circle Int
+  | Point
+
+fun radius:Int = shape:Shape =>
+    shape
+     ||> Circle left right -> left
+     ||> Point -> 0
+"#,
+    );
+    let diagnostic = report
+        .diagnostics()
+        .iter()
+        .find(|diagnostic| diagnostic.code == Some(code("constructor-arity-mismatch")))
+        .expect("wrong constructor-pattern arity should produce a HIR diagnostic");
+
+    assert_eq!(
+        diagnostic.message,
+        "constructor `Circle` expects 1 argument, but 2 were provided"
+    );
+    assert!(
+        diagnostic.labels.iter().any(|label| {
+            label.style == LabelStyle::Primary
+                && label
+                    .message
+                    .contains("this pattern supplies 2 arguments to a 1-field constructor")
+        }),
+        "expected a primary label describing the arity mismatch, got {:?}",
+        diagnostic.labels
+    );
+}
+
+#[test]
 fn case_exhaustiveness_accepts_builtin_case_pairs() {
     let report = validate_resolved_text(
         "builtin_exhaustive_cases.aivi",

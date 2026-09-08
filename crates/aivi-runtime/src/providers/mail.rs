@@ -96,7 +96,8 @@ impl DbusEmitPlan {
                                 .into(),
                         });
                     }
-                    body = parse_text_option(instance, provider, &option.option_name, &option.value)?;
+                    body =
+                        parse_text_option(instance, provider, &option.option_name, &option.value)?;
                 }
                 "bodyValues" => {
                     if !body.is_empty() {
@@ -181,8 +182,9 @@ impl ImapConnectPlan {
                         parse_text_option(instance, provider, &option.option_name, &option.value)?;
                 }
                 "limit" => {
-                    limit = parse_positive_int(instance, provider, &option.option_name, &option.value)?
-                        as usize;
+                    limit =
+                        parse_positive_int(instance, provider, &option.option_name, &option.value)?
+                            as usize;
                 }
                 "refreshOn" | "activeWhen" => {}
                 _ => {
@@ -313,11 +315,8 @@ fn spawn_goa_mail_accounts_worker(
                 None,
                 DBusSignalFlags::NONE,
                 move |signal| {
-                    let _ = publish_goa_mail_accounts(
-                        signal.connection,
-                        &publish_port,
-                        &publish_plan,
-                    );
+                    let _ =
+                        publish_goa_mail_accounts(signal.connection, &publish_port, &publish_plan);
                 },
             );
             let publish_port = port.clone();
@@ -330,11 +329,8 @@ fn spawn_goa_mail_accounts_worker(
                 None,
                 DBusSignalFlags::NONE,
                 move |signal| {
-                    let _ = publish_goa_mail_accounts(
-                        signal.connection,
-                        &publish_port,
-                        &publish_plan,
-                    );
+                    let _ =
+                        publish_goa_mail_accounts(signal.connection, &publish_port, &publish_plan);
                 },
             );
             let publish_port = port.clone();
@@ -347,11 +343,8 @@ fn spawn_goa_mail_accounts_worker(
                 None,
                 DBusSignalFlags::NONE,
                 move |signal| {
-                    let _ = publish_goa_mail_accounts(
-                        signal.connection,
-                        &publish_port,
-                        &publish_plan,
-                    );
+                    let _ =
+                        publish_goa_mail_accounts(signal.connection, &publish_port, &publish_plan);
                 },
             );
             let _ = startup_tx.send(Ok(()));
@@ -471,10 +464,18 @@ fn spawn_imap_idle_worker(
                 match imap_highest_uid(account, plan.mailbox.as_ref()) {
                     Ok(Some(uid)) => {
                         let previous = last_seen.insert(account.account_id.clone(), uid);
-                        if let Some(previous) = previous && uid > previous {
+                        if let Some(previous) = previous
+                            && uid > previous
+                        {
                             let payload = ExternalSourceValue::Record(BTreeMap::from([
-                                ("accountId".into(), ExternalSourceValue::Text(account.account_id.clone())),
-                                ("mailbox".into(), ExternalSourceValue::Text(plan.mailbox.clone())),
+                                (
+                                    "accountId".into(),
+                                    ExternalSourceValue::Text(account.account_id.clone()),
+                                ),
+                                (
+                                    "mailbox".into(),
+                                    ExternalSourceValue::Text(plan.mailbox.clone()),
+                                ),
                                 (
                                     "event".into(),
                                     ExternalSourceValue::variant_with_payload(
@@ -566,7 +567,9 @@ fn publish_goa_mail_accounts(
         .map_err(|_| "provider publication port closed before GOA update could publish".into())
 }
 
-fn goa_mail_accounts_external(connection: &DBusConnection) -> Result<ExternalSourceValue, Box<str>> {
+fn goa_mail_accounts_external(
+    connection: &DBusConnection,
+) -> Result<ExternalSourceValue, Box<str>> {
     let reply = connection
         .call_sync(
             Some("org.gnome.OnlineAccounts"),
@@ -622,9 +625,15 @@ fn goa_mail_accounts_external(connection: &DBusConnection) -> Result<ExternalSou
             ExternalSourceValue::variant_with_payload(
                 "GoaMailOAuthToken",
                 ExternalSourceValue::Record(BTreeMap::from([
-                    ("accessToken".into(), ExternalSourceValue::Text(token.into())),
+                    (
+                        "accessToken".into(),
+                        ExternalSourceValue::Text(token.into()),
+                    ),
                     ("refreshToken".into(), ExternalSourceValue::variant("None")),
-                    ("tokenType".into(), ExternalSourceValue::Text("Bearer".into())),
+                    (
+                        "tokenType".into(),
+                        ExternalSourceValue::Text("Bearer".into()),
+                    ),
                     (
                         "expiresAt".into(),
                         ExternalSourceValue::variant_with_payload(
@@ -653,8 +662,10 @@ fn goa_mail_accounts_external(connection: &DBusConnection) -> Result<ExternalSou
                 ExternalSourceValue::Text(variant_text(&reply.child_value(0))?.into()),
             )
         } else {
-            return Err(format!("GOA account {object_path} has no usable mail credential interface")
-                .into_boxed_str());
+            return Err(format!(
+                "GOA account {object_path} has no usable mail credential interface"
+            )
+            .into_boxed_str());
         };
         let account = ExternalSourceValue::Record(BTreeMap::from([
             (
@@ -783,7 +794,8 @@ fn property_bool(properties: &BTreeMap<String, Variant>, name: &str) -> Result<b
 }
 
 fn variant_text(value: &Variant) -> Result<String, Box<str>> {
-    value.str()
+    value
+        .str()
         .map(|value| value.to_owned())
         .ok_or_else(|| "expected text/object-path/signature D-Bus payload".into())
 }
@@ -835,7 +847,11 @@ fn goa_smtp_port(properties: &BTreeMap<String, Variant>) -> i64 {
 fn imap_connect_value(plan: &ImapConnectPlan) -> Result<RuntimeValue, Box<str>> {
     let mut snapshots = Vec::with_capacity(plan.accounts.len());
     for account in &plan.accounts {
-        snapshots.push(fetch_imap_snapshot_external(account, plan.mailbox.as_ref(), plan.limit)?);
+        snapshots.push(fetch_imap_snapshot_external(
+            account,
+            plan.mailbox.as_ref(),
+            plan.limit,
+        )?);
     }
     decode_ok_external(
         plan.instance,
@@ -867,12 +883,23 @@ fn imap_body_value(plan: &ImapFetchBodyPlan) -> Result<RuntimeValue, Box<str>> {
                 "mailbox".into(),
                 ExternalSourceValue::Text(plan.request.mailbox.clone()),
             ),
-            ("uid".into(), ExternalSourceValue::Int(plan.request.uid as i64)),
-            ("text".into(), ExternalSourceValue::Text(text.into_boxed_str())),
-            ("html".into(), ExternalSourceValue::Text(html.into_boxed_str())),
+            (
+                "uid".into(),
+                ExternalSourceValue::Int(plan.request.uid as i64),
+            ),
+            (
+                "text".into(),
+                ExternalSourceValue::Text(text.into_boxed_str()),
+            ),
+            (
+                "html".into(),
+                ExternalSourceValue::Text(html.into_boxed_str()),
+            ),
             (
                 "raw".into(),
-                ExternalSourceValue::Text(String::from_utf8_lossy(&raw).into_owned().into_boxed_str()),
+                ExternalSourceValue::Text(
+                    String::from_utf8_lossy(&raw).into_owned().into_boxed_str(),
+                ),
             ),
         ])),
     )
@@ -916,7 +943,10 @@ fn fetch_imap_snapshot_external(
                 let uid = message
                     .uid
                     .ok_or_else(|| "imap fetch did not include UID".to_owned())?;
-                let header = message.header().or_else(|| message.body()).unwrap_or_default();
+                let header = message
+                    .header()
+                    .or_else(|| message.body())
+                    .unwrap_or_default();
                 let header_text = String::from_utf8_lossy(header).into_owned();
                 let parsed = mailparse::parse_headers(header)
                     .map_err(|error| error.to_string())?
@@ -989,7 +1019,12 @@ fn fetch_imap_snapshot_external(
         (
             "highestUid".into(),
             highest_uid
-                .map(|uid| ExternalSourceValue::variant_with_payload("Some", ExternalSourceValue::Int(uid as i64)))
+                .map(|uid| {
+                    ExternalSourceValue::variant_with_payload(
+                        "Some",
+                        ExternalSourceValue::Int(uid as i64),
+                    )
+                })
                 .unwrap_or_else(|| ExternalSourceValue::variant("None")),
         ),
         ("messages".into(), ExternalSourceValue::List(messages)),
@@ -1057,8 +1092,13 @@ fn open_imap_session(
             "STARTTLS-backed GOA IMAP accounts are not executed by this runtime slice yet".into(),
         );
     }
-    let tcp = TcpStream::connect((account.host.as_ref(), account.port))
-        .map_err(|error| format!("failed to connect to {}:{}: {error}", account.host, account.port).into_boxed_str())?;
+    let tcp = TcpStream::connect((account.host.as_ref(), account.port)).map_err(|error| {
+        format!(
+            "failed to connect to {}:{}: {error}",
+            account.host, account.port
+        )
+        .into_boxed_str()
+    })?;
     tcp.set_read_timeout(Some(Duration::from_secs(30))).ok();
     tcp.set_write_timeout(Some(Duration::from_secs(30))).ok();
     let client = if account.use_ssl {
@@ -1083,7 +1123,12 @@ fn open_imap_session(
                 token.as_ref()
             );
             client
-                .authenticate("XOAUTH2", &mut Xoauth2Authenticator { payload: payload.into() })
+                .authenticate(
+                    "XOAUTH2",
+                    &Xoauth2Authenticator {
+                        payload: payload.into(),
+                    },
+                )
                 .map_err(|(error, _)| {
                     format!("IMAP XOAUTH2 authentication failed: {error}").into_boxed_str()
                 })
@@ -1125,7 +1170,7 @@ fn parse_imap_accounts_argument(
             provider,
             index,
             expected: "List GoaMailAccount".into(),
-            value: strip_detached_signal(value).clone(),
+            value: Box::new(strip_detached_signal(value).clone()),
         });
     };
     values
@@ -1146,7 +1191,7 @@ fn parse_imap_account_value(
             provider,
             index,
             expected: "GoaMailAccount record".into(),
-            value: value.clone(),
+            value: Box::new(value.clone()),
         });
     };
     Ok(ImapAccountConfig {
@@ -1166,12 +1211,14 @@ fn parse_goa_mail_auth(
     index: usize,
     fields: &[aivi_backend::RuntimeRecordField],
 ) -> Result<ImapAuthConfig, SourceProviderExecutionError> {
-    let value = record_field(fields, "auth").ok_or_else(|| SourceProviderExecutionError::InvalidArgument {
-        instance,
-        provider,
-        index,
-        expected: "GoaMailAccount.auth".into(),
-        value: RuntimeValue::Record(fields.to_vec()),
+    let value = record_field(fields, "auth").ok_or_else(|| {
+        SourceProviderExecutionError::InvalidArgument {
+            instance,
+            provider,
+            index,
+            expected: "GoaMailAccount.auth".into(),
+            value: Box::new(RuntimeValue::Record(fields.to_vec())),
+        }
     })?;
     let RuntimeValue::Sum(sum) = strip_signal(value) else {
         return Err(SourceProviderExecutionError::InvalidArgument {
@@ -1179,7 +1226,7 @@ fn parse_goa_mail_auth(
             provider,
             index,
             expected: "GoaMailAuth".into(),
-            value: strip_signal(value).clone(),
+            value: Box::new(strip_signal(value).clone()),
         });
     };
     match sum.variant_name.as_ref() {
@@ -1190,7 +1237,7 @@ fn parse_goa_mail_auth(
                     provider,
                     index,
                     expected: "GoaMailPassword Text".into(),
-                    value: strip_signal(value).clone(),
+                    value: Box::new(strip_signal(value).clone()),
                 });
             };
             Ok(ImapAuthConfig::Password(value.clone()))
@@ -1202,7 +1249,7 @@ fn parse_goa_mail_auth(
                     provider,
                     index,
                     expected: "GoaMailOAuthToken OAuthToken".into(),
-                    value: strip_signal(value).clone(),
+                    value: Box::new(strip_signal(value).clone()),
                 });
             };
             Ok(ImapAuthConfig::OAuthToken(record_text_field(
@@ -1218,7 +1265,7 @@ fn parse_goa_mail_auth(
             provider,
             index,
             expected: "GoaMailPassword or GoaMailOAuthToken".into(),
-            value: strip_signal(value).clone(),
+            value: Box::new(strip_signal(value).clone()),
         }),
     }
 }
@@ -1235,7 +1282,7 @@ fn parse_imap_body_request(
             provider,
             index,
             expected: "ImapBodyRequest record".into(),
-            value: strip_detached_signal(value).clone(),
+            value: Box::new(strip_detached_signal(value).clone()),
         });
     };
     Ok(ImapBodyRequest {
@@ -1273,7 +1320,7 @@ fn record_text_field(
             provider,
             index,
             expected: format!("record field `{name}: Text`").into_boxed_str(),
-            value: RuntimeValue::Record(fields.to_vec()),
+            value: Box::new(RuntimeValue::Record(fields.to_vec())),
         });
     };
     let RuntimeValue::Text(value) = strip_signal(value) else {
@@ -1282,7 +1329,7 @@ fn record_text_field(
             provider,
             index,
             expected: format!("record field `{name}: Text`").into_boxed_str(),
-            value: strip_signal(value).clone(),
+            value: Box::new(strip_signal(value).clone()),
         });
     };
     Ok(value.clone())
@@ -1301,7 +1348,7 @@ fn record_bool_field(
             provider,
             index,
             expected: format!("record field `{name}: Bool`").into_boxed_str(),
-            value: RuntimeValue::Record(fields.to_vec()),
+            value: Box::new(RuntimeValue::Record(fields.to_vec())),
         });
     };
     let RuntimeValue::Bool(value) = strip_signal(value) else {
@@ -1310,7 +1357,7 @@ fn record_bool_field(
             provider,
             index,
             expected: format!("record field `{name}: Bool`").into_boxed_str(),
-            value: strip_signal(value).clone(),
+            value: Box::new(strip_signal(value).clone()),
         });
     };
     Ok(*value)
@@ -1329,7 +1376,7 @@ fn record_int_field(
             provider,
             index,
             expected: format!("record field `{name}: Int`").into_boxed_str(),
-            value: RuntimeValue::Record(fields.to_vec()),
+            value: Box::new(RuntimeValue::Record(fields.to_vec())),
         });
     };
     let RuntimeValue::Int(value) = strip_signal(value) else {
@@ -1338,7 +1385,7 @@ fn record_int_field(
             provider,
             index,
             expected: format!("record field `{name}: Int`").into_boxed_str(),
-            value: strip_signal(value).clone(),
+            value: Box::new(strip_signal(value).clone()),
         });
     };
     Ok(*value)

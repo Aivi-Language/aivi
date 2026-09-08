@@ -3,6 +3,7 @@ name = "aivi-lambda"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 aivi-base.workspace = true
@@ -10,10 +11,13 @@ aivi-core = { path = "../aivi-core" }
 aivi-hir.workspace = true
 aivi-typing.workspace = true
 serde.workspace = true
-
 [dev-dependencies]
 aivi-syntax.workspace = true
 insta.workspace = true
 
 [lints]
 workspace = true
+
+[package.metadata.cargo-machete]
+# The arena-ID macro expands to Serde derives, so the dependency is not visible in source text.
+ignored = ["serde"]

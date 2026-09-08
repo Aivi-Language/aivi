@@ -74,6 +74,8 @@ pub const MISSING_PROVIDER_CONTRACT_SCHEMA_NAME: DiagnosticCode =
     DiagnosticCode::new("syntax", "missing-provider-contract-schema-name");
 pub const MISSING_PROVIDER_CONTRACT_SCHEMA_TYPE: DiagnosticCode =
     DiagnosticCode::new("syntax", "missing-provider-contract-schema-type");
+pub const MISSING_RECORD_FIELD_SEPARATOR: DiagnosticCode =
+    DiagnosticCode::new("syntax", "missing-record-field-separator");
 pub const MISSING_REACTIVE_UPDATE_ARM_ARROW: DiagnosticCode =
     DiagnosticCode::new("syntax", "missing-reactive-update-arm-arrow");
 pub const MISSING_REACTIVE_UPDATE_ARM_BODY: DiagnosticCode =

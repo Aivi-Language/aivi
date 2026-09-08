@@ -3,8 +3,12 @@ name = "aivi-ffi-call"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
+cranelift-codegen.workspace = true
+cranelift-jit.workspace = true
+cranelift-module.workspace = true
 libffi = "5.1.0"
 num-bigint = "0.4.6"
 rust_decimal = "1.40.0"

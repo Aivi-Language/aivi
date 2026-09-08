@@ -314,33 +314,37 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                 workspace_module.name
             ));
             workspace_states.push(seed_runtime_module_signals(
-                workspace_module.module,
-                workspace_module.item_origin_offset,
-                module_index,
+                RuntimeSignalSeedContext {
+                    module: workspace_module.module,
+                    item_origin_offset: workspace_module.item_origin_offset,
+                    module_index,
+                    graph_builder: &mut graph_builder,
+                    owners: &mut owners,
+                    signals: &mut signals,
+                    public_signals: &mut public_signals,
+                    source_inputs: &mut source_inputs,
+                    signal_origins: &mut signal_origins,
+                    errors: &mut errors,
+                },
                 |_| true,
-                &mut graph_builder,
-                &mut owners,
-                &mut signals,
-                &mut public_signals,
-                &mut source_inputs,
-                &mut signal_origins,
-                &mut errors,
             ));
         }
         let entry_module_index = workspace_modules.len();
         on_progress("seed entry signals".to_owned());
         let mut entry_state = seed_runtime_module_signals(
-            self.module,
-            0,
-            entry_module_index,
+            RuntimeSignalSeedContext {
+                module: self.module,
+                item_origin_offset: 0,
+                module_index: entry_module_index,
+                graph_builder: &mut graph_builder,
+                owners: &mut owners,
+                signals: &mut signals,
+                public_signals: &mut public_signals,
+                source_inputs: &mut source_inputs,
+                signal_origins: &mut signal_origins,
+                errors: &mut errors,
+            },
             |item| self.includes_item(item),
-            &mut graph_builder,
-            &mut owners,
-            &mut signals,
-            &mut public_signals,
-            &mut source_inputs,
-            &mut signal_origins,
-            &mut errors,
         );
         let mut workspace_signal_exports = BTreeMap::<String, BTreeMap<String, hir::ItemId>>::new();
         for (workspace_module, state) in workspace_modules.iter().zip(workspace_states.iter_mut()) {
@@ -461,14 +465,14 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                             }),
                         }
                     }
-                    if resolved.is_empty() {
-                        if let Some(body) = signal.body {
-                            resolved = collect_direct_signal_dependencies(
-                                module,
-                                body,
-                                &module_state.public_signal_names,
-                            );
-                        }
+                    if resolved.is_empty()
+                        && let Some(body) = signal.body
+                    {
+                        resolved = collect_direct_signal_dependencies(
+                            module,
+                            body,
+                            &module_state.public_signal_names,
+                        );
                     }
                     let mut graph_dependencies = resolved
                         .iter()
@@ -616,11 +620,7 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                             let body_fragment = compiled.body_fragment.expect(
                                 "successful reactive clause compilation should produce a body",
                             );
-                            let mut guard_dependencies = guard_fragment
-                                .parameter_signals
-                                .iter()
-                                .copied()
-                                .collect::<Vec<_>>();
+                            let mut guard_dependencies = guard_fragment.parameter_signals.to_vec();
                             for signal in guard_fragment
                                 .required_signals
                                 .iter()
@@ -1113,6 +1113,19 @@ struct RuntimeSignalOrigin {
     local_item: hir::ItemId,
 }
 
+struct RuntimeSignalSeedContext<'a> {
+    module: &'a hir::Module,
+    item_origin_offset: u32,
+    module_index: usize,
+    graph_builder: &'a mut SignalGraphBuilder,
+    owners: &'a mut Vec<HirOwnerBinding>,
+    signals: &'a mut Vec<HirSignalBinding>,
+    public_signals: &'a mut BTreeMap<hir::ItemId, SignalHandle>,
+    source_inputs: &'a mut BTreeMap<hir::ItemId, InputHandle>,
+    signal_origins: &'a mut BTreeMap<hir::ItemId, RuntimeSignalOrigin>,
+    errors: &'a mut Vec<HirRuntimeAdapterError>,
+}
+
 fn build_workspace_runtime_modules<'a>(
     entry_module: &hir::Module,
     workspace_hirs: &[(&'a str, &'a hir::Module)],
@@ -1133,18 +1146,21 @@ fn build_workspace_runtime_modules<'a>(
 }
 
 fn seed_runtime_module_signals(
-    module: &hir::Module,
-    item_origin_offset: u32,
-    module_index: usize,
+    context: RuntimeSignalSeedContext<'_>,
     includes_item: impl Fn(hir::ItemId) -> bool,
-    graph_builder: &mut SignalGraphBuilder,
-    owners: &mut Vec<HirOwnerBinding>,
-    signals: &mut Vec<HirSignalBinding>,
-    public_signals: &mut BTreeMap<hir::ItemId, SignalHandle>,
-    source_inputs: &mut BTreeMap<hir::ItemId, InputHandle>,
-    signal_origins: &mut BTreeMap<hir::ItemId, RuntimeSignalOrigin>,
-    errors: &mut Vec<HirRuntimeAdapterError>,
 ) -> RuntimeModuleSignalState {
+    let RuntimeSignalSeedContext {
+        module,
+        item_origin_offset,
+        module_index,
+        graph_builder,
+        owners,
+        signals,
+        public_signals,
+        source_inputs,
+        signal_origins,
+        errors,
+    } = context;
     let mut state = RuntimeModuleSignalState {
         item_origin_offset,
         import_to_module: runtime_import_to_module_map(module),
@@ -2828,42 +2844,42 @@ fn compile_reactive_clause_fragments(
         format!("__reactive_guard_{}_{}", owner.as_raw(), clause_index).into_boxed_str();
     let guard_fragment = match if update.body_mode == hir::ReactiveUpdateBodyMode::OptionalPayload {
         let signal_bool_type = hir::GateType::Signal(Box::new(bool_type.clone()));
-        compile_runtime_expr_fragment(
+        compile_runtime_expr_fragment(RuntimeFragmentCompileRequest {
             module,
             owner,
-            update.span,
-            update.guard,
-            &signal_bool_type,
-            guard_name.clone(),
+            clause_span: update.span,
+            expr: update.guard,
+            expected: &signal_bool_type,
+            name: guard_name.clone(),
             public_signals,
-            &[],
-            ReactiveFragmentRole::Guard,
-        )
+            extra_parameter_items: &[],
+            role: ReactiveFragmentRole::Guard,
+        })
         .or_else(|_| {
-            compile_runtime_expr_fragment(
+            compile_runtime_expr_fragment(RuntimeFragmentCompileRequest {
                 module,
                 owner,
-                update.span,
-                update.guard,
-                &bool_type,
-                guard_name,
+                clause_span: update.span,
+                expr: update.guard,
+                expected: &bool_type,
+                name: guard_name,
                 public_signals,
-                &[],
-                ReactiveFragmentRole::Guard,
-            )
+                extra_parameter_items: &[],
+                role: ReactiveFragmentRole::Guard,
+            })
         })
     } else {
-        compile_runtime_expr_fragment(
+        compile_runtime_expr_fragment(RuntimeFragmentCompileRequest {
             module,
             owner,
-            update.span,
-            update.guard,
-            &bool_type,
-            guard_name,
+            clause_span: update.span,
+            expr: update.guard,
+            expected: &bool_type,
+            name: guard_name,
             public_signals,
-            &[],
-            ReactiveFragmentRole::Guard,
-        )
+            extra_parameter_items: &[],
+            role: ReactiveFragmentRole::Guard,
+        })
     } {
         Ok(fragment) => fragment,
         Err(error) => {
@@ -2881,42 +2897,42 @@ fn compile_reactive_clause_fragments(
     let body_name = format!("__reactive_body_{}_{}", owner.as_raw(), clause_index).into_boxed_str();
     let body_fragment = match if update.body_mode == hir::ReactiveUpdateBodyMode::OptionalPayload {
         let signal_body_type = hir::GateType::Signal(Box::new(body_type.clone()));
-        compile_runtime_expr_fragment(
+        compile_runtime_expr_fragment(RuntimeFragmentCompileRequest {
             module,
             owner,
-            update.span,
-            update.body,
-            &signal_body_type,
-            body_name.clone(),
+            clause_span: update.span,
+            expr: update.body,
+            expected: &signal_body_type,
+            name: body_name.clone(),
             public_signals,
-            trigger_parameter_items.as_slice(),
-            ReactiveFragmentRole::Body,
-        )
+            extra_parameter_items: trigger_parameter_items.as_slice(),
+            role: ReactiveFragmentRole::Body,
+        })
         .or_else(|_| {
-            compile_runtime_expr_fragment(
+            compile_runtime_expr_fragment(RuntimeFragmentCompileRequest {
                 module,
                 owner,
-                update.span,
-                update.body,
-                &body_type,
-                body_name,
+                clause_span: update.span,
+                expr: update.body,
+                expected: &body_type,
+                name: body_name,
                 public_signals,
-                trigger_parameter_items.as_slice(),
-                ReactiveFragmentRole::Body,
-            )
+                extra_parameter_items: trigger_parameter_items.as_slice(),
+                role: ReactiveFragmentRole::Body,
+            })
         })
     } else {
-        compile_runtime_expr_fragment(
+        compile_runtime_expr_fragment(RuntimeFragmentCompileRequest {
             module,
             owner,
-            update.span,
-            update.body,
-            &body_type,
-            body_name,
+            clause_span: update.span,
+            expr: update.body,
+            expected: &body_type,
+            name: body_name,
             public_signals,
-            trigger_parameter_items.as_slice(),
-            ReactiveFragmentRole::Body,
-        )
+            extra_parameter_items: trigger_parameter_items.as_slice(),
+            role: ReactiveFragmentRole::Body,
+        })
     } {
         Ok(fragment) => fragment,
         Err(error) => {
@@ -2942,17 +2958,32 @@ fn compile_reactive_clause_fragments(
     }
 }
 
-fn compile_runtime_expr_fragment(
-    module: &hir::Module,
+struct RuntimeFragmentCompileRequest<'a> {
+    module: &'a hir::Module,
     owner: hir::ItemId,
     clause_span: SourceSpan,
     expr: hir::ExprId,
-    expected: &hir::GateType,
+    expected: &'a hir::GateType,
     name: Box<str>,
-    public_signals: &BTreeMap<hir::ItemId, SignalHandle>,
-    extra_parameter_items: &[hir::ItemId],
+    public_signals: &'a BTreeMap<hir::ItemId, SignalHandle>,
+    extra_parameter_items: &'a [hir::ItemId],
     role: ReactiveFragmentRole,
+}
+
+fn compile_runtime_expr_fragment(
+    request: RuntimeFragmentCompileRequest<'_>,
 ) -> Result<HirCompiledRuntimeExpr, HirRuntimeAdapterError> {
+    let RuntimeFragmentCompileRequest {
+        module,
+        owner,
+        clause_span,
+        expr,
+        expected,
+        name,
+        public_signals,
+        extra_parameter_items,
+        role,
+    } = request;
     let parameter_specs = collect_fragment_parameter_specs(
         module,
         owner,
@@ -4346,7 +4377,7 @@ signal total : Signal Int = ready
             "runtime-hir-adapter-dbus.aivi",
             r#"
 @source dbus.signal "/org/aivi/Test" with {
-    interface: "org.aivi.Test"
+    interface: "org.aivi.Test",
     member: "Ping"
 }
 signal inbound : Signal Text

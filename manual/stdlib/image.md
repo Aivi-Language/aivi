@@ -104,6 +104,11 @@ Pixel dimensions of an image.
 ### ImageMetadata
 
 ```aivi
+use aivi.image (
+    ImageFormat
+    ImageSize
+)
+
 type ImageMetadata = {
     format: ImageFormat,
     size: ImageSize,
@@ -120,6 +125,8 @@ Summary information about an image without carrying the raw bytes.
 ### ImageTask
 
 ```aivi
+use aivi.image (ImageError)
+
 type ImageTask A = (Task ImageError A)
 ```
 
@@ -128,6 +135,11 @@ Generic alias for image-related tasks.
 ### ImageData
 
 ```aivi
+use aivi.image (
+    ImageFormat
+    ImageSize
+)
+
 type ImageData = {
     format: ImageFormat,
     size: ImageSize,
@@ -154,6 +166,11 @@ func imageWidth = image =>
 The stdlib module comments document the following source pattern:
 
 ```aivi
+use aivi.image (
+    ImageData
+    ImageError
+)
+
 @source image.load "/app/icons/logo.png"
 signal appLogo : Signal (Result ImageError ImageData)
 ```

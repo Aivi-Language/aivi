@@ -145,6 +145,18 @@ type Shape =
 Field labels can be added for documentation and diagnostics. Names are declaration-only metadata — construction stays positional:
 
 ```aivi
+type Year = Int
+
+type Month = Int
+
+type Day = Int
+
+type Hour = Int
+
+type Minute = Int
+
+type Second = Int
+
 type Date =
   Date year:Year month:Month day:Day
 
@@ -157,6 +169,16 @@ Named and anonymous fields may be mixed, though named fields are recommended for
 Construction is curried: apply the constructor to each argument left-to-right:
 
 ```aivi
+type Vec2 = Vec2 Int Int
+
+type Year = Int
+
+type Month = Int
+
+type Day = Int
+
+type Date = Date Year Month Day
+
 value origin = Vec2 0 0
 value corner = Vec2 10 20
 value today = Date 2024 6 15
@@ -165,6 +187,8 @@ value today = Date 2024 6 15
 Under-application is legal — a partially applied constructor is a function:
 
 ```aivi
+type Cell = Cell Int Int
+
 value rowAtX5 = Cell 5
 value cell = rowAtX5 3
 ```
@@ -172,6 +196,10 @@ value cell = rowAtX5 3
 Pattern matching gives each positional field a name at the use site:
 
 ```aivi
+type Vec2 = Vec2 Int Int
+
+type Cell = Cell Int Int
+
 type Vec2 -> Vec2 -> Vec2
 func addVec = a b => (a, b)
  ||> (Vec2 ax ay, Vec2 bx by) -> Vec2 (ax + bx) (ay + by)
@@ -334,6 +362,14 @@ Rules:
 The pipe form is only syntax sugar. The type on the left is passed as the final argument to the transform on the right:
 
 ```aivi
+type User = {
+    id: Int,
+    name: Text,
+    nickname: Option Text,
+    createdAt: Text,
+    isAdmin: Bool
+}
+
 type UserPublic = User |> Omit (isAdmin) |> Rename { createdAt: created_at }
 ```
 

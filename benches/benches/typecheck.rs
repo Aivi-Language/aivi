@@ -1,13 +1,13 @@
-use std::{fs, path::PathBuf};
+use std::{fs, hint::black_box, path::PathBuf, time::Duration};
 
 use aivi_base::SourceDatabase;
 use aivi_hir::{
-    ImportModuleResolution, ImportResolver, typecheck_module,
-    lower_module, lower_module_with_resolver, exports,
+    ImportModuleResolution, ImportResolver, exports, lower_module, lower_module_with_resolver,
+    typecheck_module,
 };
-use aivi_syntax::{lex_module, parse_module};
+use aivi_syntax::parse_module;
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 /// Resolves `aivi.*` stdlib imports from the bundled stdlib directory.
 struct StdlibResolver {
@@ -16,7 +16,9 @@ struct StdlibResolver {
 
 impl StdlibResolver {
     fn new() -> Self {
-        Self { stdlib_root: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../stdlib") }
+        Self {
+            stdlib_root: PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../stdlib"),
+        }
     }
 }
 
@@ -50,12 +52,11 @@ fn bench_typecheck_snake(c: &mut Criterion) {
     let mut sources = SourceDatabase::new();
     let file_id = sources.add_file("demos/snake.aivi", include_str!("../../demos/snake.aivi"));
     let source_file = &sources[file_id];
-    c.bench_function("typecheck_snake", |b| {
+    c.bench_function("frontend_typecheck_snake", |b| {
         b.iter(|| {
-            let _tokens = lex_module(black_box(source_file));
             let parsed = parse_module(black_box(source_file));
             let lowered = lower_module_with_resolver(black_box(&parsed.module), Some(&resolver));
-            let _report = typecheck_module(lowered.module());
+            black_box(typecheck_module(lowered.module()));
         })
     });
 }
@@ -63,14 +64,16 @@ fn bench_typecheck_snake(c: &mut Criterion) {
 fn bench_typecheck_reversi(c: &mut Criterion) {
     let resolver = StdlibResolver::new();
     let mut sources = SourceDatabase::new();
-    let file_id = sources.add_file("demos/reversi.aivi", include_str!("../../demos/reversi.aivi"));
+    let file_id = sources.add_file(
+        "demos/reversi.aivi",
+        include_str!("../../demos/reversi.aivi"),
+    );
     let source_file = &sources[file_id];
-    c.bench_function("typecheck_reversi", |b| {
+    c.bench_function("frontend_typecheck_reversi", |b| {
         b.iter(|| {
-            let _tokens = lex_module(black_box(source_file));
             let parsed = parse_module(black_box(source_file));
             let lowered = lower_module_with_resolver(black_box(&parsed.module), Some(&resolver));
-            let _report = typecheck_module(lowered.module());
+            black_box(typecheck_module(lowered.module()));
         })
     });
 }
@@ -81,15 +84,21 @@ fn bench_typecheck_large(c: &mut Criterion) {
     let source = include_str!("../../demos/snake.aivi").repeat(10);
     let file_id = sources.add_file("demos/snake_10x.aivi", source);
     let source_file = &sources[file_id];
-    c.bench_function("typecheck_10x_snake", |b| {
+    c.bench_function("frontend_typecheck_10x_snake", |b| {
         b.iter(|| {
-            let _tokens = lex_module(black_box(source_file));
             let parsed = parse_module(black_box(source_file));
             let lowered = lower_module_with_resolver(black_box(&parsed.module), Some(&resolver));
-            let _report = typecheck_module(lowered.module());
+            black_box(typecheck_module(lowered.module()));
         })
     });
 }
 
-criterion_group!(typecheck, bench_typecheck_snake, bench_typecheck_reversi, bench_typecheck_large);
+criterion_group! {
+    name = typecheck;
+    config = Criterion::default()
+        .sample_size(30)
+        .warm_up_time(Duration::from_secs(2))
+        .measurement_time(Duration::from_secs(5));
+    targets = bench_typecheck_snake, bench_typecheck_reversi, bench_typecheck_large
+}
 criterion_main!(typecheck);

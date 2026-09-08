@@ -2,7 +2,7 @@
 
 ## Draft v1.0 — implementation-facing resolved pass
 
-> Status: normative working draft with implementation choices merged. Working: surface parsing, name resolution, HIR, type/kind checking, constraint resolution, closed-ADT and record lowering, current builtin executable support for `Eq`/`Ord`/`Functor`/`Apply`/`Applicative`/`Chain`/`Monad`/`Foldable`/`Traversable`/`Filterable`/`Bifunctor`, imported unary authored evidence where selection is concrete, Cranelift AOT codegen, GTK/libadwaita widget bridge, signal graph scheduling, source provider catalog (HTTP, fs, timer, D-Bus, process), and CLI execute/fmt/check. Known open gaps: generalized user-authored HKT execution through native Cranelift lowering beyond the current concrete-evidence slice, signal merge runtime wiring. Sections §26–§28 cover the CLI, LSP, and pre-stdlib implementation gaps.
+> Status: normative working draft with implementation choices merged. The [pipeline support matrix](#pipeline-support-matrix) describes the supported compiler/runtime slices and their limits; a normative rule is not by itself evidence that every backend path implements it. For user-facing behavior, consult the [manual reference](manual/reference/index.md), especially the source catalog. Sections §26–§28 cover the CLI, LSP, and runtime/application boundaries.
 
 ---
 
@@ -1371,7 +1371,7 @@ Structural patches update immutable values with explicit selector paths.
 
 #### Grammar
 
-```
+```text
 patch-expr    ::= target <| patch-literal
                |  patch { patch-entry* }
 
@@ -2911,6 +2911,45 @@ These milestones partition implementation work; they do not reduce scope.
 
 Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implemented with known gaps; **PENDING** = not yet started.
 
+### Pipeline support matrix
+
+This matrix is the implementation-status contract for the feature families specified above. A
+check means that the stage owns and validates that family; **PARTIAL** names a deliberately bounded
+slice; **REJECTED** means the stage reports an explicit diagnostic instead of guessing semantics;
+and an em dash means the feature does not belong in that stage. The detailed milestone lists below
+and the feature sections they cite remain authoritative when a row is partial.
+
+The executable conformance suite in
+`crates/aivi-backend/tests/pipeline_conformance.rs` samples representative fully supported rows
+through CST diagnostics, HIR/type checking, typed-core and lambda validation, backend validation,
+interpreter execution, JIT execution, native-artifact execution, and AOT object emission. Features
+marked partial are covered by their owning crate tests and must not be inferred to work beyond the
+boundary stated here.
+
+| Feature family | CST / formatter | HIR / type + kind checking | Typed core / lambda IR | Backend IR / interpreter | Native JIT / AOT | Runtime / GTK boundary |
+| --- | --- | --- | --- | --- | --- | --- |
+| Comments, names, imports, exports, declarations, decorators | ✓ lossless syntax and canonical formatting | ✓ resolved names, exports, decorators, and provider metadata | ✓ owned item/import identities and explicit handoffs | ✓ item identities and imported/runtime slots | **PARTIAL**: linked items and supported imported helpers | ✓ workspace and provider linking |
+| Scalar, text, regex, interpolation, suffix, tuple, list, set, map, and record literals | ✓ | ✓ closed shape checking | ✓ typed literal and aggregate nodes | ✓ interpreter layouts and values | **PARTIAL**: supported scalar, text/bytes, tuple/record, and collection kernels; unsupported layouts reject | — |
+| Functions, anonymous lambdas, application, currying, and partial application | ✓ | ✓ local inference and arity checking | ✓ explicit closures, captures, and environments | ✓ callable values and application | **PARTIAL**: saturated direct calls and supported callable descriptors; arbitrary closure conversion remains pending | — |
+| Records, tuples, closed sums, constructors, and destructuring patterns | ✓ | ✓ constructor identity, arity, exhaustiveness, and closed shapes | ✓ typed patterns with spans | ✓ validated layouts, matching, and bindings | **PARTIAL**: supported layouts and pattern forms compile; unsupported payload/layout contracts reject | — |
+| Domains, carrier types, suffix namespaces, members, and domain operators | ✓ | ✓ nominal/carrier separation and member resolution | ✓ explicit domain evidence and carrier handoff | ✓ interpreter domain values and authored members | **PARTIAL**: representational domains and supported operators | — |
+| Higher kinds, classes, constraints, instances, and evidence passing | ✓ declarations and applications | ✓ kind/constraint/instance validation | ✓ builtin, authored, and imported evidence items | ✓ executable evidence and builtin class operations | **PARTIAL**: selected intrinsic/aggregate operations; indexed multi-parameter evidence remains deferred | — |
+| Structural equality and ordering | ✓ operators | ✓ `Eq`/`Ord` evidence and closed-shape validation | ✓ explicit evidence calls | ✓ structural interpreter semantics | **PARTIAL**: supported closed layouts; open, recursive, `Bytes`-derived, or unsupported shapes reject | — |
+| `Option`, `Result`, `Validation`, and result blocks | ✓ | ✓ carrier-specific typing and applicative laws | ✓ constructors, cases, and applicative lowering | ✓ interpreter execution | **PARTIAL**: supported scalar/reference layouts and constructor cases | — |
+| Inline transform, replacement, tap, debug, case, and truthy/falsy pipes | ✓ operators, memos, and arms | ✓ stage typing, grouping, exhaustiveness, and payload handoff | ✓ normalized typed pipe stages | ✓ interpreter execution | ✓ for the currently validated scalar/reference/aggregate layouts; other layouts reject | — |
+| Gate pipes | ✓ | ✓ Bool/purity checks and signal lifting | ✓ explicit gate stages | ✓ ordinary and supported signal execution | **PARTIAL**: supported predicate/layout slice | ✓ scheduler handoff for signal gates |
+| Applicative clusters (`&\|>`) | ✓ | ✓ cluster completion and carrier laws | ✓ normalized applicative spines | ✓ builtin/authored/imported executable evidence | **PARTIAL**: kernels supported by the selected evidence operations | ✓ `Signal`, `Validation`, `Option`, `Result`, and `Task` retain distinct lawful behavior |
+| Structural patch expressions and localized update pipes | ✓ | **PARTIAL**: records, lists, maps, and single-payload constructor focus | **REJECTED** for unsupported general-expression or gate forms | **PENDING** beyond the lowered supported slice | **PENDING** | **PARTIAL**: localized runtime/GTK update paths only where explicitly lowered |
+| Signals, dependencies, merges, committed snapshots, and transactional propagation | ✓ declarations and merge syntax | ✓ signal payload/dependency typing | ✓ explicit signal reads and runtime fragments | ✓ backend signal kernels and runtime plans | **PARTIAL**: supported signal body kernels and native sidecars | ✓ deterministic batched scheduler with stale-publication rejection |
+| Recurrence, accumulation, timer/backoff wakeups, delay, and burst | ✓ syntax and decorators | ✓ target/wakeup validation and recurrence elaboration | ✓ recurrence nodes and scheduler handoff | **PARTIAL**: recurrence kernels and plans | **PARTIAL**: supported recurrence kernels | **PARTIAL**: current recurrence execution; full recurrent-task and scheduler-owned filter/fanout execution remain pending |
+| Fan-out map/filter/join pipes | ✓ | ✓ typed fan-out segments and join checks | ✓ explicit fan-out stages | **PARTIAL**: ordinary execution and lowered signal plans | **PARTIAL**: supported map/join kernels | **PARTIAL**: scheduler-owned signal filter/fanout execution remains pending |
+| `Task`, source declarations, provider contracts, lifecycle, and typed external decoding | ✓ | ✓ source contracts, recurrence metadata, and decode planning | ✓ task/source/decode IR with explicit blockers | ✓ backend source/decode plans and task interpreter | **PARTIAL**: pure helper kernels only; effects remain host-owned | **PARTIAL**: timer complete; HTTP, filesystem, socket, mail, process, D-Bus, portal, and other providers expose only their documented execution slices |
+| GTK markup, widget schemas, events, `<show>`, `<each>`, `<empty>`, `<match>`, `<fragment>`, and `<with>` | ✓ markup/control syntax | ✓ schema-aware attributes, bindings, and control-node typing | — pure language logic stays separate | — widget plans are owned by `aivi-gtk` | — GTK calls never enter native pure kernels | **PARTIAL**: current widget/property/event catalog is executable; the full GTK catalog remains pending and all mutation is main-thread confined |
+
+The matrix intentionally distinguishes “not owned by this stage” from “unsupported.” A feature may
+cross a stage as typed metadata without being executable there; unsupported executable handoffs must
+remain diagnostics, never interpreter-only semantic guesses or silent native fallbacks.
+
 ### Milestone 1 — Surface and CST freeze — **COMPLETE**
 
 - lexer ✓
@@ -2936,7 +2975,7 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 - structural patch surface (`<|`, `patch { ... }`, `:=`, selector paths) ✓
 - module-aware expression typechecker in `aivi-hir` ✓
 
-### Milestone 3 — Kinds and core typing — **COMPLETE**
+### Milestone 3 — Kinds and core typing — **PARTIAL**
 
 - kind checking ✓
 - class/instance resolution and evidence ✓
@@ -2950,7 +2989,7 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 - bidirectional record/collection/projection shape checking ✓
 - structural patch typechecking for records, lists, maps, and single-payload constructor focus **PARTIAL**
 
-### Milestone 4 — Pipe normalization — **COMPLETE**
+### Milestone 4 — Pipe normalization — **PARTIAL**
 
 - exact `&|>` normalization into applicative spines ✓
 - recurrence node representation ✓
@@ -3007,7 +3046,7 @@ Status legend: **COMPLETE** = fully implemented; **PARTIAL** = core slice implem
 - body-backed signal inline transform/tap/case/truthy-falsy execution against committed snapshots ✓
 - general lambda/closure conversion for arbitrary bodies — pending
 - scheduler-owned signal filter/fanout/recurrence pipeline execution — pending
-- initial moving-GC integration — pending
+- scheduler-committed snapshots use the moving-GC boundary described in §28.6; expansion to other runtime values remains pending
 - fuzzing and deterministic stress infrastructure — in progress
 - performance pass plan frozen and benchmark-gated (see §28.8–§28.9)
 
@@ -3038,34 +3077,39 @@ One correct algebraic model over many local patches:
 
 Module discovery uses the nearest ancestor `aivi.toml`; absent that, the entry file's parent directory is the workspace root. Module names come from relative `.aivi` paths under that root.
 
-### 26.1 `aivi check <path>`
+### 26.1 `aivi check [<path>] [--timings]`
 
-```
+```sh
 aivi check src/main.aivi
 ```
 
-Pipeline: source → CST → HIR → typed core → lambda → backend (no code emission).
+Pipeline: source → CST → resolved and type-checked HIR. No object or runnable artifact is emitted.
 
-Reports diagnostics with source locations. Exits 0 if no errors, 1 if errors, 2 on internal failure.
+A path may be a source file or a directory. When omitted, manifest entries select the files to
+check. `--timings` prints frontend stage timings to stderr.
+
+Reports diagnostics with source locations. Exits 0 if no errors, 1 if errors, 2 on command or
+internal failure.
 
 `aivi <path>` with no subcommand is equivalent to `aivi check <path>`.
 
 ### 26.2 `aivi compile <path> [-o <output>]`
 
-```
+```sh
 aivi compile src/main.aivi -o build/main.o
 aivi compile src/main.aivi --output build/main.o
 ```
 
 Pipeline: source → CST → HIR → typed core → lambda → backend → Cranelift → object file.
 
-If `-o` / `--output` is omitted, no output file is written but the pipeline is validated. Exits 0 on success, 1 on compilation errors.
+If `-o` / `--output` is omitted, the object is written to a path derived from the input. Exits 0
+on success and non-zero on compilation or command errors.
 
 `aivi compile` stops at the honest compile boundary. Use `aivi build` when you want a runnable executable; `compile` remains the object-code surface.
 
-### 26.3 `aivi build <path> -o <output> [--view <name>]`
+### 26.3 `aivi build <path> -o <output> [--app <name>] [--view <name>]`
 
-```
+```sh
 aivi build src/app.aivi -o build/app
 aivi build src/app.aivi -o dist/users --view mainWindow
 ```
@@ -3074,7 +3118,7 @@ aivi build src/app.aivi -o dist/users --view mainWindow
 The emitted executable contains:
 
 - the current `aivi` runtime host
-- a serialized `run-artifact.bin` payload for the selected view
+- a versioned frozen run image for the selected view
 - embedded backend metadata payloads plus precompiled native-kernel sidecars
 - embedded non-source workspace companion files needed at runtime (for example `assets/`)
 
@@ -3084,16 +3128,18 @@ The executable is self-contained at the AIVI layer and does not depend on worksp
 
 Exits 0 on success, 1 on validation/build errors.
 
-### 26.4 `aivi run [<path>] [--path <path>] [--app <name>] [--view <name>]`
+### 26.4 `aivi run [<path>] [--path <path>] [--app <name>] [--view <name>] [--timings]`
 
-```
+```sh
 aivi run src/app.aivi
 aivi run --app tray
 aivi run src/app.aivi --view mainWindow
-aivi run build/app/run-artifact.bin
+aivi run path/to/frozen-run-image.bin
 ```
 
-The path may be a source/workspace entry or a serialized `run-artifact.bin`.
+The path may be a source/workspace entry or a compatible versioned frozen run image. Frozen image
+files are internal build/cache artifacts and reject unknown formats or versions with rebuild
+guidance.
 When no explicit path is given, the CLI resolves the nearest-workspace default in this order:
 
 1. selected `[[app]]` from `--app <name>`
@@ -3140,7 +3186,9 @@ not inherit the default `[run.launch]` fan-out.
 
 When the input is a serialized run artifact, the bundled view is already fixed. `--view <name>` may be omitted or must match the bundled view exactly.
 
-The current cataloged widget/runtime slice includes `Window`, `HeaderBar`, `Paned`, `Box`, `ScrolledWindow`, `Frame`, `Viewport`, `Label`, `Button`, `Entry`, `Switch`, `CheckButton`, `ToggleButton`, `Image`, `Spinner`, `ProgressBar`, `Revealer`, and `Separator`. `Entry.onChange` publishes `Text`, `Switch.onToggle` publishes `Bool`, and JSON-backed source payloads may now decode `Float`, `Decimal`, `BigInt`, and `Bytes` through explicit contracts.
+The maintained widget/property/event catalog is generated from the GTK schema and documented in
+the manual's markup reference. JSON-backed source payloads decode only through explicit typed
+contracts.
 
 Widgets with a single default child group still accept ordinary unnamed children. Widgets with multiple child groups now require explicit dotted child-group wrappers, for example:
 
@@ -3171,7 +3219,7 @@ Exits 0 on clean application close, 1 on startup/compilation error.
 
 ### 26.5 `aivi execute <path> [-- args...]`
 
-```
+```sh
 aivi execute src/cli.aivi
 aivi execute src/cli.aivi -- --model gpt-5.4 prompt.txt
 ```
@@ -3207,7 +3255,7 @@ runtime error.
 
 ### 26.6 `aivi fmt [--stdin | --check] [<path>...]`
 
-```
+```sh
 aivi fmt src/app.aivi             # format to stdout
 aivi fmt --stdin                  # read from stdin, write to stdout
 aivi fmt --check src/a.aivi src/b.aivi   # verify formatting; exit 1 if any differ
@@ -3217,7 +3265,7 @@ The formatter is canonical: single deterministic output for any valid source. Fo
 
 ### 26.7 `aivi lex <path>`
 
-```
+```sh
 aivi lex src/app.aivi
 ```
 
@@ -3225,58 +3273,104 @@ Tokenizes and prints the token stream. Useful for debugging lexer behavior, rege
 
 ### 26.8 `aivi lsp`
 
-```
+```sh
 aivi lsp
 ```
 
 Starts the AIVI Language Server on stdin/stdout using the Language Server Protocol. Editor integrations launch this subprocess and communicate over stdio. See §27 for supported capabilities.
 
-### 26.9 `aivi db migrate`
+### 26.9 `aivi test <path> [name]`
 
-```
-aivi db migrate
-```
-
-Diffs current record types against the last applied migration state and writes a new SQL file under `db/migrations/` with a timestamp-prefixed filename. The generated file is ordinary SQL intended for review and commit.
-
-### 26.10 `aivi db apply`
-
-```
-aivi db apply
+```sh
+aivi test tests/main.aivi
+aivi test tests/main.aivi selectedTest
 ```
 
-Applies pending SQL migrations in lexicographic order using a `_schema_migrations` tracking table inside one transaction. On failure, the whole application rolls back.
+Discovers exported `@test value ... : Task ...` declarations in the workspace. With no name, each
+test runs in isolation. With a name, only that exact test value from the requested file runs.
+
+### 26.10 `aivi openapi-gen <spec> [-o <output>]`
+
+```sh
+aivi openapi-gen api.yaml -o generated/types.aivi
+```
+
+Parses an OpenAPI 3 JSON or YAML document and emits AIVI declarations. Without `-o`, generated
+source is written to stdout.
+
+### 26.11 `aivi init <project-name>`
+
+Creates a project directory containing `aivi.toml`, a starter `main.aivi`, and `.gitignore`.
+
+### 26.12 `aivi mcp [--path <path>] [--view <name>]`
+
+Starts the Model Context Protocol server over stdio for live app launch, signal/source inspection,
+GTK tree snapshots, synthetic events, and source-value publication.
+
+### 26.13 `aivi manual-snippets [options]`
+
+Validates fenced AIVI blocks in the manual through parsing, HIR, LSP analysis, and structural
+validation. `--write` applies canonical formatting; `--todo` selects the deterministic report
+path.
+
+### 26.14 Planned database migration commands
+
+`aivi db migrate` and `aivi db apply` are planned command shapes only. They are not dispatched by
+the current CLI. Until an implementation is specified and delivered end to end, documentation and
+automation must not rely on either command.
 
 ---
 
 ## 27. Language server (LSP)
 
-`aivi lsp` is backed by the `aivi-query` incremental query database, which caches source, parse, HIR, diagnostic, symbol, and format results per revision.
+`aivi lsp` is backed by the `aivi-query` incremental query database, which caches source,
+parse, HIR, diagnostic, symbol, format, and backend-unit results by source revision.
 
 ### 27.1 Supported capabilities
 
 | Capability | Status |
 |---|---|
-| Text document sync (full) | ✓ |
+| Text document sync (incremental, versioned UTF-16 edits) | ✓ |
 | Diagnostics (publish on open/change) | ✓ |
 | Document formatting | ✓ |
 | Document symbols | ✓ |
-| Workspace symbols | Partial |
+| Workspace symbols | ✓ |
 | Hover documentation | ✓ |
 | Go-to-definition | ✓ |
 | Completion (triggered on `.`) | ✓ |
-| Semantic tokens (full) | Partial |
+| Signature help | ✓ |
+| Go-to-implementation | ✓ |
+| References | ✓ |
+| Prepare rename and rename | ✓ |
+| Document highlights | ✓ |
+| Folding ranges | ✓ |
+| Inlay hints | ✓ |
+| Code actions | ✓ |
+| Code lenses for `@test` values | ✓ |
+| Semantic tokens (full, range, and delta) | ✓ |
 
 ### 27.2 Architecture
 
-All editor features go through the revision-keyed query database rather than invoking ad-hoc frontend passes. Incremental memoization is per file revision so rapid keystroke changes do not invalidate unrelated cached queries. When a workspace root is known, the server uses the same `aivi.toml` / relative-path module mapping as the CLI.
+Open documents are stored as versioned ropes. Each change notification is applied transactionally:
+UTF-16 ranges, surrogate boundaries, optional range lengths, and monotonically increasing document
+versions must all validate before the rope and query input are committed.
+
+Compiler work runs on a bounded analysis worker pool rather than Tokio executor threads. A newer
+edit cancels superseded diagnostic work, and diagnostics are published only after a serialized
+final version check. Protocol messages remain on stdout and logs remain on stderr.
+
+All editor features go through the revision-keyed query database rather than invoking ad-hoc
+frontend passes. Incremental memoization is per source revision, and whole-workspace navigation
+uses one immutable symbol/reference index per query-database workspace revision. When a workspace
+root is known, the server uses the same `aivi.toml` and relative-path module mapping as the CLI.
 
 ### 27.3 Current limitations
 
-- whole-workspace semantic queries remain partial; the checked/open file set is the primary working set for symbols and diagnostics
-- completion suggestions are basic; type-directed completion over expected record fields and constructor arguments is pending
-- semantic token legend exists but token-type coverage is incomplete
-- editor-facing project orchestration does not replace the CLI workflow for runtime, migrations, or provider startup validation
+- diagnostics are push-based for open or changed documents; the server does not proactively publish
+  every unopened workspace file
+- completion does not synthesize import edits
+- editor tooling does not replace `aivi run`, `aivi execute`, `aivi build`, provider startup
+  validation, or live MCP introspection
 
 ---
 
@@ -3293,6 +3387,11 @@ Multi-file workspace discovery is shared across `check`, `compile`, and `run`:
 
 ### 28.2 Database schema and migrations
 
+This subsection describes the intended migration policy, not a shipped CLI command or a
+verified startup schema check. The current public database source/command surface is
+documented in the [database reference](manual/stdlib/db.md) and
+[source catalog](manual/guide/source-catalog.md#database).
+
 AIVI record types are the schema source of truth.
 
 Rules:
@@ -3307,9 +3406,9 @@ Rules:
 
 - `dbus.ownName`: `@source` for name ownership state
 - `dbus.call`: `Task`
-- `dbus.emit`: `Task`
+- `dbus.emit`: source-backed emission
 - `dbus.signal`: `@source` for inbound signal subscription
-- `dbus.method`: `@source` for fire-and-forget inbound method dispatch with immediate Unit reply semantics on the wire
+- `dbus.method`: `@source` for inbound method dispatch with fixed or task-backed replies
 
 Current executable lowering covers:
 
@@ -3317,11 +3416,18 @@ Current executable lowering covers:
 - `dbus.signal` with `interface`, `member`, `bus`, and `address`
 - `dbus.method` with `path`, `interface`, `member`, `bus`, and `address`
 
-Methods returning non-Unit values to the caller are deferred. Recursive `DbusValue` source decoding is also still deferred, so the currently supported message body carrier is `Text`.
+Message bodies may use `Text` or the supported `List DbusValue` representation. Fixed
+`replyValues` and task-backed non-Unit replies are supported; reply tasks do not yet receive
+the incoming call as an explicit argument. See the
+[D-Bus source reference](manual/guide/source-catalog.md#d-bus) for current types and limits.
 
 ### 28.4 Local-first sync architecture
 
 Reference email-oriented runtime shape:
+
+This is an application architecture sketch, not behavior automatically supplied by an
+IMAP source. Applications must wire persistence and sync state explicitly; the SMTP stdlib
+module currently supplies vocabulary rather than a sending implementation.
 
 - IMAP sync runs on a worker and writes fetched mail into SQLite through the database layer
 - the UI reads via `db.query` over the local database rather than binding directly to a live IMAP stream
@@ -3413,7 +3519,7 @@ use aivi.core.fn (
 
 Disjoint union type. `Either L R` is `Left L | Right R`.
 
-```
+```text
 type Either L R = Left L | Right R
 ```
 
@@ -3439,7 +3545,11 @@ use aivi.core.float (
 
 #### `aivi.core.dict`
 
-Text-keyed association dictionary. `Dict V = { entries: List (DictEntry V) }`. All operations are O(n) over the entry list. The empty dict is the literal `{ entries: [] }`.
+Association dictionary for any `Eq` key type: `Dict K V = { entries: List (DictEntry K V) }`.
+Lookup, insertion, and removal scan entries; repeated insertion and merging can take quadratic
+work. `insert` prepends or moves a key to the front. See the
+[dictionary reference](manual/stdlib/dict.md) for ordering and API details.
+The empty dict is `{ entries: [] }`.
 
 ```aivi
 use aivi.core.dict (
@@ -3484,13 +3594,13 @@ Added `IntrinsicValue` variants and `RuntimeTaskPlan` entries for basic filesyst
 
 | Intrinsic | Type |
 |---|---|
-| `FsReadText` | `Text -> Task FsError Text` |
-| `FsReadDir` | `Text -> Task FsError (List Text)` |
-| `FsExists` | `Text -> Task FsError Bool` |
+| `FsReadText` | `Text -> Task Text Text` |
+| `FsReadDir` | `Text -> Task Text (List Text)` |
+| `FsExists` | `Text -> Task Text Bool` |
 
-These intrinsics are part of the **current compatibility surface**. The planned steady-state model
-moves filesystem reads, watches, and mutations behind a unified `@source fs ...` capability handle
-instead of exposing separate module-global filesystem tasks.
+These are backend intrinsic identities, not public module-global request functions.
+Public filesystem reads, watches, and mutations use unified `@source fs ...` capability
+handles; see the [filesystem reference](manual/stdlib/fs.md).
 
 ### 29.5 AIVI stdlib authoring conventions
 
@@ -3502,7 +3612,8 @@ Hard parse and HIR rules:
 - **No scientific notation** in float literals. Use decimal notation: `3.14`, not `3.14e0`.
 - **Prefix minus** on numeric literals is valid: `-3`, `-1.5`. The unary minus is also spelled `negate` for clarity in pipe contexts.
 - **Boolean operators**: `and` and `or` keywords, not `&&`/`||`.
-- **No inline lambdas** in expressions. All functions must be named top-level declarations.
+- **Inline lambdas** use `=>`, for example `value increment : Int -> Int = x => x + 1`.
+  Use named helpers when logic is reused or when a nested pipe needs its own expression spine.
 - **Record literals** may span multiple lines. The parser accepts newline-separated fields inside `{ }` with the same indentation-aware rules as other block syntax.
 - **Nested `T|>/F|>`** must use helper functions. `T|>` and `F|>` must be an adjacent pair in the same pipe spine — nesting them requires extracting the inner branch into a named helper.
 - **`value` declarations** are monomorphic. Type variables in a `value` annotation (`value x:(Dict V)`) are rejected. Use a concrete type or promote the definition to a `func` with a `Unit` parameter.
@@ -3548,8 +3659,8 @@ The following `IntrinsicValue` variants and `RuntimeTaskPlan` entries were added
 
 All catalog entries are under `aivi.fs`.
 
-Like the basic filesystem intrinsics above, these remain compatibility surfaces until provider-owned
-filesystem commands are available through unified source capabilities.
+Like the basic filesystem intrinsics above, these are internal operation identities used
+by capability lowering. Public code uses provider-owned commands on `FsSource` handles.
 
 ### 29.8 Path intrinsics
 
@@ -3567,7 +3678,7 @@ Synchronous, pure path-string intrinsics (no I/O, no `Task`). All catalog entrie
 
 `PathNormalize` resolves `.` and `..` lexically without filesystem I/O.
 
-The `aivi.path` module exports `Path` as a distinct domain type (not an alias for `Text`). `Path` is not interchangeable with `Text` without explicit conversion; use `PathFromText` to construct a `Path` from a `Text` value and `PathToText` to extract the underlying text. The `PathError` ADT is:
+The `aivi.path` module exports `Path` as a distinct domain type (not an alias for `Text`). It does not currently export a public parser or carrier conversion; `PathFromText` and `PathToText` are not catalog intrinsics. The lexical path helpers above operate on `Text`, not on the nominal domain. The `PathError` ADT is:
 
 ```aivi
 type PathError =

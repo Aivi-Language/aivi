@@ -168,3 +168,53 @@ fn test_command_accepts_contains_membership_forms() {
         "expected success summary for contains membership forms, stdout was: {stdout}"
     );
 }
+
+#[test]
+fn test_command_selects_one_exact_test_from_the_requested_file() {
+    let dir = TempDir::new("test-exact-selection");
+    let path = dir.write(
+        "main.aivi",
+        concat!(
+            "@test\n",
+            "value selected : Task Text Bool = pure True\n",
+            "@test\n",
+            "value notSelected : Task Text Bool = pure False\n",
+        ),
+    );
+    let selected = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("test")
+        .arg(&path)
+        .arg("selected")
+        .output()
+        .expect("selected test command should run");
+
+    let stdout = String::from_utf8_lossy(&selected.stdout);
+    let stderr = String::from_utf8_lossy(&selected.stderr);
+    assert!(
+        selected.status.success(),
+        "expected exact selected test to pass, stdout was: {stdout}, stderr was: {stderr}"
+    );
+    assert!(
+        stdout.contains("::selected"),
+        "selected test was not run: {stdout}"
+    );
+    assert!(
+        !stdout.contains("::notSelected"),
+        "unselected test unexpectedly ran: {stdout}"
+    );
+    assert!(stdout.contains("test result: ok. 1 passed; 0 failed; 1 total"));
+
+    let missing = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("test")
+        .arg(&path)
+        .args(["--name", "missing"])
+        .output()
+        .expect("missing selected test command should run");
+    assert!(!missing.status.success());
+    assert!(
+        String::from_utf8_lossy(&missing.stderr)
+            .contains("no `@test` value named `missing` found in"),
+        "missing selection should be actionable, stderr was: {}",
+        String::from_utf8_lossy(&missing.stderr)
+    );
+}

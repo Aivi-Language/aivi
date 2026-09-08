@@ -2,6 +2,9 @@
 
 IEEE 754 double-precision floating-point helpers. The built-in `Float` type supports `+`, `-`, `*`, `/`, `<`, `>`, `<=`, `>=`, `==`, and `!=` directly. This module adds commonly needed pure helpers on top.
 
+The runtime representation accepts finite values only; do not assume NaN or infinity
+propagation behaves like an unrestricted host-language `f64`.
+
 The low-level math intrinsics (`floor`, `ceil`, `round`, `sqrt`, `abs`, `toInt`, `fromInt`, `toText`, `parseText`) are available via the compiler catalog:
 
 ```aivi
@@ -106,10 +109,8 @@ func roundTrip = n =>
 
 ## negate
 
-Negates a float. AIVI has no prefix minus on literals, so `negate` fills that gap.
+Negates a float. This is the named, first-class function counterpart of unary `-`.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.float (negate)
@@ -125,8 +126,6 @@ func flipSign = n =>
 
 Return the larger or smaller of two floats.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.float (
@@ -145,8 +144,6 @@ func boundedProgress = progress =>
 
 Clamps a value to the inclusive range `[lo, hi]`.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.float (clamp)
@@ -162,8 +159,6 @@ func normalizedVolume = raw =>
 
 Linear interpolation between `a` and `b`. `lerp a b 0.0` returns `a`, `lerp a b 1.0` returns `b`.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.float (lerp)
@@ -179,8 +174,6 @@ func blend = from to t =>
 
 Returns `-1.0`, `0.0`, or `1.0` depending on the sign of `n`.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.float (sign)
@@ -196,8 +189,6 @@ func moveDirection = velocity =>
 
 Returns `True` if `n` is in the closed interval `[lo, hi]`.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.float (between)
@@ -211,8 +202,6 @@ func isValidRatio = ratio =>
 
 ## Predicates
 
-```aivi
-```
 
 ```aivi
 use aivi.core.float (
@@ -237,8 +226,6 @@ func signum = n => isPositive n
 
 Multiplies a float by itself.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.float (square)
@@ -258,8 +245,22 @@ func distanceSquared = dx dy =>
 
 Convert between degrees and radians.
 
-```aivi
-```
+## Additional helpers
+
+`absHelper : Float -> Float` is also exported as a pure stdlib implementation of absolute value.
+
+| Function | Type | Behavior |
+| --- | --- | --- |
+| `normalizeAngle` | `Float -> Float` | Wrap a radian angle using `angle - tau * floor (angle / tau)` |
+| `approxEq` | `Float -> Float -> Float -> Bool` | `approxEq epsilon a b` tests `abs (a - b) <= epsilon` |
+| `percentOf` | `Float -> Float -> Float` | `percentOf percent total` computes `total * percent / 100` |
+| `pow10` | `Int -> Int` | Integer power of ten; negative exponents return `1` |
+| `roundTo` | `Int -> Float -> Float` | Round to the given decimal-place count using `pow10` |
+| `cubicBezier` | `Float -> Float -> Float -> Float -> Float -> Float` | Evaluate the scalar cubic Bézier polynomial at `t` for four control values |
+
+These helpers do not clamp interpolation parameters. Use non-negative tolerances for
+`approxEq`, and keep `pow10`/`roundTo` place counts within the machine-integer range.
+
 
 ```aivi
 use aivi.core.float (

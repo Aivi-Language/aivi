@@ -20,6 +20,8 @@ use aivi.stdio (
 ## Capability handle
 
 ```aivi
+use aivi.stdio (StdioSource)
+
 @source stdio
 signal console : StdioSource
 

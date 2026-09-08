@@ -10,35 +10,13 @@ all later compiler layers consume. It depends on `aivi-typing` for structural ty
 
 ## Entry points
 
-```rust
-// Produce a HIR Module from a parsed CST
-lower_module(parsed: &ParsedModule, db: &SourceDatabase) -> LoweringResult
-lower_module_with_resolver(parsed: &ParsedModule, db: &SourceDatabase, resolver: &dyn ImportResolver) -> LoweringResult
-lower_structure(parsed: &ParsedModule, db: &SourceDatabase) -> LoweringResult
+- [`lower_module` / `lower_module_with_resolver`](src/lower/api.rs) accept a syntax `Module`, not a `ParsedModule` or source database.
+- `lower_structure` returns `LoweringResult<Unresolved>`; `resolve_imports` consumes its unresolved module to resolve references.
+- `validate_module` and `typecheck_module` produce structural and type reports.
+- The elaboration passes below produce plans consumed by later lowering.
+- [`extract_symbols`](src/symbols.rs) and [`exports`](src/exports.rs) expose tooling and import metadata.
 
-// Structural and type validation
-validate_module(module: &Module, db: &SourceDatabase) -> ValidationReport
-typecheck_module(module: &Module, db: &SourceDatabase) -> TypeCheckReport
-
-// Elaboration passes (run in order after validation)
-populate_signal_metadata(module: &mut Module, db: &SourceDatabase)
-elaborate_gates(module: &Module, db: &SourceDatabase) -> GateElaborationReport
-elaborate_truthy_falsy(module: &Module, db: &SourceDatabase) -> TruthyFalsyElaborationReport
-elaborate_temporal_stages(module: &Module, db: &SourceDatabase) -> TemporalElaborationReport
-elaborate_fanouts(module: &Module, db: &SourceDatabase) -> FanoutElaborationReport
-elaborate_recurrences(module: &Module, db: &SourceDatabase) -> RecurrenceElaborationReport
-elaborate_source_decodes(module: &Module, db: &SourceDatabase) -> SourceDecodeElaborationReport
-generate_source_decode_programs(module: &Module, ...) -> SourceDecodeProgramReport
-elaborate_source_lifecycles(module: &Module, db: &SourceDatabase) -> SourceLifecycleElaborationReport
-elaborate_general_expressions(module: &Module, db: &SourceDatabase) -> GeneralExprElaborationReport
-
-// Import resolution
-resolve_imports(parsed: &ParsedModule, resolver: &dyn ImportResolver) -> Vec<ImportModuleResolution>
-
-// Symbol extraction (for LSP)
-extract_symbols(module: &Module) -> Vec<LspSymbol>
-exports(module: &Module) -> ExportedNames
-```
+For exact signatures and pass prerequisites, consult the source API rather than treating this overview as Rust code.
 
 ## Elaboration passes
 
@@ -57,11 +35,11 @@ exports(module: &Module) -> ExportedNames
 
 ## Invariants
 
-- `lower_module` always returns a `LoweringResult`; errors appear in its `diagnostics` field, never as panics.
+- `lower_module` always returns a `LoweringResult`; frontend errors appear in its `diagnostics` field.
 - `ModuleArenas` are module-owned; IDs (`ExprId`, `BindingId`, …) are valid only within the module they came from.
-- Import cycles are detected during `resolve_imports` and reported as `ImportCycle` errors.
-- Every `ResolutionState` variant is explicit — unresolved names are represented as `NameError`, not as absent nodes.
-- Elaboration passes return `*ElaborationReport` structs that separate `Ok` and `Blocked` outcomes; callers must not treat blocked outcomes as errors.
+- Import cycles are detected through the import resolver during structural lowering, before local reference resolution.
+- Every `ResolutionState` variant is explicit — references are represented as `Unresolved` or `Resolved(T)`, with diagnostics for resolution failures.
+- Elaboration passes return `*ElaborationReport` structs that separate `Ok` and `Blocked` outcomes; callers must not treat a blocked outcome as a successfully executable plan.
 - `typecheck_module` only runs after structural validation has passed; running it on an invalid module is unsupported.
 
 ## Diagnostic codes

@@ -6,8 +6,6 @@ Predicates are inline filter expressions used inside patch selectors and collect
 
 A predicate appears inside square brackets and uses dot-prefixed field access:
 
-```aivi
-```
 
 The dot (`.`) refers to the current element being tested. The expression must evaluate to `Bool`.
 
@@ -71,32 +69,39 @@ Selectors are the path expressions inside patch braces that determine what to up
 
 Examples of chaining:
 
+
+## Optional fields
+
+Patch selectors do not implicitly unwrap constructors. Match an optional field explicitly, then
+patch the enclosing record:
+
 ```aivi
-```
+type Int -> Int
+func increment = value =>
+    value + 1
 
-## Constructor focus
-
-For single-payload constructors like `Some`, `Ok`, `Err`, `Valid`, and `Invalid`, the selector can focus through the constructor:
-
-```aivi
 type Config = {
     retries: Option Int,
     name: Text
 }
 
-value bumpRetries : (Config -> Config) =
-    patch {
-        retries.Some: increment,
-    }
+type Config -> Config
+func bumpRetries = config => config.retries
+ ||> Some retries -> config <| { retries: Some (increment retries) }
+ ||> None         -> config
 ```
 
-If the value does not match the constructor (e.g. it is `None`), the patch leaves it unchanged.
+The `None` arm leaves the record unchanged, and the `Some` arm makes the unwrap and rebuild visible.
 
 ## Store syntax
 
 Use `:=` to store a function value as data instead of applying it:
 
 ```aivi
+type Int -> Int
+func increment = value =>
+    value + 1
+
 type Counter = {
     step: Int -> Int
 }
@@ -114,6 +119,11 @@ Without `:=`, the function would be called during patch application. With `:=`, 
 Use `: -` to remove a field from a record:
 
 ```aivi
+value record = {
+    tempField: 42,
+    keep: True
+}
+
 value cleaned = record <| { tempField: - }
 ```
 

@@ -7,11 +7,11 @@ use tower_lsp::lsp_types::{
 
 use crate::state::ServerState;
 
-pub async fn hover(params: HoverParams, state: Arc<ServerState>) -> Option<Hover> {
+pub fn hover(params: HoverParams, state: Arc<ServerState>) -> Option<Hover> {
     let uri = &params.text_document_position_params.text_document.uri;
     let lsp_pos = params.text_document_position_params.position;
 
-    let file = *state.files.get(uri)?;
+    let file = state.file(uri)?;
     let analysis = crate::analysis::FileAnalysis::load(&state.db, file);
     let cursor = LspPosition {
         line: lsp_pos.line,

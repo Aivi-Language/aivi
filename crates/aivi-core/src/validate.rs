@@ -718,7 +718,7 @@ pub fn validate_module(module: &Module) -> Result<(), ValidationErrors> {
                             let expected = case_arm_result_type(&stage.result_subject);
                             for (arm_index, arm) in arms.iter().enumerate() {
                                 push_expr(module, arm.body, &mut work, &mut errors);
-                                validate_pattern(&arm.pattern, module, &mut work, &mut errors);
+                                validate_pattern(&arm.pattern);
                                 if module.exprs()[arm.body].ty != expected {
                                     errors.push(ValidationError::InlinePipeCaseArmResultMismatch {
                                         expr: expr_id,
@@ -1026,38 +1026,26 @@ fn push_exprs(
     }
 }
 
-fn validate_pattern(
-    pattern: &Pattern,
-    _module: &Module,
-    _work: &mut Vec<ExprId>,
-    _errors: &mut Vec<ValidationError>,
-) {
-    match &pattern.kind {
-        PatternKind::Wildcard
-        | PatternKind::Binding(_)
-        | PatternKind::Integer(_)
-        | PatternKind::Text(_) => {}
-        PatternKind::Tuple(elements) => {
-            for element in elements {
-                validate_pattern(element, _module, _work, _errors);
+fn validate_pattern(pattern: &Pattern) {
+    let mut work = vec![pattern];
+    while let Some(pattern) = work.pop() {
+        match &pattern.kind {
+            PatternKind::Wildcard
+            | PatternKind::Binding(_)
+            | PatternKind::Integer(_)
+            | PatternKind::Text(_) => {}
+            PatternKind::Tuple(elements) => work.extend(elements.iter().rev()),
+            PatternKind::List { elements, rest } => {
+                if let Some(rest) = rest {
+                    work.push(rest);
+                }
+                work.extend(elements.iter().rev());
             }
-        }
-        PatternKind::List { elements, rest } => {
-            for element in elements {
-                validate_pattern(element, _module, _work, _errors);
+            PatternKind::Record(fields) => {
+                work.extend(fields.iter().rev().map(|field| &field.pattern));
             }
-            if let Some(rest) = rest {
-                validate_pattern(rest, _module, _work, _errors);
-            }
-        }
-        PatternKind::Record(fields) => {
-            for field in fields {
-                validate_pattern(&field.pattern, _module, _work, _errors);
-            }
-        }
-        PatternKind::Constructor { arguments, .. } => {
-            for argument in arguments {
-                validate_pattern(argument, _module, _work, _errors);
+            PatternKind::Constructor { arguments, .. } => {
+                work.extend(arguments.iter().rev());
             }
         }
     }
@@ -1100,5 +1088,70 @@ fn case_arm_result_type(result: &crate::ty::Type) -> crate::ty::Type {
     match result {
         crate::ty::Type::Signal(payload) => payload.as_ref().clone(),
         _ => result.clone(),
+    }
+}
+
+#[cfg(test)]
+mod stack_safety_tests {
+    use std::{mem, thread};
+
+    use aivi_base::SourceSpan;
+
+    use super::validate_pattern;
+    use crate::{Pattern, PatternKind};
+
+    fn deeply_nested_list_pattern(depth: usize) -> Pattern {
+        let mut pattern = Pattern {
+            span: SourceSpan::default(),
+            kind: PatternKind::Wildcard,
+        };
+        for _ in 0..depth {
+            pattern = Pattern {
+                span: SourceSpan::default(),
+                kind: PatternKind::List {
+                    elements: Vec::new(),
+                    rest: Some(Box::new(pattern)),
+                },
+            };
+        }
+        pattern
+    }
+
+    fn drop_pattern_iteratively(root: Pattern) {
+        let mut work = vec![root];
+        while let Some(mut pattern) = work.pop() {
+            match mem::replace(&mut pattern.kind, PatternKind::Wildcard) {
+                PatternKind::Tuple(elements) => work.extend(elements),
+                PatternKind::List { elements, rest } => {
+                    work.extend(elements);
+                    if let Some(rest) = rest {
+                        work.push(*rest);
+                    }
+                }
+                PatternKind::Record(fields) => {
+                    work.extend(fields.into_iter().map(|field| field.pattern));
+                }
+                PatternKind::Constructor { arguments, .. } => work.extend(arguments),
+                PatternKind::Wildcard
+                | PatternKind::Binding(_)
+                | PatternKind::Integer(_)
+                | PatternKind::Text(_) => {}
+            }
+        }
+    }
+
+    #[test]
+    fn validates_deep_patterns_without_using_the_rust_call_stack() {
+        thread::Builder::new()
+            .name("core-pattern-stack-safety".to_owned())
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let pattern = deeply_nested_list_pattern(16_384);
+                validate_pattern(&pattern);
+                drop_pattern_iteratively(pattern);
+            })
+            .expect("stack-safety test thread should spawn")
+            .join()
+            .expect("typed-core pattern validation should not overflow the stack");
     }
 }

@@ -2,18 +2,19 @@ import * as vscode from "vscode";
 import {
   LanguageClient,
   LanguageClientOptions,
+  RevealOutputChannelOn,
   ServerOptions,
   TransportKind,
 } from "vscode-languageclient/node";
-import { getConfig } from "./config";
+import type { AiviConfig } from "./config";
+import { serverInitializationOptions } from "./contract";
 
 export function createClient(
-  context: vscode.ExtensionContext,
-  outputChannel: vscode.OutputChannel,
-  traceOutputChannel: vscode.OutputChannel
+  config: AiviConfig,
+  outputChannel: vscode.LogOutputChannel,
+  traceOutputChannel: vscode.LogOutputChannel,
+  fileWatcher: vscode.FileSystemWatcher
 ): LanguageClient {
-  const config = getConfig();
-
   // The aivi binary links against GTK4/libwayland even for headless
   // subcommands like `lsp`. Prevent display-server interaction by
   // clearing Wayland/X11 env vars — otherwise the child process can
@@ -28,42 +29,31 @@ export function createClient(
   delete lspEnv["DISPLAY"];
   delete lspEnv["GDK_BACKEND"];
 
+  const executable = {
+    command: config.compilerPath,
+    args: ["lsp"],
+    transport: TransportKind.stdio,
+    options: { env: lspEnv },
+  };
   const serverOptions: ServerOptions = {
-    run: {
-      command: config.compilerPath,
-      args: ["lsp", ...config.compilerArgs],
-      transport: TransportKind.stdio,
-      options: { env: lspEnv },
-    },
-    debug: {
-      command: config.compilerPath,
-      args: [
-        "lsp",
-        "--log",
-        "/tmp/aivi-lsp-debug.log",
-        "--log-level",
-        "debug",
-        ...config.compilerArgs,
-      ],
-      transport: TransportKind.stdio,
-      options: { env: lspEnv },
-    },
+    run: executable,
+    debug: executable,
   };
 
   const clientOptions: LanguageClientOptions = {
-    documentSelector: [{ language: "aivi" }],
+    documentSelector: [
+      { language: "aivi", scheme: "file" },
+      { language: "aivi", scheme: "untitled" },
+    ],
     synchronize: {
-      fileEvents: vscode.workspace.createFileSystemWatcher("**/*.aivi"),
+      fileEvents: fileWatcher,
     },
-    initializationOptions: {
-      diagnosticsDebounceMs: config.diagnosticsDebounceMs,
-      inlayHintsEnabled: config.inlayHintsEnabled,
-      inlayHintsMaxLength: config.inlayHintsMaxLength,
-      codeLensEnabled: config.codeLensEnabled,
-      completionAutoImport: config.completionAutoImport,
-    },
+    initializationOptions: serverInitializationOptions(config),
+    initializationFailedHandler: () => false,
+    connectionOptions: { maxRestartCount: 2 },
     outputChannel,
     traceOutputChannel,
+    revealOutputChannelOn: RevealOutputChannelOn.Never,
     markdown: { isTrusted: true, supportHtml: false },
   };
 

@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     collections::{BTreeSet, HashMap},
     fmt,
 };
@@ -80,8 +81,8 @@ impl std::error::Error for LoweringErrors {}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LoweringError {
-    InvalidLambdaModule(lambda::ValidationError),
-    InvalidBackendProgram(ValidationError),
+    InvalidLambdaModule(Box<lambda::ValidationError>),
+    InvalidBackendProgram(Box<ValidationError>),
     UnknownLambdaItem {
         item: core::ItemId,
         span: SourceSpan,
@@ -192,7 +193,7 @@ pub fn lower_module(lambda_module: &lambda::Module) -> Result<Program, LoweringE
             errors
                 .into_errors()
                 .into_iter()
-                .map(LoweringError::InvalidLambdaModule)
+                .map(|error| LoweringError::InvalidLambdaModule(Box::new(error)))
                 .collect(),
         ));
     }
@@ -209,7 +210,7 @@ pub fn lower_module_with_hir(
             errors
                 .into_errors()
                 .into_iter()
-                .map(LoweringError::InvalidLambdaModule)
+                .map(|error| LoweringError::InvalidLambdaModule(Box::new(error)))
                 .collect(),
         ));
     }
@@ -224,6 +225,14 @@ struct ProgramLowerer<'a> {
     item_map: HashMap<core::ItemId, ItemId>,
     layout_interner: HashMap<Layout, LayoutId>,
     core_layouts: HashMap<core::Type, LayoutId>,
+}
+
+struct KernelAllocation {
+    owner: ItemId,
+    span: SourceSpan,
+    kind: KernelOriginKind,
+    input_subject: Option<LayoutId>,
+    result_layout: LayoutId,
 }
 
 impl<'a> ProgramLowerer<'a> {
@@ -273,7 +282,7 @@ impl<'a> ProgramLowerer<'a> {
                 errors
                     .into_errors()
                     .into_iter()
-                    .map(LoweringError::InvalidBackendProgram)
+                    .map(|error| LoweringError::InvalidBackendProgram(Box::new(error)))
                     .collect::<Vec<_>>(),
             ));
         }
@@ -309,20 +318,18 @@ impl<'a> ProgramLowerer<'a> {
             self.item_map.insert(core_id, item_id);
             // Domain member items have deterministic names: "domain#<HIR_id>::member#<index>::<name>".
             // Build an index so the evaluator and codegen can prefer compiled bodies over the Rust fallback.
-            if let Some(rest) = item.name.strip_prefix("domain#") {
-                if let Some((domain_raw_str, rest)) = rest.split_once("::member#") {
-                    if let Some((member_raw_str, _)) = rest.split_once("::") {
-                        if let (Ok(domain_raw), Ok(member_idx)) = (
-                            domain_raw_str.parse::<u32>(),
-                            member_raw_str.parse::<usize>(),
-                        ) {
-                            let hir_domain = aivi_hir::ItemId::from_raw(domain_raw);
-                            self.program
-                                .domain_member_items_mut()
-                                .insert((hir_domain, member_idx), item_id);
-                        }
-                    }
-                }
+            if let Some(rest) = item.name.strip_prefix("domain#")
+                && let Some((domain_raw_str, rest)) = rest.split_once("::member#")
+                && let Some((member_raw_str, _)) = rest.split_once("::")
+                && let (Ok(domain_raw), Ok(member_idx)) = (
+                    domain_raw_str.parse::<u32>(),
+                    member_raw_str.parse::<usize>(),
+                )
+            {
+                let hir_domain = aivi_hir::ItemId::from_raw(domain_raw);
+                self.program
+                    .domain_member_items_mut()
+                    .insert((hir_domain, member_idx), item_id);
             }
         }
         Ok(())
@@ -1229,60 +1236,73 @@ impl<'a> ProgramLowerer<'a> {
         subject_ty: &core::Type,
         collected: &mut HashMap<core::Type, CollectedOpaqueLayout>,
     ) {
-        match &pattern.kind {
-            core::PatternKind::Wildcard
-            | core::PatternKind::Binding(_)
-            | core::PatternKind::Integer(_)
-            | core::PatternKind::Text(_) => {}
-            core::PatternKind::Tuple(elements) => {
-                let core::Type::Tuple(field_types) = subject_ty else {
-                    return;
-                };
-                for (element, field_ty) in elements.iter().zip(field_types.iter()) {
-                    self.collect_opaque_pattern_variants(element, field_ty, collected);
-                }
-            }
-            core::PatternKind::List { elements, rest } => {
-                let core::Type::List(element_ty) = subject_ty else {
-                    return;
-                };
-                for element in elements {
-                    self.collect_opaque_pattern_variants(element, element_ty, collected);
-                }
-                if let Some(rest) = rest {
-                    self.collect_opaque_pattern_variants(rest, subject_ty, collected);
-                }
-            }
-            core::PatternKind::Record(fields) => {
-                let core::Type::Record(record_fields) = subject_ty else {
-                    return;
-                };
-                for field in fields {
-                    let Some(field_ty) = record_fields
-                        .iter()
-                        .find(|candidate| candidate.name == field.label)
-                        .map(|candidate| &candidate.ty)
-                    else {
+        let mut work = vec![(pattern, Cow::Borrowed(subject_ty))];
+        while let Some((pattern, subject_ty)) = work.pop() {
+            match &pattern.kind {
+                core::PatternKind::Wildcard
+                | core::PatternKind::Binding(_)
+                | core::PatternKind::Integer(_)
+                | core::PatternKind::Text(_) => {}
+                core::PatternKind::Tuple(elements) => {
+                    let core::Type::Tuple(field_types) = subject_ty.as_ref() else {
                         continue;
                     };
-                    self.collect_opaque_pattern_variants(&field.pattern, field_ty, collected);
-                }
-            }
-            core::PatternKind::Constructor { callee, arguments } => {
-                let field_types = constructor_pattern_field_types(subject_ty, callee);
-                if let core::Reference::SumConstructor(handle) = &callee.reference
-                    && let Some(opaque_ty) = opaque_variant_type(subject_ty)
-                {
-                    record_opaque_variant(
-                        collected,
-                        opaque_ty,
-                        Some(handle.item),
-                        handle.variant_name.clone(),
-                        field_types.clone(),
+                    work.extend(
+                        elements
+                            .iter()
+                            .zip(field_types.iter())
+                            .rev()
+                            .map(|(element, field_ty)| (element, Cow::Owned(field_ty.clone()))),
                     );
                 }
-                for (argument, field_ty) in arguments.iter().zip(field_types.iter()) {
-                    self.collect_opaque_pattern_variants(argument, field_ty, collected);
+                core::PatternKind::List { elements, rest } => {
+                    let core::Type::List(element_ty) = subject_ty.as_ref() else {
+                        continue;
+                    };
+                    if let Some(rest) = rest {
+                        work.push((rest, Cow::Owned(subject_ty.as_ref().clone())));
+                    }
+                    work.extend(
+                        elements
+                            .iter()
+                            .rev()
+                            .map(|element| (element, Cow::Owned(element_ty.as_ref().clone()))),
+                    );
+                }
+                core::PatternKind::Record(fields) => {
+                    let core::Type::Record(record_fields) = subject_ty.as_ref() else {
+                        continue;
+                    };
+                    for field in fields.iter().rev() {
+                        if let Some(field_ty) = record_fields
+                            .iter()
+                            .find(|candidate| candidate.name == field.label)
+                            .map(|candidate| candidate.ty.clone())
+                        {
+                            work.push((&field.pattern, Cow::Owned(field_ty)));
+                        }
+                    }
+                }
+                core::PatternKind::Constructor { callee, arguments } => {
+                    let field_types = constructor_pattern_field_types(subject_ty.as_ref(), callee);
+                    if let core::Reference::SumConstructor(handle) = &callee.reference
+                        && let Some(opaque_ty) = opaque_variant_type(subject_ty.as_ref())
+                    {
+                        record_opaque_variant(
+                            collected,
+                            opaque_ty,
+                            Some(handle.item),
+                            handle.variant_name.clone(),
+                            field_types.clone(),
+                        );
+                    }
+                    work.extend(
+                        arguments
+                            .iter()
+                            .zip(field_types)
+                            .rev()
+                            .map(|(argument, field_ty)| (argument, Cow::Owned(field_ty))),
+                    );
                 }
             }
         }
@@ -1463,7 +1483,7 @@ impl<'a> ProgramLowerer<'a> {
                                     kind: DecodeStepKind::Record {
                                         fields: fields
                                             .into_iter()
-                                            .zip(lowered.into_iter())
+                                            .zip(lowered)
                                             .map(|((name, requirement), (step, _))| DecodeField {
                                                 name,
                                                 requirement,
@@ -1633,13 +1653,15 @@ impl<'a> ProgramLowerer<'a> {
         let result_layout = self.runtime_expr_layout(closure.root)?;
         let input_subject = input_hint.filter(|_| contract.uses_input_subject);
         self.alloc_kernel(
-            owner,
-            closure.span,
-            kind,
-            input_subject,
+            KernelAllocation {
+                owner,
+                span: closure.span,
+                kind,
+                input_subject,
+                result_layout,
+            },
             contract,
             lowered,
-            result_layout,
         )
     }
 
@@ -1681,13 +1703,15 @@ impl<'a> ProgramLowerer<'a> {
             self.lower_kernel_exprs(closure.root, None, &contract.env_map, &item_env_map)?;
         let result_layout = self.runtime_item_body_layout(item, closure.root)?;
         self.alloc_kernel(
-            owner,
-            closure.span,
-            KernelOriginKind::ItemBody { item: owner },
-            None,
+            KernelAllocation {
+                owner,
+                span: closure.span,
+                kind: KernelOriginKind::ItemBody { item: owner },
+                input_subject: None,
+                result_layout,
+            },
             contract,
             lowered,
-            result_layout,
         )
     }
 
@@ -1708,7 +1732,17 @@ impl<'a> ProgramLowerer<'a> {
         )?;
         let lowered = self.lower_kernel_exprs(root, None, &contract.env_map, &item_env_map)?;
         let result_layout = self.runtime_expr_layout(root)?;
-        self.alloc_kernel(owner, span, kind, None, contract, lowered, result_layout)
+        self.alloc_kernel(
+            KernelAllocation {
+                owner,
+                span,
+                kind,
+                input_subject: None,
+                result_layout,
+            },
+            contract,
+            lowered,
+        )
     }
 
     fn try_lower_signal_body_kernel(
@@ -1747,27 +1781,32 @@ impl<'a> ProgramLowerer<'a> {
             self.lower_kernel_exprs(closure.root, None, &contract.env_map, &item_env_map)?;
         let result_layout = self.runtime_item_body_layout(item, closure.root)?;
         let kernel = self.alloc_kernel(
-            owner,
-            closure.span,
-            KernelOriginKind::SignalBody { item: owner },
-            None,
+            KernelAllocation {
+                owner,
+                span: closure.span,
+                kind: KernelOriginKind::SignalBody { item: owner },
+                input_subject: None,
+                result_layout,
+            },
             contract,
             lowered,
-            result_layout,
         )?;
         Ok(Some((kernel, dependency_layouts)))
     }
 
     fn alloc_kernel(
         &mut self,
-        owner: ItemId,
-        span: SourceSpan,
-        kind: KernelOriginKind,
-        input_subject: Option<LayoutId>,
+        allocation: KernelAllocation,
         contract: KernelContract,
         lowered: LoweredKernelExprs,
-        result_layout: LayoutId,
     ) -> Result<KernelId, LoweringError> {
+        let KernelAllocation {
+            owner,
+            span,
+            kind,
+            input_subject,
+            result_layout,
+        } = allocation;
         let convention =
             self.build_calling_convention(input_subject, &contract.environment, result_layout);
         self.program
@@ -1778,12 +1817,14 @@ impl<'a> ProgramLowerer<'a> {
                     span,
                     kind,
                 },
-                input_subject,
-                lowered.inline_subjects,
-                contract.environment,
-                result_layout,
-                convention,
-                contract.global_items,
+                crate::KernelSignature {
+                    input_subject,
+                    inline_subjects: lowered.inline_subjects,
+                    environment: contract.environment,
+                    result_layout,
+                    convention,
+                    global_items: contract.global_items,
+                },
                 lowered.root,
                 lowered.exprs,
             ))
@@ -2788,9 +2829,7 @@ impl<'a> ProgramLowerer<'a> {
                                     stage.result_layout = exprs[first.body].layout;
                                 }
                             }
-                            InlinePipeStageKind::FanOut { map_expr } => {
-                                stage.result_layout = exprs[*map_expr].layout;
-                            }
+                            InlinePipeStageKind::FanOut { .. } => {}
                         };
                     }
                     let layout = stages
@@ -2972,118 +3011,175 @@ impl<'a> ProgramLowerer<'a> {
         inline_subjects: &mut Vec<LayoutId>,
         locals: &mut LocalBindings,
     ) -> Result<InlinePipePattern, LoweringError> {
-        let kind = match &pattern.kind {
-            core::PatternKind::Wildcard => InlinePipePatternKind::Wildcard,
-            core::PatternKind::Binding(binding) => {
-                let subject = alloc_inline_subject(inline_subjects, layout)?;
-                locals.insert(
-                    binding.binding.as_raw(),
-                    SubjectContext {
-                        reference: SubjectRef::Inline(subject),
-                        layout,
-                    },
-                );
-                InlinePipePatternKind::Binding { subject }
-            }
-            core::PatternKind::Integer(integer) => {
-                let LayoutKind::Primitive(PrimitiveType::Int) =
-                    &self.program.layouts()[layout].kind
-                else {
-                    return Err(unsupported_inline_pipe_pattern(
-                        pattern.span,
-                        "integer literal patterns require an Int subject",
-                    ));
-                };
-                InlinePipePatternKind::Integer(IntegerLiteral {
-                    raw: integer.raw.clone(),
-                })
-            }
-            core::PatternKind::Text(raw) => {
-                let LayoutKind::Primitive(PrimitiveType::Text) =
-                    &self.program.layouts()[layout].kind
-                else {
-                    return Err(unsupported_inline_pipe_pattern(
-                        pattern.span,
-                        "text literal patterns require a Text subject",
-                    ));
-                };
-                InlinePipePatternKind::Text(raw.clone())
-            }
-            core::PatternKind::Tuple(elements) => {
-                let layouts = match &self.program.layouts()[layout].kind {
-                    LayoutKind::Tuple(layouts) => layouts.clone(),
-                    _ => {
-                        return Err(unsupported_inline_pipe_pattern(
-                            pattern.span,
-                            "tuple patterns require a tuple subject",
-                        ));
+        enum Task<'a> {
+            Visit {
+                pattern: &'a core::Pattern,
+                layout: LayoutId,
+            },
+            Build {
+                span: SourceSpan,
+                kind: BuildKind,
+            },
+        }
+
+        enum BuildKind {
+            Tuple {
+                child_count: usize,
+            },
+            List {
+                element_count: usize,
+                has_rest: bool,
+            },
+            Record {
+                labels: Vec<Box<str>>,
+            },
+            Constructor {
+                constructor: InlinePipeConstructor,
+                argument_count: usize,
+            },
+        }
+
+        fn take_children(
+            patterns: &mut Vec<InlinePipePattern>,
+            count: usize,
+        ) -> Vec<InlinePipePattern> {
+            let start = patterns
+                .len()
+                .checked_sub(count)
+                .expect("inline-pattern build task must follow all child visits");
+            patterns.split_off(start)
+        }
+
+        let mut tasks = vec![Task::Visit { pattern, layout }];
+        let mut lowered = Vec::new();
+        while let Some(task) = tasks.pop() {
+            match task {
+                Task::Visit { pattern, layout } => match &pattern.kind {
+                    core::PatternKind::Wildcard => lowered.push(InlinePipePattern {
+                        span: pattern.span,
+                        kind: InlinePipePatternKind::Wildcard,
+                    }),
+                    core::PatternKind::Binding(binding) => {
+                        let subject = alloc_inline_subject(inline_subjects, layout)?;
+                        locals.insert(
+                            binding.binding.as_raw(),
+                            SubjectContext {
+                                reference: SubjectRef::Inline(subject),
+                                layout,
+                            },
+                        );
+                        lowered.push(InlinePipePattern {
+                            span: pattern.span,
+                            kind: InlinePipePatternKind::Binding { subject },
+                        });
                     }
-                };
-                if layouts.len() != elements.len() {
-                    return Err(unsupported_inline_pipe_pattern(
-                        pattern.span,
-                        format!(
-                            "tuple pattern expects {} element(s), but the subject layout supplies {}",
-                            elements.len(),
-                            layouts.len()
-                        ),
-                    ));
-                }
-                InlinePipePatternKind::Tuple(
-                    elements
-                        .iter()
-                        .zip(layouts.into_iter())
-                        .map(|(element, layout)| {
-                            self.lower_inline_pipe_pattern(element, layout, inline_subjects, locals)
-                        })
-                        .collect::<Result<Vec<_>, _>>()?,
-                )
-            }
-            core::PatternKind::List { elements, rest } => {
-                let element_layout = match &self.program.layouts()[layout].kind {
-                    LayoutKind::List { element } => *element,
-                    _ => {
-                        return Err(unsupported_inline_pipe_pattern(
-                            pattern.span,
-                            "list patterns require a List subject",
-                        ));
+                    core::PatternKind::Integer(integer) => {
+                        if !matches!(
+                            self.program.layouts()[layout].kind,
+                            LayoutKind::Primitive(PrimitiveType::Int)
+                        ) {
+                            return Err(unsupported_inline_pipe_pattern(
+                                pattern.span,
+                                "integer literal patterns require an Int subject",
+                            ));
+                        }
+                        lowered.push(InlinePipePattern {
+                            span: pattern.span,
+                            kind: InlinePipePatternKind::Integer(IntegerLiteral {
+                                raw: integer.raw.clone(),
+                            }),
+                        });
                     }
-                };
-                InlinePipePatternKind::List {
-                    elements: elements
-                        .iter()
-                        .map(|element| {
-                            self.lower_inline_pipe_pattern(
-                                element,
-                                element_layout,
-                                inline_subjects,
-                                locals,
-                            )
-                        })
-                        .collect::<Result<Vec<_>, _>>()?,
-                    rest: rest
-                        .as_deref()
-                        .map(|rest| {
-                            self.lower_inline_pipe_pattern(rest, layout, inline_subjects, locals)
-                                .map(Box::new)
-                        })
-                        .transpose()?,
-                }
-            }
-            core::PatternKind::Record(fields) => {
-                let layout_fields = match &self.program.layouts()[layout].kind {
-                    LayoutKind::Record(layout_fields) => layout_fields.clone(),
-                    _ => {
-                        return Err(unsupported_inline_pipe_pattern(
-                            pattern.span,
-                            "record patterns require a record subject",
-                        ));
+                    core::PatternKind::Text(raw) => {
+                        if !matches!(
+                            self.program.layouts()[layout].kind,
+                            LayoutKind::Primitive(PrimitiveType::Text)
+                        ) {
+                            return Err(unsupported_inline_pipe_pattern(
+                                pattern.span,
+                                "text literal patterns require a Text subject",
+                            ));
+                        }
+                        lowered.push(InlinePipePattern {
+                            span: pattern.span,
+                            kind: InlinePipePatternKind::Text(raw.clone()),
+                        });
                     }
-                };
-                InlinePipePatternKind::Record(
-                    fields
-                        .iter()
-                        .map(|field| {
+                    core::PatternKind::Tuple(elements) => {
+                        let layouts = match &self.program.layouts()[layout].kind {
+                            LayoutKind::Tuple(layouts) => layouts.clone(),
+                            _ => {
+                                return Err(unsupported_inline_pipe_pattern(
+                                    pattern.span,
+                                    "tuple patterns require a tuple subject",
+                                ));
+                            }
+                        };
+                        if layouts.len() != elements.len() {
+                            return Err(unsupported_inline_pipe_pattern(
+                                pattern.span,
+                                format!(
+                                    "tuple pattern expects {} element(s), but the subject layout supplies {}",
+                                    elements.len(),
+                                    layouts.len()
+                                ),
+                            ));
+                        }
+                        tasks.push(Task::Build {
+                            span: pattern.span,
+                            kind: BuildKind::Tuple {
+                                child_count: elements.len(),
+                            },
+                        });
+                        tasks.extend(
+                            elements
+                                .iter()
+                                .zip(layouts)
+                                .rev()
+                                .map(|(pattern, layout)| Task::Visit { pattern, layout }),
+                        );
+                    }
+                    core::PatternKind::List { elements, rest } => {
+                        let element_layout = match &self.program.layouts()[layout].kind {
+                            LayoutKind::List { element } => *element,
+                            _ => {
+                                return Err(unsupported_inline_pipe_pattern(
+                                    pattern.span,
+                                    "list patterns require a List subject",
+                                ));
+                            }
+                        };
+                        tasks.push(Task::Build {
+                            span: pattern.span,
+                            kind: BuildKind::List {
+                                element_count: elements.len(),
+                                has_rest: rest.is_some(),
+                            },
+                        });
+                        if let Some(rest) = rest {
+                            tasks.push(Task::Visit {
+                                pattern: rest,
+                                layout,
+                            });
+                        }
+                        tasks.extend(elements.iter().rev().map(|pattern| Task::Visit {
+                            pattern,
+                            layout: element_layout,
+                        }));
+                    }
+                    core::PatternKind::Record(fields) => {
+                        let layout_fields = match &self.program.layouts()[layout].kind {
+                            LayoutKind::Record(layout_fields) => layout_fields.clone(),
+                            _ => {
+                                return Err(unsupported_inline_pipe_pattern(
+                                    pattern.span,
+                                    "record patterns require a record subject",
+                                ));
+                            }
+                        };
+                        let mut children = Vec::with_capacity(fields.len());
+                        let mut labels = Vec::with_capacity(fields.len());
+                        for field in fields {
                             let Some(layout_field) = layout_fields
                                 .iter()
                                 .find(|candidate| candidate.name.as_ref() == field.label.as_ref())
@@ -3096,131 +3192,184 @@ impl<'a> ProgramLowerer<'a> {
                                     ),
                                 ));
                             };
-                            Ok(InlinePipeRecordPatternField {
-                                label: field.label.clone(),
-                                pattern: self.lower_inline_pipe_pattern(
-                                    &field.pattern,
-                                    layout_field.layout,
-                                    inline_subjects,
-                                    locals,
-                                )?,
-                            })
-                        })
-                        .collect::<Result<Vec<_>, _>>()?,
-                )
-            }
-            core::PatternKind::Constructor { callee, arguments } => {
-                let (constructor, argument_layouts) = match &callee.reference {
-                    core::Reference::Builtin(term) => {
-                        let constructor = map_builtin_term(*term);
-                        let argument_layouts = match (
-                            constructor,
-                            &self.program.layouts()[layout].kind,
-                        ) {
-                            (
-                                BuiltinTerm::True | BuiltinTerm::False,
-                                LayoutKind::Primitive(PrimitiveType::Bool),
-                            ) => Vec::new(),
-                            (BuiltinTerm::None, LayoutKind::Option { .. }) => Vec::new(),
-                            (BuiltinTerm::Some, LayoutKind::Option { element }) => {
-                                vec![*element]
+                            labels.push(field.label.clone());
+                            children.push((&field.pattern, layout_field.layout));
+                        }
+                        tasks.push(Task::Build {
+                            span: pattern.span,
+                            kind: BuildKind::Record { labels },
+                        });
+                        tasks.extend(
+                            children
+                                .into_iter()
+                                .rev()
+                                .map(|(pattern, layout)| Task::Visit { pattern, layout }),
+                        );
+                    }
+                    core::PatternKind::Constructor { callee, arguments } => {
+                        let (constructor, argument_layouts) = match &callee.reference {
+                            core::Reference::Builtin(term) => {
+                                let constructor = map_builtin_term(*term);
+                                let argument_layouts = match (
+                                    constructor,
+                                    &self.program.layouts()[layout].kind,
+                                ) {
+                                    (
+                                        BuiltinTerm::True | BuiltinTerm::False,
+                                        LayoutKind::Primitive(PrimitiveType::Bool),
+                                    ) => Vec::new(),
+                                    (BuiltinTerm::None, LayoutKind::Option { .. }) => Vec::new(),
+                                    (BuiltinTerm::Some, LayoutKind::Option { element }) => {
+                                        vec![*element]
+                                    }
+                                    (BuiltinTerm::Ok, LayoutKind::Result { value, .. }) => {
+                                        vec![*value]
+                                    }
+                                    (BuiltinTerm::Err, LayoutKind::Result { error, .. }) => {
+                                        vec![*error]
+                                    }
+                                    (BuiltinTerm::Valid, LayoutKind::Validation { value, .. }) => {
+                                        vec![*value]
+                                    }
+                                    (
+                                        BuiltinTerm::Invalid,
+                                        LayoutKind::Validation { error, .. },
+                                    ) => {
+                                        vec![*error]
+                                    }
+                                    _ => {
+                                        return Err(unsupported_inline_pipe_pattern(
+                                            pattern.span,
+                                            format!(
+                                                "constructor `{constructor}` does not match subject layout{layout}=`{}`",
+                                                self.program.layouts()[layout]
+                                            ),
+                                        ));
+                                    }
+                                };
+                                (
+                                    InlinePipeConstructor::Builtin(constructor),
+                                    argument_layouts,
+                                )
                             }
-                            (BuiltinTerm::Ok, LayoutKind::Result { value, .. }) => vec![*value],
-                            (BuiltinTerm::Err, LayoutKind::Result { error, .. }) => {
-                                vec![*error]
-                            }
-                            (BuiltinTerm::Valid, LayoutKind::Validation { value, .. }) => {
-                                vec![*value]
-                            }
-                            (BuiltinTerm::Invalid, LayoutKind::Validation { error, .. }) => {
-                                vec![*error]
+                            core::Reference::SumConstructor(handle) => {
+                                let matches_layout = match &self.program.layouts()[layout].kind {
+                                    LayoutKind::Opaque { name, .. } => {
+                                        name.as_ref() == handle.type_name.as_ref()
+                                    }
+                                    LayoutKind::Sum(variants) => variants.iter().any(|variant| {
+                                        variant.name.as_ref() == handle.variant_name.as_ref()
+                                    }),
+                                    _ => false,
+                                };
+                                if !matches_layout {
+                                    return Err(unsupported_inline_pipe_pattern(
+                                        pattern.span,
+                                        format!(
+                                            "sum constructor `{}.{}` does not match subject layout{layout}=`{}`",
+                                            handle.type_name,
+                                            handle.variant_name,
+                                            self.program.layouts()[layout]
+                                        ),
+                                    ));
+                                }
+                                let field_types = callee.field_types.as_ref().ok_or_else(|| {
+                                    unsupported_inline_pipe_pattern(
+                                        pattern.span,
+                                        "sum constructor pattern is missing lowered field types",
+                                    )
+                                })?;
+                                let argument_layouts = field_types
+                                    .iter()
+                                    .map(|field| self.intern_core_type(field))
+                                    .collect::<Result<Vec<_>, _>>()?;
+                                (InlinePipeConstructor::Sum(handle.clone()), argument_layouts)
                             }
                             _ => {
                                 return Err(unsupported_inline_pipe_pattern(
                                     pattern.span,
-                                    format!(
-                                        "constructor `{constructor}` does not match subject layout{layout}=`{}`",
-                                        self.program.layouts()[layout]
-                                    ),
+                                    "constructor patterns require builtin terms or sum constructors",
                                 ));
                             }
                         };
-                        (
-                            InlinePipeConstructor::Builtin(constructor),
-                            argument_layouts,
-                        )
-                    }
-                    core::Reference::SumConstructor(handle) => {
-                        let matches_layout = match &self.program.layouts()[layout].kind {
-                            LayoutKind::Opaque { name, .. } => {
-                                name.as_ref() == handle.type_name.as_ref()
-                            }
-                            LayoutKind::Sum(variants) => variants.iter().any(|variant| {
-                                variant.name.as_ref() == handle.variant_name.as_ref()
-                            }),
-                            _ => false,
-                        };
-                        if !matches_layout {
+                        if arguments.len() != argument_layouts.len() {
                             return Err(unsupported_inline_pipe_pattern(
                                 pattern.span,
                                 format!(
-                                    "sum constructor `{}.{}` does not match subject layout{layout}=`{}`",
-                                    handle.type_name,
-                                    handle.variant_name,
-                                    self.program.layouts()[layout]
+                                    "constructor pattern expects {} argument(s), found {}",
+                                    argument_layouts.len(),
+                                    arguments.len()
                                 ),
                             ));
                         }
-                        let field_types = callee.field_types.as_ref().ok_or_else(|| {
-                            unsupported_inline_pipe_pattern(
-                                pattern.span,
-                                "sum constructor pattern is missing lowered field types",
-                            )
-                        })?;
-                        let argument_layouts = field_types
-                            .iter()
-                            .map(|field| self.intern_core_type(field))
-                            .collect::<Result<Vec<_>, _>>()?;
-                        (InlinePipeConstructor::Sum(handle.clone()), argument_layouts)
+                        tasks.push(Task::Build {
+                            span: pattern.span,
+                            kind: BuildKind::Constructor {
+                                constructor,
+                                argument_count: arguments.len(),
+                            },
+                        });
+                        tasks.extend(
+                            arguments
+                                .iter()
+                                .zip(argument_layouts)
+                                .rev()
+                                .map(|(pattern, layout)| Task::Visit { pattern, layout }),
+                        );
                     }
-                    _ => {
-                        return Err(unsupported_inline_pipe_pattern(
-                            pattern.span,
-                            "constructor patterns require builtin terms or sum constructors",
-                        ));
-                    }
-                };
-                if arguments.len() != argument_layouts.len() {
-                    return Err(unsupported_inline_pipe_pattern(
-                        pattern.span,
-                        format!(
-                            "constructor pattern expects {} argument(s), found {}",
-                            argument_layouts.len(),
-                            arguments.len()
-                        ),
-                    ));
-                }
-                InlinePipePatternKind::Constructor {
-                    constructor,
-                    arguments: arguments
-                        .iter()
-                        .zip(argument_layouts.into_iter())
-                        .map(|(argument, layout)| {
-                            self.lower_inline_pipe_pattern(
-                                argument,
-                                layout,
-                                inline_subjects,
-                                locals,
+                },
+                Task::Build { span, kind } => {
+                    let kind = match kind {
+                        BuildKind::Tuple { child_count } => {
+                            InlinePipePatternKind::Tuple(take_children(&mut lowered, child_count))
+                        }
+                        BuildKind::List {
+                            element_count,
+                            has_rest,
+                        } => {
+                            let mut children =
+                                take_children(&mut lowered, element_count + usize::from(has_rest));
+                            let rest = has_rest.then(|| {
+                                Box::new(
+                                    children
+                                        .pop()
+                                        .expect("list rest visit must precede its build task"),
+                                )
+                            });
+                            InlinePipePatternKind::List {
+                                elements: children,
+                                rest,
+                            }
+                        }
+                        BuildKind::Record { labels } => {
+                            let children = take_children(&mut lowered, labels.len());
+                            InlinePipePatternKind::Record(
+                                labels
+                                    .into_iter()
+                                    .zip(children)
+                                    .map(|(label, pattern)| InlinePipeRecordPatternField {
+                                        label,
+                                        pattern,
+                                    })
+                                    .collect(),
                             )
-                        })
-                        .collect::<Result<Vec<_>, _>>()?,
+                        }
+                        BuildKind::Constructor {
+                            constructor,
+                            argument_count,
+                        } => InlinePipePatternKind::Constructor {
+                            constructor,
+                            arguments: take_children(&mut lowered, argument_count),
+                        },
+                    };
+                    lowered.push(InlinePipePattern { span, kind });
                 }
             }
-        };
-        Ok(InlinePipePattern {
-            span: pattern.span,
-            kind,
-        })
+        }
+        debug_assert_eq!(lowered.len(), 1);
+        Ok(lowered
+            .pop()
+            .expect("root inline-pattern visit must produce one lowered pattern"))
     }
 
     fn build_calling_convention(

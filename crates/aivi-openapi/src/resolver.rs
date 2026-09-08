@@ -101,7 +101,7 @@ fn resolve_components(components: Option<&Components>) -> ResolvedComponents {
     let mut security_schemes = indexmap::IndexMap::new();
     for (name, scheme_or_ref) in &comp.security_schemes {
         if let SecuritySchemeOrRef::SecurityScheme(scheme) = scheme_or_ref {
-            security_schemes.insert(name.clone(), scheme.clone());
+            security_schemes.insert(name.clone(), scheme.as_ref().clone());
         }
     }
     ResolvedComponents {

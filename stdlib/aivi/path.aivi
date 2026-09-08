@@ -16,10 +16,15 @@ type PathError =
 
 domain Path over Text = {
     type parse : Text -> Result PathError Path
+
     type (/) : Path -> Text -> Path
+
     type parent : Path -> Option Path
+
     type filename : Path -> Option Text
+
     type stem : Path -> Option Text
+
     type ext : Path -> Option Text
 }
 

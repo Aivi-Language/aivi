@@ -161,7 +161,7 @@ A feature is not done until every affected artifact is updated. Use the conditio
 | Backend / codegen | `crates/aivi-backend/` | Cranelift emission changes |
 | Runtime | `crates/aivi-runtime/` | Signal engine, scheduler, sources, GC |
 | GTK bridge | `crates/aivi-gtk/` | Widget catalog, event routing, markup |
-| Query layer | `crates/aivi-query/` | Salsa database, incremental queries |
+| Query layer | `crates/aivi-query/` | Revision-aware database, incremental queries |
 | LSP server | `crates/aivi-lsp/` | Diagnostics, completion, hover, semantic tokens, formatting, go-to-def, symbols, code lens |
 | CLI | `crates/aivi-cli/` | Commands: `check`, `run`, `execute`, `compile`, `build`, `test`, `fmt`, `lsp`, `mcp`, `manual-snippets` |
 | MCP server | `crates/aivi-cli/src/mcp.rs` | Live app introspection tools (signals, sources, GTK tree, events) |
@@ -277,58 +277,18 @@ Done requires:
 
 If blocked, state the exact blocker and mark the work incomplete. Never present partial work as finished.
 
-## Wiki
+## Project memory
 
-`wiki/` is a persistent, LLM-maintained knowledge base for this project.
+Crusty is the sole durable project ledger. Record architecture and policy as decisions, operating
+instructions as steerings, defects as problems, quality rules as reviewable constraints, and planned
+changes as work items. Keep discoverable implementation facts in code, specifications, and the
+manual; use Git history as the archive.
 
-**Raw sources** (read-only, never modify):
-- `src/`, `crates/` — Rust source code
-- `stdlib/` — AIVI standard library source
-- `manual/` — human-facing documentation
-- `syntax.md`, `AIVI_RFC.md`, `AGENTS.md` — spec and schema
+Start repository tasks with `repo.consult` using the full user intent. Before editing, call
+`change.prepare` with the intended files and poll `task.get` until its context is ready. After
+editing, call `change.validate` with that context ID and poll it to completion. Attach focused
+verification evidence before closing the authorized work item. Use `task.list` and `change.get`
+to recover interrupted work; use `index.status` and an explicit `index.refresh` when indexed
+evidence is stale. Audit findings are proposals to check against source and tests.
 
-**The wiki** (`wiki/`): LLM-generated markdown. You write it; humans read it.
-
-### Conventions
-
-- `wiki/index.md` — catalog: every page listed with a link and one-line summary, organised by category.
-- `wiki/log.md` — append-only activity log. Each entry: `## [YYYY-MM-DD] <verb> | <title>`. Never edit past entries.
-- All other pages are topic files. Name them `kebab-case.md`.
-- Use relative links between pages.
-- Pages may include AIVI code blocks but these are illustrative, not checked by `manual-snippets`.
-
-### Operations
-
-**Ingest** (when you read a source file or a new raw document):
-1. Extract key facts from the source.
-2. Write or update the relevant wiki page(s).
-3. Update `wiki/index.md` if a new page was created.
-4. Append an entry to `wiki/log.md`: `## [date] ingest | <source name>`.
-
-**Query** (when answering a question):
-1. Read `wiki/index.md` to identify relevant pages.
-2. Read those pages.
-3. Synthesise an answer with citations to wiki pages and raw sources.
-4. If the answer is valuable and reusable, file it as a new wiki page and update the index.
-5. Append an entry to `wiki/log.md`: `## [date] query | <question summary>`.
-
-**Lint** (periodically or on request):
-1. Scan for orphan pages (not linked from `index.md`).
-2. Flag stale claims superseded by newer source changes.
-3. Flag important concepts mentioned but lacking their own page.
-4. Append: `## [date] lint | wiki health check`.
-
-### Current pages
-
-| Page | Topic |
-|------|-------|
-| [architecture.md](wiki/architecture.md) | Crate map, pipeline overview, key invariants |
-| [compiler-pipeline.md](wiki/compiler-pipeline.md) | CST → HIR → Core → Lambda → Backend stages |
-| [type-system.md](wiki/type-system.md) | Kinds, type classes, Eq, HKT, constraints |
-| [signal-model.md](wiki/signal-model.md) | Signals, sources, merge syntax, fanout, recurrence |
-| [runtime.md](wiki/runtime.md) | Scheduler, signal graph, task executor, GLib integration |
-| [gtk-bridge.md](wiki/gtk-bridge.md) | GTK4/libadwaita widget bridge, markup lowering |
-| [query-layer.md](wiki/query-layer.md) | Incremental query layer, workspace, formatter safety |
-| [lsp-server.md](wiki/lsp-server.md) | LSP server, navigation, diagnostics, VS Code extension |
-| [cli.md](wiki/cli.md) | CLI commands, MCP server, build & test commands |
-| [stdlib.md](wiki/stdlib.md) | Standard library module overview |
+For connection setup and the stdio smoke check, see [How to Contribute](manual/how-to/contribute.md#connect-crusty).

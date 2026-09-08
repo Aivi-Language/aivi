@@ -4,6 +4,7 @@ use aivi.bits (
     shiftLeft
     shiftRightUnsigned
 )
+
 use aivi.core.float (
     fromInt as floatFromInt
     toInt as floatToInt
@@ -12,20 +13,28 @@ use aivi.core.float (
 domain Color over Int = {
     type argb : Int -> Color
     argb = n => n
+
     type alpha : Color -> Int
     alpha = color => and (shiftRightUnsigned color 24) 255
+
     type red : Color -> Int
     red = color => and (shiftRightUnsigned color 16) 255
+
     type green : Color -> Int
     green = color => and (shiftRightUnsigned color 8) 255
+
     type blue : Color -> Int
     blue = color => and color 255
+
     type withAlpha : Color -> Int -> Color
     withAlpha = color a => or (and color 16777215) (shiftLeft a 24)
+
     type withRed : Color -> Int -> Color
     withRed = color r => or (and color 4278255615) (shiftLeft r 16)
+
     type withGreen : Color -> Int -> Color
     withGreen = color g => or (and color 4294902015) (shiftLeft g 8)
+
     type withBlue : Color -> Int -> Color
     withBlue = color b => or (and color 4294967040) b
 }
@@ -35,15 +44,18 @@ func blendChannel = a b t =>
     floatToInt (floatFromInt a + floatFromInt (b - a) * t)
 
 type Color -> Color -> Float -> Color
-func blend = c1 c2 t => argb (4278190080 + (blendChannel (red c1) (red c2) t) * 65536 + (blendChannel (green c1) (green c2) t) * 256 + blendChannel (blue c1) (blue c2) t)
+func blend = c1 c2 t =>
+    argb (4278190080 + (blendChannel (red c1) (red c2) t) * 65536 + (blendChannel (green c1) (green c2) t) * 256 + blendChannel (blue c1) (blue c2) t)
 
 // GNOME palette — canonical Adwaita brand colours
 value black : Color = argb 4278190080
+
 value white : Color = argb 4294967295
 value transparent : Color = argb 0
 
 // Blues
 value gnomeBlue1 : Color = argb 4288427505
+
 value gnomeBlue2 : Color = argb 4284875498
 value gnomeBlue3 : Color = argb 4281697508
 value gnomeBlue4 : Color = argb 4279832024
@@ -51,6 +63,7 @@ value gnomeBlue5 : Color = argb 4279328692
 
 // Greens
 value gnomeGreen1 : Color = argb 4291165614
+
 value gnomeGreen2 : Color = argb 4283896934
 value gnomeGreen3 : Color = argb 4281586042
 value gnomeGreen4 : Color = argb 4279340096
@@ -58,6 +71,7 @@ value gnomeGreen5 : Color = argb 4278892336
 
 // Yellows
 value gnomeYellow1 : Color = argb 4294963892
+
 value gnomeYellow2 : Color = argb 4294301008
 value gnomeYellow3 : Color = argb 4294365997
 value gnomeYellow4 : Color = argb 4292394010
@@ -65,6 +79,7 @@ value gnomeYellow5 : Color = argb 4289691688
 
 // Oranges
 value gnomeOrange1 : Color = argb 4294953143
+
 value gnomeOrange2 : Color = argb 4294944768
 value gnomeOrange3 : Color = argb 4294932480
 value gnomeOrange4 : Color = argb 4293421056
@@ -72,6 +87,7 @@ value gnomeOrange5 : Color = argb 4290772992
 
 // Reds
 value gnomeRed1 : Color = argb 4294902892
+
 value gnomeRed2 : Color = argb 4293782052
 value gnomeRed3 : Color = argb 4292877092
 value gnomeRed4 : Color = argb 4290641940
@@ -79,6 +95,7 @@ value gnomeRed5 : Color = argb 4287427609
 
 // Purples
 value gnomePurple1 : Color = argb 4290757312
+
 value gnomePurple2 : Color = argb 4288940716
 value gnomePurple3 : Color = argb 4287699612
 value gnomePurple4 : Color = argb 4284702878
@@ -86,6 +103,7 @@ value gnomePurple5 : Color = argb 4281957483
 
 // Browns
 value gnomeBrown1 : Color = argb 4291619476
+
 value gnomeBrown2 : Color = argb 4289767496
 value gnomeBrown3 : Color = argb 4288178756
 value gnomeBrown4 : Color = argb 4285438546

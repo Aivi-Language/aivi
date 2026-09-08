@@ -1,11 +1,21 @@
 {
   "mcpServers": {
+    "Crusty": {
+      "command": "rust-repo-intelligence",
+      "args": ["--workspace", "."]
+    },
     "Aivi": {
-      "command": "/home/mendrik/.cargo/bin/aivi",
+      "command": "cargo",
       "args": [
+        "run",
+        "--quiet",
+        "--locked",
+        "--bin",
+        "aivi",
+        "--",
         "mcp",
         "--path",
-        "/home/mendrik/desk/mendrik/aivi2/demos/snake.aivi"
+        "demos/snake.aivi"
       ]
     }
   }

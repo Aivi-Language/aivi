@@ -17,7 +17,7 @@ pub(crate) fn normalize_signal_kernel_result(
         return Err(EvaluationError::KernelResultLayoutMismatch {
             kernel,
             expected,
-            found: result,
+            found: Box::new(result),
         });
     }
     Ok(result)
@@ -245,8 +245,8 @@ fn structural_eq(
             return Err(EvaluationError::UnsupportedStructuralEquality {
                 kernel,
                 expr,
-                left: left.clone(),
-                right: right.clone(),
+                left: Box::new(left.clone()),
+                right: Box::new(right.clone()),
             });
         }
         _ => false,
@@ -350,7 +350,7 @@ fn project_field(
         return Err(EvaluationError::InvalidProjectionBase {
             kernel,
             expr,
-            found: value,
+            found: Box::new(value),
         });
     };
     fields

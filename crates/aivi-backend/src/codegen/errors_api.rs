@@ -346,7 +346,7 @@ struct CraneliftCompiler<'a, M: Module> {
     literal_data: BTreeMap<Box<str>, JitLiteralDataRecord>,
     function_builder_ctx: FunctionBuilderContext,
     next_data_symbol: u64,
-    jit_symbols: Option<Arc<Mutex<BTreeMap<Box<str>, usize>>>>,
+    jit_symbols: Option<JitSymbolTable>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -1,11 +1,11 @@
 {
   "name": "vscode-aivi",
   "displayName": "AIVI",
-  "description": "AIVI language support \u2014 syntax, diagnostics, formatting, and intelligence",
+  "description": "AIVI language support — syntax, diagnostics, formatting, and intelligence",
   "version": "0.1.0",
   "publisher": "aivi-lang",
   "engines": {
-    "vscode": "^1.110.0"
+    "vscode": "^1.134.0"
   },
   "categories": [
     "Programming Languages",
@@ -22,6 +22,16 @@
   "license": "GPL-3.0-only",
   "icon": "icons/aivi-a.png",
   "main": "./dist/extension.js",
+  "files": [
+    "dist/extension.js",
+    "icons/**",
+    "snippets/**",
+    "syntaxes/**",
+    "themes/**",
+    "language-configuration.json",
+    "README.md",
+    "licence.txt"
+  ],
   "activationEvents": [
     "onLanguage:aivi"
   ],
@@ -95,10 +105,6 @@
         "when": "editorLangId == aivi"
       },
       {
-        "command": "aivi.openCompilerLog",
-        "title": "AIVI: Open Compiler Log"
-      },
-      {
         "command": "aivi.runTest",
         "title": "AIVI: Run Test",
         "when": "editorLangId == aivi"
@@ -112,22 +118,18 @@
           "default": "aivi",
           "description": "Path to the aivi compiler binary."
         },
-        "aivi.compiler.args": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [],
-          "description": "Extra arguments passed to the compiler."
-        },
         "aivi.compiler.timeout": {
           "type": "number",
-          "default": 5000,
-          "description": "Compiler request timeout in milliseconds."
+          "default": 15000,
+          "minimum": 1000,
+          "maximum": 120000,
+          "description": "Maximum time to wait for the language server to start, in milliseconds."
         },
         "aivi.diagnostics.debounceMs": {
           "type": "number",
           "default": 200,
+          "minimum": 0,
+          "maximum": 5000,
           "description": "Delay before triggering diagnostics after a document change."
         },
         "aivi.inlayHints.enabled": {
@@ -138,27 +140,14 @@
         "aivi.inlayHints.maxLength": {
           "type": "number",
           "default": 30,
+          "minimum": 4,
+          "maximum": 200,
           "description": "Maximum character length of an inlay hint before truncation."
         },
         "aivi.codeLens.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Show code lens annotations."
-        },
-        "aivi.completion.autoImport": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically insert use declarations for completion items."
-        },
-        "aivi.trace.server": {
-          "type": "string",
-          "enum": [
-            "off",
-            "messages",
-            "verbose"
-          ],
-          "default": "off",
-          "description": "Trace communication between VSCode and the language server."
         },
         "aivi.format.onSave": {
           "type": "boolean",
@@ -170,17 +159,23 @@
   },
   "scripts": {
     "build": "vite build",
+    "lint": "tsc --noEmit",
     "watch": "vite build --watch",
-    "test": "echo 'no tests yet'",
-    "package": "vsce package --no-dependencies --allow-missing-repository"
+    "test": "pnpm run test:compile && pnpm run test:unit && pnpm run test:server && pnpm run test:integration",
+    "test:compile": "tsc -p tsconfig.test.json",
+    "test:unit": "node --test test-out/tests/contract.test.js test-out/tests/lifecycle.test.js",
+    "test:server": "cargo build --manifest-path ../../../Cargo.toml --bin aivi",
+    "test:integration": "node --test test-out/tests/lsp.integration.test.js",
+    "package": "vsce package --no-dependencies --allow-missing-repository && node scripts/verify-vsix.mjs"
   },
   "dependencies": {
-    "vscode-languageclient": "^9.0.1"
+    "vscode-languageclient": "^10.1.0"
   },
   "devDependencies": {
-    "@types/vscode": "^1.110.0",
-    "@vscode/vsce": "3.7.1",
-    "typescript": "6.0.2",
-    "vite": "8.0.3"
+    "@types/node": "24.13.3",
+    "@types/vscode": "^1.134.0",
+    "@vscode/vsce": "3.9.2",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
   }
 }

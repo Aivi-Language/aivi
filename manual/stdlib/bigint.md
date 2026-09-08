@@ -86,8 +86,6 @@ Friendly alias names such as `parse`, `plus`, `minus`, `times`, `dividedBy`, `re
 
 ### fromInt / fromInteger
 
-```aivi
-```
 
 Convert a normal machine-sized `Int` into `BigInt`. Use this when you want to move into
 big-integer arithmetic before the value grows large.
@@ -100,8 +98,6 @@ value startCount = fromInt 42
 
 ### fromText / parse
 
-```aivi
-```
 
 Parse decimal text into `BigInt`. Surrounding whitespace is ignored. Returns `None` when the text
 is not a valid integer.
@@ -114,8 +110,6 @@ value customerId = fromText "90071992547409931234567890"
 
 ### toInt
 
-```aivi
-```
 
 Try to convert a `BigInt` back to plain `Int`. Returns `Some n` when the value fits in `Int`, or
 `None` when it is too large or too small.
@@ -126,13 +120,14 @@ use aivi.bigint (
     toInt
 )
 
-func toMachineInt = raw =>
+type Text -> Option Int
+func toMachineInt = raw => fromText raw
+ ||> None       -> None
+ ||> Some value -> toInt value
 ```
 
 ### toText
 
-```aivi
-```
 
 Render a `BigInt` as decimal text. This is the easiest way to show a large number in the UI or
 store it in text-based formats.
@@ -148,29 +143,21 @@ value rendered = toText (factorial 30)
 
 ### add / plus
 
-```aivi
-```
 
 Add two `BigInt` values.
 
 ### sub / minus
 
-```aivi
-```
 
 Subtract the right value from the left.
 
 ### mul / times
 
-```aivi
-```
 
 Multiply two `BigInt` values.
 
 ### div / dividedBy
 
-```aivi
-```
 
 Integer division. Any remainder is discarded. Returns `None` when the divisor is zero.
 
@@ -185,87 +172,63 @@ value maybePages = div (fromInt 120) (fromInt 10)
 
 ### bigMod / remainder
 
-```aivi
-```
 
 Return the remainder after integer division. Returns `None` when the divisor is zero.
 
 ### pow / raiseTo
 
-```aivi
-```
 
 Raise a `BigInt` to a whole-number power. The exponent is a normal `Int`. Negative exponents are
 currently treated as `0`, so the result is `1`.
 
 ### neg / negate
 
-```aivi
-```
 
 Flip the sign of a `BigInt`.
 
 ### bigAbs / absolute
 
-```aivi
-```
 
 Return the absolute value of a `BigInt`.
 
 ### cmp
 
-```aivi
-```
 
 Compare two `BigInt` values. The result is `-1` when the left value is smaller, `0` when both
 values are equal, and `1` when the left value is larger.
 
 ### bigEq / equals
 
-```aivi
-```
 
 Check whether two `BigInt` values are exactly equal.
 
 ### gt / greaterThan
 
-```aivi
-```
 
 Return `True` when the left value is greater than the right value.
 
 ### lt / lessThan
 
-```aivi
-```
 
 Return `True` when the left value is less than the right value.
 
 ### greaterOrEqual / lessOrEqual
 
-```aivi
-```
 
 Inclusive comparison helpers built from the basic comparison functions.
 
 ### zero / one / negOne
 
-```aivi
-```
 
 Ready-made `BigInt` constants for common starting values.
 
 ### isZero / isPositive / isNegative
 
-```aivi
-```
 
 Small sign-check helpers for common conditions.
 
 ### factorial
 
-```aivi
-```
 
 Compute `n!` as a `BigInt`. `factorial 0` returns `one`, and negative input currently also returns
 `one`.
@@ -288,7 +251,10 @@ use aivi.bigint (
     toText
 )
 
-func combineTotals = left right =>
+type Text -> Text -> Option Text
+func combineTotals = left right => (fromText left, fromText right)
+ ||> (Some leftValue, Some rightValue) -> Some (toText (add leftValue rightValue))
+ ||> _                                 -> None
 ```
 
 ## Example — compare large identifiers safely
@@ -299,5 +265,8 @@ use aivi.bigint (
     fromText
 )
 
-func newerId = left right =>
+type Text -> Text -> Option Bool
+func newerId = left right => (fromText left, fromText right)
+ ||> (Some leftValue, Some rightValue) -> Some (cmp leftValue rightValue > 0)
+ ||> _                                 -> None
 ```

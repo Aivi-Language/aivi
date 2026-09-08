@@ -3,18 +3,24 @@ name = "aivi-gtk"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 aivi-base.workspace = true
 aivi-hir.workspace = true
 aivi-runtime = { path = "../aivi-runtime" }
-gtk = { package = "gtk4", version = "0.11.1", features = ["v4_8"] }
-libadwaita = { package = "libadwaita", version = "0.9", features = ["v1_3", "v1_4", "v1_5"] }
+gtk = { workspace = true, features = ["v4_8"] }
+gtk-sys.workspace = true
+adw = { workspace = true, features = ["v1_3", "v1_4", "v1_5"] }
 serde.workspace = true
-webkit6 = "0.6.1"
+webkit6.workspace = true
 
 [dev-dependencies]
 aivi-syntax.workspace = true
 
 [lints]
 workspace = true
+
+[package.metadata.cargo-machete]
+# This direct edge constrains gtk4-sys to the GTK 4.8-compatible patch paired with gtk4 0.11.3.
+ignored = ["gtk-sys"]

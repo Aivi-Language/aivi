@@ -500,6 +500,7 @@ where
     dirty_scratch: Vec<bool>,
     publications_scratch: Vec<Option<Publication<V>>>,
     dropped_scratch: Vec<DroppedPublication>,
+    committed_scratch: Vec<SignalHandle>,
     worker_publication_tx: mpsc::SyncSender<Publication<V>>,
     worker_publication_rx: mpsc::Receiver<Publication<V>>,
     worker_publication_notifier: Option<Arc<dyn Fn() + Send + Sync + 'static>>,
@@ -551,6 +552,7 @@ where
             dirty_scratch: Vec::new(),
             publications_scratch: Vec::new(),
             dropped_scratch: Vec::new(),
+            committed_scratch: Vec::with_capacity(signal_count),
             worker_publication_tx,
             worker_publication_rx,
             worker_publication_notifier: None,
@@ -788,7 +790,8 @@ where
         self.evaluate_dirty_signals(order, evaluator, &mut pending, &dirty)?;
         self.dirty_scratch = dirty;
 
-        let mut committed = Vec::new();
+        let mut committed = std::mem::take(&mut self.committed_scratch);
+        committed.clear();
         for (index, pending_value) in pending.drain(..).enumerate() {
             let handle = SignalHandle::from_raw(index as u32);
             if commit_pending_slot(
@@ -803,13 +806,17 @@ where
         self.collect_committed_values();
 
         self.initialized = true;
+        // `TickOutcome` owns its handles, while the scheduler retains the
+        // graph-sized work buffer to avoid geometric growth on the next tick.
+        let committed_outcome = Box::<[SignalHandle]>::from(committed.as_slice());
+        self.committed_scratch = committed;
         // Drain `dropped` into a boxed slice for the outcome, then return the
         // now-empty Vec to the scratch field to avoid a fresh allocation next tick.
         let dropped_publications: Box<[DroppedPublication]> = dropped.drain(..).collect();
         self.dropped_scratch = dropped;
         Ok(TickOutcome {
             tick,
-            committed: committed.into_boxed_slice(),
+            committed: committed_outcome,
             dropped_publications,
         })
     }

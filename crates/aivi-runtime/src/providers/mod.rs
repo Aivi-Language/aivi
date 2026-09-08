@@ -39,6 +39,8 @@ use crate::{
     },
 };
 
+type OwnedTextPair = (Box<str>, Box<str>);
+
 include!("context.rs");
 include!("manager.rs");
 include!("plans.rs");

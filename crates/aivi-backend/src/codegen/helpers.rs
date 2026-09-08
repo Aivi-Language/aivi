@@ -456,7 +456,7 @@ fn compute_kernel_fingerprint_for(
 ) -> KernelFingerprint {
     let mut hasher = FxHasher::default();
     kernel_symbol_for(program, kernel_id, kernel).hash(&mut hasher);
-    format!("{kernel:?}").hash(&mut hasher);
+    crate::fingerprint::hash_debug(kernel, &mut hasher);
 
     let mut layout_ids = BTreeSet::new();
     collect_kernel_layout_dependencies(program, kernel, &mut layout_ids);
@@ -469,14 +469,14 @@ fn compute_kernel_fingerprint_for(
 
     for layout_id in layout_ids {
         layout_id.hash(&mut hasher);
-        format!("{:?}", program.layouts()[layout_id]).hash(&mut hasher);
+        crate::fingerprint::hash_debug(&program.layouts()[layout_id], &mut hasher);
     }
 
     for item_id in item_ids {
         let item = &program.items()[item_id];
         item_id.hash(&mut hasher);
         item.name.hash(&mut hasher);
-        format!("{:?}", item.kind).hash(&mut hasher);
+        crate::fingerprint::hash_debug(&item.kind, &mut hasher);
         item.parameters.hash(&mut hasher);
         item.body.hash(&mut hasher);
 
@@ -495,7 +495,7 @@ fn compute_kernel_fingerprint_for(
         if let Some(body) = item.body {
             let body_kernel = &program.kernels()[body];
             kernel_symbol_for(program, body, body_kernel).hash(&mut hasher);
-            format!("{:?}", body_kernel.convention).hash(&mut hasher);
+            crate::fingerprint::hash_debug(&body_kernel.convention, &mut hasher);
         }
     }
 

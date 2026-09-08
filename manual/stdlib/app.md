@@ -3,7 +3,8 @@
 Application framework types for AIVI desktop apps.
 
 The `aivi.app` module provides the core data types for building structured GTK4/libadwaita
-applications: lifecycle state, actions, undo/redo history, and notifications.
+applications: lifecycle state, actions, undo/redo history, and notifications. These are
+data types, not automatic lifecycle subscriptions, an undo engine, or notification rendering.
 
 ## Import
 
@@ -31,8 +32,8 @@ type AppLifecycle =
   | Stopped
 ```
 
-Represents the current phase of an application's main loop. AIVI apps transition through
-these states as the OS or user triggers lifecycle events:
+Represents phases that an application can model in its own state. The module does not
+automatically publish OS lifecycle transitions:
 
 | State       | Description                                      |
 |-------------|--------------------------------------------------|
@@ -150,11 +151,14 @@ type NotificationLevel =
   | NoteSuccess
 ```
 
-Severity of an in-app notification. Maps to libadwaita toast and banner styling.
+Severity of an in-app notification. Application code must map it to presentation;
+the type itself does not apply libadwaita toast or banner styling.
 
 ### AppNotification
 
 ```aivi
+use aivi.app.lifecycle (NotificationLevel)
+
 type AppNotification = {
     level: NotificationLevel,
     title: Text,
@@ -181,9 +185,13 @@ value savedNotification : AppNotification = {
 ## Example — tracking app lifecycle in a signal
 
 ```aivi
-use aivi.app.lifecycle (AppLifecycle)
+use aivi.app.lifecycle (
+    AppLifecycle
+    Running
+    Starting
+)
 
-signal lifecycle : AppLifecycle = source Starting
+signal lifecycle : Signal AppLifecycle = Starting
 
 type AppLifecycle -> Bool
 func isRunning = state => state

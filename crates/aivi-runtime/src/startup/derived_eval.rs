@@ -31,13 +31,18 @@ fn strip_signal_value(value: RuntimeValue) -> RuntimeValue {
 // previous program at the same address can never interfere.
 thread_local! {
     static NATIVE_KERNEL_PLAN_CACHE: std::cell::RefCell<BTreeMap<(usize, NativePlanCacheKey), NativeKernelPlan>> =
-        std::cell::RefCell::new(BTreeMap::new());
+        const { std::cell::RefCell::new(BTreeMap::new()) };
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ReactivePipelineContext {
     Seed,
     Body(ReactiveClauseHandle),
+}
+
+struct RuntimePipelineEvaluation<'a> {
+    globals: &'a BTreeMap<BackendItemId, RuntimeValue>,
+    evaluator: &'a mut dyn BackendExecutionEngine,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -95,8 +100,10 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
                     stage_offset: helper.stage_offset + 1,
                 }),
                 value,
-                &globals,
-                &mut *engine,
+                RuntimePipelineEvaluation {
+                    globals: &globals,
+                    evaluator: &mut *engine,
+                },
             );
         }
 
@@ -121,7 +128,11 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
             };
             let signal_value = RuntimeValue::Signal(Box::new(value.clone()));
             if let Some(layout) = binding.dependency_layouts.get(index).copied() {
-                dependency_environment.push(stage_subject_value(self.backend_view(), layout, value));
+                dependency_environment.push(stage_subject_value(
+                    self.backend_view(),
+                    layout,
+                    value,
+                ));
             }
             globals.insert(dependency, signal_value);
         }
@@ -139,8 +150,10 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
             binding.pipeline_ids.as_ref(),
             None,
             value,
-            &globals,
-            &mut *engine,
+            RuntimePipelineEvaluation {
+                globals: &globals,
+                evaluator: &mut *engine,
+            },
         )
     }
 
@@ -179,8 +192,10 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
             ReactivePipelineContext::Seed,
             binding_pipeline_ids.as_ref(),
             value,
-            &globals,
-            &mut *engine,
+            RuntimePipelineEvaluation {
+                globals: &globals,
+                evaluator: &mut *engine,
+            },
         )
     }
 
@@ -210,14 +225,14 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
                     signal,
                     clause,
                     item: binding.owner,
-                    value: RuntimeValue::Signal(Box::new(other)),
+                    value: Box::new(RuntimeValue::Signal(Box::new(other))),
                 }),
             },
             other => Err(BackendRuntimeError::ReactiveGuardReturnedNonBool {
                 signal,
                 clause,
                 item: binding.owner,
-                value: other,
+                value: Box::new(other),
             }),
         }
     }
@@ -267,7 +282,7 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
                             signal,
                             clause,
                             item: clause_owner,
-                            value: RuntimeValue::Signal(Box::new(other)),
+                            value: Box::new(RuntimeValue::Signal(Box::new(other))),
                         });
                     }
                 },
@@ -276,7 +291,7 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
                         signal,
                         clause,
                         item: clause_owner,
-                        value: other,
+                        value: Box::new(other),
                     });
                 }
             },
@@ -291,8 +306,10 @@ impl TryDerivedNodeEvaluator<RuntimeValue> for LinkedDerivedEvaluator<'_> {
             ReactivePipelineContext::Body(clause),
             clause_pipeline_ids.as_ref(),
             value,
-            &globals,
-            &mut *engine,
+            RuntimePipelineEvaluation {
+                globals: &globals,
+                evaluator: &mut *engine,
+            },
         )
     }
 }
@@ -509,22 +526,24 @@ impl LinkedDerivedEvaluator<'_> {
                         globals,
                     ),
                     Some(Ok(value)) => Ok(value),
-                    Some(Err(NativeKernelExecutionError::FallbackRequired)) => {
-                        self.evaluate_fallback_derived_value(
+                    Some(Err(NativeKernelExecutionError::FallbackRequired)) => self
+                        .evaluate_fallback_derived_value(
                             signal,
                             binding,
                             dependency_environment,
                             globals,
-                        )
-                    }
+                        ),
                     Some(Err(NativeKernelExecutionError::Evaluation(error))) => {
                         Err(self.derived_eval_error(signal, binding.item, error))
                     }
                 }
             }
-            LinkedEvalLane::Fallback => {
-                self.evaluate_fallback_derived_value(signal, binding, dependency_environment, globals)
-            }
+            LinkedEvalLane::Fallback => self.evaluate_fallback_derived_value(
+                signal,
+                binding,
+                dependency_environment,
+                globals,
+            ),
         }
     }
 
@@ -557,8 +576,10 @@ impl LinkedDerivedEvaluator<'_> {
                 binding.pipeline_ids.as_ref(),
                 None,
                 value,
-                self.committed_signals,
-                &mut *engine,
+                RuntimePipelineEvaluation {
+                    globals: self.committed_signals,
+                    evaluator: &mut *engine,
+                },
             )?;
         }
         Ok(())
@@ -686,23 +707,26 @@ impl LinkedDerivedEvaluator<'_> {
                         guard_native_kernels.as_ref(),
                         binding.compiled_guard.entry_item,
                         env,
-                        |error| self.reactive_guard_eval_error(signal, clause, binding.owner, error),
+                        |error| {
+                            self.reactive_guard_eval_error(signal, clause, binding.owner, error)
+                        },
                         globals,
                     ),
                     Some(Ok(value)) => Ok(value),
-                    Some(Err(NativeKernelExecutionError::FallbackRequired)) => {
-                        self.evaluate_fallback_reactive_fragment_value(
+                    Some(Err(NativeKernelExecutionError::FallbackRequired)) => self
+                        .evaluate_fallback_reactive_fragment_value(
                             &guard_backend,
                             guard_native_kernels.as_ref(),
                             binding.compiled_guard.entry_item,
                             env,
-                            |error| self.reactive_guard_eval_error(signal, clause, binding.owner, error),
+                            |error| {
+                                self.reactive_guard_eval_error(signal, clause, binding.owner, error)
+                            },
                             globals,
-                        )
+                        ),
+                    Some(Err(NativeKernelExecutionError::Evaluation(error))) => {
+                        Err(self.reactive_guard_eval_error(signal, clause, binding.owner, error))
                     }
-                    Some(Err(NativeKernelExecutionError::Evaluation(error))) => Err(
-                        self.reactive_guard_eval_error(signal, clause, binding.owner, error),
-                    ),
                 }
             }
             LinkedEvalLane::Fallback => self.evaluate_fallback_reactive_fragment_value(
@@ -754,7 +778,9 @@ impl LinkedDerivedEvaluator<'_> {
                             frag_native_kernels.as_ref(),
                             fragment.entry_item,
                             env,
-                            |error| self.reactive_body_eval_error(signal, clause, binding.owner, error),
+                            |error| {
+                                self.reactive_body_eval_error(signal, clause, binding.owner, error)
+                            },
                             globals,
                         ),
                     Some(Err(NativeKernelExecutionError::Evaluation(error))) => {
@@ -808,8 +834,14 @@ impl LinkedDerivedEvaluator<'_> {
         globals: &BTreeMap<BackendItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, BackendRuntimeError> {
         let mut engine = backend.executable_program(native_kernels).create_engine();
-        if let Some(kernel) = backend.runtime_view().item(entry_item).and_then(|item| item.body) {
-            engine.evaluate_kernel(kernel, None, env, globals).map_err(map_error)
+        if let Some(kernel) = backend
+            .runtime_view()
+            .item(entry_item)
+            .and_then(|item| item.body)
+        {
+            engine
+                .evaluate_kernel(kernel, None, env, globals)
+                .map_err(map_error)
         } else {
             engine.evaluate_item(entry_item, globals).map_err(map_error)
         }
@@ -833,7 +865,7 @@ impl LinkedDerivedEvaluator<'_> {
         let cache_key = (backend.cache_identity(), key);
         NATIVE_KERNEL_PLAN_CACHE.with(|cell| {
             let mut cache = cell.borrow_mut();
-            if !cache.contains_key(&cache_key) {
+            if let std::collections::btree_map::Entry::Vacant(entry) = cache.entry(cache_key) {
                 let compiled = match backend {
                     BackendRuntimePayload::Program(program) => {
                         NativeKernelPlan::compile_with_native_artifacts(
@@ -858,7 +890,7 @@ impl LinkedDerivedEvaluator<'_> {
                     }
                 };
                 if let Some(compiled) = compiled {
-                    cache.insert(cache_key, compiled);
+                    entry.insert(compiled);
                 }
             }
             let staged_input = input.cloned().map(strip_signal_value);
@@ -867,7 +899,8 @@ impl LinkedDerivedEvaluator<'_> {
                 .cloned()
                 .map(strip_signal_value)
                 .collect::<Vec<_>>();
-            cache.get_mut(&cache_key)
+            cache
+                .get_mut(&cache_key)
                 .map(|plan| plan.execute(staged_input.as_ref(), &staged_env, globals))
         })
     }
@@ -888,7 +921,7 @@ impl LinkedDerivedEvaluator<'_> {
 
         NATIVE_KERNEL_PLAN_CACHE.with(|cell| {
             let mut cache = cell.borrow_mut();
-            if !cache.contains_key(&cache_key) {
+            if let std::collections::btree_map::Entry::Vacant(entry) = cache.entry(cache_key) {
                 let compiled = match self.backend {
                     BackendRuntimePayload::Program(program) => {
                         NativeKernelPlan::compile_with_native_artifacts(
@@ -913,7 +946,7 @@ impl LinkedDerivedEvaluator<'_> {
                     }
                 };
                 if let Some(compiled) = compiled {
-                    cache.insert(cache_key, compiled);
+                    entry.insert(compiled);
                 }
             }
             let native_result = cache
@@ -922,7 +955,11 @@ impl LinkedDerivedEvaluator<'_> {
             match native_result {
                 Some(Ok(value)) => Ok(value),
                 Some(Err(NativeKernelExecutionError::Evaluation(error))) => {
-                    Err(BackendRuntimeError::EvaluateRecurrenceSignal { signal, item, error })
+                    Err(BackendRuntimeError::EvaluateRecurrenceSignal {
+                        signal,
+                        item,
+                        error: Box::new(error),
+                    })
                 }
                 None | Some(Err(NativeKernelExecutionError::FallbackRequired)) => self
                     .executable_program()
@@ -931,7 +968,7 @@ impl LinkedDerivedEvaluator<'_> {
                     .map_err(|error| BackendRuntimeError::EvaluateRecurrenceSignal {
                         signal,
                         item,
-                        error,
+                        error: Box::new(error),
                     }),
             }
         })
@@ -946,7 +983,7 @@ impl LinkedDerivedEvaluator<'_> {
         BackendRuntimeError::EvaluateDerivedSignal {
             signal,
             item,
-            error,
+            error: Box::new(error),
         }
     }
 
@@ -959,7 +996,7 @@ impl LinkedDerivedEvaluator<'_> {
         BackendRuntimeError::EvaluateReactiveSeed {
             signal,
             item,
-            error,
+            error: Box::new(error),
         }
     }
 
@@ -974,7 +1011,7 @@ impl LinkedDerivedEvaluator<'_> {
             signal,
             clause,
             item,
-            error,
+            error: Box::new(error),
         }
     }
 
@@ -989,7 +1026,7 @@ impl LinkedDerivedEvaluator<'_> {
             signal,
             clause,
             item,
-            error,
+            error: Box::new(error),
         }
     }
 
@@ -1015,9 +1052,9 @@ impl LinkedDerivedEvaluator<'_> {
         pipeline_ids: &[BackendPipelineId],
         mut resume: Option<TemporalResumePoint>,
         mut value: RuntimeValue,
-        globals: &BTreeMap<BackendItemId, RuntimeValue>,
-        evaluator: &mut dyn BackendExecutionEngine,
+        evaluation: RuntimePipelineEvaluation<'_>,
     ) -> Result<DerivedSignalUpdate<RuntimeValue>, BackendRuntimeError> {
+        let RuntimePipelineEvaluation { globals, evaluator } = evaluation;
         let binding = self
             .derived_signals
             .get(&signal)
@@ -1124,7 +1161,7 @@ impl LinkedDerivedEvaluator<'_> {
                                 item,
                                 pipeline: pipeline_id,
                                 stage_index: stage.index,
-                                value: duration_value.clone(),
+                                value: Box::new(duration_value.clone()),
                             }
                         })?;
                         if wait.is_zero() {
@@ -1133,7 +1170,7 @@ impl LinkedDerivedEvaluator<'_> {
                                 item,
                                 pipeline: pipeline_id,
                                 stage_index: stage.index,
-                                value: duration_value,
+                                value: Box::new(duration_value),
                             });
                         }
                         self.pending_temporal_schedules
@@ -1163,7 +1200,7 @@ impl LinkedDerivedEvaluator<'_> {
                                 item,
                                 pipeline: pipeline_id,
                                 stage_index: stage.index,
-                                value: every_value.clone(),
+                                value: Box::new(every_value.clone()),
                             }
                         })?;
                         let count_value = evaluator
@@ -1175,7 +1212,7 @@ impl LinkedDerivedEvaluator<'_> {
                                 item,
                                 pipeline: pipeline_id,
                                 stage_index: stage.index,
-                                value: count_value.clone(),
+                                value: Box::new(count_value.clone()),
                             }
                         })?;
                         if wait.is_zero() {
@@ -1184,7 +1221,7 @@ impl LinkedDerivedEvaluator<'_> {
                                 item,
                                 pipeline: pipeline_id,
                                 stage_index: stage.index,
-                                value: every_value,
+                                value: Box::new(every_value),
                             });
                         }
                         self.pending_temporal_schedules
@@ -1203,9 +1240,10 @@ impl LinkedDerivedEvaluator<'_> {
                             });
                         return Ok(self.suppressed_derived_update(binding.backend_item));
                     }
-                    BackendStageKind::Fanout(fanout) => {
-                        value = self
-                            .apply_fanout_stage(signal, item, fanout, value, globals, evaluator)?;
+                    BackendStageKind::Fanout(_) => {
+                        // Carrier metadata only. The signal body kernel evaluates the fanout
+                        // map/filter/join expression; replaying it here would map the result a
+                        // second time and violate the stage's collection input contract.
                     }
                     _ => unreachable!(
                         "unsupported pipeline stage kind should have been blocked during linking"
@@ -1223,9 +1261,9 @@ impl LinkedDerivedEvaluator<'_> {
         context: ReactivePipelineContext,
         pipeline_ids: &[BackendPipelineId],
         mut value: RuntimeValue,
-        globals: &BTreeMap<BackendItemId, RuntimeValue>,
-        evaluator: &mut dyn BackendExecutionEngine,
+        evaluation: RuntimePipelineEvaluation<'_>,
     ) -> Result<DerivedSignalUpdate<RuntimeValue>, BackendRuntimeError> {
+        let RuntimePipelineEvaluation { globals, evaluator } = evaluation;
         for &pipeline_id in pipeline_ids {
             let pipeline = self
                 .backend_view()
@@ -1254,7 +1292,12 @@ impl LinkedDerivedEvaluator<'_> {
                     ),
                     BackendStageKind::Fanout(fanout) => {
                         value = self.apply_reactive_fanout_stage(
-                            signal, item, context, fanout, value, globals, evaluator,
+                            signal,
+                            item,
+                            context,
+                            fanout,
+                            value,
+                            RuntimePipelineEvaluation { globals, evaluator },
                         )?;
                     }
                     _ => unreachable!(
@@ -1266,57 +1309,6 @@ impl LinkedDerivedEvaluator<'_> {
         Ok(DerivedSignalUpdate::Value(value))
     }
 
-    fn apply_fanout_stage(
-        &self,
-        signal: DerivedHandle,
-        item: hir::ItemId,
-        fanout: &aivi_backend::FanoutStage,
-        value: RuntimeValue,
-        globals: &BTreeMap<BackendItemId, RuntimeValue>,
-        evaluator: &mut dyn BackendExecutionEngine,
-    ) -> Result<RuntimeValue, BackendRuntimeError> {
-        let current = match value {
-            RuntimeValue::Signal(inner) => *inner,
-            other => other,
-        };
-        let RuntimeValue::List(elements) = current else {
-            return Ok(current);
-        };
-
-        let mut mapped = Vec::with_capacity(elements.len());
-        'elements: for element in elements {
-            let mapped_value = evaluator
-                .evaluate_kernel(fanout.map, Some(&element), &[], globals)
-                .map_err(|error| self.derived_eval_error(signal, item, error))?;
-            for filter in &fanout.filters {
-                let predicate = evaluator
-                    .evaluate_kernel(filter.predicate, Some(&mapped_value), &[], globals)
-                    .map_err(|error| self.derived_eval_error(signal, item, error))?;
-                if !matches!(predicate, RuntimeValue::Bool(true)) {
-                    continue 'elements;
-                }
-            }
-            mapped.push(mapped_value);
-        }
-
-        let mapped_collection = RuntimeValue::List(mapped);
-        match &fanout.join {
-            Some(join) => {
-                let subject =
-                    stage_subject_value(self.backend_view(), join.input_layout, &mapped_collection);
-                let joined = evaluator
-                    .evaluate_kernel(join.kernel, Some(&subject), &[], globals)
-                    .map_err(|error| self.derived_eval_error(signal, item, error))?;
-                Ok(unwrap_signal_layout_result(
-                    self.backend_view(),
-                    join.result_layout,
-                    joined,
-                ))
-            }
-            None => Ok(mapped_collection),
-        }
-    }
-
     fn apply_reactive_fanout_stage(
         &self,
         signal: SignalHandle,
@@ -1324,9 +1316,9 @@ impl LinkedDerivedEvaluator<'_> {
         context: ReactivePipelineContext,
         fanout: &aivi_backend::FanoutStage,
         value: RuntimeValue,
-        globals: &BTreeMap<BackendItemId, RuntimeValue>,
-        evaluator: &mut dyn BackendExecutionEngine,
+        evaluation: RuntimePipelineEvaluation<'_>,
     ) -> Result<RuntimeValue, BackendRuntimeError> {
+        let RuntimePipelineEvaluation { globals, evaluator } = evaluation;
         let current = match value {
             RuntimeValue::Signal(inner) => *inner,
             other => other,
@@ -1405,7 +1397,7 @@ impl LinkedDerivedEvaluator<'_> {
             .map_err(|error| BackendRuntimeError::EvaluateRecurrenceSignal {
                 signal,
                 item: binding.item,
-                error,
+                error: Box::new(error),
             })?;
             return Ok(DerivedSignalUpdate::Value(seed_value));
         }
@@ -1425,7 +1417,8 @@ impl LinkedDerivedEvaluator<'_> {
         };
         let mut result = actual_prev.clone();
         for &step_kernel in binding.step_kernels.iter() {
-            result = self.evaluate_recurrence_step(signal, binding.item, step_kernel, result, &globals)?;
+            result =
+                self.evaluate_recurrence_step(signal, binding.item, step_kernel, result, &globals)?;
         }
 
         if result == *actual_prev {
@@ -1457,17 +1450,19 @@ fn evaluate_kernel_coercing_zero_arity(
             // If the value is a zero-arity sum constructor callable, apply it to get
             // the actual Sum value.
             if let RuntimeValue::Callable(RuntimeCallable::SumConstructor {
-                ref handle,
-                ref bound_arguments,
-            }) = found
-                && handle.field_count == 0 && bound_arguments.is_empty() {
-                    return Ok(RuntimeValue::Sum(RuntimeSumValue {
-                        item: handle.item,
-                        type_name: handle.type_name.clone(),
-                        variant_name: handle.variant_name.clone(),
-                        fields: Vec::new(),
-                    }));
-                }
+                handle,
+                bound_arguments,
+            }) = found.as_ref()
+                && handle.field_count == 0
+                && bound_arguments.is_empty()
+            {
+                return Ok(RuntimeValue::Sum(RuntimeSumValue {
+                    item: handle.item,
+                    type_name: handle.type_name.clone(),
+                    variant_name: handle.variant_name.clone(),
+                    fields: Vec::new(),
+                }));
+            }
             Err(EvaluationError::KernelResultLayoutMismatch {
                 kernel: kernel_id,
                 expected,

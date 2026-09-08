@@ -180,6 +180,8 @@ This is the severity of an in-app message such as a toast, banner, or status mes
 ### AppNotification
 
 ```aivi
+use aivi.app.lifecycle (NotificationLevel)
+
 type AppNotification = {
     level: NotificationLevel,
     title: Text,
@@ -209,6 +211,12 @@ value savedNotice : AppNotification = {
 ### AppEvent
 
 ```aivi
+use aivi.app.lifecycle (
+    AppCommand
+    AppLifecycle
+    AppNotification
+)
+
 type AppEvent =
   | LifecycleChanged AppLifecycle
   | CommandRequested AppCommand
@@ -239,7 +247,10 @@ value openRequested : AppEvent = CommandRequested openCommand
 
 ```aivi
 use aivi.app.lifecycle (
+    AppCommand
     AppEvent
+    AppLifecycle
+    AppNotification
     LifecycleChanged
     CommandRequested
     NotificationIssued

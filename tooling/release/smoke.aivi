@@ -1,0 +1,8 @@
+use aivi.math (isEven)
+
+value main : Task Text Bool = pure (isEven 42)
+
+@test
+value stdlibAvailable : Task Text Bool = pure (isEven 42)
+
+export main

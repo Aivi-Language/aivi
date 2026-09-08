@@ -4,7 +4,7 @@ In most languages, you manage changing state with mutable variables and manual u
 
 AIVI replaces mutable state with **signals** — reactive values in a dependency graph. A signal declares what it depends on, and the runtime handles the updates. You describe the relationships; the runtime does the work.
 
-```
+```text
 value  →  computed once, never changes
 signal →  recomputes when its dependencies change
 ```
@@ -98,11 +98,11 @@ value seed : User = {
     email: "ada@example.com"
 }
 
-signal sessions : Session = {
+signal sessions : Signal Session = {
     user: seed
 }
 
-signal activeUsers : User = sessions
+signal activeUsers : Signal User = sessions
   |> .user
  ?|> .active
 ```
@@ -280,6 +280,10 @@ func step = event count => event
 signal elapsed = event
  +|> 0 step
 
+type Int -> Text
+func formatInt = value =>
+    "{value}"
+
 signal label = elapsed
   |> formatInt
 
@@ -291,7 +295,7 @@ value main =
 export main
 ```
 
-```
+```text
 timer.every  ──→  tick signal
                        ↓
 keyboard     ──→  keyDown signal
@@ -379,8 +383,10 @@ signal firstLoadDone : Signal Bool = usersResult.success
  +|> False trackFirstDone
 ```
 
-`firstLoadDone` is `False` until `usersResult.success` is first `Some`, then `True` forever. Gate any
-follow-up source with `activeWhen: firstLoadDone` to fire it exactly once.
+`firstLoadDone` is `False` until `usersResult.success` is first `Some`, then `True` forever.
+It can activate a one-shot follow-up source once per instance lifetime, provided that source
+has no retry, refresh, restart, or changing configuration triggers. `activeWhen` is an
+activation gate, not an exactly-once delivery guarantee; a repeating timer still repeats.
 
 See [`aivi.async`](/stdlib/async) for the full `AsyncTracker` reference.
 

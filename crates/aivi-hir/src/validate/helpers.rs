@@ -259,9 +259,9 @@ fn suggest_similar_name(module: &Module, target: &str) -> Option<String> {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum RecurrenceWakeupHint {
-    BuiltinSource(SourceRecurrenceWakeupContext),
-    NonSource(NonSourceWakeupCause),
-    CustomSource {
+    Builtin(SourceRecurrenceWakeupContext),
+    Non(NonSourceWakeupCause),
+    Custom {
         provider_path: NamePath,
         context: CustomSourceRecurrenceWakeupContext,
     },

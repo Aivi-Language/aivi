@@ -42,19 +42,10 @@ use aivi.auth (
 ## Capability handle
 
 ```aivi
-use aivi.auth (AuthSource, AuthTask, PkceToken)
+use aivi.auth (AuthSource)
 
 @source auth
 signal auth : AuthSource
-
-value signIn : AuthTask PkceToken =
-    auth.pkce {
-        clientId: "desktop-client",
-        authEndpoint: "https://auth.example/authorize",
-        tokenEndpoint: "https://auth.example/token",
-        scopes: ["mail.read"],
-        redirectPort: 43123
-    }
 ```
 
 Current canonical handle members:
@@ -66,6 +57,12 @@ Current canonical handle members:
 
 `auth.pkce` launches the external browser with `xdg-open` and listens on
 `http://127.0.0.1:{redirectPort}/callback`.
+
+The current `aivi.url` module does not export a text-to-`Url` constructor, and the capability
+projection currently accepts its structural configuration directly rather than the imported
+nominal `PkceConfig`. Consequently the handle can be declared, but a fully type-safe public
+`auth.pkce` call cannot yet be written using only exported stdlib values. The member signatures
+above describe the intended boundary and are retained here as an explicit implementation gap.
 
 ---
 
@@ -164,6 +161,11 @@ func describePkceError = error => error
 ## `PkceState`
 
 ```aivi
+use aivi.auth (
+    PkceError
+    PkceToken
+)
+
 type PkceState =
   | PkceIdle
   | PkceInProgress

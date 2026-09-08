@@ -152,7 +152,7 @@ impl<'a> RuntimeFragmentLowerer<'a> {
                 validation
                     .into_errors()
                     .into_iter()
-                    .map(LoweringError::Validation),
+                    .map(|error| LoweringError::Validation(Box::new(error))),
             );
             return Err(LoweringErrors::new(self.lowerer.errors));
         }
@@ -211,7 +211,7 @@ impl<'a> RuntimeFragmentLowerer<'a> {
                     owner,
                     body_expr: report.body_expr,
                     span: blocked.primary_span().unwrap_or_default(),
-                    blocked,
+                    blocked: Box::new(blocked),
                 });
                 return;
             }
@@ -277,7 +277,7 @@ impl<'a> RuntimeFragmentLowerer<'a> {
                     owner: key.domain,
                     body_expr: report.body_expr,
                     span: blocked.primary_span().unwrap_or_default(),
-                    blocked,
+                    blocked: Box::new(blocked),
                 });
                 return;
             }
@@ -347,7 +347,7 @@ impl<'a> RuntimeFragmentLowerer<'a> {
                     owner: key.instance,
                     body_expr: report.body_expr,
                     span: blocked.primary_span().unwrap_or_default(),
-                    blocked,
+                    blocked: Box::new(blocked),
                 });
                 return;
             }

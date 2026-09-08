@@ -110,6 +110,15 @@ struct ModuleLowerer<'a> {
     errors: Vec<LoweringError>,
 }
 
+struct ClosureLoweringRequest {
+    span: SourceSpan,
+    kind: ClosureKind,
+    ambient_subject: Option<core::Type>,
+    parameters: Vec<Parameter>,
+    root: core::ExprId,
+    allow_captures: bool,
+}
+
 impl<'a> ModuleLowerer<'a> {
     fn new(core: &'a core::Module) -> Self {
         Self {
@@ -147,12 +156,14 @@ impl<'a> ModuleLowerer<'a> {
             let body = item.body.and_then(|root| {
                 self.lower_closure(
                     item_id,
-                    item.span,
-                    ClosureKind::ItemBody,
-                    None,
-                    lambda_params.clone(),
-                    root,
-                    false,
+                    ClosureLoweringRequest {
+                        span: item.span,
+                        kind: ClosureKind::ItemBody,
+                        ambient_subject: None,
+                        parameters: lambda_params.clone(),
+                        root,
+                        allow_captures: false,
+                    },
                     &parameter_name_map(&item.parameters),
                 )
             });
@@ -186,24 +197,28 @@ impl<'a> ModuleLowerer<'a> {
                 }) => {
                     let Some(when_true) = self.lower_closure(
                         owner,
-                        stage.span,
-                        ClosureKind::GateTrue,
-                        Some(stage.input_subject.clone()),
-                        Vec::new(),
-                        *when_true,
-                        true,
+                        ClosureLoweringRequest {
+                            span: stage.span,
+                            kind: ClosureKind::GateTrue,
+                            ambient_subject: Some(stage.input_subject.clone()),
+                            parameters: Vec::new(),
+                            root: *when_true,
+                            allow_captures: true,
+                        },
                         &runtime_names,
                     ) else {
                         continue;
                     };
                     let Some(when_false) = self.lower_closure(
                         owner,
-                        stage.span,
-                        ClosureKind::GateFalse,
-                        Some(stage.input_subject.clone()),
-                        Vec::new(),
-                        *when_false,
-                        true,
+                        ClosureLoweringRequest {
+                            span: stage.span,
+                            kind: ClosureKind::GateFalse,
+                            ambient_subject: Some(stage.input_subject.clone()),
+                            parameters: Vec::new(),
+                            root: *when_false,
+                            allow_captures: true,
+                        },
                         &runtime_names,
                     ) else {
                         continue;
@@ -220,12 +235,14 @@ impl<'a> ModuleLowerer<'a> {
                 }) => {
                     let Some(predicate) = self.lower_closure(
                         owner,
-                        stage.span,
-                        ClosureKind::SignalFilterPredicate,
-                        Some(payload_type.clone()),
-                        Vec::new(),
-                        *predicate,
-                        true,
+                        ClosureLoweringRequest {
+                            span: stage.span,
+                            kind: ClosureKind::SignalFilterPredicate,
+                            ambient_subject: Some(payload_type.clone()),
+                            parameters: Vec::new(),
+                            root: *predicate,
+                            allow_captures: true,
+                        },
                         &runtime_names,
                     ) else {
                         continue;
@@ -248,12 +265,14 @@ impl<'a> ModuleLowerer<'a> {
                 core::StageKind::Temporal(core::TemporalStage::Previous { seed_expr }) => {
                     let Some(seed) = self.lower_closure(
                         owner,
-                        stage.span,
-                        ClosureKind::PreviousSeed,
-                        None,
-                        Vec::new(),
-                        *seed_expr,
-                        true,
+                        ClosureLoweringRequest {
+                            span: stage.span,
+                            kind: ClosureKind::PreviousSeed,
+                            ambient_subject: None,
+                            parameters: Vec::new(),
+                            root: *seed_expr,
+                            allow_captures: true,
+                        },
                         &runtime_names,
                     ) else {
                         continue;
@@ -263,12 +282,14 @@ impl<'a> ModuleLowerer<'a> {
                 core::StageKind::Temporal(core::TemporalStage::DiffFunction { diff_expr }) => {
                     let Some(diff) = self.lower_closure(
                         owner,
-                        stage.span,
-                        ClosureKind::DiffFunction,
-                        None,
-                        Vec::new(),
-                        *diff_expr,
-                        true,
+                        ClosureLoweringRequest {
+                            span: stage.span,
+                            kind: ClosureKind::DiffFunction,
+                            ambient_subject: None,
+                            parameters: Vec::new(),
+                            root: *diff_expr,
+                            allow_captures: true,
+                        },
                         &runtime_names,
                     ) else {
                         continue;
@@ -278,12 +299,14 @@ impl<'a> ModuleLowerer<'a> {
                 core::StageKind::Temporal(core::TemporalStage::DiffSeed { seed_expr }) => {
                     let Some(seed) = self.lower_closure(
                         owner,
-                        stage.span,
-                        ClosureKind::DiffSeed,
-                        None,
-                        Vec::new(),
-                        *seed_expr,
-                        true,
+                        ClosureLoweringRequest {
+                            span: stage.span,
+                            kind: ClosureKind::DiffSeed,
+                            ambient_subject: None,
+                            parameters: Vec::new(),
+                            root: *seed_expr,
+                            allow_captures: true,
+                        },
                         &runtime_names,
                     ) else {
                         continue;
@@ -293,12 +316,14 @@ impl<'a> ModuleLowerer<'a> {
                 core::StageKind::Temporal(core::TemporalStage::Delay { duration_expr }) => {
                     let Some(duration) = self.lower_closure(
                         owner,
-                        stage.span,
-                        ClosureKind::DelayDuration,
-                        None,
-                        Vec::new(),
-                        *duration_expr,
-                        true,
+                        ClosureLoweringRequest {
+                            span: stage.span,
+                            kind: ClosureKind::DelayDuration,
+                            ambient_subject: None,
+                            parameters: Vec::new(),
+                            root: *duration_expr,
+                            allow_captures: true,
+                        },
                         &runtime_names,
                     ) else {
                         continue;
@@ -311,24 +336,28 @@ impl<'a> ModuleLowerer<'a> {
                 }) => {
                     let Some(every) = self.lower_closure(
                         owner,
-                        stage.span,
-                        ClosureKind::BurstEvery,
-                        None,
-                        Vec::new(),
-                        *every_expr,
-                        true,
+                        ClosureLoweringRequest {
+                            span: stage.span,
+                            kind: ClosureKind::BurstEvery,
+                            ambient_subject: None,
+                            parameters: Vec::new(),
+                            root: *every_expr,
+                            allow_captures: true,
+                        },
                         &runtime_names,
                     ) else {
                         continue;
                     };
                     let Some(count) = self.lower_closure(
                         owner,
-                        stage.span,
-                        ClosureKind::BurstCount,
-                        None,
-                        Vec::new(),
-                        *count_expr,
-                        true,
+                        ClosureLoweringRequest {
+                            span: stage.span,
+                            kind: ClosureKind::BurstCount,
+                            ambient_subject: None,
+                            parameters: Vec::new(),
+                            root: *count_expr,
+                            allow_captures: true,
+                        },
                         &runtime_names,
                     ) else {
                         continue;
@@ -360,12 +389,14 @@ impl<'a> ModuleLowerer<'a> {
             let recurrence = pipe.recurrence.as_ref().and_then(|recurrence| {
                 let seed = self.lower_closure(
                     pipe.owner,
-                    pipe.origin.span,
-                    ClosureKind::RecurrenceSeed,
-                    None,
-                    Vec::new(),
-                    recurrence.seed_expr,
-                    true,
+                    ClosureLoweringRequest {
+                        span: pipe.origin.span,
+                        kind: ClosureKind::RecurrenceSeed,
+                        ambient_subject: None,
+                        parameters: Vec::new(),
+                        root: recurrence.seed_expr,
+                        allow_captures: true,
+                    },
                     &runtime_names,
                 )?;
                 let start = self.lower_recurrence_stage(
@@ -386,12 +417,14 @@ impl<'a> ModuleLowerer<'a> {
                 let non_source_wakeup = recurrence.non_source_wakeup.as_ref().and_then(|wakeup| {
                     let runtime = self.lower_closure(
                         pipe.owner,
-                        pipe.origin.span,
-                        ClosureKind::RecurrenceWakeupWitness,
-                        None,
-                        Vec::new(),
-                        wakeup.runtime_witness,
-                        true,
+                        ClosureLoweringRequest {
+                            span: pipe.origin.span,
+                            kind: ClosureKind::RecurrenceWakeupWitness,
+                            ambient_subject: None,
+                            parameters: Vec::new(),
+                            root: wakeup.runtime_witness,
+                            allow_captures: true,
+                        },
                         &runtime_names,
                     )?;
                     Some(NonSourceWakeup {
@@ -434,12 +467,14 @@ impl<'a> ModuleLowerer<'a> {
     ) -> Option<RecurrenceStage> {
         let runtime = self.lower_closure(
             owner,
-            stage.stage_span,
-            kind,
-            Some(stage.input_subject.clone()),
-            Vec::new(),
-            stage.runtime_expr,
-            true,
+            ClosureLoweringRequest {
+                span: stage.stage_span,
+                kind,
+                ambient_subject: Some(stage.input_subject.clone()),
+                parameters: Vec::new(),
+                root: stage.runtime_expr,
+                allow_captures: true,
+            },
             known_names,
         )?;
         Some(RecurrenceStage {
@@ -461,12 +496,14 @@ impl<'a> ModuleLowerer<'a> {
     ) -> Option<FanoutStage> {
         let map = self.lower_closure(
             owner,
-            span,
-            ClosureKind::FanoutMap,
-            Some(fanout.element_subject.clone()),
-            Vec::new(),
-            fanout.runtime_map,
-            true,
+            ClosureLoweringRequest {
+                span,
+                kind: ClosureKind::FanoutMap,
+                ambient_subject: Some(fanout.element_subject.clone()),
+                parameters: Vec::new(),
+                root: fanout.runtime_map,
+                allow_captures: true,
+            },
             known_names,
         )?;
         let mut filters = Vec::with_capacity(fanout.filters.len());
@@ -478,12 +515,14 @@ impl<'a> ModuleLowerer<'a> {
                 input_subject: filter.input_subject.clone(),
                 runtime: self.lower_closure(
                     owner,
-                    filter.stage_span,
-                    ClosureKind::FanoutFilterPredicate,
-                    Some(filter.input_subject.clone()),
-                    Vec::new(),
-                    filter.runtime_predicate,
-                    true,
+                    ClosureLoweringRequest {
+                        span: filter.stage_span,
+                        kind: ClosureKind::FanoutFilterPredicate,
+                        ambient_subject: Some(filter.input_subject.clone()),
+                        parameters: Vec::new(),
+                        root: filter.runtime_predicate,
+                        allow_captures: true,
+                    },
                     known_names,
                 )?,
             });
@@ -497,12 +536,14 @@ impl<'a> ModuleLowerer<'a> {
                 collection_subject: join.collection_subject.clone(),
                 runtime: self.lower_closure(
                     owner,
-                    join.stage_span,
-                    ClosureKind::FanoutJoin,
-                    Some(join.collection_subject.clone()),
-                    Vec::new(),
-                    join.runtime_expr,
-                    true,
+                    ClosureLoweringRequest {
+                        span: join.stage_span,
+                        kind: ClosureKind::FanoutJoin,
+                        ambient_subject: Some(join.collection_subject.clone()),
+                        parameters: Vec::new(),
+                        root: join.runtime_expr,
+                        allow_captures: true,
+                    },
                     known_names,
                 )?,
                 result_type: join.result_type.clone(),
@@ -524,14 +565,17 @@ impl<'a> ModuleLowerer<'a> {
     fn lower_closure(
         &mut self,
         owner: core::ItemId,
-        span: SourceSpan,
-        kind: ClosureKind,
-        ambient_subject: Option<core::Type>,
-        parameters: Vec<Parameter>,
-        root: core::ExprId,
-        allow_captures: bool,
+        request: ClosureLoweringRequest,
         known_names: &BTreeMap<BindingId, Box<str>>,
     ) -> Option<ClosureId> {
+        let ClosureLoweringRequest {
+            span,
+            kind,
+            ambient_subject,
+            parameters,
+            root,
+            allow_captures,
+        } = request;
         let local_bindings = parameters
             .iter()
             .map(|parameter| parameter.binding)

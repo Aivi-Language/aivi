@@ -1,6 +1,5 @@
 packages:
   - packages/*
-  - ../manual
 
 onlyBuiltDependencies:
   - '@vscode/vsce-sign'

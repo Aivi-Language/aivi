@@ -1,3 +1,19 @@
+struct RequiredSignalScratch {
+    kernels: Vec<KernelId>,
+    visited_items: std::collections::HashSet<BackendItemId>,
+    required_items: Vec<BackendItemId>,
+}
+
+impl RequiredSignalScratch {
+    fn with_capacity(item_count: usize) -> Self {
+        Self {
+            kernels: Vec::with_capacity(item_count),
+            visited_items: std::collections::HashSet::with_capacity(item_count),
+            required_items: Vec::with_capacity(item_count),
+        }
+    }
+}
+
 struct LinkBuilder<'a> {
     assembly: &'a HirRuntimeAssembly,
     backend: BackendRuntimeView<'a>,
@@ -14,6 +30,7 @@ struct LinkBuilder<'a> {
     source_bindings: BTreeMap<SourceInstanceId, LinkedSourceBinding>,
     task_bindings: BTreeMap<TaskInstanceId, LinkedTaskBinding>,
     db_changed_routes: Vec<LinkedDbChangedRoute>,
+    required_signal_scratch: RequiredSignalScratch,
 }
 
 impl<'a> LinkBuilder<'a> {
@@ -50,6 +67,9 @@ impl<'a> LinkBuilder<'a> {
             source_bindings: BTreeMap::new(),
             task_bindings: BTreeMap::new(),
             db_changed_routes: Vec::new(),
+            required_signal_scratch: RequiredSignalScratch::with_capacity(
+                assembly.signals().len(),
+            ),
         }
     }
 
@@ -63,10 +83,12 @@ impl<'a> LinkBuilder<'a> {
         if self.errors.is_empty() {
             Ok(BackendLinkedRuntimeTables {
                 signal_items_by_handle: std::mem::take(&mut self.signal_items_by_handle),
-                signal_alias_items_by_handle: std::mem::take(&mut self.signal_alias_items_by_handle)
-                    .into_iter()
-                    .map(|(signal, items)| (signal, items.into_boxed_slice()))
-                    .collect(),
+                signal_alias_items_by_handle: std::mem::take(
+                    &mut self.signal_alias_items_by_handle,
+                )
+                .into_iter()
+                .map(|(signal, items)| (signal, items.into_boxed_slice()))
+                .collect(),
                 runtime_signal_by_item: std::mem::take(&mut self.runtime_signal_by_item),
                 derived_signals: std::mem::take(&mut self.derived_signals),
                 reactive_signals: std::mem::take(&mut self.reactive_signals),
@@ -99,7 +121,8 @@ impl<'a> LinkBuilder<'a> {
             let Some(&backend_item) = self.hir_to_backend.get(&binding.item) else {
                 continue;
             };
-            self.runtime_signal_by_item.insert(backend_item, binding.signal);
+            self.runtime_signal_by_item
+                .insert(backend_item, binding.signal);
             match self.signal_items_by_handle.get(&binding.signal).copied() {
                 Some(primary) if primary != backend_item => self
                     .signal_alias_items_by_handle
@@ -108,7 +131,8 @@ impl<'a> LinkBuilder<'a> {
                     .push(backend_item),
                 Some(_) => {}
                 None => {
-                    self.signal_items_by_handle.insert(binding.signal, backend_item);
+                    self.signal_items_by_handle
+                        .insert(binding.signal, backend_item);
                 }
             }
         }
@@ -295,9 +319,7 @@ impl<'a> LinkBuilder<'a> {
                     });
                 continue;
             }
-            let pipeline_ids = item
-                .pipelines.to_vec()
-                .into_boxed_slice();
+            let pipeline_ids = item.pipelines.to_vec().into_boxed_slice();
             let has_seed_body = item.body.is_some();
             let entry_kernel = info.body_kernel.or(item.body);
             let dependency_items = if info.dependencies.is_empty() {
@@ -314,13 +336,12 @@ impl<'a> LinkBuilder<'a> {
             let pipeline_signals = self
                 .collect_pipeline_signal_handles(binding.item, pipeline_ids.as_ref())
                 .into_boxed_slice();
-            let seed_eval_lane =
-                self.kernel_eval_lane(
-                    self.backend,
-                    self.backend_native_kernels,
-                    entry_kernel,
-                    dependency_layouts.as_ref(),
-                );
+            let seed_eval_lane = self.kernel_eval_lane(
+                self.backend,
+                self.backend_native_kernels,
+                entry_kernel,
+                dependency_layouts.as_ref(),
+            );
             self.reactive_signals.insert(
                 reactive,
                 LinkedReactiveSignal {
@@ -418,18 +439,13 @@ impl<'a> LinkBuilder<'a> {
                     });
                 continue;
             };
-            if let Some(pipeline_id) = item
-                .pipelines
-                .iter()
-                .copied()
-                .find(|&pid| {
-                    self.backend
-                        .pipeline(pid)
-                        .expect("linked runtime pipeline should exist")
-                        .recurrence
-                        .is_some()
-                })
-            {
+            if let Some(pipeline_id) = item.pipelines.iter().copied().find(|&pid| {
+                self.backend
+                    .pipeline(pid)
+                    .expect("linked runtime pipeline should exist")
+                    .recurrence
+                    .is_some()
+            }) {
                 let Some(recurrence_binding) = self
                     .assembly
                     .recurrences()
@@ -494,9 +510,7 @@ impl<'a> LinkBuilder<'a> {
                         seed_kernel,
                         step_kernels,
                         dependency_items: dependency_items.into_boxed_slice(),
-                        pipeline_ids: item
-                            .pipelines.to_vec()
-                            .into_boxed_slice(),
+                        pipeline_ids: item.pipelines.to_vec().into_boxed_slice(),
                     },
                 );
                 continue;
@@ -579,13 +593,12 @@ impl<'a> LinkBuilder<'a> {
                 .and_then(|kernel| self.backend.kernel(kernel))
                 .map(|kernel| kernel.environment.to_vec().into_boxed_slice())
                 .unwrap_or_else(|| Vec::new().into_boxed_slice());
-            let eval_lane =
-                self.kernel_eval_lane(
-                    self.backend,
-                    self.backend_native_kernels,
-                    entry_kernel,
-                    dependency_layouts.as_ref(),
-                );
+            let eval_lane = self.kernel_eval_lane(
+                self.backend,
+                self.backend_native_kernels,
+                entry_kernel,
+                dependency_layouts.as_ref(),
+            );
 
             self.derived_signals.insert(
                 derived,
@@ -600,9 +613,7 @@ impl<'a> LinkBuilder<'a> {
                     dependency_items: declared,
                     dependency_layouts,
                     source_input: binding.source_input,
-                    pipeline_ids: item
-                        .pipelines.to_vec()
-                        .into_boxed_slice(),
+                    pipeline_ids: item.pipelines.to_vec().into_boxed_slice(),
                     temporal_trigger_dependencies: binding
                         .temporal_trigger_dependencies()
                         .to_vec()
@@ -676,47 +687,7 @@ impl<'a> LinkBuilder<'a> {
         owner: hir::ItemId,
         kernels: &[KernelId],
     ) -> Box<[BackendItemId]> {
-        let mut required = BTreeSet::new();
-        let mut kernel_queue = kernels.to_vec();
-        let mut visited_items = BTreeSet::new();
-        while let Some(kernel_id) = kernel_queue.pop() {
-            let kernel = self
-                .backend
-                .kernel(kernel_id)
-                .expect("linked runtime kernel should exist");
-            for &item_id in kernel.global_items {
-                if !visited_items.insert(item_id) {
-                    continue;
-                }
-                let item = self
-                    .backend
-                    .item(item_id)
-                    .expect("linked runtime item should exist");
-                match item.kind {
-                    BackendItemKind::Signal(_) => {
-                        required.insert(item_id);
-                    }
-                    _ => {
-                        if item.name.starts_with("__aivi_")
-                            || (item.body.is_none() && matches!(item.kind, BackendItemKind::Function))
-                        {
-                            // Ambient prelude items are runtime-interpreted, not compiled.
-                            continue;
-                        }
-                        if let Some(body) = item.body {
-                            kernel_queue.push(body);
-                        } else {
-                            self.errors
-                                .push(BackendRuntimeLinkError::MissingItemBodyForGlobal {
-                                    owner,
-                                    item: item_id,
-                                });
-                        }
-                    }
-                }
-            }
-        }
-        required.into_iter().collect::<Vec<_>>().into_boxed_slice()
+        self.collect_required_signal_items_for_kernels(owner, kernels)
     }
 
     fn collect_required_signal_items(
@@ -724,93 +695,64 @@ impl<'a> LinkBuilder<'a> {
         owner: hir::ItemId,
         root: KernelId,
     ) -> Box<[BackendItemId]> {
-        let mut required = BTreeSet::new();
-        let mut kernels = vec![root];
-        let mut visited_items = BTreeSet::new();
-        while let Some(kernel_id) = kernels.pop() {
-            let kernel = self
-                .backend
-                .kernel(kernel_id)
-                .expect("linked runtime kernel should exist");
-            for item_id in kernel.global_items {
-                if !visited_items.insert(*item_id) {
-                    continue;
-                }
-                let item = self
-                    .backend
-                    .item(*item_id)
-                    .expect("linked runtime item should exist");
-                match item.kind {
-                    BackendItemKind::Signal(_) => {
-                        required.insert(*item_id);
-                    }
-                    _ => {
-                        if item.name.starts_with("__aivi_")
-                            || (item.body.is_none() && matches!(item.kind, BackendItemKind::Function))
-                        {
-                            continue;
-                        }
-                        let Some(body) = item.body else {
-                            self.errors
-                                .push(BackendRuntimeLinkError::MissingItemBodyForGlobal {
-                                    owner,
-                                    item: *item_id,
-                                });
-                            continue;
-                        };
-                        kernels.push(body);
-                    }
-                }
-            }
-        }
-        required.into_iter().collect::<Vec<_>>().into_boxed_slice()
+        self.collect_required_signal_items_for_kernels(owner, std::slice::from_ref(&root))
     }
 
     fn collect_required_signal_items_for_kernels(
         &mut self,
         owner: hir::ItemId,
-        kernels: Vec<KernelId>,
+        roots: &[KernelId],
     ) -> Box<[BackendItemId]> {
-        let mut required = BTreeSet::new();
-        let mut kernels = kernels;
-        let mut visited_items = BTreeSet::new();
-        while let Some(kernel_id) = kernels.pop() {
-            let kernel = self
-                .backend
+        let Self {
+            backend,
+            errors,
+            required_signal_scratch,
+            ..
+        } = self;
+        required_signal_scratch.kernels.clear();
+        required_signal_scratch.kernels.extend_from_slice(roots);
+        required_signal_scratch.visited_items.clear();
+        required_signal_scratch.required_items.clear();
+
+        while let Some(kernel_id) = required_signal_scratch.kernels.pop() {
+            let kernel = backend
                 .kernel(kernel_id)
                 .expect("linked runtime kernel should exist");
-            for item_id in kernel.global_items {
-                if !visited_items.insert(*item_id) {
+            for &item_id in kernel.global_items {
+                if !required_signal_scratch.visited_items.insert(item_id) {
                     continue;
                 }
-                let item = self
-                    .backend
-                    .item(*item_id)
+                let item = backend
+                    .item(item_id)
                     .expect("linked runtime item should exist");
                 match item.kind {
                     BackendItemKind::Signal(_) => {
-                        required.insert(*item_id);
+                        required_signal_scratch.required_items.push(item_id);
                     }
                     _ => {
                         if item.name.starts_with("__aivi_")
-                            || (item.body.is_none() && matches!(item.kind, BackendItemKind::Function))
+                            || (item.body.is_none()
+                                && matches!(item.kind, BackendItemKind::Function))
                         {
                             continue;
                         }
                         let Some(body) = item.body else {
-                            self.errors
-                                .push(BackendRuntimeLinkError::MissingItemBodyForGlobal {
-                                    owner,
-                                    item: *item_id,
-                                });
+                            errors.push(BackendRuntimeLinkError::MissingItemBodyForGlobal {
+                                owner,
+                                item: item_id,
+                            });
                             continue;
                         };
-                        kernels.push(body);
+                        required_signal_scratch.kernels.push(body);
                     }
                 }
             }
         }
-        required.into_iter().collect::<Vec<_>>().into_boxed_slice()
+        required_signal_scratch.required_items.sort_unstable();
+        required_signal_scratch
+            .required_items
+            .to_vec()
+            .into_boxed_slice()
     }
 
     fn kernel_eval_lane(
@@ -913,7 +855,7 @@ impl<'a> LinkBuilder<'a> {
                 }
             }
         }
-        self.collect_required_signal_items_for_kernels(owner, kernels)
+        self.collect_required_signal_items_for_kernels(owner, &kernels)
             .iter()
             .filter_map(|dependency| self.runtime_signal_for_backend_item(owner, *dependency))
             .collect()
@@ -1016,12 +958,12 @@ fn active_when_value(
             RuntimeValue::Bool(value) => Ok(*value),
             other => Err(BackendRuntimeError::InvalidActiveWhenValue {
                 instance,
-                value: other.clone(),
+                value: Box::new(other.clone()),
             }),
         },
         Some(other) => Err(BackendRuntimeError::InvalidActiveWhenValue {
             instance,
-            value: other.clone(),
+            value: Box::new(other.clone()),
         }),
     }
 }

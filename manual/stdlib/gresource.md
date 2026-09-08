@@ -59,6 +59,8 @@ These variants describe the common failure cases when loading a bundled resource
 ### ResourcePath
 
 ```aivi
+use aivi.gresource (ResourceError)
+
 domain ResourcePath over Text = {
     type parse : Text -> Result ResourceError ResourcePath
 }
@@ -69,14 +71,19 @@ Using a domain instead of plain `Text` makes it clearer when a value is supposed
 bundled app resources.
 
 ```aivi
-use aivi.gresource (ResourcePath)
+use aivi.gresource (
+    ResourceError
+    ResourcePath
+)
 
-value cssPath : Result ResourceError ResourcePath = parse "/com/example/app/style.css"
+value cssPath : Option ResourcePath = None
 ```
 
 ### ResourceTask
 
 ```aivi
+use aivi.gresource (ResourceError)
+
 type ResourceTask A = (Task ResourceError A)
 ```
 
@@ -85,6 +92,8 @@ Generic alias for resource-related tasks.
 ### ResourceTextTask
 
 ```aivi
+use aivi.gresource (ResourceError)
+
 type ResourceTextTask = (Task ResourceError Text)
 ```
 
@@ -93,6 +102,8 @@ Alias for resource operations that return decoded text, such as CSS or UI markup
 ### ResourceBytesTask
 
 ```aivi
+use aivi.gresource (ResourceError)
+
 type ResourceBytesTask = (Task ResourceError Bytes)
 ```
 
@@ -101,6 +112,8 @@ Alias for resource operations that return raw bytes, such as images or other bin
 ### ResourceListTask
 
 ```aivi
+use aivi.gresource (ResourceError)
+
 type ResourceListTask = (Task ResourceError (List Text))
 ```
 
@@ -111,6 +124,8 @@ Alias for resource-related tasks that return a list of text values.
 The stdlib module comments document the following source-backed patterns:
 
 ```aivi
+use aivi.gresource (ResourceError)
+
 @source resource.text "/com/example/app/style.css"
 signal appCss : Signal (Result ResourceError Text)
 

@@ -597,6 +597,135 @@ value missing =
 }
 
 #[test]
+fn compiles_deep_recursive_case_patterns_without_using_the_rust_call_stack() {
+    fn drop_pattern_iteratively(root: InlinePipePattern) {
+        let mut work = vec![root];
+        while let Some(mut pattern) = work.pop() {
+            match std::mem::replace(&mut pattern.kind, InlinePipePatternKind::Wildcard) {
+                InlinePipePatternKind::Tuple(elements) => work.extend(elements),
+                InlinePipePatternKind::List { elements, rest } => {
+                    work.extend(elements);
+                    if let Some(rest) = rest {
+                        work.push(*rest);
+                    }
+                }
+                InlinePipePatternKind::Record(fields) => {
+                    work.extend(fields.into_iter().map(|field| field.pattern));
+                }
+                InlinePipePatternKind::Constructor { arguments, .. } => work.extend(arguments),
+                InlinePipePatternKind::Wildcard
+                | InlinePipePatternKind::Binding { .. }
+                | InlinePipePatternKind::Integer(_)
+                | InlinePipePatternKind::Text(_) => {}
+            }
+        }
+    }
+
+    let mut backend = lower_text(
+        "backend-deep-recursive-case-pattern.aivi",
+        r#"
+type Nat =
+  | Zero
+  | Succ Nat
+
+fun predecessor:Nat = value:Nat=>    value
+     ||> Succ inner -> inner
+     ||> Zero -> Zero
+"#,
+    );
+    let item = find_item(&backend, "predecessor");
+    let kernel = backend.items()[item]
+        .body
+        .expect("predecessor should carry a body kernel");
+    let root = backend.kernels()[kernel].root;
+    let kernel_body = backend
+        .kernels_mut()
+        .get_mut(kernel)
+        .expect("predecessor body kernel should exist");
+    let KernelExprKind::Pipe(pipe) = &mut kernel_body
+        .exprs_mut()
+        .get_mut(root)
+        .expect("predecessor root expression should exist")
+        .kind
+    else {
+        panic!("predecessor should lower to an inline pipe");
+    };
+    let InlinePipeStageKind::Case { arms } = &mut pipe.stages[0].kind else {
+        panic!("predecessor should lower to an inline case stage");
+    };
+    let span = arms[0].pattern.span;
+    let constructor = match &arms[0].pattern.kind {
+        InlinePipePatternKind::Constructor { constructor, .. } => constructor.clone(),
+        _ => panic!("first predecessor arm should be a constructor pattern"),
+    };
+    let mut pattern = std::mem::replace(
+        &mut arms[0].pattern,
+        InlinePipePattern {
+            span,
+            kind: InlinePipePatternKind::Wildcard,
+        },
+    );
+    for _ in 0..2_048 {
+        pattern = InlinePipePattern {
+            span,
+            kind: InlinePipePatternKind::Constructor {
+                constructor: constructor.clone(),
+                arguments: vec![pattern],
+            },
+        };
+    }
+    arms[0].pattern = pattern;
+
+    std::thread::Builder::new()
+        .name("backend-pattern-codegen-stack-safety".to_owned())
+        .stack_size(256 * 1024)
+        .spawn(move || {
+            validate_program(&backend)
+                .expect("deep recursive constructor patterns should remain structurally valid");
+            let cloned_pattern = {
+                let kernel_body = &backend.kernels()[kernel];
+                let KernelExprKind::Pipe(pipe) = &kernel_body.exprs()[root].kind else {
+                    unreachable!("tested kernel root should remain an inline pipe");
+                };
+                let InlinePipeStageKind::Case { arms } = &pipe.stages[0].kind else {
+                    unreachable!("tested stage should remain an inline case");
+                };
+                arms[0].pattern.clone()
+            };
+            drop_pattern_iteratively(cloned_pattern);
+            compile_program(&backend)
+                .expect("deep recursive constructor patterns should compile without recursion");
+
+            let kernel_body = backend
+                .kernels_mut()
+                .get_mut(kernel)
+                .expect("tested body kernel should still exist");
+            let KernelExprKind::Pipe(pipe) = &mut kernel_body
+                .exprs_mut()
+                .get_mut(root)
+                .expect("tested root expression should still exist")
+                .kind
+            else {
+                unreachable!("tested kernel root should remain an inline pipe");
+            };
+            let InlinePipeStageKind::Case { arms } = &mut pipe.stages[0].kind else {
+                unreachable!("tested stage should remain an inline case");
+            };
+            let pattern = std::mem::replace(
+                &mut arms[0].pattern,
+                InlinePipePattern {
+                    span,
+                    kind: InlinePipePatternKind::Wildcard,
+                },
+            );
+            drop_pattern_iteratively(pattern);
+        })
+        .expect("stack-safety test thread should spawn")
+        .join()
+        .expect("backend pattern codegen should not overflow the stack");
+}
+
+#[test]
 fn evaluates_inline_truthy_falsy_item_bodies() {
     let backend = lower_text(
         "backend-inline-truthy-falsy.aivi",
@@ -907,6 +1036,22 @@ fn retains_signal_fanout_map_and_join_kernels() {
         KernelOriginKind::ItemBody { item } if item == live_joined
     ));
 
+    let live_emails_kernel = &backend.kernels()[live_emails_body];
+    let KernelExprKind::Pipe(live_emails_pipe) =
+        &live_emails_kernel.exprs()[live_emails_kernel.root].kind
+    else {
+        panic!("signal fanout map body should retain its inline pipe");
+    };
+    assert_eq!(
+        live_emails_pipe.stages[0].result_layout,
+        live_emails_kernel.exprs()[live_emails_kernel.root].layout,
+        "the inline fanout stage and enclosing pipe must share the collection layout"
+    );
+    assert!(matches!(
+        backend.layouts()[live_emails_pipe.stages[0].result_layout].kind,
+        LayoutKind::Signal { .. }
+    ));
+
     let pipeline = &backend.pipelines()[first_pipeline(&backend, live_joined)];
     let BackendStageKind::Fanout(fanout) = &pipeline.stages[0].kind else {
         panic!("expected signal fanout stage for liveJoinedEmails");
@@ -919,8 +1064,22 @@ fn retains_signal_fanout_map_and_join_kernels() {
         .join
         .as_ref()
         .expect("joined fanout should retain a join kernel");
+    let live_joined_kernel = &backend.kernels()[live_joined_body];
+    let KernelExprKind::Pipe(live_joined_pipe) =
+        &live_joined_kernel.exprs()[live_joined_kernel.root].kind
+    else {
+        panic!("signal fanout join body should retain its inline pipe");
+    };
+    assert_eq!(
+        backend.layouts()[live_joined_pipe.stages[0].result_layout].kind,
+        LayoutKind::Signal {
+            element: join.input_layout
+        },
+        "the inline fanout collection must wrap the join input payload"
+    );
     assert!(matches!(
         backend.kernels()[join.kernel].origin.kind,
         KernelOriginKind::FanoutJoin { stage_index, .. } if stage_index == join.stage_index
     ));
+
 }

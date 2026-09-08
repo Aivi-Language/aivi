@@ -118,6 +118,10 @@ type Int -> Bool
 func isEven = arg1 =>
     arg1 % 2 == 0
 
+type Int -> Int -> Int
+func add = total value =>
+    total + value
+
 value numbers = [1, 2, 3, 4, 5]
 
 value doubled = numbers
@@ -174,6 +178,8 @@ needs an earlier value and a plain `.` would stop being clear.
 Or break the work into named helpers:
 
 ```aivi
+type User = { name: Text }
+
 type Text -> Text
 func greet = name =>
     "Hello, {name}!"
@@ -238,6 +244,8 @@ This declares: *"count starts at 0, and each time an event arrives, apply `step`
 Pure functions cannot read files, make HTTP requests, or listen for keyboard input. In AIVI, all external input enters through **sources**:
 
 ```aivi
+type Key = Key Text
+
 @source timer.every 1000ms
 signal tick : Signal Unit
 
@@ -249,7 +257,7 @@ A source is a declared entry point. It tells the runtime: *"this signal gets its
 
 Think of it this way:
 
-```
+```text
 Outside world  →  Source  →  Signal  →  Pure derivations  →  UI
    (messy)        (typed     (reactive     (deterministic)    (GTK
                   boundary)   graph)                          widgets)

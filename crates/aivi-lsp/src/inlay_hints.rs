@@ -16,7 +16,7 @@ pub fn inlay_hints(params: InlayHintParams, state: Arc<ServerState>) -> Option<V
     }
 
     let uri = &params.text_document.uri;
-    let file = *state.files.get(uri)?;
+    let file = state.file(uri)?;
     let analysis = FileAnalysis::load(&state.db, file);
     let source = &analysis.source;
 

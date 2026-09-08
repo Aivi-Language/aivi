@@ -138,7 +138,10 @@ value shifted : RangeInt = shift 3 (make 1 5)
 
 ### `overlaps : RangeInt -> RangeInt -> Bool`
 
-Returns `True` when two ranges share at least one integer. Empty ranges never overlap.
+For two nonempty ranges, returns `True` when they share at least one integer.
+Current limitation: the implementation explicitly checks only the first range for
+emptiness. Check `isEmpty` on both inputs before calling it when either can be empty;
+an empty second range can otherwise incorrectly report an overlap.
 
 ```aivi
 use aivi.core.range (
@@ -164,6 +167,19 @@ value shared : RangeInt = intersect (make 1 5) (make 4 8)
 ```
 
 ---
+
+## Floating-point ranges
+
+`RangeFloat` is a record `{ start: Float, end: Float }`. Its helpers are:
+
+| Function | Type | Behavior |
+| --- | --- | --- |
+| `makeFloat` | `Float -> Float -> RangeFloat` | Construct bounds |
+| `isEmptyFloat` | `RangeFloat -> Bool` | Test `start > end` |
+| `containsFloat` | `RangeFloat -> Float -> Bool` | Inclusive membership |
+| `clampToFloat` | `RangeFloat -> Float -> Float` | Clamp against the bounds; use nonempty ranges |
+| `shiftFloat` | `Float -> RangeFloat -> RangeFloat` | Add a delta to both bounds |
+| `lerpFloat` | `RangeFloat -> Float -> Float` | Interpolate at `t`; values outside `0..1` extrapolate |
 
 ## Real-world example
 

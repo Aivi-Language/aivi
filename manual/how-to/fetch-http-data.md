@@ -5,6 +5,9 @@ flow into ordinary signals.
 
 ## Example
 
+Replace `https://api.example.com/users` with a real endpoint returning a JSON array of
+objects with integer `id` and text `name` fields. The example hostname is a placeholder.
+
 ```aivi
 type User = {
     id: Int,

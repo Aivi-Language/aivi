@@ -900,10 +900,8 @@ fn format_expr(module: &Module, expr_id: ExprId, f: &mut fmt::Formatter<'_>) -> 
                             format_expr(module, *body, f)?;
                         }
                     }
-                    crate::expr::PipeStageKind::TruthyFalsy(PipeTruthyFalsyStage {
-                        truthy,
-                        falsy,
-                    }) => {
+                    crate::expr::PipeStageKind::TruthyFalsy(pair) => {
+                        let PipeTruthyFalsyStage { truthy, falsy } = pair.as_ref();
                         write!(f, " T|>[{}] ", constructor_name(truthy.constructor))?;
                         format_expr(module, truthy.body, f)?;
                         write!(f, " F|>[{}] ", constructor_name(falsy.constructor))?;
@@ -921,61 +919,74 @@ fn format_expr(module: &Module, expr_id: ExprId, f: &mut fmt::Formatter<'_>) -> 
 }
 
 fn format_pattern(pattern: &Pattern, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match &pattern.kind {
-        PatternKind::Wildcard => f.write_str("_"),
-        PatternKind::Binding(PatternBinding { name, .. }) => f.write_str(name),
-        PatternKind::Integer(value) => write!(f, "{}", value.raw),
-        PatternKind::Text(raw) => write!(f, "\"{raw}\""),
-        PatternKind::Tuple(elements) => {
-            f.write_str("(")?;
-            for (index, element) in elements.iter().enumerate() {
-                if index > 0 {
-                    f.write_str(", ")?;
+    enum Task<'a> {
+        Pattern(&'a Pattern),
+        Static(&'static str),
+        RecordLabel(&'a str),
+    }
+
+    let mut work = vec![Task::Pattern(pattern)];
+    while let Some(task) = work.pop() {
+        match task {
+            Task::Static(text) => f.write_str(text)?,
+            Task::RecordLabel(label) => write!(f, "{label}: ")?,
+            Task::Pattern(pattern) => match &pattern.kind {
+                PatternKind::Wildcard => f.write_str("_")?,
+                PatternKind::Binding(PatternBinding { name, .. }) => f.write_str(name)?,
+                PatternKind::Integer(value) => write!(f, "{}", value.raw)?,
+                PatternKind::Text(raw) => write!(f, "\"{raw}\"")?,
+                PatternKind::Tuple(elements) => {
+                    f.write_str("(")?;
+                    work.push(Task::Static(")"));
+                    for (index, element) in elements.iter().enumerate().rev() {
+                        work.push(Task::Pattern(element));
+                        if index > 0 {
+                            work.push(Task::Static(", "));
+                        }
+                    }
                 }
-                format_pattern(element, f)?;
-            }
-            f.write_str(")")
-        }
-        PatternKind::List { elements, rest } => {
-            f.write_str("[")?;
-            for (index, element) in elements.iter().enumerate() {
-                if index > 0 {
-                    f.write_str(", ")?;
+                PatternKind::List { elements, rest } => {
+                    f.write_str("[")?;
+                    work.push(Task::Static("]"));
+                    if let Some(rest) = rest {
+                        work.push(Task::Pattern(rest));
+                        work.push(Task::Static("..."));
+                        if !elements.is_empty() {
+                            work.push(Task::Static(", "));
+                        }
+                    }
+                    for (index, element) in elements.iter().enumerate().rev() {
+                        work.push(Task::Pattern(element));
+                        if index > 0 {
+                            work.push(Task::Static(", "));
+                        }
+                    }
                 }
-                format_pattern(element, f)?;
-            }
-            if let Some(rest) = rest {
-                if !elements.is_empty() {
-                    f.write_str(", ")?;
+                PatternKind::Record(fields) => {
+                    f.write_str("{")?;
+                    work.push(Task::Static("}"));
+                    for (index, field) in fields.iter().enumerate().rev() {
+                        work.push(Task::Pattern(&field.pattern));
+                        work.push(Task::RecordLabel(&field.label));
+                        if index > 0 {
+                            work.push(Task::Static(", "));
+                        }
+                    }
                 }
-                f.write_str("...")?;
-                format_pattern(rest, f)?;
-            }
-            f.write_str("]")
-        }
-        PatternKind::Record(fields) => {
-            f.write_str("{")?;
-            for (index, field) in fields.iter().enumerate() {
-                if index > 0 {
-                    f.write_str(", ")?;
+                PatternKind::Constructor {
+                    callee: PatternConstructor { display, .. },
+                    arguments,
+                } => {
+                    f.write_str(display)?;
+                    for argument in arguments.iter().rev() {
+                        work.push(Task::Pattern(argument));
+                        work.push(Task::Static(" "));
+                    }
                 }
-                write!(f, "{}: ", field.label)?;
-                format_pattern(&field.pattern, f)?;
-            }
-            f.write_str("}")
-        }
-        PatternKind::Constructor {
-            callee: PatternConstructor { display, .. },
-            arguments,
-        } => {
-            f.write_str(display)?;
-            for argument in arguments {
-                f.write_str(" ")?;
-                format_pattern(argument, f)?;
-            }
-            Ok(())
+            },
         }
     }
+    Ok(())
 }
 
 fn constructor_name(term: BuiltinTerm) -> &'static str {
@@ -988,5 +999,74 @@ fn constructor_name(term: BuiltinTerm) -> &'static str {
         BuiltinTerm::Err => "Err",
         BuiltinTerm::Valid => "Valid",
         BuiltinTerm::Invalid => "Invalid",
+    }
+}
+
+#[cfg(test)]
+mod pattern_format_stack_safety_tests {
+    use std::{fmt, mem, thread};
+
+    use aivi_base::SourceSpan;
+
+    use super::format_pattern;
+    use crate::{Pattern, PatternKind};
+
+    struct PatternDisplay<'a>(&'a Pattern);
+
+    impl fmt::Display for PatternDisplay<'_> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            format_pattern(self.0, f)
+        }
+    }
+
+    fn drop_pattern_iteratively(root: Pattern) {
+        let mut work = vec![root];
+        while let Some(mut pattern) = work.pop() {
+            match mem::replace(&mut pattern.kind, PatternKind::Wildcard) {
+                PatternKind::Tuple(elements) => work.extend(elements),
+                PatternKind::List { elements, rest } => {
+                    work.extend(elements);
+                    if let Some(rest) = rest {
+                        work.push(*rest);
+                    }
+                }
+                PatternKind::Record(fields) => {
+                    work.extend(fields.into_iter().map(|field| field.pattern));
+                }
+                PatternKind::Constructor { arguments, .. } => work.extend(arguments),
+                PatternKind::Wildcard
+                | PatternKind::Binding(_)
+                | PatternKind::Integer(_)
+                | PatternKind::Text(_) => {}
+            }
+        }
+    }
+
+    #[test]
+    fn formats_deep_patterns_without_using_the_rust_call_stack() {
+        thread::Builder::new()
+            .name("core-pattern-format-stack-safety".to_owned())
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let mut pattern = Pattern {
+                    span: SourceSpan::default(),
+                    kind: PatternKind::Wildcard,
+                };
+                for _ in 0..16_384 {
+                    pattern = Pattern {
+                        span: SourceSpan::default(),
+                        kind: PatternKind::List {
+                            elements: Vec::new(),
+                            rest: Some(Box::new(pattern)),
+                        },
+                    };
+                }
+                let rendered = PatternDisplay(&pattern).to_string();
+                assert_eq!(rendered.len(), 5 * 16_384 + 1);
+                drop_pattern_iteratively(pattern);
+            })
+            .expect("stack-safety test thread should spawn")
+            .join()
+            .expect("typed-core pattern formatting should not overflow the stack");
     }
 }

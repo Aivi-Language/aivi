@@ -1,6 +1,9 @@
 # aivi.core.dict
 
-Association map keyed by any `Eq` type. `Dict K V` is an ordered association map backed by a list of entries. All operations are `O(n)`. For small to medium-sized dicts this is practical and requires no additional runtime support.
+Association map keyed by any `Eq` type. `Dict K V` is backed by an explicit list of entries.
+Lookup, insertion, and removal scan that list. Repeated insertion (`fromList`, `union`,
+`mergeWith`) can take quadratic work; this is not a hash map. These costs also depend on
+the cost of comparing keys.
 
 The empty dict is written as the record literal `{ entries: [] }`.
 
@@ -57,8 +60,6 @@ value emptyScores : (Dict Text Int) = {
 
 Creates a dict with exactly one entry.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.dict (
@@ -75,8 +76,6 @@ value greeting : (Dict Text Text) = singleton "hello" "world"
 
 Inserts or replaces a key. If the key already exists, the old value is discarded.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.dict (
@@ -95,8 +94,6 @@ value scores : (Dict Text Int) = { entries: [] }
 
 Inserts a key, combining the new value with the existing one using `merge` if the key is already present.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.dict (
@@ -119,8 +116,6 @@ func addScore = key n d =>
 
 Looks up a key. Returns `None` when the key is absent.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.dict (
@@ -143,8 +138,6 @@ value found : (Option Int) = get "x" d
 
 Looks up a key, returning a fallback value when the key is absent.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.dict (
@@ -167,8 +160,6 @@ value level : Int = getWithDefault 1 "level" d
 
 Returns `True` if the key exists in the dict.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.dict (
@@ -191,8 +182,6 @@ value hasIt : Bool = member "exists" d
 
 Removes a key. Has no effect if the key is absent.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.dict (
@@ -215,8 +204,6 @@ value cleaned : (Dict Text Int) = remove "temp" d
 
 Returns the number of entries.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.dict (
@@ -236,10 +223,10 @@ value count : Int = size d
 
 ## keys / values
 
-Return the keys or values as a list, in insertion order.
+Return the keys or values in the current `entries` order. `insert` prepends the new or
+replacement entry, so this is not insertion order. `insertWith` appends an absent key,
+but moves an existing key to the front when replacing it.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.dict (
@@ -264,8 +251,6 @@ value vs : (List Int) = values d
 
 Convert between a `Dict K V` and a list of `(K, V)` pairs.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.dict (
@@ -289,8 +274,6 @@ value back : (List (Text, Int)) = toList d
 
 Applies a function to every value, preserving keys.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.dict (
@@ -317,8 +300,6 @@ value doubled : (Dict Text Int) = mapValues double d
 
 Keeps only entries whose value satisfies a predicate.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.dict (
@@ -344,8 +325,6 @@ value highOnly : (Dict Text Int) = filterValues isHigh d
 
 Merges two dicts. When both contain the same key, `combine` is called with the left and right values to produce the merged value.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.dict (
@@ -377,8 +356,6 @@ value merged : (Dict Text Int) = mergeWith addScores left right
 
 Merges two dicts. When a key exists in both, the **right** dict wins.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.dict (

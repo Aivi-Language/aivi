@@ -53,17 +53,25 @@ These variants describe the usual GSettings failure cases.
 ### SettingsSchema
 
 ```aivi
+use aivi.gnome.settings (SettingsError)
+
 domain SettingsSchema over Text = {
     type parse : Text -> Result SettingsError SettingsSchema
 }
 ```
 
-Checked schema identifier such as `"org.gnome.desktop.interface"`.
+Schema identifier such as `"org.gnome.desktop.interface"`. The module currently publishes the
+domain declaration, but it does not export a runtime schema-validation function.
+
+An integration receives a `SettingsSchema` from code that owns schema validation; consumers keep
+the nominal type intact:
 
 ```aivi
 use aivi.gnome.settings (SettingsSchema)
 
-value interfaceSchema : Result SettingsError SettingsSchema = parse "org.gnome.desktop.interface"
+type SettingsSchema -> SettingsSchema
+func retainSchema = schema =>
+    schema
 ```
 
 ### SettingsKey
@@ -76,12 +84,15 @@ domain SettingsKey over Text = {
 
 Wrapped key name such as `"color-scheme"`.
 
-`SettingsKey` uses `make` rather than `parse`, so wrapping a key name is direct.
+The domain declaration names a future `make` member, but the current module does not export that
+member. Construct the domain value explicitly for now.
 
 ```aivi
 use aivi.gnome.settings (SettingsKey)
 
-value colorSchemeKey : SettingsKey = make "color-scheme"
+type SettingsKey -> SettingsKey
+func retainKey = key =>
+    key
 ```
 
 ### SettingValue
@@ -119,6 +130,8 @@ func settingKind = value => value
 ### SettingsTask
 
 ```aivi
+use aivi.gnome.settings (SettingsError)
+
 type SettingsTask A = (Task SettingsError A)
 ```
 
@@ -129,6 +142,8 @@ Generic alias for settings-related tasks.
 The stdlib module comments document the following watcher patterns:
 
 ```aivi
+use aivi.gnome.settings (SettingsError)
+
 @source gsettings.watch "org.gnome.desktop.interface" "color-scheme"
 signal colorScheme : Signal (Result SettingsError Text)
 

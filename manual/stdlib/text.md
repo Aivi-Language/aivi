@@ -71,6 +71,7 @@ use aivi.text (
 | `parseIntOrElse` | `Int -> Text -> Int` | Parse an int or use a fallback |
 | `lines` | `Text -> List Text` | Split on newline characters |
 | `words` | `Text -> List Text` | Split on spaces |
+| `unlines` | `List Text -> Text` | Join with newline separators; no trailing newline is added |
 
 ## Example
 

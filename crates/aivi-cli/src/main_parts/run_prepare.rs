@@ -216,7 +216,6 @@ where
         metrics.reactive_fragment_compilation,
     ));
     let runtime_assembly = profiled_runtime_assembly.assembly;
-    let runtime_backend_by_hir = backend_items_by_hir(&lowered.core, lowered.backend.as_ref());
     let runtime_link =
         aivi_runtime::derive_backend_runtime_link_seed(&lowered.core, lowered.backend.as_ref())
             .map_err(|errors| {
@@ -259,11 +258,9 @@ where
                             .iter()
                             .map(|(name, module)| ((*name).into(), (*module).clone()))
                             .collect(),
-                        view_owner,
                         sites: sites.clone(),
                         runtime_assembly: runtime_assembly.clone(),
                         runtime_backend: lowered.backend.clone(),
-                        runtime_backend_by_hir: runtime_backend_by_hir.clone(),
                         fragment_cache: Arc::new(std::sync::Mutex::new(BTreeMap::new())),
                         opaque_variant_templates: BTreeMap::new(),
                         representational_carrier_templates: BTreeMap::new(),
@@ -274,16 +271,16 @@ where
                 )
             } else {
                 let (compiled, hydration_metrics) = compile_run_inputs(
-                    sources,
-                    module,
-                    workspace_hirs,
-                    view_owner,
-                    &sites,
+                    RunFragmentCompileContext {
+                        sources,
+                        module,
+                        workspace_hirs,
+                        sites: &sites,
+                        runtime_assembly: &runtime_assembly,
+                        runtime_backend: lowered.backend.as_ref(),
+                        query_context,
+                    },
                     &bridge,
-                    &runtime_assembly,
-                    lowered.backend.as_ref(),
-                    &runtime_backend_by_hir,
-                    query_context,
                     |detail| {
                         on_stage_event(RunPreparationStageEvent::Detail(
                             "hydration fragments",
@@ -334,7 +331,7 @@ where
             "event handler resolve",
             metrics.event_handler_resolution,
         ));
-        RunArtifactKind::Gtk(RunGtkArtifact {
+        RunArtifactKind::Gtk(Box::new(RunGtkArtifact {
             patterns,
             bridge,
             hydration_inputs,
@@ -342,7 +339,7 @@ where
             lazy_hydration,
             lazy_event_handlers,
             event_handlers,
-        })
+        }))
     } else {
         if runtime_assembly.task_by_owner(view_owner).is_none() {
             return Err(
@@ -460,7 +457,7 @@ fn select_run_entry<'a>(
 
     match markup_values.as_slice() {
         [single] => Ok(SelectedRunEntry {
-            value: *single,
+            value: single,
             kind: SelectedRunEntryKind::Gtk,
         }),
         [] => Err("no markup view found; define `value view = <Window ...>` or pass `--view <name>` for another markup-valued top-level `value`".to_owned()),
@@ -1141,6 +1138,19 @@ fn lower_runtime_backend_stack_with_workspace(
     })
 }
 
+struct RunEventResolutionInputs<'a> {
+    entry_module: &'a HirModule,
+    workspace_hirs: &'a [(&'a str, &'a HirModule)],
+    resolution: &'a RunEventResolutionContext<'a>,
+    runtime_assembly: &'a HirRuntimeAssembly,
+    sources: &'a SourceDatabase,
+}
+
+struct RunEventHandlerContext<'a> {
+    resolution: RunEventResolutionInputs<'a>,
+    sites: &'a RunMarkupExprSites,
+}
+
 fn resolve_run_event_handlers(
     module: &HirModule,
     workspace_hirs: &[(&str, &HirModule)],
@@ -1150,6 +1160,16 @@ fn resolve_run_event_handlers(
     sources: &SourceDatabase,
 ) -> Result<BTreeMap<ExprRef, ResolvedRunEventHandler>, String> {
     let resolution = RunEventResolutionContext::new(module, workspace_hirs, runtime_assembly)?;
+    let context = RunEventHandlerContext {
+        resolution: RunEventResolutionInputs {
+            entry_module: module,
+            workspace_hirs,
+            resolution: &resolution,
+            runtime_assembly,
+            sources,
+        },
+        sites,
+    };
     let mut pending = Vec::new();
     for node in bridge.nodes() {
         let GtkBridgeNodeKind::Widget(widget) = &node.kind else {
@@ -1165,12 +1185,7 @@ fn resolve_run_event_handlers(
     }
     let resolve_one = |(widget, event_name, handler): &(aivi_hir::NamePath, String, ExprRef)| {
         resolve_run_event_handler(
-            module,
-            workspace_hirs,
-            sites,
-            &resolution,
-            runtime_assembly,
-            sources,
+            &context,
             widget,
             event_name,
             *handler,
@@ -1196,17 +1211,16 @@ fn resolve_run_event_handlers(
 }
 
 fn resolve_run_event_handler(
-    module: &HirModule,
-    workspace_hirs: &[(&str, &HirModule)],
-    sites: &RunMarkupExprSites,
-    resolution: &RunEventResolutionContext<'_>,
-    runtime_assembly: &HirRuntimeAssembly,
-    sources: &SourceDatabase,
+    context: &RunEventHandlerContext<'_>,
     widget: &aivi_hir::NamePath,
     event_name: &str,
     expr: ExprRef,
 ) -> Result<ResolvedRunEventHandler, String> {
-    let origin_module = resolution.module_for_file(expr.origin_file).ok_or_else(|| {
+    let origin_module = context
+        .resolution
+        .resolution
+        .module_for_file(expr.origin_file)
+        .ok_or_else(|| {
         format!(
             "event handler uses expression from unknown workspace module {}",
             expr.origin_file.as_u32()
@@ -1214,7 +1228,7 @@ fn resolve_run_event_handler(
     })?;
     let span = origin_module.exprs()[expr.expr].span;
     let Some(event) = lookup_widget_event(widget, event_name) else {
-        let location = source_location(sources, span);
+        let location = source_location(context.resolution.sources, span);
         return Err(format!(
             "event handler at {location} uses unsupported GTK event `{}` on widget `{}`",
             event_name,
@@ -1224,19 +1238,15 @@ fn resolve_run_event_handler(
     match &origin_module.exprs()[expr.expr].kind {
         ExprKind::Name(reference) => {
             let resolved = resolve_run_event_signal_target(
-                module,
-                workspace_hirs,
+                &context.resolution,
                 origin_module,
                 expr.origin_file,
-                resolution,
-                runtime_assembly,
                 reference,
-                sources,
                 span,
             )?;
             let payload = event.payload;
             if !event_signal_accepts_payload(resolved.inner_payload_type.as_ref(), payload) {
-                let location = source_location(sources, span);
+                let location = source_location(context.resolution.sources, span);
                 return Err(format!(
                     "event handler `{}` at {location} points at signal `{}`, but `{}` on `{}` publishes `{}` and requires `{}`",
                     name_path_text(&reference.path),
@@ -1256,13 +1266,13 @@ fn resolve_run_event_handler(
         }
         ExprKind::Apply { callee, arguments } => {
             if arguments.len() != 1 {
-                let location = source_location(sources, span);
+                let location = source_location(context.resolution.sources, span);
                 return Err(format!(
                     "event handler at {location} must call a direct signal name with exactly one explicit payload expression"
                 ));
             }
             let ExprKind::Name(reference) = &origin_module.exprs()[*callee].kind else {
-                let location = source_location(sources, span);
+                let location = source_location(context.resolution.sources, span);
                 return Err(format!(
                     "event handler at {location} must call a direct signal name when providing an explicit payload"
                 ));
@@ -1272,18 +1282,14 @@ fn resolve_run_event_handler(
                     "single-argument handler applications should expose a payload expression",
                 );
             let resolved = resolve_run_event_signal_target(
-                module,
-                workspace_hirs,
+                &context.resolution,
                 origin_module,
                 expr.origin_file,
-                resolution,
-                runtime_assembly,
                 reference,
-                sources,
                 span,
             )?;
             let required_payload = resolved.inner_payload_type.clone().ok_or_else(|| {
-                let location = source_location(sources, span);
+                let location = source_location(context.resolution.sources, span);
                 format!(
                     "event handler `{}` at {location} points at signal `{}`, but explicit payload hooks require a known `Signal A` payload type",
                     name_path_text(&reference.path),
@@ -1294,8 +1300,8 @@ fn resolve_run_event_handler(
                 origin_file: expr.origin_file,
                 expr: payload_expr,
             };
-            let site = sites.get(payload_expr).ok_or_else(|| {
-                let location = source_location(sources, span);
+            let site = context.sites.get(payload_expr).ok_or_else(|| {
+                let location = source_location(context.resolution.sources, span);
                 format!(
                     "event handler `{}` at {location} uses payload expression {} without a collected runtime environment",
                     name_path_text(&reference.path),
@@ -1303,7 +1309,7 @@ fn resolve_run_event_handler(
                 )
             })?;
             if !site.ty.same_shape(&required_payload) {
-                let location = source_location(sources, span);
+                let location = source_location(context.resolution.sources, span);
                 return Err(format!(
                     "event handler `{}` at {location} points at signal `{}`, but the explicit payload has type `{}` and the signal requires `{}`",
                     name_path_text(&reference.path),
@@ -1320,7 +1326,7 @@ fn resolve_run_event_handler(
             })
         }
         _ => {
-            let location = source_location(sources, span);
+            let location = source_location(context.resolution.sources, span);
             Err(format!(
                 "event handler at {location} must be a direct signal name or a direct signal application with one explicit payload"
             ))
@@ -1339,6 +1345,13 @@ fn resolve_deferred_run_event_handler(
         .collect::<Vec<_>>();
     let resolution =
         RunEventResolutionContext::new(&context.module, &workspace_hirs, &context.runtime_assembly)?;
+    let resolution_inputs = RunEventResolutionInputs {
+        entry_module: &context.module,
+        workspace_hirs: &workspace_hirs,
+        resolution: &resolution,
+        runtime_assembly: &context.runtime_assembly,
+        sources: &context.sources,
+    };
     let origin_module = resolution.module_for_file(expr.origin_file).ok_or_else(|| {
         format!(
             "event handler uses expression from unknown workspace module {}",
@@ -1349,14 +1362,10 @@ fn resolve_deferred_run_event_handler(
     match &origin_module.exprs()[expr.expr].kind {
         ExprKind::Name(reference) => {
             let resolved = resolve_run_event_signal_target(
-                &context.module,
-                &workspace_hirs,
+                &resolution_inputs,
                 origin_module,
                 expr.origin_file,
-                &resolution,
-                &context.runtime_assembly,
                 reference,
-                &context.sources,
                 span,
             )?;
             Ok(ResolvedRunEventHandler {
@@ -1380,14 +1389,10 @@ fn resolve_deferred_run_event_handler(
                 ));
             };
             let resolved = resolve_run_event_signal_target(
-                &context.module,
-                &workspace_hirs,
+                &resolution_inputs,
                 origin_module,
                 expr.origin_file,
-                &resolution,
-                &context.runtime_assembly,
                 reference,
-                &context.sources,
                 span,
             )?;
             Ok(ResolvedRunEventHandler {
@@ -1490,20 +1495,16 @@ impl<'a> RunEventResolutionContext<'a> {
 }
 
 fn resolve_run_event_signal_target(
-    entry_module: &HirModule,
-    workspace_hirs: &[(&str, &HirModule)],
+    context: &RunEventResolutionInputs<'_>,
     module: &HirModule,
     module_file: FileId,
-    resolution: &RunEventResolutionContext<'_>,
-    runtime_assembly: &HirRuntimeAssembly,
     reference: &aivi_hir::TermReference,
-    sources: &SourceDatabase,
     span: SourceSpan,
 ) -> Result<EventSignalResolution, String> {
     match reference.resolution.as_ref() {
         aivi_hir::ResolutionState::Resolved(TermResolution::Item(item_id)) => {
             let Item::Signal(signal) = &module.items()[*item_id] else {
-                let location = source_location(sources, span);
+                let location = source_location(context.sources, span);
                 return Err(format!(
                     "event handler `{}` at {location} resolves to a {}, but event hooks require an input-backed signal",
                     name_path_text(&reference.path),
@@ -1511,13 +1512,19 @@ fn resolve_run_event_signal_target(
                 ));
             };
             let runtime_item =
-                globalize_run_item_id(entry_module, workspace_hirs, module_file, *item_id)
+                globalize_run_item_id(
+                    context.entry_module,
+                    context.workspace_hirs,
+                    module_file,
+                    *item_id,
+                )
                     .unwrap_or(*item_id);
-            let binding = resolution
+            let binding = context
+                .resolution
                 .signal(runtime_item)
-                .or_else(|| runtime_assembly.signal(runtime_item))
+                .or_else(|| context.runtime_assembly.signal(runtime_item))
                 .ok_or_else(|| {
-                let location = source_location(sources, span);
+                let location = source_location(context.sources, span);
                 format!(
                     "event handler `{}` at {location} points at signal `{}` without a runtime binding",
                     name_path_text(&reference.path),
@@ -1525,14 +1532,16 @@ fn resolve_run_event_signal_target(
                 )
             })?;
             let Some(signal_input) = binding.input() else {
-                let location = source_location(sources, span);
+                let location = source_location(context.sources, span);
                 return Err(format!(
                     "event handler `{}` at {location} points at signal `{}`, but only direct input signals are publishable from GTK events",
                     name_path_text(&reference.path),
                     signal.name.text()
                 ));
             };
-            let inner_payload_type = resolution.signal_payload_type(module, *item_id, signal);
+            let inner_payload_type = context
+                .resolution
+                .signal_payload_type(module, *item_id, signal);
             Ok(EventSignalResolution {
                 item_id: runtime_item,
                 signal_name: signal.name.text().into(),
@@ -1542,7 +1551,7 @@ fn resolve_run_event_signal_target(
         }
         aivi_hir::ResolutionState::Resolved(TermResolution::Import(import_id)) => {
             let Some(import_binding) = module.imports().get(*import_id) else {
-                let location = source_location(sources, span);
+                let location = source_location(context.sources, span);
                 return Err(format!(
                     "event handler `{}` at {location}: import binding not found",
                     name_path_text(&reference.path)
@@ -1552,7 +1561,7 @@ fn resolve_run_event_signal_target(
                 ty: ImportValueType::Signal(inner_ty),
             } = &import_binding.metadata
             else {
-                let location = source_location(sources, span);
+                let location = source_location(context.sources, span);
                 return Err(format!(
                     "event handler `{}` at {location} resolves to a cross-module import that is not a Signal",
                     name_path_text(&reference.path)
@@ -1562,21 +1571,22 @@ fn resolve_run_event_signal_target(
                 module,
                 *import_id,
                 import_binding,
-                resolution,
+                context.resolution,
             )
             else {
-                let location = source_location(sources, span);
+                let location = source_location(context.sources, span);
                 return Err(format!(
                     "event handler `{}` at {location}: no runtime binding found for cross-module signal `{}`",
                     name_path_text(&reference.path),
                     import_binding.local_name.text()
                 ));
             };
-            let binding = resolution
+            let binding = context
+                .resolution
                 .signal(item_id)
-                .or_else(|| runtime_assembly.signal(item_id))
+                .or_else(|| context.runtime_assembly.signal(item_id))
                 .ok_or_else(|| {
-                let location = source_location(sources, span);
+                let location = source_location(context.sources, span);
                 format!(
                     "event handler `{}` at {location}: no runtime binding found for cross-module signal `{}`",
                     name_path_text(&reference.path),
@@ -1584,7 +1594,7 @@ fn resolve_run_event_signal_target(
                 )
             })?;
             let Some(signal_input) = binding.input() else {
-                let location = source_location(sources, span);
+                let location = source_location(context.sources, span);
                 return Err(format!(
                     "event handler `{}` at {location}: cross-module signal `{}` is not a publishable input signal",
                     name_path_text(&reference.path),
@@ -1600,7 +1610,7 @@ fn resolve_run_event_signal_target(
             })
         }
         _ => {
-            let location = source_location(sources, span);
+            let location = source_location(context.sources, span);
             Err(format!(
                 "event handler `{}` at {location} must resolve directly to a signal item",
                 name_path_text(&reference.path)
@@ -2051,16 +2061,8 @@ fn collect_run_input_specs_from_bridge(
 }
 
 fn compile_run_inputs(
-    sources: &SourceDatabase,
-    module: &HirModule,
-    workspace_hirs: &[(&str, &HirModule)],
-    view_owner: aivi_hir::ItemId,
-    sites: &RunMarkupExprSites,
+    context: RunFragmentCompileContext<'_>,
     bridge: &GtkBridgeGraph,
-    runtime_assembly: &HirRuntimeAssembly,
-    runtime_backend: &BackendProgram,
-    runtime_backend_by_hir: &BTreeMap<aivi_hir::ItemId, BackendItemId>,
-    query_context: Option<BackendQueryContext<'_>>,
     mut on_detail: impl FnMut(String),
 ) -> Result<
     (
@@ -2076,27 +2078,16 @@ fn compile_run_inputs(
         }
         on_detail(detail);
     };
-    let input_specs = collect_run_input_specs_from_bridge(module, workspace_hirs, bridge);
+    let input_specs =
+        collect_run_input_specs_from_bridge(context.module, context.workspace_hirs, bridge);
     let mut inputs = BTreeMap::new();
     let mut metrics = RunInputCompilationMetrics::default();
-        if query_context.is_some() {
+    if context.query_context.is_some() {
         let unique_exprs = collect_unique_run_input_exprs(&input_specs);
         let total = unique_exprs.len();
         emit_detail(format!("{total} unique fragments queued"));
         let compile_expr = |expr| {
-            compile_run_fragment_for_input(
-                module,
-                sources,
-                workspace_hirs,
-                view_owner,
-                sites,
-                runtime_assembly,
-                runtime_backend,
-                runtime_backend_by_hir,
-                query_context,
-                expr,
-            )
-            .map(|fragment| (expr, fragment))
+            compile_run_fragment_for_input(&context, expr).map(|fragment| (expr, fragment))
         };
         let parallelism = bounded_fragment_parallelism(unique_exprs.len());
         let batch_size = fragment_batch_size(unique_exprs.len());
@@ -2167,17 +2158,7 @@ fn compile_run_inputs(
         }
         return Ok((inputs, metrics));
     }
-    let mut compiler = RunFragmentCompiler::new(
-        sources,
-        module,
-        workspace_hirs,
-        view_owner,
-        sites,
-        runtime_assembly,
-        runtime_backend,
-        runtime_backend_by_hir,
-        query_context,
-    );
+    let mut compiler = RunFragmentCompiler::new(context);
     let mut compile_fragment = |expr| {
         let (fragment, compiled_now) = compiler.compile(expr)?;
         if compiled_now {

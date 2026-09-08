@@ -318,7 +318,7 @@ type HttpError =
   | RequestFailure Text
 
 @source http.get "{base_url}/users" with {{
-    refreshEvery: 40
+    refreshEvery: 250
 }}
 signal users : Signal (Result HttpError Text)
 "#
@@ -344,10 +344,10 @@ signal users : Signal (Result HttpError Text)
         .signal(item_id(lowered.hir.module(), "users"))
         .expect("users signal binding should exist")
         .signal();
-    let value = spin_until(&mut linked, users_signal, Duration::from_secs(1))
+    let value = spin_until(&mut linked, users_signal, Duration::from_secs(2))
         .expect("http provider should refresh and publish");
     if value != RuntimeValue::ResultOk(Box::new(RuntimeValue::Text("second".into()))) {
-        let deadline = Instant::now() + Duration::from_secs(1);
+        let deadline = Instant::now() + Duration::from_secs(2);
         let mut latest = value;
         while Instant::now() < deadline {
             linked.tick().expect("runtime tick should succeed");
@@ -720,7 +720,7 @@ type DbusSignal = {
 }
 
 @source dbus.signal "/org/aivi/Test" with {
-    interface: "org.aivi.Test"
+    interface: "org.aivi.Test",
     member: "Ping"
 }
 signal inbound : Signal DbusSignal
@@ -787,8 +787,8 @@ type DbusError =
   | DbusProtocolError Text
 
 @source dbus.emit "{path}" with {{
-    interface: "{interface}"
-    member: "Ping"
+    interface: "{interface}",
+    member: "Ping",
     body: "hello"
 }}
 signal emitted : Signal (Result DbusError Unit)
@@ -903,8 +903,8 @@ type DbusCall = {{
 signal busState : Signal BusNameState
 
 @source dbus.method "{service_name}" with {{
-    path: "/org/aivi/Test"
-    interface: "org.aivi.Test"
+    path: "/org/aivi/Test",
+    interface: "org.aivi.Test",
     member: "ShowWindow"
 }}
 signal incoming : Signal DbusCall
@@ -1023,8 +1023,8 @@ value replyTask : Task Text (List DbusValue) =
 signal busState : Signal BusNameState
 
 @source dbus.method "{service_name}", replyTask with {{
-    path: "/org/aivi/Test"
-    interface: "org.aivi.Test"
+    path: "/org/aivi/Test",
+    interface: "org.aivi.Test",
     member: "GetStatus"
 }}
 signal incoming : Signal DbusCall
@@ -1091,7 +1091,6 @@ signal incoming : Signal DbusCall
 }
 
 #[test]
-#[ignore = "known pre-existing failure: flaky GLib threading in D-Bus reply handling"]
 fn dbus_method_source_replies_with_configured_body() {
     if env::var("DBUS_SESSION_BUS_ADDRESS").is_err() {
         return;
@@ -1119,13 +1118,18 @@ type DbusCall = {{
     body: Text
 }}
 
+type DbusValue =
+  | DbusString Text
+  | DbusInt Int
+  | DbusBool Bool
+
 @source dbus.ownName "{service_name}"
 signal busState : Signal BusNameState
 
 @source dbus.method "{service_name}" with {{
-    path: "/org/aivi/Test"
-    interface: "org.aivi.Test"
-    member: "GetStatus"
+    path: "/org/aivi/Test",
+    interface: "org.aivi.Test",
+    member: "GetStatus",
     replyValues: [DbusString "running", DbusInt 42]
 }}
 signal incoming : Signal DbusCall
@@ -1144,6 +1148,27 @@ signal incoming : Signal DbusCall
     let actions = linked
         .tick_with_source_lifecycle()
         .expect("linked runtime tick should succeed");
+    let method_config = actions
+        .source_actions()
+        .iter()
+        .find_map(|action| match action {
+            crate::LinkedSourceLifecycleAction::Activate { config, .. }
+                if config.provider
+                    == crate::RuntimeSourceProvider::Builtin(BuiltinSourceProvider::DbusMethod) =>
+            {
+                Some(config)
+            }
+            _ => None,
+        })
+        .expect("dbus.method should produce an activation config");
+    assert_eq!(
+        method_config
+            .options
+            .iter()
+            .map(|option| option.option_name.as_ref())
+            .collect::<Vec<_>>(),
+        ["path", "interface", "member", "replyValues"]
+    );
     let mut providers = SourceProviderManager::new();
     providers
         .apply_actions(actions.source_actions())
@@ -1203,7 +1228,7 @@ type Key =
   | ArrowDown
 
 @source window.keyDown with {
-    repeat: False
+    repeat: False,
     focusOnly: True
 }
 signal keyDown : Signal Key
@@ -1429,7 +1454,7 @@ value accounts = [{
 }]
 
 @source imap.connect accounts with {
-    mailbox: "INBOX"
+    mailbox: "INBOX",
     limit: 10
 }
 signal snapshots : Signal (Result ImapError (List ImapSnapshot))

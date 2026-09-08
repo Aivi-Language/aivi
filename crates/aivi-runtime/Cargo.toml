@@ -3,6 +3,7 @@ name = "aivi-runtime"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 aivi-base.workspace = true
@@ -11,14 +12,14 @@ aivi-core = { path = "../aivi-core" }
 aivi-hir.workspace = true
 aivi-lambda = { path = "../aivi-lambda" }
 aivi-typing.workspace = true
-gio = "0.22.2"
-glib = "0.22.3"
+gio.workspace = true
+glib.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 regex = "1"
 rayon = "1"
 url = "2.5"
-ureq = "2"
+ureq = "3.4.0"
 fastrand = "2"
 base64 = "0.22"
 sha2 = "0.10"

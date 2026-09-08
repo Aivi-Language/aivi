@@ -7090,27 +7090,26 @@ impl<'a> GateTypeContext<'a> {
                 definition,
                 ..
             } => {
-                if let Some(import_binding) = self.module.imports().get(*import) {
-                    if let ImportBindingMetadata::TypeConstructor {
+                if let Some(import_binding) = self.module.imports().get(*import)
+                    && let ImportBindingMetadata::TypeConstructor {
                         fields: Some(fields),
                         ..
                     } = &import_binding.metadata
-                    {
-                        let import_fields = fields
-                            .iter()
-                            .map(|f| GateRecordField {
-                                name: f.name.to_string(),
-                                ty: self.lower_import_value_type(&f.ty),
-                            })
-                            .collect::<Vec<_>>();
-                        return self.project_record_field_step(
-                            &import_fields,
-                            false,
-                            subject,
-                            segment,
-                            path,
-                        );
-                    }
+                {
+                    let import_fields = fields
+                        .iter()
+                        .map(|f| GateRecordField {
+                            name: f.name.to_string(),
+                            ty: self.lower_import_value_type(&f.ty),
+                        })
+                        .collect::<Vec<_>>();
+                    return self.project_record_field_step(
+                        &import_fields,
+                        false,
+                        subject,
+                        segment,
+                        path,
+                    );
                 }
                 if let Some(ImportTypeDefinition::Alias(alias)) = definition.as_deref() {
                     let lowered =

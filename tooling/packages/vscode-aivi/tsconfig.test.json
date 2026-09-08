@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "rootDir": ".",
+    "outDir": "./test-out"
+  },
+  "include": [
+    "src/contract.ts",
+    "src/invocations.ts",
+    "src/lifecycle.ts",
+    "tests/**/*.ts"
+  ]
+}

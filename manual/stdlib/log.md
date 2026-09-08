@@ -33,6 +33,14 @@ use aivi.log (
 ## Capability handle
 
 ```aivi
+use aivi.log (
+    LogError
+    LogSource
+    kv
+    levelInfo
+    levelWarn
+)
+
 @source log
 signal logger : LogSource
 

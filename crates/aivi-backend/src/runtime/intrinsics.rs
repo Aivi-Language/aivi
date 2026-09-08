@@ -135,7 +135,7 @@ fn evaluate_intrinsic_value(
                         expr,
                         value,
                         index: 1,
-                        found,
+                        found: Box::new(found),
                     });
                 }
             };
@@ -564,7 +564,7 @@ fn evaluate_intrinsic_value(
                         expr,
                         value,
                         index: 0,
-                        found,
+                        found: Box::new(found),
                     });
                 }
             };
@@ -589,7 +589,7 @@ fn evaluate_intrinsic_value(
                         expr,
                         value,
                         index: 0,
-                        found,
+                        found: Box::new(found),
                     });
                 }
             };
@@ -851,7 +851,7 @@ fn evaluate_intrinsic_value(
                         expr,
                         value,
                         index: 2,
-                        found,
+                        found: Box::new(found),
                     });
                 }
             };
@@ -867,7 +867,7 @@ fn evaluate_intrinsic_value(
                                     expr,
                                     value,
                                     index: 2,
-                                    found,
+                                    found: Box::new(found),
                                 });
                             }
                         };
@@ -879,7 +879,7 @@ fn evaluate_intrinsic_value(
                                     expr,
                                     value,
                                     index: 2,
-                                    found,
+                                    found: Box::new(found),
                                 });
                             }
                         };
@@ -891,7 +891,7 @@ fn evaluate_intrinsic_value(
                             expr,
                             value,
                             index: 2,
-                            found,
+                            found: Box::new(found),
                         });
                     }
                 }
@@ -1586,10 +1586,10 @@ fn expect_intrinsic_i64(
                 expr,
                 value,
                 index,
-                found: RuntimeValue::SuffixedInteger {
+                found: Box::new(RuntimeValue::SuffixedInteger {
                     raw: raw.clone(),
                     suffix: Box::from(""),
-                },
+                }),
             }
         }),
         found => Err(EvaluationError::InvalidIntrinsicArgument {
@@ -1597,7 +1597,7 @@ fn expect_intrinsic_i64(
             expr,
             value,
             index,
-            found: found.clone(),
+            found: Box::new(found.clone()),
         }),
     }
 }
@@ -1616,7 +1616,7 @@ fn expect_intrinsic_text(
             expr,
             value,
             index,
-            found: found.clone(),
+            found: Box::new(found.clone()),
         }),
     }
 }
@@ -1635,7 +1635,7 @@ fn expect_intrinsic_bytes(
             expr,
             value,
             index,
-            found: found.clone(),
+            found: Box::new(found.clone()),
         }),
     }
 }
@@ -1654,7 +1654,7 @@ fn expect_intrinsic_float(
             expr,
             value,
             index,
-            found: found.clone(),
+            found: Box::new(found.clone()),
         }),
     }
 }
@@ -1673,7 +1673,7 @@ fn expect_intrinsic_bigint(
             expr,
             value,
             index,
-            found,
+            found: Box::new(found),
         }),
     }
 }
@@ -1690,7 +1690,7 @@ fn invalid_intrinsic_argument(
         expr,
         value,
         index,
-        found,
+        found: Box::new(found),
     }
 }
 
@@ -1779,13 +1779,15 @@ fn expect_intrinsic_list(
     Ok(values.into_boxed_slice())
 }
 
+type RuntimeTextMapEntries = Box<[(Box<str>, Box<str>)]>;
+
 fn expect_intrinsic_text_map(
     kernel: KernelId,
     expr: KernelExprId,
     value: IntrinsicValue,
     index: usize,
     argument: &RuntimeValue,
-) -> Result<Box<[(Box<str>, Box<str>)]>, EvaluationError> {
+) -> Result<RuntimeTextMapEntries, EvaluationError> {
     let found = strip_signal(argument.clone());
     let RuntimeValue::Map(entries) = &found else {
         return Err(invalid_intrinsic_argument(

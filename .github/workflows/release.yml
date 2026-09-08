@@ -1,0 +1,149 @@
+name: Release aivi-lang
+
+# Commit the Cargo version and refreshed lockfile, then push vMAJOR.MINOR.PATCH
+# (or vMAJOR.MINOR.PATCH-rc.N). The workflow never creates or moves a tag.
+# Select the bump deliberately: patch for compatible fixes, minor for compatible
+# additions, major for breaking stable APIs. During 0.x development, use a new
+# minor for breaking changes. Build metadata is excluded by release policy.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aivi-release-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Validate SemVer, Cargo manifests and lockfile
+        id: version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 tooling/release/version.py "$RELEASE_TAG"
+
+  validate:
+    needs: version
+    uses: ./.github/workflows/ci.yml
+
+  package:
+    needs: [version, validate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libgtk-4-dev libadwaita-1-dev \
+            libwebkitgtk-6.0-dev libssl-dev libdbus-1-dev libsecret-1-dev
+      - name: Install repository-pinned Rust toolchain
+        run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-linux-x86_64
+      - name: Build locked release compiler
+        run: cargo build --locked --release -p aivi-cli --bin aivi --all-features
+      - name: Package compiler, stdlib and matching source
+        run: |
+          test "$(target/release/aivi --version)" = "aivi $VERSION"
+          archive="aivi-lang-${VERSION}-x86_64-unknown-linux-gnu"
+          mkdir -p "dist/$archive/bin" "dist/$archive/examples"
+          install -m 755 target/release/aivi "dist/$archive/bin/aivi"
+          cp -a stdlib "dist/$archive/stdlib"
+          install -m 644 tooling/packages/vscode-aivi/licence.txt "dist/$archive/LICENSE"
+          install -m 644 tooling/release/smoke.aivi "dist/$archive/examples/smoke.aivi"
+          tar -C dist -czf "dist/$archive.tar.gz" "$archive"
+          git archive --format=tar.gz --prefix="aivi-lang-${VERSION}-source/" \
+            -o "dist/aivi-lang-${VERSION}-source.tar.gz" HEAD
+          cd dist
+          sha256sum ./*.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@v7
+        with:
+          name: aivi-lang-release
+          path: |
+            dist/*.tar.gz
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
+
+  smoke:
+    needs: [version, package]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      # No checkout: prove the archive works without compile-time source paths.
+      - uses: actions/download-artifact@v8
+        with:
+          name: aivi-lang-release
+          path: dist
+      - name: Install native runtime dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libgtk-4-1 libadwaita-1-0 \
+            libwebkitgtk-6.0-4 libsecret-1-0 libdbus-1-3
+      - name: Verify checksums and extracted compiler
+        run: |
+          cd dist
+          sha256sum --check SHA256SUMS
+          archive="aivi-lang-${VERSION}-x86_64-unknown-linux-gnu"
+          tar -xzf "$archive.tar.gz"
+          cd "$archive"
+          test "$(bin/aivi --version)" = "aivi $VERSION"
+          bin/aivi check examples/smoke.aivi
+          bin/aivi execute examples/smoke.aivi
+          bin/aivi test examples/smoke.aivi stdlibAvailable
+
+  publish:
+    needs: [version, smoke]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ github.ref_name }}
+      PRERELEASE: ${{ needs.version.outputs.prerelease }}
+      EXPECTED_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: aivi-lang-release
+          path: dist
+      - name: Publish immutable versioned assets
+        run: |
+          cd dist
+          sha256sum --check SHA256SUMS
+          remote_sha=$(gh api "repos/$GH_REPO/commits/$RELEASE_TAG" --jq .sha)
+          test "$remote_sha" = "$EXPECTED_SHA"
+          flags=()
+          if [[ "$PRERELEASE" == true ]]; then
+            flags+=(--prerelease --latest=false)
+          fi
+          gh release create "$RELEASE_TAG" ./*.tar.gz SHA256SUMS \
+            --draft --verify-tag --generate-notes --title "aivi-lang $RELEASE_TAG" \
+            --notes "Linux x86-64 binaries built on Ubuntu 24.04. Requires compatible GTK 4, libadwaita, WebKitGTK 6 and libsecret runtime libraries. Keep bin/ and stdlib/ together. Source and SHA-256 checksums are attached." \
+            "${flags[@]}"
+          gh release edit "$RELEASE_TAG" --draft=false "${flags[@]}"

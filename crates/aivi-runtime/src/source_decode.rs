@@ -1198,7 +1198,7 @@ type Key =
   | Key Text
 
 @source window.keyDown with {
-    repeat: False
+    repeat: False,
     focusOnly: True
 }
 signal keyDown : Signal Key

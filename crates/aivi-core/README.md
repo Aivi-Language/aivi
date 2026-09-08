@@ -11,24 +11,18 @@ can already justify, and rejects blocked handoffs explicitly.
 
 ## Entry points
 
-```rust
-// Lower a HIR module into a typed core Module
-lower_module(hir: &hir::Module, db: &SourceDatabase, reports: &ElaborationReports) -> Result<Module, LoweringErrors>
-lower_module_with_items(hir: &hir::Module, items: &IncludedItems, ...) -> Result<Module, LoweringErrors>
+- [`lower_module`](src/lower/api.rs) accepts a HIR module and returns `Result<Module, LoweringErrors>`.
+- `lower_module_with_items` restricts lowering to an `IncludedItems` set.
+- `lower_runtime_module` and its item/workspace variants lower the supported runtime surface.
+- `lower_runtime_fragment` and its workspace variant return a `LoweredRuntimeFragment`.
+- [`validate_module`](src/validate.rs) checks a lowered core module.
 
-// Lower only the runtime fragment (for interpreter/GTK paths)
-lower_runtime_module(hir: &hir::Module, ...) -> Result<LoweredRuntimeFragment, LoweringErrors>
-lower_runtime_module_with_items(hir: &hir::Module, items: &IncludedItems, ...) -> Result<LoweredRuntimeFragment, LoweringErrors>
-lower_runtime_fragment(spec: RuntimeFragmentSpec, ...) -> Result<LoweredRuntimeFragment, LoweringErrors>
-
-// Validate a lowered module
-validate_module(module: &Module) -> Result<(), ValidationErrors>
-```
+Lowering obtains its elaboration evidence internally; callers do not pass a source database or an `ElaborationReports` argument.
 
 ## Invariants
 
-- All typed IDs (`ExprId`, `ItemId`, `SourceId`, `StageId`, …) are scoped to the owning `Module`; cross-module ID use is undefined.
-- `lower_module` never panics; lowering failures are returned as `LoweringErrors`.
+- All typed IDs (`ExprId`, `ItemId`, `SourceId`, `StageId`, …) are scoped to the owning `Module`; cross-module ID use is invalid.
+- Unsupported lowering is reported as `LoweringErrors`; internal arena/identity preconditions still apply.
 - Every `Expr` node is typed; a missing type annotation is a lowering error, not a silent hole.
 - `Module` arenas are append-only after construction; structural mutation is not supported.
 - `validate_module` is a post-condition check — passing validation means the IR is internally consistent.

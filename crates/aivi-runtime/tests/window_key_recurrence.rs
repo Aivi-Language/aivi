@@ -102,7 +102,7 @@ fun updateDirection:Direction = key:Key current:Direction=>    arrowKey key
      |> filterDirection current
 
 @source window.keyDown with {
-    repeat: False
+    repeat: False,
     focusOnly: True
 }
 signal keyDown : Signal Key
@@ -249,7 +249,7 @@ provider custom.tick
 signal tick : Signal Int
 
 @source window.keyDown with {
-    repeat: False
+    repeat: False,
     focusOnly: True
 }
 signal keyDown : Signal Key

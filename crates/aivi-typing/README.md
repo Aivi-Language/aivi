@@ -9,45 +9,24 @@ This crate has **no dependencies on other AIVI crates** — it is a pure analysi
 
 ## Entry points
 
-```rust
-// Kind checking
-KindChecker::new(store: KindStore) -> KindChecker
-KindChecker::check(ty: &TypeNode) -> Result<Kind, KindCheckError>
+- [`KindChecker`](src/kind.rs) is a stateless checker with `infer`, `expect_kind`, and solution-producing variants over a `KindStore`.
+- [`EqDeriver`](src/eq.rs) analyzes structural equality/default evidence.
+- [`DecodePlanner::plan`](src/decode.rs) takes a `TypeStore`, `TypeId`, and `DecodeMode`, returning a `DecodeSchema`.
+- [`GatePlanner`](src/gate.rs), [`FanoutPlanner`](src/fanout.rs), and [`RecurrencePlanner`](src/recurrence.rs) plan the corresponding carrier operations.
+- `RecurrenceWakeupPlanner` checks source wakeup evidence.
+- [Source contracts](src/source_contracts.rs) define provider arguments, options, and wakeups.
+- [`StructuralWalker`](src/walker.rs) supplies an explicit worklist and assembly stack.
 
-// Eq / Default derivation
-EqDeriver::new(store: &TypeStore) -> EqDeriver
-EqDeriver::derive(id: TypeId) -> Result<EqDerivation, EqDerivationError>
-
-// JSON/domain decode planning
-DecodePlanner::new(store: &TypeStore) -> DecodePlanner
-DecodePlanner::plan(id: TypeId, mode: DecodeMode) -> Result<DecodePlanId, DecodePlanningError>
-
-// Gate (filter) planning
-GatePlanner::new(store: &TypeStore) -> GatePlanner
-GatePlanner::plan(carrier: GateCarrier) -> Result<GatePlan, Vec<GateResultKind>>
-
-// Fanout planning
-FanoutPlanner::new(store: &TypeStore) -> FanoutPlanner
-FanoutPlanner::plan(carrier: FanoutCarrier) -> Result<FanoutPlan, Vec<FanoutResultKind>>
-
-// Recurrence planning
-RecurrencePlanner::new(store: &TypeStore) -> RecurrencePlanner
-RecurrencePlanner::plan(target: RecurrenceTarget) -> Result<RecurrencePlan, RecurrenceTargetError>
-RecurrenceWakeupPlanner::plan(ctx: ...) -> Result<RecurrenceWakeupPlan, RecurrenceWakeupError>
-
-// Source contracts
-SourceContract — describes lifecycle, options, wakeup conditions for a named source provider
-StructuralWalker — generic walker over TypeStore shapes
-```
+The source modules define the exact signatures; these planners do not share a universal constructor or result type.
 
 ## Invariants
 
 - This crate is dependency-free with respect to other AIVI crates; it must remain so.
 - `TypeStore` and `KindStore` are append-only during a planning session; IDs are stable.
 - `DecodePlanner` rejects types that do not have a structural decode mapping; errors are typed, not panics.
-- `EqDeriver` requires all referenced types to already be in the `TypeStore`; missing types are `EqDerivationError`.
-- Kind expressions are interned in `KindStore`; two structurally equal kinds share an ID.
-- `StructuralWalker` prevents unbounded recursion by tracking visited type IDs.
+- Referenced type IDs must belong to the provided `TypeStore`; structural failures are reported through typed derivation errors.
+- Kind-expression IDs belong to their `KindStore`; do not transfer them between stores.
+- `StructuralWalker` uses explicit stacks instead of Rust recursion. Individual planners own cycle detection and must preserve the walker's assembly-stack preconditions.
 
 ## Diagnostic codes
 

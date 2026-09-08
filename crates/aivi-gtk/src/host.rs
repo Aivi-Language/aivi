@@ -12,9 +12,7 @@ use aivi_hir::{NamePath, TextLiteral, TextSegment};
 use gtk::{
     Orientation,
     glib::{self, SignalHandlerId},
-    prelude::*,
 };
-use libadwaita as adw;
 use webkit6::prelude::*;
 use webkit6::{NetworkSession, PolicyDecisionType, WebView};
 
@@ -487,29 +485,46 @@ impl GtkWindowFocusQueue {
     }
 }
 
-fn notify_pending_event(notifier: &Rc<RefCell<Option<Rc<dyn Fn()>>>>) {
-    if let Some(notifier) = notifier.borrow().clone() {
-        notifier();
+#[derive(Clone, Default)]
+struct GtkEventNotifier {
+    state: Rc<RefCell<GtkEventNotifierState>>,
+}
+
+#[derive(Default)]
+struct GtkEventNotifierState {
+    callback: Option<Rc<dyn Fn()>>,
+}
+
+impl GtkEventNotifier {
+    fn set(&self, callback: Option<Rc<dyn Fn()>>) {
+        self.state.borrow_mut().callback = callback;
+    }
+
+    fn notify(&self) {
+        let callback = self.state.borrow().callback.clone();
+        if let Some(callback) = callback {
+            callback();
+        }
     }
 }
 
 fn queue_window_size_snapshot(
     queue: &GtkWindowSizeQueue,
-    notifier: &Rc<RefCell<Option<Rc<dyn Fn()>>>>,
+    notifier: &GtkEventNotifier,
     size: (i32, i32),
 ) {
     if queue.push(size) {
-        notify_pending_event(notifier);
+        notifier.notify();
     }
 }
 
 fn queue_window_focus_snapshot(
     queue: &GtkWindowFocusQueue,
-    notifier: &Rc<RefCell<Option<Rc<dyn Fn()>>>>,
+    notifier: &GtkEventNotifier,
     focused: bool,
 ) {
     if queue.push(focused) {
-        notify_pending_event(notifier);
+        notifier.notify();
     }
 }
 
@@ -585,7 +600,7 @@ where
     events: BTreeMap<u64, MountedEvent>,
     queued_events: Rc<GtkEventQueue<V>>,
     queued_window_keys: Rc<GtkWindowKeyQueue>,
-    event_notifier: Rc<RefCell<Option<Rc<dyn Fn()>>>>,
+    event_notifier: GtkEventNotifier,
     /// Tracks the set of CSS class names that were last applied to each widget
     /// via the `cssClasses` property, keyed by the widget's GObject pointer.
     /// Needed so the classes can be cleanly replaced on each property update
@@ -629,7 +644,7 @@ where
             events: BTreeMap::new(),
             queued_events: Rc::new(GtkEventQueue::default()),
             queued_window_keys: Rc::new(GtkWindowKeyQueue::default()),
-            event_notifier: Rc::new(RefCell::new(None)),
+            event_notifier: GtkEventNotifier::default(),
             managed_css_classes: RefCell::new(BTreeMap::new()),
             alert_dialog_responses: RefCell::new(BTreeMap::new()),
             view_stack_page_meta: RefCell::new(BTreeMap::new()),
@@ -663,7 +678,7 @@ where
 
     pub fn set_event_notifier(&mut self, notifier: Option<Rc<dyn Fn()>>) {
         GtkConcreteHost::<V>::assert_gtk_main_thread();
-        *self.event_notifier.borrow_mut() = notifier;
+        self.event_notifier.set(notifier);
     }
 
     pub fn widget(&self, handle: &GtkConcreteWidget) -> Option<gtk::Widget> {
@@ -722,14 +737,10 @@ where
         let style_manager = adw::StyleManager::default();
         // Push the current state immediately so the source is not uninitialized.
         queue.push(style_manager.is_dark());
-        if let Some(n) = notifier.borrow().clone() {
-            n();
-        }
+        notifier.notify();
         style_manager.connect_dark_notify(move |mgr| {
             queue.push(mgr.is_dark());
-            if let Some(n) = notifier.borrow().clone() {
-                n();
-            }
+            notifier.notify();
         });
     }
 
@@ -764,9 +775,7 @@ where
                     .map(|s| s.to_string())
                     .unwrap_or_default();
                 queue_init.push(text);
-                if let Some(n) = notifier_init.borrow().clone() {
-                    n();
-                }
+                notifier_init.notify();
             });
         }
         clipboard.connect_changed(move |cb| {
@@ -779,9 +788,7 @@ where
                     .map(|s| s.to_string())
                     .unwrap_or_default();
                 queue.push(text);
-                if let Some(n) = notifier.borrow().clone() {
-                    n();
-                }
+                notifier.notify();
             });
         });
     }
@@ -839,9 +846,7 @@ where
             name: name.into(),
             repeated,
         });
-        if let Some(notifier) = self.event_notifier.borrow().clone() {
-            notifier();
-        }
+        self.event_notifier.notify();
     }
 
     pub fn present_root_windows(&self) {
@@ -889,9 +894,7 @@ where
                         !pressed.insert(name.clone())
                     };
                     key_events.push(GtkQueuedWindowKeyEvent { name, repeated });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                     glib::Propagation::Proceed
                 });
                 controller.connect_key_released(move |_, key, _, _| {
@@ -1064,19 +1067,13 @@ where
             }
             GtkConcreteWidgetKind::InfoBar => gtk::InfoBar::new().upcast::<gtk::Widget>(),
             GtkConcreteWidgetKind::LevelBar => gtk::LevelBar::new().upcast::<gtk::Widget>(),
-            GtkConcreteWidgetKind::LinkButton => {
-                gtk::LinkButton::new("").upcast::<gtk::Widget>()
-            }
+            GtkConcreteWidgetKind::LinkButton => gtk::LinkButton::new("").upcast::<gtk::Widget>(),
             GtkConcreteWidgetKind::Stack => gtk::Stack::new().upcast::<gtk::Widget>(),
             GtkConcreteWidgetKind::StackSwitcher => {
                 gtk::StackSwitcher::new().upcast::<gtk::Widget>()
             }
-            GtkConcreteWidgetKind::StackSidebar => {
-                gtk::StackSidebar::new().upcast::<gtk::Widget>()
-            }
-            GtkConcreteWidgetKind::TreeExpander => {
-                gtk::TreeExpander::new().upcast::<gtk::Widget>()
-            }
+            GtkConcreteWidgetKind::StackSidebar => gtk::StackSidebar::new().upcast::<gtk::Widget>(),
+            GtkConcreteWidgetKind::TreeExpander => gtk::TreeExpander::new().upcast::<gtk::Widget>(),
             GtkConcreteWidgetKind::GLArea => gtk::GLArea::new().upcast::<gtk::Widget>(),
             GtkConcreteWidgetKind::Breakpoint => {
                 // Breakpoint is a layout helper, not a widget. Create an invisible placeholder.
@@ -1084,9 +1081,7 @@ where
                 placeholder.set_visible(false);
                 placeholder.upcast::<gtk::Widget>()
             }
-            GtkConcreteWidgetKind::ViewSwitcher => {
-                adw::ViewSwitcher::new().upcast::<gtk::Widget>()
-            }
+            GtkConcreteWidgetKind::ViewSwitcher => adw::ViewSwitcher::new().upcast::<gtk::Widget>(),
             GtkConcreteWidgetKind::ViewSwitcherBar => {
                 adw::ViewSwitcherBar::new().upcast::<gtk::Widget>()
             }
@@ -1105,9 +1100,7 @@ where
                     adw::Squeezer::new().upcast::<gtk::Widget>()
                 }
             }
-            GtkConcreteWidgetKind::Flap => {
-                adw::Flap::new().upcast::<gtk::Widget>()
-            }
+            GtkConcreteWidgetKind::Flap => adw::Flap::new().upcast::<gtk::Widget>(),
             GtkConcreteWidgetKind::ButtonContent => {
                 adw::ButtonContent::new().upcast::<gtk::Widget>()
             }
@@ -1120,9 +1113,7 @@ where
                 placeholder.set_visible(false);
                 placeholder.upcast::<gtk::Widget>()
             }
-            GtkConcreteWidgetKind::AdwDialog => {
-                adw::Dialog::new().upcast::<gtk::Widget>()
-            }
+            GtkConcreteWidgetKind::AdwDialog => adw::Dialog::new().upcast::<gtk::Widget>(),
             // Gesture controllers and DnD are EventControllers, not Widgets.
             // They use invisible placeholders in the widget tree; the bridge
             // attaches the actual controllers to parent widgets at hydration time.
@@ -1140,9 +1131,7 @@ where
             }
             GtkConcreteWidgetKind::CssProvider => {
                 let provider = gtk::CssProvider::new();
-                self.css_providers
-                    .borrow_mut()
-                    .push(provider);
+                self.css_providers.borrow_mut().push(provider);
                 let placeholder = gtk::Box::new(gtk::Orientation::Vertical, 0);
                 placeholder.set_visible(false);
                 placeholder.upcast::<gtk::Widget>()
@@ -1744,10 +1733,8 @@ where
                     .set_has_arrow(value);
             }
             GtkPropertySetter::Bool(GtkBoolPropertySetter::AboutDialogVisible) => {
-                if let Ok(dialog) = widget.clone().downcast::<adw::AboutDialog>() {
-                    if value {
-                        dialog.present(None::<&gtk::Window>);
-                    }
+                if value && let Ok(dialog) = widget.clone().downcast::<adw::AboutDialog>() {
+                    dialog.present(None::<&gtk::Window>);
                 }
             }
             GtkPropertySetter::Bool(GtkBoolPropertySetter::FileDialogVisible) => {
@@ -3537,12 +3524,12 @@ where
                 })?;
                 let n = tab_view.n_pages();
                 let idx = value as i32;
-                if idx >= 0 && idx < n {
-                    if let Some(page) = tab_view.pages().item(idx as u32) {
-                        if let Ok(tab_page) = page.downcast::<adw::TabPage>() {
-                            tab_view.set_selected_page(&tab_page);
-                        }
-                    }
+                if idx >= 0
+                    && idx < n
+                    && let Some(page) = tab_view.pages().item(idx as u32)
+                    && let Ok(tab_page) = page.downcast::<adw::TabPage>()
+                {
+                    tab_view.set_selected_page(&tab_page);
                 }
                 Ok(())
             }
@@ -4422,12 +4409,11 @@ where
                     .set_content(child);
             }
             GtkChildMountRoute::TabViewTabBar => {
-                if let Some(tab_view) = parent_widget.clone().downcast::<adw::TabView>().ok() {
-                    if let Some(c) = child {
-                        if let Ok(bar) = c.clone().downcast::<adw::TabBar>() {
-                            bar.set_view(Some(&tab_view));
-                        }
-                    }
+                if let Ok(tab_view) = parent_widget.clone().downcast::<adw::TabView>()
+                    && let Some(child) = child
+                    && let Ok(bar) = child.clone().downcast::<adw::TabBar>()
+                {
+                    bar.set_view(Some(&tab_view));
                 }
             }
             GtkChildMountRoute::TabPageContent => {
@@ -4765,9 +4751,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::EntryChanged => widget
                 .clone()
@@ -4782,9 +4766,7 @@ where
                         route: route_id,
                         value: V::from_text(text.as_str()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::EntryActivated => widget
                 .clone()
@@ -4798,9 +4780,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::SwitchToggled => widget
                 .clone()
@@ -4814,9 +4794,7 @@ where
                         route: route_id,
                         value: V::from_bool(switch.is_active()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::CheckButtonToggled => widget
                 .clone()
@@ -4830,9 +4808,7 @@ where
                         route: route_id,
                         value: V::from_bool(btn.is_active()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::ToggleButtonToggled => widget
                 .clone()
@@ -4846,9 +4822,7 @@ where
                         route: route_id,
                         value: V::from_bool(btn.is_active()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::SpinButtonValueChanged => widget
                 .clone()
@@ -4862,9 +4836,7 @@ where
                         route: route_id,
                         value: V::from_f64(spin.value()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::ScaleValueChanged => widget
                 .clone()
@@ -4878,9 +4850,7 @@ where
                         route: route_id,
                         value: V::from_f64(scale.value()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::RevealerChildRevealed => widget
                 .clone()
@@ -4894,9 +4864,7 @@ where
                         route: route_id,
                         value: V::from_bool(r.is_child_revealed()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::FocusIn => {
                 let controller = gtk::EventControllerFocus::new();
@@ -4905,9 +4873,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 });
                 signal_object = controller.clone().upcast::<glib::Object>();
                 widget.add_controller(controller);
@@ -4920,9 +4886,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 });
                 signal_object = controller.clone().upcast::<glib::Object>();
                 widget.add_controller(controller);
@@ -4936,9 +4900,7 @@ where
                         route: route_id,
                         value: V::from_f64(dy),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                     glib::Propagation::Proceed
                 });
                 signal_object = controller.clone().upcast::<glib::Object>();
@@ -4952,9 +4914,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 });
                 signal_object = controller.clone().upcast::<glib::Object>();
                 widget.add_controller(controller);
@@ -4967,9 +4927,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 });
                 signal_object = controller.clone().upcast::<glib::Object>();
                 widget.add_controller(controller);
@@ -4987,9 +4945,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::ActionRowActivated => widget
                 .clone()
@@ -5003,9 +4959,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::SwitchRowToggled => widget
                 .clone()
@@ -5019,9 +4973,7 @@ where
                         route: route_id,
                         value: V::from_bool(row.is_active()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::SpinRowValueChanged => widget
                 .clone()
@@ -5035,9 +4987,7 @@ where
                         route: route_id,
                         value: V::from_f64(row.value()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::EntryRowChanged => widget
                 .clone()
@@ -5052,9 +5002,7 @@ where
                         route: route_id,
                         value: V::from_text(text.as_str()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::EntryRowActivated => widget
                 .clone()
@@ -5068,9 +5016,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::ListBoxActivated => widget
                 .clone()
@@ -5085,9 +5031,7 @@ where
                         route: route_id,
                         value: V::from_i64(index),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::ListBoxRowActivated => widget
                 .clone()
@@ -5101,9 +5045,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::ListViewActivated => widget
                 .clone()
@@ -5117,9 +5059,7 @@ where
                         route: route_id,
                         value: V::from_i64(position as i64),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::GridViewActivated => widget
                 .clone()
@@ -5133,9 +5073,7 @@ where
                         route: route_id,
                         value: V::from_i64(position as i64),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::DropDownSelectionChanged => widget
                 .clone()
@@ -5150,9 +5088,7 @@ where
                         route: route_id,
                         value: V::from_i64(selected),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::SearchEntryChanged => widget
                 .clone()
@@ -5167,9 +5103,7 @@ where
                         route: route_id,
                         value: V::from_text(text.as_str()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::SearchEntryActivated => widget
                 .clone()
@@ -5183,9 +5117,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::SearchEntrySearchChanged => widget
                 .clone()
@@ -5200,9 +5132,7 @@ where
                         route: route_id,
                         value: V::from_text(text.as_str()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::ComboRowSelectionChanged => widget
                 .clone()
@@ -5217,9 +5147,7 @@ where
                         route: route_id,
                         value: V::from_i64(selected),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::PasswordEntryRowChanged => widget
                 .clone()
@@ -5234,9 +5162,7 @@ where
                         route: route_id,
                         value: V::from_text(text.as_str()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::PasswordEntryRowActivated => widget
                 .clone()
@@ -5250,9 +5176,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::MultilineEntryChanged => {
                 let text_view = widget.clone().downcast::<gtk::TextView>().map_err(|_| {
@@ -5269,9 +5193,7 @@ where
                         route: route_id,
                         value: V::from_text(text.as_str()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 });
                 signal_object = buffer.upcast::<glib::Object>();
                 sid
@@ -5288,9 +5210,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                     glib::Propagation::Proceed
                 }),
             GtkEventSignal::NavigationViewPopped => widget
@@ -5306,9 +5226,7 @@ where
                         route: route_id,
                         value: V::from_text(tag.as_str()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::ExpanderRowExpanded => widget
                 .clone()
@@ -5322,9 +5240,7 @@ where
                         route: route_id,
                         value: V::from_bool(row.is_expanded()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::ExpanderExpanded => widget
                 .clone()
@@ -5338,9 +5254,7 @@ where
                         route: route_id,
                         value: V::from_bool(expander.is_expanded()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::NavigationPageShowing => widget
                 .clone()
@@ -5354,9 +5268,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::NavigationPageHiding => widget
                 .clone()
@@ -5370,9 +5282,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::ViewStackSwitch => widget
                 .clone()
@@ -5390,9 +5300,7 @@ where
                         route: route_id,
                         value: V::from_text(&name),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::AlertDialogResponse => widget
                 .clone()
@@ -5406,9 +5314,7 @@ where
                         route: route_id,
                         value: V::from_text(response),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::WindowMaximized => widget
                 .clone()
@@ -5422,9 +5328,7 @@ where
                         route: route_id,
                         value: V::from_bool(win.is_maximized()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::WindowFullscreened => widget
                 .clone()
@@ -5438,9 +5342,7 @@ where
                         route: route_id,
                         value: V::from_bool(win.is_fullscreen()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::CalendarDaySelected => widget
                 .clone()
@@ -5454,9 +5356,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::FlowBoxChildActivated => widget
                 .clone()
@@ -5470,9 +5370,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::MenuButtonToggled => {
                 let btn = widget.clone().downcast::<gtk::MenuButton>().map_err(|_| {
@@ -5489,9 +5387,7 @@ where
                         route: route_id,
                         value: V::from_bool(active),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 })
             }
             GtkEventSignal::PopoverClosed => widget
@@ -5506,9 +5402,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::SecondaryClick => {
                 let controller = gtk::GestureClick::new();
@@ -5518,9 +5412,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 });
                 signal_object = controller.clone().upcast::<glib::Object>();
                 widget.add_controller(controller);
@@ -5533,9 +5425,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 });
                 signal_object = controller.clone().upcast::<glib::Object>();
                 widget.add_controller(controller);
@@ -5549,9 +5439,7 @@ where
                             route: route_id,
                             value: V::unit(),
                         });
-                        if let Some(notifier) = notifier.borrow().clone() {
-                            notifier();
-                        }
+                        notifier.notify();
                     }
                 });
                 signal_object = controller.clone().upcast::<glib::Object>();
@@ -5566,9 +5454,7 @@ where
                             route: route_id,
                             value: V::unit(),
                         });
-                        if let Some(notifier) = notifier.borrow().clone() {
-                            notifier();
-                        }
+                        notifier.notify();
                     }
                 });
                 signal_object = controller.clone().upcast::<glib::Object>();
@@ -5587,9 +5473,7 @@ where
                         route: route_id,
                         value: V::from_bool(nav.shows_content()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::OverlaySplitViewShowSidebarChanged => widget
                 .clone()
@@ -5603,9 +5487,7 @@ where
                         route: route_id,
                         value: V::from_bool(ov.shows_sidebar()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::TabViewPageAdded => widget
                 .clone()
@@ -5619,9 +5501,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::TabViewPageClosed => widget
                 .clone()
@@ -5635,9 +5515,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                     glib::Propagation::Proceed
                 }),
             GtkEventSignal::TabViewSelectedPageChanged => widget
@@ -5652,9 +5530,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::CarouselPageChanged => widget
                 .clone()
@@ -5668,9 +5544,7 @@ where
                         route: route_id,
                         value: V::from_i64(idx as i64),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             GtkEventSignal::FileDialogResponse => {
                 let key = widget.as_ptr() as usize;
@@ -5688,9 +5562,7 @@ where
                             route: route_id,
                             value: V::from_i64(val),
                         });
-                        if let Some(notifier) = notifier.borrow().clone() {
-                            notifier();
-                        }
+                        notifier.notify();
                     })
                 } else {
                     widget.connect_notify_local(Some("visible"), move |_, _| {
@@ -5698,9 +5570,7 @@ where
                             route: route_id,
                             value: V::from_i64(0),
                         });
-                        if let Some(notifier) = notifier.borrow().clone() {
-                            notifier();
-                        }
+                        notifier.notify();
                     })
                 }
             }
@@ -5716,9 +5586,7 @@ where
                         route: route_id,
                         value: V::unit(),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             // Group M+ event signals — connect where widget downcast is known,
             // return an unsupported-event error for the rest.
@@ -5734,9 +5602,7 @@ where
                         route: route_id,
                         value: V::from_text(format!("{response_id}").as_str()),
                     });
-                    if let Some(notifier) = notifier.borrow().clone() {
-                        notifier();
-                    }
+                    notifier.notify();
                 }),
             // Events for new widgets — forward as notify-based Unit events.
             // Concrete per-widget signal connections will be added per widget
@@ -6261,6 +6127,11 @@ fn parse_orientation(value: &str) -> Option<Orientation> {
 
 #[cfg(test)]
 mod tests {
+    use crate::{
+        AttributeSite, GtkBridgeGraph, GtkBridgeNodeKind, GtkRuntimeExecutor,
+        RuntimePropertyBinding, StableNodeId, StaticPropertyPlan, StaticPropertyValue,
+        lower_markup_expr, lower_widget_bridge,
+    };
     use aivi_base::{FileId, SourceDatabase, SourceSpan, Span};
     use aivi_hir::{
         ExprId, Item, MarkupNodeId, Name, TextFragment, TextInterpolation, TextLiteral,
@@ -6268,13 +6139,6 @@ mod tests {
     };
     use aivi_runtime::InputHandle;
     use aivi_syntax::parse_module;
-    use gtk::prelude::*;
-
-    use crate::{
-        AttributeSite, GtkBridgeGraph, GtkBridgeNodeKind, GtkRuntimeExecutor,
-        RuntimePropertyBinding, StableNodeId, StaticPropertyPlan, StaticPropertyValue,
-        lower_markup_expr, lower_widget_bridge,
-    };
 
     use super::*;
 
@@ -6374,10 +6238,10 @@ mod tests {
         let queue = GtkWindowSizeQueue::default();
         let notify_count = Rc::new(std::cell::Cell::new(0usize));
         let notify_count_for_closure = notify_count.clone();
-        let notifier: Rc<RefCell<Option<Rc<dyn Fn()>>>> =
-            Rc::new(RefCell::new(Some(Rc::new(move || {
-                notify_count_for_closure.set(notify_count_for_closure.get() + 1);
-            }))));
+        let notifier = GtkEventNotifier::default();
+        notifier.set(Some(Rc::new(move || {
+            notify_count_for_closure.set(notify_count_for_closure.get() + 1);
+        })));
 
         queue_window_size_snapshot(&queue, &notifier, (1280, 720));
         queue_window_size_snapshot(&queue, &notifier, (1280, 720));
@@ -6398,10 +6262,10 @@ mod tests {
         let queue = GtkWindowFocusQueue::default();
         let notify_count = Rc::new(std::cell::Cell::new(0usize));
         let notify_count_for_closure = notify_count.clone();
-        let notifier: Rc<RefCell<Option<Rc<dyn Fn()>>>> =
-            Rc::new(RefCell::new(Some(Rc::new(move || {
-                notify_count_for_closure.set(notify_count_for_closure.get() + 1);
-            }))));
+        let notifier = GtkEventNotifier::default();
+        notifier.set(Some(Rc::new(move || {
+            notify_count_for_closure.set(notify_count_for_closure.get() + 1);
+        })));
 
         queue_window_focus_snapshot(&queue, &notifier, true);
         queue_window_focus_snapshot(&queue, &notifier, true);

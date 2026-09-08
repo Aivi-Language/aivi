@@ -214,7 +214,6 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 message: error.to_string().into_boxed_str(),
             })
         })?;
-        let function = self.module.get_finalized_function(requested_func_id);
         let caller = FunctionCaller::new(
             self.build_jit_call_signature(requested_kernel)
                 .map_err(wrap_one)?,
@@ -229,11 +228,12 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
 
         Ok((
             CompiledJitKernel {
-                function,
+                function: requested_func_id,
                 caller,
                 signal_slots,
                 imported_item_slots,
-                _module: self.module,
+                readable_data: self.readable_jit_data_ids(),
+                module: self.module,
             },
             cached_artifact,
         ))
@@ -361,18 +361,18 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 message: error.to_string().into_boxed_str(),
             })
         })?;
-        let function = self.module.get_finalized_function(requested_func_id);
         let caller = FunctionCaller::new(
             self.build_jit_call_signature(requested_kernel)
                 .map_err(wrap_one)?,
         );
 
         Ok(CompiledJitKernel {
-            function,
+            function: requested_func_id,
             caller,
             signal_slots,
             imported_item_slots,
-            _module: self.module,
+            readable_data: self.readable_jit_data_ids(),
+            module: self.module,
         })
     }
 
@@ -464,18 +464,18 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 message: error.to_string().into_boxed_str(),
             })
         })?;
-        let function = self.module.get_finalized_function(requested_func_id);
         let caller = FunctionCaller::new(
             self.build_replay_jit_call_signature(meta, requested_kernel)
                 .map_err(wrap_one)?,
         );
 
         Ok(CompiledJitKernel {
-            function,
+            function: requested_func_id,
             caller,
             signal_slots,
             imported_item_slots,
-            _module: self.module,
+            readable_data: self.readable_jit_data_ids(),
+            module: self.module,
         })
     }
 
@@ -573,19 +573,27 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 message: error.to_string().into_boxed_str(),
             })
         })?;
-        let function = self.module.get_finalized_function(requested_func_id);
         let caller = FunctionCaller::new(
             self.build_frozen_replay_jit_call_signature(&abi, requested_kernel)
                 .map_err(wrap_one)?,
         );
 
         Ok(CompiledJitKernel {
-            function,
+            function: requested_func_id,
             caller,
             signal_slots,
             imported_item_slots,
-            _module: self.module,
+            readable_data: self.readable_jit_data_ids(),
+            module: self.module,
         })
+    }
+
+    fn readable_jit_data_ids(&self) -> Vec<DataId> {
+        self.literal_data
+            .values()
+            .map(|record| record.data_id)
+            .chain(self.declared_callable_descriptors.values().copied())
+            .collect()
     }
 
     fn build_cached_jit_artifact(
@@ -679,7 +687,7 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
         &self,
         target: &ModuleRelocTarget,
     ) -> Option<CachedJitRelocTarget> {
-        let cached = match target {
+        match target {
             ModuleRelocTarget::User {
                 namespace: 0,
                 index,
@@ -705,8 +713,7 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 Some(CachedJitRelocTarget::KnownSymbol(symbol.to_string().into()))
             }
             ModuleRelocTarget::User { .. } => None,
-        };
-        cached
+        }
     }
 
     fn describe_cacheable_jit_reloc_target(&self, target: &ModuleRelocTarget) -> String {

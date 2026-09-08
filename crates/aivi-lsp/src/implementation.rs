@@ -8,14 +8,14 @@ use crate::{
     state::ServerState,
 };
 
-pub async fn implementation(
+pub fn implementation(
     params: GotoImplementationParams,
     state: Arc<ServerState>,
 ) -> Option<GotoImplementationResponse> {
     let uri = &params.text_document_position_params.text_document.uri;
     let lsp_pos = params.text_document_position_params.position;
 
-    let file = *state.files.get(uri)?;
+    let file = state.file(uri)?;
     let analysis = NavigationAnalysis::load(&state.db, file);
     match analysis.implementation_targets_at_lsp_position(
         &state.db,

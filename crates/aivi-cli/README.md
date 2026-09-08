@@ -1,55 +1,47 @@
 # aivi-cli
 
-## Purpose
+`aivi-cli` builds the `aivi` binary and owns end-to-end command orchestration across syntax,
+HIR, typed core, lambda IR, backend IR, Cranelift, the runtime, GTK, LSP, and MCP surfaces.
 
-The `aivi` command-line binary — the primary developer-facing entry point for the AIVI compiler
-and toolchain. `aivi-cli` wires together all compiler layers (`aivi-syntax`, `aivi-hir`,
-`aivi-core`, `aivi-lambda`, `aivi-backend`, `aivi-runtime`, `aivi-gtk`, `aivi-query`, `aivi-lsp`)
-into end-to-end subcommands and manages the application lifecycle: compilation, execution, the
-GTK event loop, and tooling servers.
+## Commands
 
-## Entry points
+| Command | Current behavior |
+| --- | --- |
+| `check` | Parse, resolve, and type-check a file, directory, or manifest entries |
+| `compile` | Emit a native object file; do not link a runnable app |
+| `build` | Package one runnable executable with a source-free embedded app bundle |
+| `run` | Compile and launch a GTK app or load a compatible frozen run image |
+| `execute` | Run an exported headless `main : Task ...` |
+| `test` | Run every `@test` value or one exact test from a requested file |
+| `lex` | Print the lossless token stream |
+| `fmt` | Print canonical formatting, read stdin, or check files |
+| `openapi-gen` | Generate AIVI declarations from OpenAPI 3 JSON/YAML |
+| `init` | Scaffold a project |
+| `lsp` | Start the stdio language server |
+| `mcp` | Start the stdio live-introspection server |
+| `manual-snippets` | Check and optionally rewrite manual AIVI blocks |
 
-```rust
-// Binary entry point
-fn main() -> ExitCode
-```
+`aivi help <command>` is the executable command contract. The user-facing artifact distinctions
+are documented in [Toolchain and Artifacts](../../manual/reference/toolchain-and-artifacts.md).
 
-Subcommands dispatched from `main`:
+## Ownership boundaries
 
-| Subcommand | Action |
-|---|---|
-| `check` | Parse + HIR-check one or more source files; emit diagnostics |
-| `compile` | Compile a source file through the full pipeline to object code |
-| `build` | Package a single runnable executable with the embedded runtime artifact |
-| `run` | Build and immediately execute the compiled application |
-| `execute` | Interpret a source file through the HIR/runtime path (no codegen) |
-| `test` | Discover and run `@test`-decorated declarations |
-| `fmt` | Format source files in-place using the canonical formatter |
-| `mcp` | Start the Model Context Protocol server (for AI tooling integration) |
-
-Internal modules:
-
-| Module | Purpose |
-|---|---|
-| `manual_snippets` | Built-in manual/help text snippets |
-| `mcp` | MCP server implementation |
-| `run_session` | Shared session logic for `run` / `execute` subcommands |
+- `main_parts/dispatch.rs` parses commands and selects entrypoints.
+- `main_parts/check_execute.rs` owns check and headless execution orchestration.
+- `main_parts/run_*.rs` own live-session preparation, versioned run artifacts, hydration, and
+  lifecycle.
+- `main_parts/build_tools.rs` owns runnable packaging and help output.
+- `manual_snippets.rs` owns repository documentation verification.
+- `mcp.rs` owns live application introspection.
+- `run_session.rs` owns the shared scheduler/GTK session boundary.
 
 ## Invariants
 
-- The GTK main loop runs on the process main thread; all widget operations are dispatched there.
-- Worker threads communicate with the scheduler exclusively via message passing; no shared mutable state crosses the thread boundary.
-- `execute` and `run` share a common session abstraction (`run_session`) to avoid duplicating GTK + scheduler setup.
-- Subcommand dispatch is argument-position based (first argument), not flag-based, to keep the CLI surface minimal.
-- `compile` stops at object emission; `build` performs the runnable source-free executable path by writing a single executable with the serialized run artifact, serialized backend metadata payloads, precompiled native-kernel sidecars, and companion assets embedded inside it.
-- Exit codes follow Unix conventions: 0 for success, non-zero for any error.
-
-## Diagnostic codes
-
-This crate emits no `DiagnosticCode` values of its own. Diagnostics from all upstream crates are
-collected and rendered to stderr by the CLI's reporting layer.
-
-## RFC reference
-
-See [`../../AIVI_RFC.md`](../../AIVI_RFC.md) §26 (CLI interface and tooling).
+- GTK creation, mutation, and event dispatch stay on the GLib main thread.
+- Worker results cross into scheduler/GTK ownership as messages.
+- `compile` stops at object emission; only `build` owns the single-file runnable path.
+- Frozen images and backend payloads use bounded versioned envelopes and fail closed with rebuild
+  guidance.
+- The CLI and LSP render the same native frontend diagnostics.
+- Exit status is zero on success and non-zero on validation, runtime, or command errors.
+- The crate forbids unsafe code.

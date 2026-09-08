@@ -11,7 +11,7 @@ use aivi_hir::{
 use aivi_query::{HirModuleResult, RootDatabase, SourceFile};
 use tower_lsp::lsp_types::{GotoDefinitionResponse, Location, Url};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct NavigationTarget {
     file: SourceFile,
     pub(crate) span: SourceSpan,
@@ -24,6 +24,10 @@ impl NavigationTarget {
 
     pub(crate) fn file(&self) -> SourceFile {
         self.file
+    }
+
+    pub(crate) fn location(&self, db: &RootDatabase) -> Option<Location> {
+        location_for_target(db, *self)
     }
 
     /// Try to find the `LspSymbol` declared at this target's span.  Used by
@@ -126,24 +130,24 @@ impl NavigationAnalysis {
         NavigationLookup::from_targets(self.implementation_targets_for_site(db, &site))
     }
 
-    /// Return all `Location`s in this file that refer to any of the given
-    /// definition `targets`.  This powers find-all-references and rename.
-    pub fn all_reference_locations_for_targets(
-        &self,
-        db: &RootDatabase,
-        targets: &[NavigationTarget],
-    ) -> Vec<Location> {
-        let mut locations = Vec::new();
+    /// Resolve every authored navigation site in this file into indexable
+    /// definition-target/location pairs.
+    ///
+    /// A site may resolve to multiple targets (for example an ambiguous class
+    /// member), so it is intentionally emitted once for each target. The
+    /// workspace index deduplicates identical locations per target.
+    pub(crate) fn reference_entries(&self, db: &RootDatabase) -> Vec<(NavigationTarget, Location)> {
+        let mut entries = Vec::new();
         for (span, site) in self.collect_all_sites() {
-            let site_targets = self.definition_targets_for_site(db, &site);
-            if site_targets.iter().any(|t| targets.contains(t))
-                && let Some(loc) = location_for_target(db, NavigationTarget::new(self.file, span))
-                && !locations.contains(&loc)
-            {
-                locations.push(loc);
+            let Some(location) = location_for_target(db, NavigationTarget::new(self.file, span))
+            else {
+                continue;
+            };
+            for target in self.definition_targets_for_site(db, &site) {
+                entries.push((target, location.clone()));
             }
         }
-        locations
+        entries
     }
 
     /// Collect every navigable (span, site) pair in this module without

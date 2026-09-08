@@ -34,8 +34,9 @@ use aivi.http (
 )
 
 type Response Text -> Bool
-func isSuccess = resp =>
-    isOk resp
+func isSuccess = resp => resp
+ ||> Ok _  -> True
+ ||> Err _ -> False
 ```
 
 ## Exporting names
@@ -121,7 +122,7 @@ type Message = {}
 Any file in the project can then use `AccountId`, `Message`, etc. without any `use` statement.
 To show the contrast — a consuming file needs no imports at all:
 
-```text
+```aivi-fragment
 // apps/ui/view.aivi — no use or hoist needed here
 type AccountId -> Text -> Widget
 func accountLabel = id label => ...
@@ -129,14 +130,16 @@ func accountLabel = id label => ...
 
 ### The stdlib prelude
 
-Each AIVI standard library module declares its own `hoist`:
+Several commonly used standard library modules declare `hoist`:
 
 ```aivi
 // stdlib/aivi/list.aivi
 hoist
 ```
 
-This means `map`, `filter`, `length`, `getOrElse`, `isOk`, and the rest of those modules are available in every AIVI project without any `use` declaration.
+Together with the compiler's ambient prelude, this makes names such as `map`, `filter`,
+`length`, `getOrElse`, and `isOk` available without an explicit import. Not every stdlib
+module hoists its exports: use the import shown on each module's reference page.
 
 ### Kind filters
 
@@ -167,17 +170,25 @@ hoist (func) hiding (foldr, foldl)
 When two hoisted modules export the same name (e.g. `map` from both `aivi.list` and `aivi.option`), the compiler picks the right one from type context:
 
 ```aivi
+type Int -> Int
+func double = value =>
+    value * 2
+
+type Text -> Text
+func greet = name =>
+    "Hello, {name}"
+
 value numbers = [1, 2, 3]
-value doubled
+value doubled : List Int = map double numbers
 value maybeName = Some "Alice"
-value greeting
+value greeting : Option Text = map greet maybeName
 ```
 
 If the type context is insufficient, the compiler reports an error and suggests using `hiding` to exclude the conflicting name from one of the hoisted modules.
 
 ### Priority order
 
-```
+```text
 local definitions > use imports > hoisted globals > ambient prelude
 ```
 

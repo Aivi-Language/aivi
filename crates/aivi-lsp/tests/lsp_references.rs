@@ -18,11 +18,19 @@ fn inline_uri(name: &str) -> Url {
 fn open_inline(name: &str, text: &str) -> (Arc<ServerState>, Url, String) {
     let state = Arc::new(ServerState::new());
     let uri = inline_uri(name);
-    open_document(&state, &uri, text.to_owned());
+    open_document(&state, &uri, 1, text.to_owned());
     (state, uri, text.to_owned())
 }
 
 fn reference_params(uri: Url, position: Position) -> ReferenceParams {
+    reference_params_with_declaration(uri, position, true)
+}
+
+fn reference_params_with_declaration(
+    uri: Url,
+    position: Position,
+    include_declaration: bool,
+) -> ReferenceParams {
     ReferenceParams {
         text_document_position: TextDocumentPositionParams {
             text_document: TextDocumentIdentifier { uri },
@@ -31,9 +39,21 @@ fn reference_params(uri: Url, position: Position) -> ReferenceParams {
         work_done_progress_params: WorkDoneProgressParams::default(),
         partial_result_params: PartialResultParams::default(),
         context: ReferenceContext {
-            include_declaration: true,
+            include_declaration,
         },
     }
+}
+
+#[test]
+fn find_refs_omits_the_declaration_when_the_client_requests_usages_only() {
+    let text = "type Int -> Int\nfunc id x =>\n    x\n";
+    let (state, uri, _) = open_inline("refs-without-declaration.aivi", text);
+    let declaration = position_of_nth(text, "x", 0);
+    let params = reference_params_with_declaration(uri, declaration, false);
+
+    let locations = references(params, state).expect("the use site should still be returned");
+    assert_eq!(locations.len(), 1);
+    assert_eq!(locations[0].range.start, position_of_nth(text, "x", 1));
 }
 
 fn position_at_byte(text: &str, byte_index: usize) -> Position {
@@ -62,8 +82,8 @@ fn position_of_nth(text: &str, needle: &str, occurrence: usize) -> Position {
     }
 }
 
-#[tokio::test]
-async fn find_refs_returns_declaration_and_usage_for_local_binding() {
+#[test]
+fn find_refs_returns_declaration_and_usage_for_local_binding() {
     // The function `id` binds `x` as a parameter and uses it in the body.
     // find-refs at the declaration site of `x` should return both:
     // 1. the binding declaration span, and
@@ -74,7 +94,7 @@ async fn find_refs_returns_declaration_and_usage_for_local_binding() {
     // Position at the first occurrence of `x` (the parameter declaration).
     let decl_pos = position_of_nth(text, "x", 0);
     let params = reference_params(uri.clone(), decl_pos);
-    let result = references(params, state).await;
+    let result = references(params, state);
 
     let locs = result.expect("find-refs should return at least one location for a used binding");
     assert!(
@@ -89,15 +109,15 @@ async fn find_refs_returns_declaration_and_usage_for_local_binding() {
     );
 }
 
-#[tokio::test]
-async fn find_refs_at_use_site_matches_declaration_site_results() {
+#[test]
+fn find_refs_at_use_site_matches_declaration_site_results() {
     // find-refs at the use site of `x` should return the same set as at the declaration.
     let text = "type Int -> Int\nfunc id x =>\n    x\n";
     let (state, uri, _) = open_inline("refs-use-site.aivi", text);
 
     let use_pos = position_of_nth(text, "x", 1);
     let params = reference_params(uri, use_pos);
-    let result = references(params, state).await;
+    let result = references(params, state);
 
     assert!(
         result.is_some(),
@@ -109,8 +129,8 @@ async fn find_refs_at_use_site_matches_declaration_site_results() {
     );
 }
 
-#[tokio::test]
-async fn find_refs_returns_none_for_out_of_range_position() {
+#[test]
+fn find_refs_returns_none_for_out_of_range_position() {
     let text = "value answer = 42\n";
     let (state, uri, _) = open_inline("refs-oor.aivi", text);
 
@@ -121,7 +141,7 @@ async fn find_refs_returns_none_for_out_of_range_position() {
             character: 0,
         },
     );
-    let result = references(params, state).await;
+    let result = references(params, state);
 
     assert!(
         result.is_none(),

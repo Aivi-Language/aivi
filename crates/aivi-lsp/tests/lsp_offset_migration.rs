@@ -17,7 +17,7 @@ fn test_uri() -> Url {
 fn test_state() -> (Arc<ServerState>, Url) {
     let state = Arc::new(ServerState::new());
     let uri = test_uri();
-    open_document(&state, &uri, "value answer = 42\n".to_owned());
+    open_document(&state, &uri, 1, "value answer = 42\n".to_owned());
     (state, uri)
 }
 
@@ -54,8 +54,8 @@ fn definition_params(uri: Url, position: Position) -> GotoDefinitionParams {
     }
 }
 
-#[tokio::test]
-async fn completion_still_works_for_valid_positions() {
+#[test]
+fn completion_still_works_for_valid_positions() {
     let (state, uri) = test_state();
 
     let response = completion(
@@ -67,14 +67,13 @@ async fn completion_still_works_for_valid_positions() {
             },
         ),
         state,
-    )
-    .await;
+    );
 
     assert!(matches!(response, Some(CompletionResponse::Array(_))));
 }
 
-#[tokio::test]
-async fn hover_still_works_for_valid_positions() {
+#[test]
+fn hover_still_works_for_valid_positions() {
     let (state, uri) = test_state();
 
     let response = hover(
@@ -86,14 +85,13 @@ async fn hover_still_works_for_valid_positions() {
             },
         ),
         state,
-    )
-    .await;
+    );
 
     assert!(response.is_some());
 }
 
-#[tokio::test]
-async fn definition_still_works_for_valid_positions() {
+#[test]
+fn definition_still_works_for_valid_positions() {
     let (state, uri) = test_state();
 
     let response = definition(
@@ -105,8 +103,7 @@ async fn definition_still_works_for_valid_positions() {
             },
         ),
         state,
-    )
-    .await;
+    );
 
     let location = response.expect("definition should resolve for a valid symbol position");
     let tower_lsp::lsp_types::GotoDefinitionResponse::Scalar(location) = location else {
@@ -115,8 +112,8 @@ async fn definition_still_works_for_valid_positions() {
     assert_eq!(location.uri, uri);
 }
 
-#[tokio::test]
-async fn completion_returns_none_for_out_of_range_columns() {
+#[test]
+fn completion_returns_none_for_out_of_range_columns() {
     let (state, uri) = test_state();
 
     let response = completion(
@@ -128,14 +125,13 @@ async fn completion_returns_none_for_out_of_range_columns() {
             },
         ),
         state,
-    )
-    .await;
+    );
 
     assert!(response.is_none());
 }
 
-#[tokio::test]
-async fn hover_returns_none_for_out_of_range_columns() {
+#[test]
+fn hover_returns_none_for_out_of_range_columns() {
     let (state, uri) = test_state();
 
     let response = hover(
@@ -147,14 +143,13 @@ async fn hover_returns_none_for_out_of_range_columns() {
             },
         ),
         state,
-    )
-    .await;
+    );
 
     assert!(response.is_none());
 }
 
-#[tokio::test]
-async fn definition_returns_none_for_out_of_range_columns() {
+#[test]
+fn definition_returns_none_for_out_of_range_columns() {
     let (state, uri) = test_state();
 
     let response = definition(
@@ -166,8 +161,7 @@ async fn definition_returns_none_for_out_of_range_columns() {
             },
         ),
         state,
-    )
-    .await;
+    );
 
     assert!(response.is_none());
 }

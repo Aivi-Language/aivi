@@ -198,12 +198,7 @@ impl CommittedValueStore<RuntimeValue> for MovingRuntimeValueStore {
                 .root_slot(handle)
                 .object
                 .expect("live moving-GC roots must point at an allocated object");
-            // TODO: write barrier — this direct in-place write bypasses any GC write barrier.
-            // A generational or incremental collector requires a write barrier here to record
-            // that the old-generation object at `object` has been overwritten with a potentially
-            // young-generation value. Without introducing barriers at every write site like this
-            // one, neither a generational nor an incremental GC can be added safely.
-            self.from_space.values[object.0 as usize] = value;
+            self.from_space.replace(object, value);
             return;
         }
 
@@ -254,6 +249,21 @@ impl RuntimeGcSpace {
         self.values
             .get(id.0 as usize)
             .expect("moving-GC object ids must reference the active space")
+    }
+
+    /// Replaces one opaque root payload at the collector's only object-mutation boundary.
+    ///
+    /// No write barrier is required by the current stop-the-world copying collector:
+    /// `RuntimeValue` cannot contain a [`RuntimeGcObjectId`], so replacement cannot introduce an
+    /// edge between GC-managed objects. If runtime values later become a graph of managed
+    /// objects, this method is the mandatory barrier insertion point and must record the old/new
+    /// generation or incremental-marking relationship before performing the write.
+    fn replace(&mut self, id: RuntimeGcObjectId, value: RuntimeValue) {
+        let object = self
+            .values
+            .get_mut(id.0 as usize)
+            .expect("moving-GC object ids must reference the active space");
+        *object = value;
     }
 }
 
@@ -343,5 +353,26 @@ mod tests {
             "recycled root slots must advance generation to invalidate stale handles"
         );
         assert_eq!(store.live_root_count(), 1);
+    }
+
+    #[test]
+    fn moving_store_replacement_preserves_the_root_and_latest_value_across_collection() {
+        let mut store = MovingRuntimeValueStore::default();
+        let mut slot = Option::<RuntimeGcHandle>::default();
+        store.replace(&mut slot, RuntimeValue::Int(1));
+        let handle = slot.expect("first value should allocate a stable root handle");
+
+        store.replace(&mut slot, RuntimeValue::Int(2));
+        assert_eq!(slot, Some(handle));
+        assert_eq!(store.allocated_value_count(), 1);
+        assert_eq!(store.get(&slot), Some(&RuntimeValue::Int(2)));
+
+        store.collect(&[&slot]);
+        assert_eq!(slot, Some(handle));
+        assert_eq!(store.get(&slot), Some(&RuntimeValue::Int(2)));
+
+        store.replace(&mut slot, RuntimeValue::Int(3));
+        assert_eq!(slot, Some(handle));
+        assert_eq!(store.get(&slot), Some(&RuntimeValue::Int(3)));
     }
 }

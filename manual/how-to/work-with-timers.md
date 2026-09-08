@@ -11,7 +11,7 @@ func countTicks = tick total =>
     total + 1
 
 @source timer.every 1sec with {
-    immediate: True,
+    immediate: False,
     coalesce: True
 }
 signal tick : Signal Unit
@@ -20,7 +20,7 @@ signal elapsed = tick
  +|> 0 countTicks
 
 signal label = elapsed
-  |> "Elapsed: {.}s"
+  |> "Ticks received: {.}"
 
 value main =
     <Window title="Timer">
@@ -35,6 +35,8 @@ export main
 - `timer.every` creates a typed stream of events.
 - `+|>` accumulates those events into state over time.
 - `coalesce: True` avoids a backlog if the UI is briefly busy.
+- Counting delivered ticks is not a precise elapsed-time measurement: coalescing can skip
+  missed ticks. Use a monotonic clock when measuring elapsed time matters.
 
 ## Common variations
 

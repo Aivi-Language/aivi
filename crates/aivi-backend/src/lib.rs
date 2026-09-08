@@ -1,4 +1,4 @@
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 
 //! First backend-facing foundations for the AIVI compiler.
 //!
@@ -19,6 +19,7 @@
 pub mod cache;
 mod codegen;
 mod engine;
+mod fingerprint;
 mod gc;
 mod ids;
 mod jit;
@@ -69,9 +70,9 @@ pub use kernel::{
     ExecutableEvidence, FloatLiteral, InlinePipeCaseArm, InlinePipeConstructor, InlinePipeExpr,
     InlinePipePattern, InlinePipePatternKind, InlinePipeRecordPatternField, InlinePipeStage,
     InlinePipeStageKind, InlinePipeTruthyFalsyBranch, IntegerLiteral, Kernel, KernelExpr,
-    KernelExprKind, KernelOrigin, KernelOriginKind, MapEntry, ParameterRole, ProjectionBase,
-    RecordExprField, SubjectRef, SuffixedIntegerLiteral, TextLiteral, TextSegment, UnaryOperator,
-    describe_expr_kind,
+    KernelExprKind, KernelOrigin, KernelOriginKind, KernelSignature, MapEntry, ParameterRole,
+    ProjectionBase, RecordExprField, SubjectRef, SuffixedIntegerLiteral, TextLiteral, TextSegment,
+    UnaryOperator, describe_expr_kind,
 };
 pub use layout::{
     AbiPassMode, Layout, LayoutKind, PrimitiveType, RecordFieldLayout, VariantLayout,

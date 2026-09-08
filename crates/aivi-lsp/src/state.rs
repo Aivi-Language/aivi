@@ -1,10 +1,18 @@
-use std::sync::RwLock;
+use std::sync::{
+    RwLock,
+    atomic::{AtomicU64, Ordering},
+};
 
 use aivi_query::{RootDatabase, SourceFile};
-use dashmap::DashMap;
+use dashmap::{DashMap, mapref::entry::Entry};
+use ropey::Rope;
 use serde::Deserialize;
-use tokio::task::JoinHandle;
+use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use tower_lsp::lsp_types::Url;
+
+use crate::analysis_pool::{AnalysisPool, CancellationToken};
+use crate::semantic_tokens::SemanticTokenHistory;
+use crate::workspace_index::WorkspaceIndex;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ServerConfig {
@@ -61,19 +69,108 @@ struct InitializationOptions {
 /// Shared state for the language server.
 pub struct ServerState {
     pub db: RootDatabase,
-    pub files: DashMap<Url, SourceFile>,
-    /// Pending debounced diagnostics tasks, keyed by document URI.
-    pub pending_diagnostics: DashMap<Url, JoinHandle<()>>,
+    pub(crate) documents: DashMap<Url, DocumentState>,
+    pub analysis_pool: AnalysisPool,
+    pub analysis_access: std::sync::Arc<AsyncRwLock<()>>,
+    pub(crate) workspace_index: WorkspaceIndex,
+    pub(crate) semantic_tokens: SemanticTokenHistory,
+    pub diagnostic_publication: AsyncMutex<()>,
+    pending_diagnostics: DashMap<Url, PendingDiagnostics>,
+    next_diagnostic_request: AtomicU64,
     config: RwLock<ServerConfig>,
+}
+
+#[derive(Clone)]
+pub(crate) struct DocumentState {
+    pub file: SourceFile,
+    pub version: i32,
+    pub text: Rope,
+}
+
+#[derive(Clone, Debug)]
+pub struct DocumentSnapshot {
+    pub file: SourceFile,
+    pub version: i32,
+    pub text: Rope,
+}
+
+struct PendingDiagnostics {
+    request_id: u64,
+    cancellation: CancellationToken,
 }
 
 impl ServerState {
     pub fn new() -> Self {
         Self {
             db: RootDatabase::new(),
-            files: DashMap::new(),
+            documents: DashMap::new(),
+            analysis_pool: AnalysisPool::default(),
+            analysis_access: std::sync::Arc::new(AsyncRwLock::new(())),
+            workspace_index: WorkspaceIndex::default(),
+            semantic_tokens: SemanticTokenHistory::default(),
+            diagnostic_publication: AsyncMutex::new(()),
             pending_diagnostics: DashMap::new(),
+            next_diagnostic_request: AtomicU64::new(0),
             config: RwLock::new(ServerConfig::default()),
+        }
+    }
+
+    pub fn contains_document(&self, uri: &Url) -> bool {
+        self.documents.contains_key(uri)
+    }
+
+    pub fn file(&self, uri: &Url) -> Option<SourceFile> {
+        self.documents.get(uri).map(|document| document.file)
+    }
+
+    pub fn document_snapshot(&self, uri: &Url) -> Option<DocumentSnapshot> {
+        self.documents.get(uri).map(|document| DocumentSnapshot {
+            file: document.file,
+            version: document.version,
+            text: document.text.clone(),
+        })
+    }
+
+    pub fn open_files(&self) -> Vec<(Url, SourceFile)> {
+        let mut files = self
+            .documents
+            .iter()
+            .map(|document| (document.key().clone(), document.file))
+            .collect::<Vec<_>>();
+        files.sort_by(|(left, _), (right, _)| left.as_str().cmp(right.as_str()));
+        files
+    }
+
+    pub fn document_is_current(&self, uri: &Url, snapshot: &DocumentSnapshot) -> bool {
+        self.documents.get(uri).is_some_and(|document| {
+            document.file == snapshot.file && document.version == snapshot.version
+        })
+    }
+
+    pub fn start_diagnostics(&self, uri: &Url) -> (u64, CancellationToken) {
+        let request_id = self.next_diagnostic_request.fetch_add(1, Ordering::Relaxed);
+        let cancellation = CancellationToken::default();
+        let pending = PendingDiagnostics {
+            request_id,
+            cancellation: cancellation.clone(),
+        };
+        if let Some(previous) = self.pending_diagnostics.insert(uri.clone(), pending) {
+            previous.cancellation.cancel();
+        }
+        (request_id, cancellation)
+    }
+
+    pub fn finish_diagnostics(&self, uri: &Url, request_id: u64) {
+        if let Entry::Occupied(entry) = self.pending_diagnostics.entry(uri.clone())
+            && entry.get().request_id == request_id
+        {
+            entry.remove();
+        }
+    }
+
+    pub fn cancel_diagnostics(&self, uri: &Url) {
+        if let Some((_, pending)) = self.pending_diagnostics.remove(uri) {
+            pending.cancellation.cancel();
         }
     }
 
@@ -100,7 +197,11 @@ impl Default for ServerState {
 
 #[cfg(test)]
 mod tests {
-    use super::ServerConfig;
+    use std::path::PathBuf;
+
+    use tower_lsp::lsp_types::Url;
+
+    use super::{ServerConfig, ServerState};
 
     #[test]
     fn initialization_options_override_defaults() {
@@ -115,5 +216,22 @@ mod tests {
         assert!(!config.inlay_hints_enabled);
         assert_eq!(config.inlay_hints_max_length, 12);
         assert!(!config.code_lens_enabled);
+    }
+
+    #[test]
+    fn newer_diagnostic_request_cancels_older_request_only() {
+        let state = ServerState::new();
+        let uri = Url::from_file_path(PathBuf::from("/state-tests/diagnostics.aivi"))
+            .expect("test URI should be valid");
+
+        let (first_id, first) = state.start_diagnostics(&uri);
+        let (second_id, second) = state.start_diagnostics(&uri);
+
+        assert!(first.is_cancelled());
+        assert!(!second.is_cancelled());
+        state.finish_diagnostics(&uri, first_id);
+        state.cancel_diagnostics(&uri);
+        assert!(second.is_cancelled());
+        state.finish_diagnostics(&uri, second_id);
     }
 }

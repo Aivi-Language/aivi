@@ -43,6 +43,11 @@ impl<T> NonEmpty<T> {
         1 + self.rest.len()
     }
 
+    /// A `NonEmpty` sequence is never empty by construction.
+    pub const fn is_empty(&self) -> bool {
+        false
+    }
+
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = &T> {
         iter::once(&self.first).chain(self.rest.iter())
     }
@@ -102,6 +107,11 @@ impl<T> AtLeastTwo<T> {
 
     pub fn len(&self) -> usize {
         2 + self.rest.len()
+    }
+
+    /// An `AtLeastTwo` sequence is never empty by construction.
+    pub const fn is_empty(&self) -> bool {
+        false
     }
 
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = &T> {

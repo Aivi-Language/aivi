@@ -92,6 +92,8 @@ func pdfAttachment = data =>
 ## `SmtpMessage`
 
 ```aivi
+use aivi.smtp (Attachment)
+
 type SmtpMessage = {
     from: Text,
     to: List Text,
@@ -173,6 +175,8 @@ func describeSmtpError = error => error
 ## `SmtpTask`
 
 ```aivi
+use aivi.smtp (SmtpError)
+
 type SmtpTask =
   Task SmtpError Unit
 ```

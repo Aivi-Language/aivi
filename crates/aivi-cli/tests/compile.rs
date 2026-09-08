@@ -776,7 +776,7 @@ fn compile_accepts_additional_compile_safe_catalog_examples() {
 }
 
 #[test]
-fn compile_reports_codegen_limits_without_emitting_fake_artifacts() {
+fn compile_emits_object_for_domain_arithmetic_in_signal_gate() {
     let input = TempFile::new(
         "compile-codegen-limit",
         "aivi",
@@ -809,7 +809,7 @@ signal slowWindows : Signal Window =
 "#,
     );
     let output_dir = TempDir::new("compile-codegen-limit");
-    let output_path = output_dir.path().join("unsupported.o");
+    let output_path = output_dir.path().join("domain-arithmetic.o");
     let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
         .arg("compile")
         .arg(input.path())
@@ -819,26 +819,24 @@ signal slowWindows : Signal Window =
         .expect("compile command should run");
 
     assert!(
-        !output.status.success(),
-        "expected compile to stop at codegen, stdout was: {}",
-        String::from_utf8_lossy(&output.stdout)
+        output.status.success(),
+        "expected domain arithmetic to compile, stderr was: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let metadata = fs::metadata(&output_path)
+        .expect("successful domain arithmetic codegen should emit an object file");
+    assert!(
+        metadata.len() > 0,
+        "domain arithmetic object file should not be empty"
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("codegen: ok"),
+        "expected successful codegen stage, got stdout: {stdout}"
     );
     assert!(
-        fs::metadata(&output_path).is_err(),
-        "compile should not emit an object file after codegen failure"
-    );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("codegen failed"),
-        "expected codegen stage heading, got stderr: {stderr}"
-    );
-    assert!(
-        stderr.contains("outside the first Cranelift slice"),
-        "expected explicit codegen limitation, got stderr: {stderr}"
-    );
-    assert!(
-        stderr.contains("compile pipeline stopped at codegen"),
-        "expected explicit stop boundary, got stderr: {stderr}"
+        stdout.contains("object file:"),
+        "expected emitted object path, got stdout: {stdout}"
     );
 }
 

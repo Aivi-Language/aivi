@@ -120,11 +120,40 @@ pub(crate) struct JitDataSlot {
 }
 
 pub(crate) struct CompiledJitKernel {
-    pub(crate) function: *const u8,
+    pub(crate) function: FuncId,
     pub(crate) caller: FunctionCaller,
     pub(crate) signal_slots: Vec<JitDataSlot>,
     pub(crate) imported_item_slots: Vec<JitDataSlot>,
-    pub(crate) _module: JITModule,
+    pub(crate) readable_data: Vec<DataId>,
+    pub(crate) module: JITModule,
+}
+
+impl CompiledJitKernel {
+    #[allow(unsafe_code)]
+    pub(crate) fn call(&self, args: &[aivi_ffi_call::AbiValue]) -> Result<aivi_ffi_call::AbiValue, aivi_ffi_call::CallError> {
+        // SAFETY: `CompiledJitKernel` is only constructed after backend IR validation, Cranelift
+        // verification/finalization, external-symbol validation, and exact declaration/signature
+        // matching. Pointer arguments are capabilities backed by the live call arena, and the
+        // owning JIT module remains borrowed for the entire invocation.
+        unsafe { self.caller.call(&self.module, self.function, args) }
+    }
+
+    pub(crate) fn readable_memory<'a>(
+        &'a self,
+        arena: &'a AllocationArena,
+    ) -> Option<ReadableMemory<'a>> {
+        let slots = self
+            .signal_slots
+            .iter()
+            .chain(self.imported_item_slots.iter())
+            .map(|slot| slot.cell.as_ref());
+        ReadableMemory::with_jit_data(
+            &self.module,
+            self.readable_data.iter().copied(),
+            arena,
+            slots,
+        )
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

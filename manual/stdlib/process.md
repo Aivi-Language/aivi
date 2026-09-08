@@ -81,6 +81,8 @@ func describeStatus = status => status
 ## `ProcessOutput`
 
 ```aivi
+use aivi.process (ProcessStatus)
+
 type ProcessOutput = {
     stdout: Text,
     stderr: Text,
@@ -126,6 +128,11 @@ value gitStatus : ProcessConfig = {
 ## `ProcessTask`
 
 ```aivi
+use aivi.process (
+    ProcessError
+    ProcessOutput
+)
+
 type ProcessTask = (Task ProcessError ProcessOutput)
 ```
 

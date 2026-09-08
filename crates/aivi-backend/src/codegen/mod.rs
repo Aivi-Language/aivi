@@ -8,13 +8,13 @@ use std::{
 use rayon::prelude::*;
 use rustc_hash::FxHasher;
 
-use aivi_ffi_call::{AbiValueKind, CallSignature, FunctionCaller};
+use aivi_ffi_call::{AbiValueKind, AllocationArena, CallSignature, FunctionCaller, ReadableMemory};
 use aivi_hir::IntrinsicValue;
 use cranelift_codegen::{
     binemit::Reloc,
     control::ControlPlane,
     ir::{
-        AbiParam, BlockArg, InstBuilder, MemFlags, Type, UserFuncName, Value,
+        AbiParam, BlockArg, InstBuilder, MemFlagsData, Type, UserFuncName, Value,
         condcodes::{FloatCC, IntCC},
         immediates::Ieee64,
         types,
@@ -43,6 +43,8 @@ use crate::{
     program::ItemKind,
     validate_program,
 };
+
+type JitSymbolTable = Arc<Mutex<BTreeMap<Box<str>, usize>>>;
 
 include!("artifacts.rs");
 include!("errors_api.rs");

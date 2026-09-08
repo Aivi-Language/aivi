@@ -660,8 +660,7 @@ fn truncate_ansi_line(text: &str, max_width: usize) -> String {
     rendered
 }
 
-fn print_run_timing_report(
-    path: &Path,
+struct RunTimingReport {
     load_duration: Duration,
     syntax_duration: Duration,
     hir_duration: Duration,
@@ -669,15 +668,18 @@ fn print_run_timing_report(
     artifact: RunArtifactPreparationMetrics,
     startup: run_session::RunStartupMetrics,
     total_to_first_present: Duration,
-) {
+}
+
+fn print_run_timing_report(path: &Path, report: RunTimingReport) {
     eprintln!("timings for `aivi run` ({}):", path.display());
     print_run_prelaunch_timing_details(
-        load_duration,
-        syntax_duration,
-        hir_duration,
-        query_cache,
-        artifact,
+        report.load_duration,
+        report.syntax_duration,
+        report.hir_duration,
+        report.query_cache,
+        report.artifact,
     );
+    let startup = report.startup;
     eprintln!("  GTK init:                  {:>8.2?}", startup.gtk_init);
     eprintln!(
         "  runtime link:              {:>8.2?}",
@@ -709,7 +711,7 @@ fn print_run_timing_report(
     );
     eprintln!(
         "  total (first present):     {:>8.2?}",
-        total_to_first_present
+        report.total_to_first_present
     );
     flush_timing_output();
 }
@@ -1116,41 +1118,26 @@ struct CompiledRuntimeFragmentUnit {
     backend: Arc<BackendProgram>,
 }
 
-struct RunFragmentCompiler<'a> {
+#[derive(Clone, Copy)]
+struct RunFragmentCompileContext<'a> {
     sources: &'a SourceDatabase,
     module: &'a HirModule,
     workspace_hirs: &'a [(&'a str, &'a HirModule)],
-    view_owner: aivi_hir::ItemId,
     sites: &'a RunMarkupExprSites,
     runtime_assembly: &'a HirRuntimeAssembly,
     runtime_backend: &'a BackendProgram,
-    runtime_backend_by_hir: &'a BTreeMap<aivi_hir::ItemId, BackendItemId>,
     query_context: Option<BackendQueryContext<'a>>,
+}
+
+struct RunFragmentCompiler<'a> {
+    context: RunFragmentCompileContext<'a>,
     compiled_fragments: BTreeMap<ExprRef, CompiledRunFragment>,
 }
 
 impl<'a> RunFragmentCompiler<'a> {
-    fn new(
-        sources: &'a SourceDatabase,
-        module: &'a HirModule,
-        workspace_hirs: &'a [(&'a str, &'a HirModule)],
-        view_owner: aivi_hir::ItemId,
-        sites: &'a RunMarkupExprSites,
-        runtime_assembly: &'a HirRuntimeAssembly,
-        runtime_backend: &'a BackendProgram,
-        runtime_backend_by_hir: &'a BTreeMap<aivi_hir::ItemId, BackendItemId>,
-        query_context: Option<BackendQueryContext<'a>>,
-    ) -> Self {
+    fn new(context: RunFragmentCompileContext<'a>) -> Self {
         Self {
-            sources,
-            module,
-            workspace_hirs,
-            view_owner,
-            sites,
-            runtime_assembly,
-            runtime_backend,
-            runtime_backend_by_hir,
-            query_context,
+            context,
             compiled_fragments: BTreeMap::new(),
         }
     }
@@ -1166,43 +1153,24 @@ impl<'a> RunFragmentCompiler<'a> {
     }
 
     fn compile_uncached(&mut self, expr: ExprRef) -> Result<CompiledRunFragment, String> {
-        compile_run_fragment_for_input(
-            self.module,
-            self.sources,
-            self.workspace_hirs,
-            self.view_owner,
-            self.sites,
-            self.runtime_assembly,
-            self.runtime_backend,
-            self.runtime_backend_by_hir,
-            self.query_context,
-            expr,
-        )
+        compile_run_fragment_for_input(&self.context, expr)
     }
 }
 
 fn compile_run_fragment_for_input(
-    module: &HirModule,
-    sources: &SourceDatabase,
-    workspace_hirs: &[(&str, &HirModule)],
-    _view_owner: aivi_hir::ItemId,
-    sites: &RunMarkupExprSites,
-    runtime_assembly: &HirRuntimeAssembly,
-    runtime_backend: &BackendProgram,
-    runtime_backend_by_hir: &BTreeMap<aivi_hir::ItemId, BackendItemId>,
-    query_context: Option<BackendQueryContext<'_>>,
+    context: &RunFragmentCompileContext<'_>,
     expr: ExprRef,
 ) -> Result<CompiledRunFragment, String> {
-    let site = sites.get(expr).ok_or_else(|| {
+    let site = context.sites.get(expr).ok_or_else(|| {
         format!(
             "run view references expression {} at {} without a collected runtime environment",
             expr.expr.as_raw(),
-            module_for_file(module, workspace_hirs, expr.origin_file)
-                .map(|origin_module| source_location(sources, origin_module.exprs()[expr.expr].span))
+            module_for_file(context.module, context.workspace_hirs, expr.origin_file)
+                .map(|origin_module| source_location(context.sources, origin_module.exprs()[expr.expr].span))
                 .unwrap_or_else(|| format!("<unknown:{}>", expr.origin_file.as_u32()))
         )
     })?;
-    let origin_module = module_for_file(module, workspace_hirs, expr.origin_file).ok_or_else(|| {
+    let origin_module = module_for_file(context.module, context.workspace_hirs, expr.origin_file).ok_or_else(|| {
         format!(
             "run view references expression {} from unknown workspace module {}",
             expr.expr.as_raw(),
@@ -1218,7 +1186,7 @@ fn compile_run_fragment_for_input(
         .map_err(|blocked| {
             format!(
                 "failed to elaborate runtime expression at {}: {}",
-                source_location(sources, site.span),
+                source_location(context.sources, site.span),
                 blocked
             )
         })?;
@@ -1230,20 +1198,20 @@ fn compile_run_fragment_for_input(
         parameters: site.parameters.clone(),
         body,
     };
-    let fragment_workspace_hirs = workspace_hirs
+    let fragment_workspace_hirs = context.workspace_hirs
         .iter()
         .copied()
         .filter(|(_, workspace_module)| workspace_module.file() != expr.origin_file)
         .collect::<Vec<_>>();
     let unit = compile_runtime_fragment_backend_unit(
-        Some(sources),
+        Some(context.sources),
         origin_module,
         &fragment_workspace_hirs,
         &fragment,
-        query_context,
+        context.query_context,
         &format!(
             "failed to compile runtime expression at {}",
-            source_location(sources, site.span)
+            source_location(context.sources, site.span)
         ),
     )?;
     let execution = Arc::new(RunFragmentExecutionUnit::new(
@@ -1259,17 +1227,12 @@ fn compile_run_fragment_for_input(
             format!(
                 "backend lowering did not preserve runtime fragment `{}` for expression at {}",
                 unit.core.entry_name,
-                source_location(sources, site.span)
+                source_location(context.sources, site.span)
             )
         })?;
     let required_signal_globals = collect_fragment_signal_global_items_for_run(
-        runtime_backend,
-        runtime_backend_by_hir,
-        runtime_assembly,
-        module,
-        workspace_hirs,
+        context,
         &fragment_workspace_hirs,
-        expr.origin_file,
         origin_module,
         &unit,
         backend,
@@ -1286,13 +1249,8 @@ fn compile_run_fragment_for_input(
 }
 
 fn collect_fragment_signal_global_items_for_run(
-    runtime_backend: &BackendProgram,
-    runtime_backend_by_hir: &BTreeMap<aivi_hir::ItemId, BackendItemId>,
-    runtime_assembly: &HirRuntimeAssembly,
-    entry_module: &HirModule,
-    workspace_hirs: &[(&str, &HirModule)],
+    context: &RunFragmentCompileContext<'_>,
     fragment_workspace_hirs: &[(&str, &HirModule)],
-    origin_file: FileId,
     module: &HirModule,
     unit: &CompiledRuntimeFragmentUnit,
     backend: &BackendProgram,
@@ -1336,13 +1294,8 @@ fn collect_fragment_signal_global_items_for_run(
         .into_iter()
         .map(|fragment_item| {
             link_fragment_signal_global_for_run(
-                runtime_backend,
-                runtime_backend_by_hir,
-                runtime_assembly,
-                entry_module,
-                workspace_hirs,
+                context,
                 fragment_workspace_hirs,
-                origin_file,
                 module,
                 unit,
                 backend,
@@ -1355,13 +1308,8 @@ fn collect_fragment_signal_global_items_for_run(
 }
 
 fn link_fragment_signal_global_for_run(
-    runtime_backend: &BackendProgram,
-    _runtime_backend_by_hir: &BTreeMap<aivi_hir::ItemId, BackendItemId>,
-    runtime_assembly: &HirRuntimeAssembly,
-    entry_module: &HirModule,
-    workspace_hirs: &[(&str, &HirModule)],
+    context: &RunFragmentCompileContext<'_>,
     fragment_workspace_hirs: &[(&str, &HirModule)],
-    _origin_file: FileId,
     module: &HirModule,
     unit: &CompiledRuntimeFragmentUnit,
     backend: &BackendProgram,
@@ -1407,9 +1355,9 @@ fn link_fragment_signal_global_for_run(
             ));
         };
         let signal = resolve_live_signal_handle(
-            runtime_assembly,
-            entry_module,
-            workspace_hirs,
+            context.runtime_assembly,
+            context.module,
+            context.workspace_hirs,
             fragment_file,
             local_item,
         )
@@ -1425,7 +1373,8 @@ fn link_fragment_signal_global_for_run(
             kind: CompiledRunGlobalKind::Signal { signal },
         }));
     }
-    let runtime_item = runtime_backend
+    let runtime_item = context
+        .runtime_backend
         .items()
         .iter()
         .find_map(|(backend_item, item)| {
@@ -1437,7 +1386,7 @@ fn link_fragment_signal_global_for_run(
                 expr.expr.as_raw(),
             )
         })?;
-    let runtime_decl = runtime_backend.items().get(runtime_item).ok_or_else(|| {
+    let runtime_decl = context.runtime_backend.items().get(runtime_item).ok_or_else(|| {
         format!(
             "live run backend is missing runtime item {} for signal `{signal_name}`",
             runtime_item,
@@ -2284,18 +2233,16 @@ fn compile_deferred_run_fragment(
         .iter()
         .map(|(name, module)| (name.as_ref(), module))
         .collect::<Vec<_>>();
-    let mut compiled = compile_run_fragment_for_input(
-        &lazy.module,
-        &lazy.sources,
-        &workspace_hirs,
-        lazy.view_owner,
-        &lazy.sites,
-        &lazy.runtime_assembly,
-        lazy.runtime_backend.as_ref(),
-        &lazy.runtime_backend_by_hir,
-        None,
-        expr,
-    )?;
+    let context = RunFragmentCompileContext {
+        sources: &lazy.sources,
+        module: &lazy.module,
+        workspace_hirs: &workspace_hirs,
+        sites: &lazy.sites,
+        runtime_assembly: &lazy.runtime_assembly,
+        runtime_backend: lazy.runtime_backend.as_ref(),
+        query_context: None,
+    };
+    let mut compiled = compile_run_fragment_for_input(&context, expr)?;
     backfill_run_fragment_opaque_variants(
         &mut compiled,
         &lazy.opaque_variant_templates,
@@ -2409,27 +2356,6 @@ fn evaluate_compiled_run_fragment<'a>(
     result
 }
 
-fn backend_items_by_hir(
-    core: &aivi_core::Module,
-    backend: &BackendProgram,
-) -> BTreeMap<aivi_hir::ItemId, BackendItemId> {
-    let core_to_hir = core
-        .items()
-        .iter()
-        .map(|(core_id, item)| (core_id, item.origin))
-        .collect::<BTreeMap<_, _>>();
-    backend
-        .items()
-        .iter()
-        .filter_map(|(backend_id, item)| {
-            core_to_hir
-                .get(&item.origin)
-                .copied()
-                .map(|hir_id| (hir_id, backend_id))
-        })
-        .collect()
-}
-
 fn evaluate_compiled_run_text<'a>(
     shared: &'a RunHydrationStaticState,
     text: &'a CompiledRunText,
@@ -2533,7 +2459,7 @@ fn match_pattern(
             let RuntimeValue::Tuple(found) = strip_signal_runtime_value(value.clone()) else {
                 return Ok(false);
             };
-            let expected = elements.iter().copied().collect::<Vec<_>>();
+            let expected = elements.to_vec();
             if expected.len() != found.len() {
                 return Ok(false);
             }

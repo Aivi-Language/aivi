@@ -2,6 +2,9 @@
 /target
 **/*.rs.bk
 
+# Crusty local index and durable ledger (back up separately)
+/.rust-repo-intelligence/
+
 # insta snapshot pending reviews
 *.pending.snap
 

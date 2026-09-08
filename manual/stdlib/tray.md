@@ -38,7 +38,11 @@ use aivi.gnome.tray (
 ## Example
 
 ```aivi
-use aivi.gnome.tray (BusNameState, TrayActionCall, TraySource)
+use aivi.gnome.tray (
+    BusNameState
+    TrayActionCall
+    TraySource
+)
 
 @source tray "io.mailfox.Tray"
 signal tray : TraySource

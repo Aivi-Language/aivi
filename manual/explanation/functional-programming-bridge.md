@@ -6,7 +6,7 @@ familiar tools are replaced by different ones:
 | Familiar habit | In AIVI |
 | --- | --- |
 | Change a variable over time | Derive a new value, or move changing state into a `signal` |
-| Write `if` / `else` chains | Pattern-match with `||>` or use `T|>` / `F|>` |
+| Write `if` / `else` chains | Pattern-match with `\|\|>` or use `T\|>` / `F\|>` |
 | Use loops for collections | Use `map`, `filter`, `reduce`, and friends |
 | Hide effects in library calls | Declare sources and let the runtime bridge them into the graph |
 

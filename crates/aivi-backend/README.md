@@ -12,16 +12,9 @@ backend-side machine-code caches and runtime execution engine.
 
 ## Entry points
 
-```rust
-// Lower a lambda Module into a backend Program
-lower_module(lambda: &lambda::Module) -> Result<Program, LoweringErrors>
-
-// Validate a backend Program
-validate_program(program: &Program) -> Result<(), ValidationErrors>
-
-// Compile a validated Program to object code
-compile_program(program: &Program) -> Result<CompiledProgram, CodegenErrors>
-```
+- [`lower_module`](src/lower.rs) lowers a lambda module to `Result<Program, LoweringErrors>`.
+- [`validate_program`](src/validate.rs) checks backend invariants.
+- [`compile_program`](src/codegen/errors_api.rs) emits `Result<CompiledProgram, CodegenErrors>`.
 
 Key runtime types used by the live execution path:
 
@@ -29,13 +22,12 @@ Key runtime types used by the live execution path:
 RuntimeValue               // Dynamically-typed runtime value (GTK/runtime path)
 BackendExecutableProgram   // Builds the active lazy-JIT execution surface
 KernelEvaluator            // Reference interpreter and fallback engine
-RuntimeTaskPlan      // Describes an async task to execute
-execute_runtime_value(kernel: &Kernel, args: &[RuntimeValue]) -> Result<RuntimeValue, EvaluationError>
+RuntimeTaskPlan             // Describes a task for the host runtime to execute
 ```
 
 ## Invariants
 
-- `lower_module` is total for valid lambda modules; failures are `LoweringErrors`, never panics.
+- Unsupported lowering is reported through `LoweringErrors`; valid lambda structure alone does not promise support for every backend layout.
 - `Layout` tables are computed once and immutable; all downstream stages read them by `LayoutId`.
 - `Kernel` calling conventions are explicit (`CallingConvention`); no implicit ABI inference occurs.
 - Cranelift codegen touches only backend-owned kernel bodies; pure core / HIR types are not re-parsed.
@@ -44,8 +36,8 @@ execute_runtime_value(kernel: &Kernel, args: &[RuntimeValue]) -> Result<RuntimeV
   `KernelEvaluator` for unsupported layouts/helpers.
 - Persistent per-kernel disk artifacts store replayable JIT machine-code bundles keyed by backend
   fingerprint plus compiler/target namespace; corrupt entries degrade to cache misses.
-- `RuntimeGcHandle` and `MovingRuntimeValueStore` are the only types that own heap-allocated values at runtime; all other `RuntimeValue` variants are inline or reference-counted.
-- GTK main thread: this crate has no GTK dependency and is safe to use from worker threads.
+- `RuntimeValue` includes owned `Box` and `Vec` payloads; not all values are inline or reference-counted. `DetachedRuntimeValue` makes owned/copy boundaries explicit, while GC handles serve collector-managed storage.
+- This crate has no GTK dependency. Worker use still has to respect the ownership and `Send`/`Sync` requirements of the particular evaluator/JIT value.
 
 ## Diagnostic codes
 

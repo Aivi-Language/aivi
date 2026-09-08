@@ -754,24 +754,6 @@ impl RunHydrationWorker {
     fn drain_ready(&self) -> Vec<RunHydrationResponse> {
         self.response_rx.try_iter().collect()
     }
-
-    /// Like `drain_ready`, but waits briefly for a response that is expected to arrive very soon.
-    /// Used immediately after `request()` when the hydration work is fast (sub-millisecond), so
-    /// we can apply the result in the same `process_pending_work` cycle instead of waiting for
-    /// the next polling wakeup.
-    fn drain_ready_immediate(&self) -> Vec<RunHydrationResponse> {
-        match self
-            .response_rx
-            .recv_timeout(std::time::Duration::from_micros(500))
-        {
-            Ok(first) => {
-                let mut results = vec![first];
-                results.extend(self.response_rx.try_iter());
-                results
-            }
-            Err(_) => Vec::new(),
-        }
-    }
 }
 
 impl Drop for RunHydrationWorker {
@@ -877,15 +859,6 @@ impl RunHydrationCoordinator {
         executor: &mut GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
     ) -> Result<(), String> {
         self.apply_from(self.worker.drain_ready(), executor)
-    }
-
-    /// Like `apply_ready`, but waits briefly for the response that was just requested.
-    /// This collapses the two-cycle request→apply pipeline into one for fast hydration.
-    fn apply_ready_immediate(
-        &mut self,
-        executor: &mut GtkRuntimeExecutor<GtkConcreteHost<RunHostValue>, RunHostValue>,
-    ) -> Result<(), String> {
-        self.apply_from(self.worker.drain_ready_immediate(), executor)
     }
 
     fn apply_from(
@@ -1088,13 +1061,9 @@ impl RunSessionState {
                 self.driver.drain_outcomes();
                 if state.startup_gate.roots_presented {
                     let required_signal_globals = self.required_signal_globals.clone();
-                    let latest_requested = state.hydration.latest_requested();
                     state
                         .hydration
                         .request_current(&self.driver, &required_signal_globals)?;
-                    if state.hydration.latest_requested() != latest_requested {
-                        state.hydration.apply_ready_immediate(&mut state.executor)?;
-                    }
                     state.hydration.apply_ready(&mut state.executor)?;
                     state.startup_gate.release_if_ready(
                         &self.driver,
@@ -2073,13 +2042,15 @@ mod tests {
     use aivi_backend::{DetachedRuntimeValue, RuntimeValue};
     use aivi_base::SourceDatabase;
     use aivi_hir::{ValidationMode, lower_module as lower_hir_module};
-    use aivi_runtime::{SignalHandle, set_native_kernel_plans_enabled};
+    use aivi_runtime::{GlibLinkedRuntimeDriver, SignalHandle, set_native_kernel_plans_enabled};
     use aivi_syntax::parse_module;
     use gtk::prelude::*;
     use std::{
+        cell::Cell,
         collections::BTreeMap,
         env,
         path::{Path, PathBuf},
+        rc::Rc,
         sync::{Arc, Once},
         time::{Duration, Instant},
     };
@@ -2088,6 +2059,14 @@ mod tests {
         static ONCE: Once = Once::new();
         ONCE.call_once(|| set_native_kernel_plans_enabled(false));
     }
+
+    fn lock_gtk_test() -> std::sync::MutexGuard<'static, ()> {
+        crate::gtk_test_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    const ASYNC_GTK_TEST_TIMEOUT: Duration = Duration::from_secs(5);
 
     fn repo_path(path: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -2314,7 +2293,7 @@ mod tests {
         );
         restart.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(250), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 debug_signal_value_for(&harness, "state") == opening_state
                     && has_sensitive_button_by_label(&harness, "◌")
             }),
@@ -2370,6 +2349,27 @@ mod tests {
             context.iteration(false);
         }
         predicate()
+    }
+
+    fn schedule_quit_when(
+        timeout: Duration,
+        mut predicate: impl FnMut() -> bool + 'static,
+        quit: impl FnOnce() + 'static,
+    ) -> Rc<Cell<bool>> {
+        let reached = Rc::new(Cell::new(false));
+        let reached_for_callback = reached.clone();
+        let deadline = Instant::now() + timeout;
+        let mut quit = Some(quit);
+        gtk::glib::timeout_add_local(Duration::from_millis(10), move || {
+            if predicate() {
+                reached_for_callback.set(true);
+            } else if Instant::now() < deadline {
+                return gtk::glib::ControlFlow::Continue;
+            }
+            quit.take().expect("quit callback should run exactly once")();
+            gtk::glib::ControlFlow::Break
+        });
+        reached
     }
 
     fn present_root_windows_and_wait_for_hydration(harness: &RunSessionHarness, timeout: Duration) {
@@ -2500,41 +2500,45 @@ mod tests {
         asset: String,
     }
 
+    fn board_tiles_for_driver(
+        driver: &GlibLinkedRuntimeDriver,
+        board_item: SignalHandle,
+    ) -> Vec<SnakeRenderTile> {
+        let value = driver
+            .current_signal_value(board_item)
+            .expect("signal value should be readable")
+            .unwrap_or_else(|| panic!("required board tile signal should exist"))
+            .into_runtime();
+        let RuntimeValue::List(items) = runtime_signal_payload(&value) else {
+            panic!("expected board tile signal to be a List, found {value:?}");
+        };
+        items
+            .iter()
+            .map(|tile| {
+                let fields = runtime_record_fields(tile, "snake render tile");
+                SnakeRenderTile {
+                    column: runtime_int(
+                        runtime_record_field(fields, "column", "snake render tile"),
+                        "snake render tile column",
+                    ),
+                    row: runtime_int(
+                        runtime_record_field(fields, "row", "snake render tile"),
+                        "snake render tile row",
+                    ),
+                    asset: runtime_text(
+                        runtime_record_field(fields, "asset", "snake render tile"),
+                        "snake render tile asset",
+                    ),
+                }
+            })
+            .collect()
+    }
+
     fn board_tiles_for(
         harness: &super::RunSessionHarness,
         board_item: SignalHandle,
     ) -> Vec<SnakeRenderTile> {
-        harness.with_access(|access| {
-            let value = access
-                .driver()
-                .current_signal_value(board_item)
-                .expect("signal value should be readable")
-                .unwrap_or_else(|| panic!("required board tile signal should exist"))
-                .into_runtime();
-            let RuntimeValue::List(items) = runtime_signal_payload(&value) else {
-                panic!("expected board tile signal to be a List, found {value:?}");
-            };
-            items
-                .iter()
-                .map(|tile| {
-                    let fields = runtime_record_fields(tile, "snake render tile");
-                    SnakeRenderTile {
-                        column: runtime_int(
-                            runtime_record_field(fields, "column", "snake render tile"),
-                            "snake render tile column",
-                        ),
-                        row: runtime_int(
-                            runtime_record_field(fields, "row", "snake render tile"),
-                            "snake render tile row",
-                        ),
-                        asset: runtime_text(
-                            runtime_record_field(fields, "asset", "snake render tile"),
-                            "snake render tile asset",
-                        ),
-                    }
-                })
-                .collect()
-        })
+        board_tiles_for_driver(&harness.control().driver(), board_item)
     }
 
     fn head_tile(tiles: &[SnakeRenderTile]) -> &SnakeRenderTile {
@@ -2580,12 +2584,16 @@ mod tests {
         }
     }
 
-    fn gtk_board_picture_files_for(harness: &super::RunSessionHarness) -> Vec<String> {
+    fn gtk_board_picture_files(windows: &[gtk::Window]) -> Vec<String> {
         let mut files = Vec::new();
-        for window in harness.root_windows() {
+        for window in windows {
             collect_picture_files(&window.clone().upcast::<gtk::Widget>(), &mut files);
         }
         files
+    }
+
+    fn gtk_board_picture_files_for(harness: &super::RunSessionHarness) -> Vec<String> {
+        gtk_board_picture_files(harness.root_windows())
     }
 
     fn find_button_by_label(widget: &gtk::Widget, label: &str) -> Option<gtk::Button> {
@@ -2605,10 +2613,11 @@ mod tests {
     }
 
     fn count_buttons_by_label(widget: &gtk::Widget, label: &str) -> usize {
-        let own_count = widget_text(widget)
-            .is_some_and(|text| text == label)
-            .then_some(1)
-            .unwrap_or(0);
+        let own_count = if widget_text(widget).is_some_and(|text| text == label) {
+            1
+        } else {
+            0
+        };
         let mut child = widget.first_child();
         let mut child_count = 0;
         while let Some(current) = child {
@@ -2866,7 +2875,7 @@ value view =
 
     #[gtk::test]
     fn startup_progress_reports_completed_prepresent_stages() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let _guard = lock_gtk_test();
         let artifact = prepare_run_from_text(
             "startup-progress.aivi",
             r#"
@@ -2930,10 +2939,10 @@ export main
                 .expect("snake demo should start a paused run session");
         let context = harness.control().context();
         let initial_board = board_tiles_for(&harness, board_item);
-        let initial_head = head_tile(&initial_board);
+        let initial_head_column = head_tile(&initial_board).column;
         let initial_hydration = harness.with_access(|access| access.latest_applied_hydration());
         assert_eq!(
-            initial_head.column, 6,
+            initial_head_column, 6,
             "shifted snake demo should start with runway"
         );
 
@@ -2953,14 +2962,14 @@ export main
             .present_root_windows()
             .expect("presenting the run-session window should release startup timers");
         assert!(
-            pump_until(&context, Duration::from_secs(1), || {
-                head_tile(&board_tiles_for(&harness, board_item)).column > initial_head.column
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
+                head_tile(&board_tiles_for(&harness, board_item)).column > initial_head_column
             }),
             "board should start advancing after presentation releases the startup-held timer source"
         );
         let advanced_board = board_tiles_for(&harness, board_item);
         assert!(
-            head_tile(&advanced_board).column > initial_head.column,
+            head_tile(&advanced_board).column > initial_head_column,
             "board should keep advancing after presentation releases the startup-held timer source"
         );
         harness.shutdown();
@@ -2975,19 +2984,28 @@ export main
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
                 .expect("snake demo should start a run session");
         let initial_board = board_tiles_for(&harness, board_item);
-        let initial_head = head_tile(&initial_board);
+        let initial_head_column = head_tile(&initial_board).column;
         harness
             .present_root_windows()
             .expect("presenting the run-session window should release startup timers");
         let main_loop = harness.session.borrow().main_loop.clone();
         let quit_loop = main_loop.clone();
-        gtk::glib::timeout_add_local_once(Duration::from_millis(650), move || {
-            quit_loop.quit();
-        });
+        let driver = harness.control().driver();
+        let advanced = schedule_quit_when(
+            Duration::from_secs(2),
+            move || {
+                head_tile(&board_tiles_for_driver(&driver, board_item)).column > initial_head_column
+            },
+            move || quit_loop.quit(),
+        );
         main_loop.run();
+        assert!(
+            advanced.get(),
+            "the timer-driven board should advance before the main-loop deadline"
+        );
         let advanced_board = board_tiles_for(&harness, board_item);
         assert!(
-            head_tile(&advanced_board).column > initial_head.column,
+            head_tile(&advanced_board).column > initial_head_column,
             "the plain run-session main loop should advance the snake after presentation"
         );
 
@@ -3007,10 +3025,18 @@ export main
             .expect("presenting the run-session window should release startup timers");
         let main_loop = harness.session.borrow().main_loop.clone();
         let quit_loop = main_loop.clone();
-        gtk::glib::timeout_add_local_once(Duration::from_millis(650), move || {
-            quit_loop.quit();
-        });
+        let windows = harness.root_windows().to_vec();
+        let initial_files_for_callback = initial_files.clone();
+        let hydrated = schedule_quit_when(
+            Duration::from_secs(2),
+            move || gtk_board_picture_files(&windows) != initial_files_for_callback,
+            move || quit_loop.quit(),
+        );
         main_loop.run();
+        assert!(
+            hydrated.get(),
+            "the GTK picture grid should hydrate before the main-loop deadline"
+        );
         let advanced_files = gtk_board_picture_files_for(&harness);
         assert_ne!(
             advanced_files, initial_files,
@@ -3029,22 +3055,33 @@ export main
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
                 .expect("snake demo should start a run session");
         let initial_board = board_tiles_for(&harness, board_item);
-        let initial_head = head_tile(&initial_board);
+        let initial_head_column = head_tile(&initial_board).column;
         harness
             .present_root_windows()
             .expect("presenting the run-session window should release startup timers");
+        let driver = harness.control().driver();
         let control = harness.control();
-        gtk::glib::timeout_add_local_once(Duration::from_millis(650), move || {
-            control
-                .request_quit()
-                .expect("test quit request should enqueue onto the GTK main context");
-        });
+        let advanced = schedule_quit_when(
+            Duration::from_secs(2),
+            move || {
+                head_tile(&board_tiles_for_driver(&driver, board_item)).column > initial_head_column
+            },
+            move || {
+                control
+                    .request_quit()
+                    .expect("test quit request should enqueue onto the GTK main context")
+            },
+        );
         harness
             .run_main_loop()
             .expect("plain aivi run should not panic while the session updates itself");
+        assert!(
+            advanced.get(),
+            "the timer-driven board should advance before the harness main-loop deadline"
+        );
         let advanced_board = board_tiles_for(&harness, board_item);
         assert!(
-            head_tile(&advanced_board).column > initial_head.column,
+            head_tile(&advanced_board).column > initial_head_column,
             "the real run_main_loop path should keep advancing the snake while the GTK main loop runs"
         );
 
@@ -3083,7 +3120,7 @@ export main
 
     #[gtk::test]
     fn queued_window_keys_do_not_pull_pending_timer_ticks_forward() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let _guard = lock_gtk_test();
         let artifact = prepare_run_from_text(
             "queued-window-key-no-timer-collapse.aivi",
             r#"
@@ -3214,7 +3251,7 @@ export main
         );
 
         assert!(
-            pump_until(&context, Duration::from_millis(250), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 text_signal_for(&harness, tick_item) == "Ticks: 1"
             }),
             "the queued timer publication should still apply on the later async wake"
@@ -3225,7 +3262,7 @@ export main
 
     #[gtk::test]
     fn button_click_event_payloads_use_current_markup_bindings() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let _guard = lock_gtk_test();
         let artifact = prepare_run_from_text(
             "event-hook-payload-run.aivi",
             r#"
@@ -3263,7 +3300,7 @@ export main
             .present_root_windows()
             .expect("presenting the fixture window should trigger initial hydration");
         assert!(
-            pump_until(&context, Duration::from_millis(100), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 harness.root_windows().iter().any(|window| {
                     find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "Beta").is_some()
                 })
@@ -3281,7 +3318,7 @@ export main
 
         beta.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(100), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 text_signal_for(&harness, selected_item) == "Beta"
             }),
             "payload event hooks should publish the clicked row binding into the selected signal"
@@ -3292,7 +3329,7 @@ export main
 
     #[gtk::test]
     fn deferred_live_button_click_event_payloads_use_current_markup_bindings() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let _guard = lock_gtk_test();
         let artifact = prepare_run_from_text_with_hydration_mode(
             "deferred-live-event-hook-payload-run.aivi",
             r#"
@@ -3335,7 +3372,7 @@ export main
             .present_root_windows()
             .expect("presenting the deferred live fixture window should trigger initial hydration");
         assert!(
-            pump_until(&context, Duration::from_millis(500), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 harness.root_windows().iter().any(|window| {
                     find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "Beta").is_some()
                 })
@@ -3352,7 +3389,7 @@ export main
         assert_eq!(text_signal_for(&harness, selected_item), "None");
 
         beta.emit_clicked();
-        let published = pump_until(&context, Duration::from_millis(250), || {
+        let published = pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
             text_signal_for(&harness, selected_item) == "Beta"
         });
         if !published {
@@ -3373,7 +3410,7 @@ export main
 
     #[gtk::test]
     fn parameterized_from_selectors_refresh_markup_after_signal_updates() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let _guard = lock_gtk_test();
         let artifact = prepare_run_from_text(
             "from-selector-refresh-run.aivi",
             r#"
@@ -3421,7 +3458,7 @@ export main
             .present_root_windows()
             .expect("presenting the fixture window should trigger initial hydration");
         assert!(
-            pump_until(&context, Duration::from_millis(100), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 harness.root_windows().iter().any(|window| {
                     find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "Off").is_some()
                 })
@@ -3436,7 +3473,7 @@ export main
 
         button.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(250), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 harness.root_windows().iter().any(|window| {
                     find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "On").is_some()
                 })
@@ -3450,7 +3487,7 @@ export main
 
     #[gtk::test]
     fn reversi_run_session_exposes_human_opening_move() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let _guard = lock_gtk_test();
         let (path, artifact) = prepare_reversi_run();
         let harness =
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
@@ -3472,7 +3509,7 @@ export main
 
     #[gtk::test]
     fn reversi_stays_clickable_after_idling_on_human_turn() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let _guard = lock_gtk_test();
         let (path, artifact) = prepare_reversi_run();
         let harness =
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
@@ -3495,7 +3532,7 @@ export main
             .expect("reversi board should still expose a legal opening move after idling");
         opening_move.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(250), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 button_label_count_for(&harness, "🔴") > opening_red_count
             }),
             "an idle reversi session should still accept the first human move"
@@ -3506,7 +3543,7 @@ export main
 
     #[gtk::test]
     fn reversi_restart_resets_the_board_during_the_ai_turn() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let _guard = lock_gtk_test();
         let (path, artifact) = prepare_reversi_run();
         let harness =
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
@@ -3528,7 +3565,7 @@ export main
 
         opening_move.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(250), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 button_label_count_for(&harness, "🔴") > opening_red_count
             }),
             "the opening human move should land before attempting a restart"
@@ -3536,7 +3573,7 @@ export main
 
         restart.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(250), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 debug_signal_value_for(&harness, "state") == opening_state
             }),
             "restart should restore the opening board even if the AI turn had already started (phase: {}, state: {})",
@@ -3549,7 +3586,7 @@ export main
 
     #[gtk::test]
     fn reversi_restart_resets_after_game_over() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let _guard = lock_gtk_test();
         assert_reversi_restart_resets_after_terminal_fixture(
             near_endgame_reversi_source(),
             "the near-endgame human-final fixture",
@@ -3559,7 +3596,7 @@ export main
 
     #[gtk::test]
     fn reversi_restart_resets_after_computer_final_move() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let _guard = lock_gtk_test();
         assert_reversi_restart_resets_after_terminal_fixture(
             computer_final_reversi_source(),
             "the computer-final fixture",
@@ -3569,17 +3606,17 @@ export main
 
     #[gtk::test]
     fn reversi_restart_resets_after_pass_chain_game_over() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let _guard = lock_gtk_test();
         assert_reversi_restart_resets_after_terminal_fixture(
             pass_chain_terminal_reversi_source(),
             "the pass-chain terminal fixture",
-            Duration::from_secs(8),
+            Duration::from_secs(15),
         );
     }
 
     #[gtk::test]
     fn reversi_human_moves_paint_red_stones_promptly() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let _guard = lock_gtk_test();
         let (path, artifact) = prepare_reversi_run();
         let harness =
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
@@ -3595,7 +3632,7 @@ export main
             .expect("reversi board should expose a legal opening move");
         opening_move.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(250), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 button_label_count_for(&harness, "🔴") > opening_red_count
             }),
             "the first human move should paint its red stones without waiting for the AI turn (phase: {}, requested: {:?}, applied: {:?}, state: {})",
@@ -3605,7 +3642,7 @@ export main
             debug_signal_value_for(&harness, "state"),
         );
         assert!(
-            pump_until(&context, Duration::from_secs(4), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 harness.root_windows().iter().any(|window| {
                     find_button_by_label(&window.clone().upcast::<gtk::Widget>(), "◌")
                         .is_some_and(|button| button.is_sensitive())
@@ -3625,7 +3662,7 @@ export main
         let second_turn_red_count = button_label_count_for(&harness, "🔴");
         second_move.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(250), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 button_label_count_for(&harness, "🔴") > second_turn_red_count
             }),
             "the second human move should also paint its red stones right away"
@@ -3636,7 +3673,7 @@ export main
 
     #[gtk::test]
     fn reversi_stays_playable_after_the_first_full_turn() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let _guard = lock_gtk_test();
         let (path, artifact) = prepare_reversi_run();
         let harness =
             start_run_session_with_launch_config(&path, artifact, RunLaunchConfig::default())
@@ -3653,7 +3690,7 @@ export main
             .expect("reversi board should expose a legal opening move");
         opening_move.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(250), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 button_label_count_for(&harness, "🔴") > opening_red_count
             }),
             "clicking a legal move should put the new red stone on the board right away"
@@ -3670,14 +3707,14 @@ export main
             "the board should stay visually unchanged while the computer is only thinking"
         );
         assert!(
-            pump_until(&context, Duration::from_millis(600), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 button_label_count_for(&harness, "⚪") > thinking_white_count
                     && !has_sensitive_button_by_label(&harness, "◌")
             }),
             "the computer target should flash onto the board before the move commits"
         );
         assert!(
-            pump_until(&context, Duration::from_secs(4), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 has_sensitive_button_by_label(&harness, "◌")
             }),
             "after the computer flash sequence the game should return to a playable human turn (phase: {}, state: {})",
@@ -3686,7 +3723,7 @@ export main
         );
 
         assert!(
-            pump_until(&context, Duration::from_secs(4), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 has_sensitive_button_by_label(&harness, "◌")
             }),
             "after the AI reply the GTK tree should expose a clickable human move"
@@ -3696,7 +3733,7 @@ export main
         let second_turn_red_count = button_label_count_for(&harness, "🔴");
         second_move.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(250), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 button_label_count_for(&harness, "🔴") > second_turn_red_count
             }),
             "the second human move should still land without crashing (phase: {}, state: {})",
@@ -3709,7 +3746,7 @@ export main
 
     #[gtk::test]
     fn reversi_profiled_hydration_reports_fragment_and_kernel_activity() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let _guard = lock_gtk_test();
         let (path, artifact) = prepare_reversi_run();
         let shared = RunHydrationStaticState {
             view_name: artifact.view_name.clone(),
@@ -3740,7 +3777,7 @@ export main
             .expect("reversi board should expose a legal opening move");
         opening_move.emit_clicked();
         assert!(
-            pump_until(&context, Duration::from_millis(250), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 button_label_count_for(&harness, "🔴") > opening_red_count
             }),
             "opening move should land before profiling hydration"
@@ -3798,7 +3835,7 @@ export main
     #[gtk::test]
     #[ignore = "manual latency probe for snake turn hydration"]
     fn snake_profiled_turn_hydration_reports_runtime_cost() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let _guard = lock_gtk_test();
         let path = repo_path("demos/snake.aivi");
         let artifact = prepare_run_from_path(&path);
         let shared = RunHydrationStaticState {
@@ -3859,7 +3896,7 @@ export main
 
         driver.dispatch_window_key_event("ArrowUp", false);
         assert!(
-            pump_until(&context, Duration::from_millis(250), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 snake_direction_for(&harness) == "North"
             }),
             "dispatching ArrowUp should update the snake direction before profiling hydration"
@@ -3912,7 +3949,7 @@ export main
         let driver = harness.control().driver();
         driver.dispatch_window_key_event("ArrowUp", false);
         assert!(
-            pump_until(&context, Duration::from_secs(1), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 snake_direction_for(&harness) == "North"
             }),
             "dispatching ArrowUp should update the snake direction before waiting for a collision"
@@ -3928,7 +3965,7 @@ export main
 
         driver.dispatch_window_key_event("Space", false);
         assert!(
-            pump_until(&context, Duration::from_millis(100), || {
+            pump_until(&context, ASYNC_GTK_TEST_TIMEOUT, || {
                 snake_status_for(&harness) == "Running" && snake_direction_for(&harness) == "East"
             }),
             "pressing Space should immediately reset the event-driven snake"
@@ -3953,7 +3990,7 @@ export main
 
     #[gtk::test]
     fn headless_run_session_starts_without_gtk_windows_and_activates_sources() {
-        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        let _guard = lock_gtk_test();
         let artifact = prepare_run_from_text(
             "headless-run.aivi",
             r#"

@@ -5,6 +5,7 @@ export type ServerStatus = "starting" | "running" | "error" | "crashed";
 export class StatusBarItem {
   private item: vscode.StatusBarItem;
   private errorCount = 0;
+  private status: ServerStatus = "starting";
 
   constructor() {
     this.item = vscode.window.createStatusBarItem(
@@ -19,14 +20,22 @@ export class StatusBarItem {
     this.item.show();
   }
 
+  setErrorCount(errorCount: number): void {
+    this.errorCount = errorCount;
+    if (this.status === "running") this.setStatus("running");
+  }
+
   setStatus(status: ServerStatus, errorCount?: number): void {
+    this.status = status;
     this.errorCount = errorCount ?? this.errorCount;
     switch (status) {
       case "starting":
+        this.item.command = "aivi.showOutputChannel";
         this.item.text = "$(loading~spin) AIVI";
         this.item.tooltip = "AIVI language server starting...";
         break;
       case "running":
+        this.item.command = "aivi.showOutputChannel";
         if (this.errorCount > 0) {
           this.item.text = `$(error) AIVI (${this.errorCount} error${this.errorCount === 1 ? "" : "s"})`;
           this.item.tooltip = `AIVI: ${this.errorCount} error(s) in workspace`;
@@ -36,6 +45,7 @@ export class StatusBarItem {
         }
         break;
       case "error":
+        this.item.command = "aivi.showOutputChannel";
         this.item.text = "$(warning) AIVI";
         this.item.tooltip = "AIVI language server encountered an error";
         break;

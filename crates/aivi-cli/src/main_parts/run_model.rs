@@ -73,7 +73,7 @@ struct RunArtifact {
 
 #[derive(Clone, Debug)]
 enum RunArtifactKind {
-    Gtk(RunGtkArtifact),
+    Gtk(Box<RunGtkArtifact>),
     HeadlessTask { task_owner: HirItemId },
 }
 
@@ -254,11 +254,9 @@ struct LazyRunHydrationContext {
     sources: SourceDatabase,
     module: HirModule,
     workspace_hirs: Vec<(Box<str>, HirModule)>,
-    view_owner: aivi_hir::ItemId,
     sites: RunMarkupExprSites,
     runtime_assembly: HirRuntimeAssembly,
     runtime_backend: Arc<BackendProgram>,
-    runtime_backend_by_hir: BTreeMap<aivi_hir::ItemId, BackendItemId>,
     fragment_cache: Arc<std::sync::Mutex<BTreeMap<ExprRef, CompiledRunFragment>>>,
     opaque_variant_templates: BTreeMap<String, Box<[OpaqueVariantTemplate]>>,
     representational_carrier_templates: BTreeMap<String, String>,

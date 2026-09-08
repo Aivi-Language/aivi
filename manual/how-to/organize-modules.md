@@ -6,7 +6,7 @@ Split code into modules when a concept deserves a stable name, a focused file, o
 
 `tasks.aivi`
 
-```text
+```aivi-fragment
 type Todo = {
     text: Text,
     done: Bool
@@ -21,7 +21,7 @@ export (Todo, isOpen)
 
 `main.aivi`
 
-```text
+```aivi-fragment
 use tasks (
     Todo
     isOpen
@@ -43,6 +43,10 @@ export openCount
 ```
 
 ## Good module boundaries
+
+Save these as two separate files in the same project directory, then run `aivi check main.aivi`.
+They are highlighted as AIVI fragments because the single-block manual checker cannot resolve
+the separate `tasks.aivi` module from the second block alone.
 
 - Put **shared types** in their own module when several files talk about the same data.
 - Put **domain logic** next to the type it belongs to.

@@ -10,13 +10,10 @@ those decisions belong to `aivi-backend`.
 
 ## Entry points
 
-```rust
-// Lower a typed-core Module into a lambda Module
-lower_module(core: &core::Module) -> Result<Module, LoweringErrors>
-
-// Validate the lowered lambda Module
-validate_module(module: &Module) -> Result<(), ValidationErrors>
-```
+- [`lower_module`](src/lower.rs) accepts a typed-core module and returns
+  `Result<Module, LoweringErrors>`.
+- [`validate_module`](src/validate.rs) checks the lowered lambda module and returns
+  `Result<(), ValidationErrors>`.
 
 Key types exposed for downstream consumers:
 
@@ -34,8 +31,8 @@ are re-exported directly from `aivi-core` so callers need not depend on both cra
 ## Invariants
 
 - Every `Closure` has exactly one `ClosureKind`; the kind is immutable after construction.
-- `CaptureId` and `ClosureId` are scoped to the owning `Module`; cross-module use is undefined.
-- `lower_module` is total for valid core modules; errors indicate an internal invariant violation.
+- Typed identities belong to their owning lowered structures; cross-module reuse is invalid.
+- `lower_module` validates supported core structure and reports failures as `LoweringErrors`; validation is not a promise of arbitrary backend code-generation support.
 - Captured environments are analyzed once during lowering; the result is carried as stable lambda metadata.
 - `validate_module` checks that every `Capture` references a valid binding and every `ClosureId` resolves within the module.
 - This crate re-exports core types verbatim; there is no additional type elaboration at this layer.

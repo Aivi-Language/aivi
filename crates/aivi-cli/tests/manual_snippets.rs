@@ -182,3 +182,104 @@ fn manual_snippets_does_not_panic_on_imported_record_constructor_gaps() {
         "expected unresolved imported-record diagnostics instead of a panic"
     );
 }
+
+#[test]
+fn manual_snippets_checks_named_groups_as_one_complete_module() {
+    let temp = TempDir::new("manual-snippets-group");
+    let manual_root = temp.path().join("manual");
+    temp.write(
+        "manual/tutorials/example.md",
+        concat!(
+            "# Example\n\n",
+            "```aivi group=model\n",
+            "type Answer = Answer Int\n",
+            "```\n\n",
+            "```aivi group=model\n",
+            "value answer : Answer = Answer 42\n",
+            "```\n",
+        ),
+    );
+    let todo_path = temp.path().join("todo.json");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("manual-snippets")
+        .arg("--root")
+        .arg(&manual_root)
+        .arg("--todo")
+        .arg(&todo_path)
+        .output()
+        .expect("manual-snippets command should run");
+
+    assert!(
+        output.status.success(),
+        "a grouped tutorial should check as one module, stdout was: {}, stderr was: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let report: Value = serde_json::from_str(
+        &fs::read_to_string(todo_path).expect("todo report should be readable"),
+    )
+    .expect("todo report should be valid json");
+    assert_eq!(report["scanned_blocks"], Value::from(2));
+    assert_eq!(report["unresolved_fragments"], Value::from(0));
+}
+
+#[test]
+fn manual_snippets_reports_group_diagnostics_once() {
+    let temp = TempDir::new("manual-snippets-group-diagnostics");
+    let manual_root = temp.path().join("manual");
+    temp.write(
+        "manual/tutorials/example.md",
+        concat!(
+            "# Example\n\n",
+            "```aivi group=model\n",
+            "type Answer = Answer Int\n",
+            "```\n\n",
+            "```aivi group=model\n",
+            "value answer : Answer = Missing 42\n",
+            "```\n",
+        ),
+    );
+    let todo_path = temp.path().join("todo.json");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("manual-snippets")
+        .arg("--root")
+        .arg(&manual_root)
+        .arg("--todo")
+        .arg(&todo_path)
+        .output()
+        .expect("manual-snippets command should run");
+
+    assert!(!output.status.success());
+    let report: Value = serde_json::from_str(
+        &fs::read_to_string(todo_path).expect("todo report should be readable"),
+    )
+    .expect("todo report should be valid json");
+    assert_eq!(report["unresolved_fragments"], Value::from(1));
+    assert_eq!(report["entries"][0]["fence_info"], "aivi group=model");
+}
+
+#[test]
+fn manual_snippets_rejects_ambiguous_fence_metadata() {
+    let temp = TempDir::new("manual-snippets-group-metadata");
+    let manual_root = temp.path().join("manual");
+    temp.write(
+        "manual/tutorials/example.md",
+        "# Example\n\n```aivi group=one group=two\nvalue answer = 42\n```\n",
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("manual-snippets")
+        .arg("--root")
+        .arg(&manual_root)
+        .output()
+        .expect("manual-snippets command should run");
+
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("at most one `group=<name>` attribute"),
+        "unexpected stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}

@@ -105,6 +105,9 @@ value fromExisting : Result MatrixError (Matrix Text) =
 
 ## Dimensions and access
 
+`indices : Int -> List Int` is also exported: it produces `0` through `n - 1`, or
+an empty list when `n <= 0`. It is a dimension helper, distinct from `coords` on a matrix.
+
 `width` and `height` report the current shape. `row` and `at` return `None` when the requested
 coordinate is out of bounds.
 

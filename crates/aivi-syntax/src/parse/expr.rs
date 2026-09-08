@@ -162,10 +162,7 @@ impl<'a> Parser<'a> {
         end: usize,
         stop: ExprStop,
     ) -> Expr {
-        loop {
-            let Some(index) = self.peek_nontrivia(*cursor, end) else {
-                break;
-            };
+        while let Some(index) = self.peek_nontrivia(*cursor, end) {
             if self.expr_should_stop(index, stop)
                 || self.tokens[index].kind() != TokenKind::PatchApply
             {
@@ -593,10 +590,7 @@ impl<'a> Parser<'a> {
     ) -> Option<Expr> {
         let mut left = self.parse_application_expr(cursor, end, stop)?;
 
-        loop {
-            let Some(index) = self.peek_nontrivia(*cursor, end) else {
-                break;
-            };
+        while let Some(index) = self.peek_nontrivia(*cursor, end) {
             if self.expr_should_stop(index, stop) {
                 break;
             }
@@ -667,10 +661,7 @@ impl<'a> Parser<'a> {
         stop: ExprStop,
     ) -> Option<Expr> {
         let mut expr = self.parse_prefix_expr(cursor, end, stop)?;
-        loop {
-            let Some(index) = self.peek_nontrivia(*cursor, end) else {
-                break;
-            };
+        while let Some(index) = self.peek_nontrivia(*cursor, end) {
             if self.expr_should_stop(index, stop) || self.tokens[index].kind() != TokenKind::Dot {
                 break;
             }
@@ -1474,10 +1465,24 @@ impl<'a> Parser<'a> {
                 value,
                 span: SourceSpan::new(self.source.id(), Span::new(field_start, field_end)),
             });
-            if self.consume_kind(cursor, end, TokenKind::Comma).is_none() {
-                let _ = self.consume_kind(cursor, end, TokenKind::RBrace);
+            if self.consume_kind(cursor, end, TokenKind::Comma).is_some() {
+                continue;
+            }
+            if self.consume_kind(cursor, end, TokenKind::RBrace).is_some() {
                 break;
             }
+            if let Some(next_field) = self.peek_nontrivia(*cursor, end) {
+                self.diagnostics.push(
+                    Diagnostic::error("record fields must be separated by commas")
+                        .with_code(MISSING_RECORD_FIELD_SEPARATOR)
+                        .with_primary_label(
+                            self.source_span_of_token(next_field),
+                            "add `,` before this record field",
+                        ),
+                );
+                continue;
+            }
+            break;
         }
 
         Some(RecordExpr {

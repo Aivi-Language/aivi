@@ -830,7 +830,11 @@ value missingGreeting : Option Text = "hello"
     assert!(maybe_positive_artifact.code_size > 0);
     assert!(maybe_positive_artifact.clif.contains("brif"));
     assert!(maybe_positive_artifact.clif.contains("() -> i128"));
-    assert!(maybe_positive_artifact.clif.contains("ishl_imm"));
+    assert!(
+        maybe_positive_artifact.clif.contains("ishl"),
+        "option packing should shift the payload into its i128 carrier; CLIF was:\n{}",
+        maybe_positive_artifact.clif
+    );
 
     let missing_number_body = backend.items()[find_item(&backend, "missingNumber")]
         .body

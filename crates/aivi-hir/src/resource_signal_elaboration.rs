@@ -85,14 +85,12 @@ fn collect_resource_signal_candidate(
     let existing_trigger_expr =
         source_option_expr(module, source, trigger_option_name).map(|(expr, _)| expr);
     let existing_trigger_signal = match existing_trigger_expr {
-        Some(expr) => {
-            let signal =
-                resolve_resource_option_signal_binding(module, provider, trigger_option_name, expr);
-            if signal.is_none() {
-                return None;
-            }
-            signal
-        }
+        Some(expr) => Some(resolve_resource_option_signal_binding(
+            module,
+            provider,
+            trigger_option_name,
+            expr,
+        )?),
         None => None,
     };
     let active_when_expr = source_option_expr(module, source, "activeWhen").map(|(expr, _)| expr);

@@ -51,8 +51,6 @@ currently exported surface for `aivi.math`.
 
 Returns the absolute value of an integer.
 
-```aivi
-```
 
 ```aivi
 use aivi.math (abs)
@@ -68,8 +66,6 @@ func distance = a b =>
 
 Negates an integer: `negate n` is equivalent to `0 - n`.
 
-```aivi
-```
 
 ```aivi
 use aivi.math (negate)
@@ -85,8 +81,6 @@ func flipSign = n =>
 
 Returns the sign of an integer as `-1`, `0`, or `1`.
 
-```aivi
-```
 
 ```aivi
 use aivi.math (sign)
@@ -102,8 +96,6 @@ func direction = velocity =>
 
 Returns `True` if the integer is divisible by 2.
 
-```aivi
-```
 
 ```aivi
 use aivi.list (filter)
@@ -121,8 +113,6 @@ func evensOnly = numbers =>
 
 Returns `True` if the integer is not divisible by 2.
 
-```aivi
-```
 
 ```aivi
 use aivi.list (filter)
@@ -140,8 +130,6 @@ func oddsOnly = numbers =>
 
 Multiplies an integer by itself.
 
-```aivi
-```
 
 ```aivi
 use aivi.math (square)
@@ -157,8 +145,6 @@ func areaOfSquare = side =>
 
 Constrains a value to lie within `[low, high]`. If `n < low`, returns `low`; if `n > high`, returns `high`; otherwise returns `n`.
 
-```aivi
-```
 
 ```aivi
 use aivi.math (clamp)
@@ -174,8 +160,6 @@ func normalizedVolume = raw =>
 
 Returns `True` if `n` is within the inclusive range `[low, high]`.
 
-```aivi
-```
 
 ```aivi
 use aivi.math (between)
@@ -191,8 +175,6 @@ func isValidAge = age =>
 
 Returns `True` if `divisor` evenly divides `n` (i.e. `n % divisor == 0`).
 
-```aivi
-```
 
 ```aivi
 use aivi.math (divides)

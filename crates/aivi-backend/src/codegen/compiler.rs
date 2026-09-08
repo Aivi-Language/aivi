@@ -18,6 +18,20 @@ struct ResolvedSignalCallable {
     result_layout: LayoutId,
 }
 
+struct RepackShape<'a, Field> {
+    source_layout: LayoutId,
+    source_fields: &'a [Field],
+    target_layout: LayoutId,
+    target_fields: &'a [Field],
+}
+
+#[derive(Clone, Copy)]
+struct InlinePipeStageLocation {
+    kernel: KernelId,
+    pipe_expr: KernelExprId,
+    stage_index: usize,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RuntimeTextInterpolationSupport {
     Text,
@@ -31,7 +45,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
     fn with_module(
         program: &'a Program,
         module: M,
-        jit_symbols: Option<Arc<Mutex<BTreeMap<Box<str>, usize>>>>,
+        jit_symbols: Option<JitSymbolTable>,
     ) -> Self {
         Self {
             program,
@@ -283,16 +297,16 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         work.push(pipe.head);
                         let mut current_layout = kernel.exprs()[pipe.head].layout;
                         for (stage_index, stage) in pipe.stages.iter().enumerate() {
-                            if !self.layout_is_signal_of(current_layout, stage.input_layout) {
-                                if let Err(error) = self.require_layout_match(
+                            if !self.layout_is_signal_of(current_layout, stage.input_layout)
+                                && let Err(error) = self.require_layout_match(
                                     kernel_id,
                                     expr_id,
                                     stage.input_layout,
                                     current_layout,
                                     &format!("inline-pipe stage {stage_index} input"),
-                                ) {
-                                    errors.push(error);
-                                }
+                                )
+                            {
+                                errors.push(error);
                             }
                             match &stage.kind {
                                 crate::InlinePipeStageKind::Transform { expr, .. } => {
@@ -782,6 +796,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         ctx.func.signature = signature;
         ctx.func.name = UserFuncName::user(0, func_id.as_u32());
         let mut function_builder_ctx = std::mem::take(&mut self.function_builder_ctx);
+        let frontend_config = self.module.isa().frontend_config();
 
         {
             let mut builder = FunctionBuilder::new(&mut ctx.func, &mut function_builder_ctx);
@@ -792,7 +807,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             let value = self.lower_kernel_body(kernel_id, kernel, &mut builder, entry)?;
             builder.ins().return_(&[value]);
             builder.seal_all_blocks();
-            builder.finalize();
+            builder.finalize(frontend_config);
         }
         self.function_builder_ctx = function_builder_ctx;
 
@@ -979,32 +994,27 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             pattern: &crate::InlinePipePattern,
             callback: &mut impl FnMut(crate::InlineSubjectId),
         ) {
-            match &pattern.kind {
-                crate::InlinePipePatternKind::Binding { subject } => callback(*subject),
-                crate::InlinePipePatternKind::Constructor { arguments, .. } => {
-                    for p in arguments {
-                        collect_pattern_binding_subjects(p, callback);
+            let mut work = vec![pattern];
+            while let Some(pattern) = work.pop() {
+                match &pattern.kind {
+                    crate::InlinePipePatternKind::Binding { subject } => callback(*subject),
+                    crate::InlinePipePatternKind::Constructor { arguments, .. }
+                    | crate::InlinePipePatternKind::Tuple(arguments) => {
+                        work.extend(arguments.iter().rev());
                     }
+                    crate::InlinePipePatternKind::Record(fields) => {
+                        work.extend(fields.iter().rev().map(|field| &field.pattern));
+                    }
+                    crate::InlinePipePatternKind::List { elements, rest } => {
+                        if let Some(rest) = rest {
+                            work.push(rest);
+                        }
+                        work.extend(elements.iter().rev());
+                    }
+                    crate::InlinePipePatternKind::Wildcard
+                    | crate::InlinePipePatternKind::Integer(_)
+                    | crate::InlinePipePatternKind::Text(_) => {}
                 }
-                crate::InlinePipePatternKind::Tuple(pats) => {
-                    for p in pats {
-                        collect_pattern_binding_subjects(p, callback);
-                    }
-                }
-                crate::InlinePipePatternKind::Record(fields) => {
-                    for f in fields {
-                        collect_pattern_binding_subjects(&f.pattern, callback);
-                    }
-                }
-                crate::InlinePipePatternKind::List { elements, rest } => {
-                    for p in elements {
-                        collect_pattern_binding_subjects(p, callback);
-                    }
-                    if let Some(r) = rest {
-                        collect_pattern_binding_subjects(r, callback);
-                    }
-                }
-                _ => {}
             }
         }
 
@@ -1971,7 +1981,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     builder.inst_results(call)[0]
                                 }
                                 _ => self.lower_native_equality_shape(
-                                    kernel_id, expr_id, &shape, lhs, rhs, builder,
+                                    kernel_id, &shape, lhs, rhs, builder,
                                 )?,
                             }
                         }
@@ -2016,7 +2026,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 | NativeEqualityShape::InlineScalarOption(_)
                                 | NativeEqualityShape::NicheOption { .. } => {
                                     let equal = self.lower_native_equality_shape(
-                                        kernel_id, expr_id, &shape, lhs, rhs, builder,
+                                        kernel_id, &shape, lhs, rhs, builder,
                                     )?;
                                     let one = builder.ins().iconst(types::I8, 1);
                                     builder.ins().bxor(equal, one)
@@ -2168,7 +2178,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             builder.append_block_param(merge_block, result_abi.ty);
 
                             let first_arm_body = arms[0].body;
-                            let first_arm_pattern = arms[0].pattern.clone();
+                            let first_arm_pattern = &arms[0].pattern;
                             let arm_body_block = builder.create_block();
                             let next_block = if arms.len() > 1 {
                                 Some(builder.create_block())
@@ -2180,9 +2190,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             let cond = self.emit_pattern_test(
                                 kernel_id,
                                 current,
-                                &first_arm_pattern,
+                                first_arm_pattern,
                                 stage.input_layout,
-                                &mut inline_subjects,
                                 builder,
                             )?;
                             builder
@@ -2198,7 +2207,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             self.apply_pattern_bindings(
                                 kernel_id,
                                 current,
-                                &first_arm_pattern,
+                                first_arm_pattern,
                                 stage.input_layout,
                                 &mut inline_subjects,
                                 builder,
@@ -2233,9 +2242,11 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             let truthy_payload_subject = truthy.payload_subject;
                             let truthy_body = truthy.body;
                             let cond = self.emit_truthy_falsy_condition(
-                                kernel_id,
-                                pipe_expr,
-                                stage_index,
+                                InlinePipeStageLocation {
+                                    kernel: kernel_id,
+                                    pipe_expr,
+                                    stage_index,
+                                },
                                 current,
                                 stage.input_layout,
                                 &truthy_constructor,
@@ -2506,12 +2517,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
 
                     // Store mapped element at result_array[counter * stride]
                     let counter = builder.block_params(loop_header)[0];
-                    let offset = builder.ins().imul_imm(counter, result_stride as i64);
+                    let offset = builder.ins().imul_imm_s(counter, result_stride as i64);
                     let dest = builder.ins().iadd(result_array_ptr, offset);
-                    builder.ins().store(MemFlags::new(), map_result, dest, 0);
+                    builder.ins().store(MemFlagsData::new(), map_result, dest, 0);
 
                     // Increment counter and jump back to loop header
-                    let next_counter = builder.ins().iadd_imm(counter, 1);
+                    let next_counter = builder.ins().iadd_imm_s(counter, 1);
                     builder
                         .ins()
                         .jump(loop_header, &[BlockArg::Value(next_counter)]);
@@ -2647,7 +2658,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     for (i, seg_val) in seg_values.iter().enumerate() {
                         builder
                             .ins()
-                            .store(MemFlags::new(), *seg_val, array_ptr, (i * 8) as i32);
+                            .store(MemFlagsData::new(), *seg_val, array_ptr, (i * 8) as i32);
                     }
 
                     let concat_func = self.declare_text_concat_func(kernel_id, builder)?;
@@ -2706,7 +2717,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     let array_ptr = builder.ins().stack_addr(self.pointer_type(), array_slot, 0);
                     for (i, elem_val) in element_values.iter().enumerate() {
                         builder.ins().store(
-                            MemFlags::new(),
+                            MemFlagsData::new(),
                             *elem_val,
                             array_ptr,
                             (i as u32 * stride) as i32,
@@ -2752,7 +2763,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     let array_ptr = builder.ins().stack_addr(self.pointer_type(), array_slot, 0);
                     for (i, elem_val) in element_values.iter().enumerate() {
                         builder.ins().store(
-                            MemFlags::new(),
+                            MemFlagsData::new(),
                             *elem_val,
                             array_ptr,
                             (i as u32 * stride) as i32,
@@ -2805,13 +2816,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     for i in 0..count {
                         let base_offset = (i as u32) * entry_stride;
                         builder.ins().store(
-                            MemFlags::new(),
+                            MemFlagsData::new(),
                             kv_values[i * 2],
                             array_ptr,
                             base_offset as i32,
                         );
                         builder.ins().store(
-                            MemFlags::new(),
+                            MemFlagsData::new(),
                             kv_values[i * 2 + 1],
                             array_ptr,
                             (base_offset + key_stride) as i32,
@@ -2926,7 +2937,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         .ins()
                         .jump(merge_block, &[BlockArg::Value(arm_result)]);
 
-                    let (arms_len, next_arm_body, next_arm_pattern, result_memo, next_stage_count) = {
+                    let (arms_len, next_arm_body, result_memo, next_stage_count) = {
                         let pipe_expr_ref = &kernel.exprs()[pipe_expr];
                         let KernelExprKind::Pipe(pipe) = &pipe_expr_ref.kind else {
                             unreachable!()
@@ -2937,15 +2948,14 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         };
                         let arms_len = arms.len();
                         let next_arm = arm_index + 1;
-                        let (body, pattern) = if next_arm < arms_len {
-                            (arms[next_arm].body, arms[next_arm].pattern.clone())
+                        let body = if next_arm < arms_len {
+                            arms[next_arm].body
                         } else {
-                            (arms[0].body, arms[0].pattern.clone())
+                            arms[0].body
                         };
                         (
                             arms_len,
                             body,
-                            pattern,
                             stage.result_memo,
                             pipe.stages.len(),
                         )
@@ -2971,13 +2981,24 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             };
                             pipe.stages[stage_index].input_layout
                         };
+                        let next_arm_pattern = {
+                            let pipe_expr_ref = &kernel.exprs()[pipe_expr];
+                            let KernelExprKind::Pipe(pipe) = &pipe_expr_ref.kind else {
+                                unreachable!()
+                            };
+                            let crate::InlinePipeStageKind::Case { arms } =
+                                &pipe.stages[stage_index].kind
+                            else {
+                                unreachable!()
+                            };
+                            &arms[next_arm_index].pattern
+                        };
 
                         let cond = self.emit_pattern_test(
                             kernel_id,
                             current,
-                            &next_arm_pattern,
+                            next_arm_pattern,
                             input_layout,
-                            &mut inline_subjects,
                             builder,
                         )?;
                         // When there is no newer next arm, branch to a trap block (exhaustive match)
@@ -2997,7 +3018,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         self.apply_pattern_bindings(
                             kernel_id,
                             current,
-                            &next_arm_pattern,
+                            next_arm_pattern,
                             input_layout,
                             &mut inline_subjects,
                             builder,
@@ -3452,7 +3473,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let data_id = self.declare_signal_item_slot(item, slot_layout)?;
         let global = self.module.declare_data_in_func(data_id, builder.func);
         let slot = builder.ins().symbol_value(self.pointer_type(), global);
-        Ok(builder.ins().load(abi.ty, MemFlags::new(), slot, 0))
+        Ok(builder.ins().load(abi.ty, MemFlagsData::new(), slot, 0))
     }
 
     fn declare_imported_item_slot(
@@ -3494,7 +3515,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let data_id = self.declare_imported_item_slot(item, expr_layout)?;
         let global = self.module.declare_data_in_func(data_id, builder.func);
         let slot = builder.ins().symbol_value(self.pointer_type(), global);
-        Ok(builder.ins().load(abi.ty, MemFlags::new(), slot, 0))
+        Ok(builder.ins().load(abi.ty, MemFlagsData::new(), slot, 0))
     }
 
     fn declare_callable_item_descriptor(
@@ -3718,11 +3739,10 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     return arguments.first().copied();
                 }
                 LayoutKind::Tuple(fields) if count == 0 => {
-                    let Some(next) =
-                        fields.iter().copied().find(|field| self.is_list_like_layout(*field))
-                    else {
-                        return None;
-                    };
+                    let next = fields
+                        .iter()
+                        .copied()
+                        .find(|field| self.is_list_like_layout(*field))?;
                     layout = next;
                 }
                 _ => return None,
@@ -4145,9 +4165,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 if let Some(item_id) = self
                     .program
                     .domain_member_item(handle.domain, handle.member_index)
+                    && let Some(item) = self.program.items().get(item_id)
+                    && let Some(body) = item.body
                 {
-                    if let Some(item) = self.program.items().get(item_id) {
-                        if let Some(body) = item.body {
                             let kernel = &self.program.kernels()[kernel_id];
                             let result_layout = kernel.exprs()[expr_id].layout;
                             let body_kernel = &self.program.kernels()[body];
@@ -4193,8 +4213,6 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     result: (call_kernel.result_layout, result_layout),
                                 });
                             }
-                        }
-                    }
                 }
                 self.require_compilable_domain_member_call(
                     kernel_id, expr_id, callee, handle, arguments,
@@ -5507,8 +5525,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         operator: BinaryOperator,
         builder: &mut FunctionBuilder<'_>,
     ) -> Result<Value, CodegenError> {
-        let lhs = builder.ins().load(types::I64, MemFlags::new(), lhs_ptr, 0);
-        let rhs = builder.ins().load(types::I64, MemFlags::new(), rhs_ptr, 0);
+        let lhs = builder.ins().load(types::I64, MemFlagsData::new(), lhs_ptr, 0);
+        let rhs = builder.ins().load(types::I64, MemFlagsData::new(), rhs_ptr, 0);
         let result = match operator {
             BinaryOperator::Add => builder.ins().iadd(lhs, rhs),
             BinaryOperator::Subtract => builder.ins().isub(lhs, rhs),
@@ -5527,8 +5545,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         cc: IntCC,
         builder: &mut FunctionBuilder<'_>,
     ) -> Value {
-        let lhs = builder.ins().load(types::I64, MemFlags::new(), lhs_ptr, 0);
-        let rhs = builder.ins().load(types::I64, MemFlags::new(), rhs_ptr, 0);
+        let lhs = builder.ins().load(types::I64, MemFlagsData::new(), lhs_ptr, 0);
+        let rhs = builder.ins().load(types::I64, MemFlagsData::new(), rhs_ptr, 0);
         builder.ins().icmp(cc, lhs, rhs)
     }
 
@@ -5583,7 +5601,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
     ) -> Result<Value, CodegenError> {
         let base =
             self.allocate_static_arena_bytes(kernel_id, size.max(1), align.max(1), builder)?;
-        builder.ins().store(MemFlags::new(), value, base, 0);
+        builder.ins().store(MemFlagsData::new(), value, base, 0);
         Ok(base)
     }
 
@@ -5624,7 +5642,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         for (offset, value) in offsets.into_iter().zip(field_values.iter()) {
             builder
                 .ins()
-                .store(MemFlags::new(), *value, base, offset as i32);
+                .store(MemFlagsData::new(), *value, base, offset as i32);
         }
         Ok(base)
     }
@@ -5645,9 +5663,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let total_size = (8 + payload_size).max(8);
         let base = self.allocate_static_arena_bytes(kernel_id, total_size, 8, builder)?;
         let tag_value = builder.ins().iconst(types::I64, tag);
-        builder.ins().store(MemFlags::new(), tag_value, base, 0);
+        builder.ins().store(MemFlagsData::new(), tag_value, base, 0);
         if let Some((payload, _)) = payload {
-            builder.ins().store(MemFlags::new(), payload, base, 8);
+            builder.ins().store(MemFlagsData::new(), payload, base, 8);
         }
         Ok(base)
     }
@@ -5667,9 +5685,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         };
         let total_size = (8 + payload_size).max(8);
         let base = self.allocate_static_arena_bytes(kernel_id, total_size, 8, builder)?;
-        builder.ins().store(MemFlags::new(), tag, base, 0);
+        builder.ins().store(MemFlagsData::new(), tag, base, 0);
         if let Some((payload, _)) = payload {
-            builder.ins().store(MemFlags::new(), payload, base, 8);
+            builder.ins().store(MemFlagsData::new(), payload, base, 8);
         }
         Ok(base)
     }
@@ -5752,10 +5770,31 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 builder,
             ),
             (LayoutKind::Tuple(from_fields), LayoutKind::Tuple(to_fields)) => {
-                self.repack_tuple_value(kernel_id, value, from, from_fields, to, to_fields, builder)
+                self.repack_tuple_value(
+                    kernel_id,
+                    value,
+                    RepackShape {
+                        source_layout: from,
+                        source_fields: from_fields,
+                        target_layout: to,
+                        target_fields: to_fields,
+                    },
+                    builder,
+                )
             }
-            (LayoutKind::Record(from_fields), LayoutKind::Record(to_fields)) => self
-                .repack_record_value(kernel_id, value, from, from_fields, to, to_fields, builder),
+            (LayoutKind::Record(from_fields), LayoutKind::Record(to_fields)) => {
+                self.repack_record_value(
+                    kernel_id,
+                    value,
+                    RepackShape {
+                        source_layout: from,
+                        source_fields: from_fields,
+                        target_layout: to,
+                        target_fields: to_fields,
+                    },
+                    builder,
+                )
+            }
             (
                 LayoutKind::Result {
                     error: from_error,
@@ -5850,7 +5889,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 )),
             };
         let ptr = self.allocate_static_arena_bytes(kernel_id, abi.size, abi.align, builder)?;
-        builder.ins().store(MemFlags::new(), value, ptr, 0);
+        builder.ins().store(MemFlagsData::new(), value, ptr, 0);
         Ok(ptr)
     }
 
@@ -5866,7 +5905,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             return Ok(value);
         }
         let abi = self.field_abi_shape(kernel_id, to, "erased domain target")?;
-        Ok(builder.ins().load(abi.ty, MemFlags::new(), value, 0))
+        Ok(builder.ins().load(abi.ty, MemFlagsData::new(), value, 0))
     }
 
     fn repack_sequence_value(
@@ -5892,7 +5931,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let stride = builder
             .ins()
             .iconst(types::I64, i64::from(to_abi.size.max(1)));
-        let alloc_count = builder.ins().iadd_imm(len, 1);
+        let alloc_count = builder.ins().iadd_imm_s(len, 1);
         let alloc_size = builder.ins().imul(alloc_count, stride);
         let buffer = self.allocate_arena_bytes(kernel_id, alloc_size, to_abi.align, builder)?;
 
@@ -5915,7 +5954,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let cell_ptr = builder.inst_results(get_call)[0];
         let source = builder
             .ins()
-            .load(from_abi.ty, MemFlags::new(), cell_ptr, 0);
+            .load(from_abi.ty, MemFlagsData::new(), cell_ptr, 0);
         let adapted = self.repack_value(kernel_id, source, from_element, to_element, builder)?;
         let offset = builder.ins().imul(index, stride);
         let offset = if self.pointer_type() == types::I64 {
@@ -5924,8 +5963,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             builder.ins().ireduce(self.pointer_type(), offset)
         };
         let target_ptr = builder.ins().iadd(buffer, offset);
-        builder.ins().store(MemFlags::new(), adapted, target_ptr, 0);
-        let next = builder.ins().iadd_imm(index, 1);
+        builder.ins().store(MemFlagsData::new(), adapted, target_ptr, 0);
+        let next = builder.ins().iadd_imm_s(index, 1);
         builder.ins().jump(loop_block, &[BlockArg::Value(next)]);
 
         builder.seal_block(loop_block);
@@ -5939,12 +5978,15 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         &mut self,
         kernel_id: KernelId,
         value: Value,
-        from_layout: LayoutId,
-        from_fields: &[LayoutId],
-        to_layout: LayoutId,
-        to_fields: &[LayoutId],
+        shape: RepackShape<'_, LayoutId>,
         builder: &mut FunctionBuilder<'_>,
     ) -> Result<Value, CodegenError> {
+        let RepackShape {
+            source_layout: from_layout,
+            source_fields: from_fields,
+            target_layout: to_layout,
+            target_fields: to_fields,
+        } = shape;
         if from_fields.len() != to_fields.len() {
             return Err(self.unsupported_expression(
                 kernel_id,
@@ -5988,16 +6030,16 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let target =
             self.allocate_static_arena_bytes(kernel_id, target_size.max(1), target_align, builder)?;
         for ((from_field, source_offset, source_abi), (to_field, target_offset, _)) in
-            source_fields.into_iter().zip(target_fields.into_iter())
+            source_fields.into_iter().zip(target_fields)
         {
             let field =
                 builder
                     .ins()
-                    .load(source_abi.ty, MemFlags::new(), value, source_offset as i32);
+                    .load(source_abi.ty, MemFlagsData::new(), value, source_offset as i32);
             let adapted = self.repack_value(kernel_id, field, from_field, to_field, builder)?;
             builder
                 .ins()
-                .store(MemFlags::new(), adapted, target, target_offset as i32);
+                .store(MemFlagsData::new(), adapted, target, target_offset as i32);
         }
         Ok(target)
     }
@@ -6006,12 +6048,15 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         &mut self,
         kernel_id: KernelId,
         value: Value,
-        from_layout: LayoutId,
-        from_fields: &[crate::RecordFieldLayout],
-        to_layout: LayoutId,
-        to_fields: &[crate::RecordFieldLayout],
+        shape: RepackShape<'_, crate::RecordFieldLayout>,
         builder: &mut FunctionBuilder<'_>,
     ) -> Result<Value, CodegenError> {
+        let RepackShape {
+            source_layout: from_layout,
+            source_fields: from_fields,
+            target_layout: to_layout,
+            target_fields: to_fields,
+        } = shape;
         if from_fields.len() != to_fields.len() {
             return Err(self.unsupported_expression(
                 kernel_id,
@@ -6063,16 +6108,16 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let target =
             self.allocate_static_arena_bytes(kernel_id, target_size.max(1), target_align, builder)?;
         for ((from_field, source_offset, source_abi), (to_field, target_offset, _)) in
-            source_fields.into_iter().zip(target_fields.into_iter())
+            source_fields.into_iter().zip(target_fields)
         {
             let field =
                 builder
                     .ins()
-                    .load(source_abi.ty, MemFlags::new(), value, source_offset as i32);
+                    .load(source_abi.ty, MemFlagsData::new(), value, source_offset as i32);
             let adapted = self.repack_value(kernel_id, field, from_field, to_field, builder)?;
             builder
                 .ins()
-                .store(MemFlags::new(), adapted, target, target_offset as i32);
+                .store(MemFlagsData::new(), adapted, target, target_offset as i32);
         }
         Ok(target)
     }
@@ -6085,13 +6130,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         to: (LayoutId, LayoutId),
         builder: &mut FunctionBuilder<'_>,
     ) -> Result<Value, CodegenError> {
-        let tag = builder.ins().load(types::I64, MemFlags::new(), value, 0);
+        let tag = builder.ins().load(types::I64, MemFlagsData::new(), value, 0);
         let ok_block = builder.create_block();
         let err_block = builder.create_block();
         let exit_block = builder.create_block();
         builder.append_block_param(exit_block, self.pointer_type());
 
-        let is_ok = builder.ins().icmp_imm(IntCC::Equal, tag, 0);
+        let is_ok = builder.ins().icmp_imm_s(IntCC::Equal, tag, 0);
         builder.ins().brif(is_ok, ok_block, &[], err_block, &[]);
 
         builder.seal_block(ok_block);
@@ -6099,7 +6144,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let from_ok_abi = self.field_abi_shape(kernel_id, from.0, "result ok payload")?;
         let ok_value = builder
             .ins()
-            .load(from_ok_abi.ty, MemFlags::new(), value, 8);
+            .load(from_ok_abi.ty, MemFlagsData::new(), value, 8);
         let ok_value = self.repack_value(kernel_id, ok_value, from.0, to.0, builder)?;
         let ok_value = self.emit_tagged_reference(kernel_id, 0, Some((ok_value, to.0)), builder)?;
         builder.ins().jump(exit_block, &[BlockArg::Value(ok_value)]);
@@ -6109,7 +6154,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let from_err_abi = self.field_abi_shape(kernel_id, from.1, "result err payload")?;
         let err_value = builder
             .ins()
-            .load(from_err_abi.ty, MemFlags::new(), value, 8);
+            .load(from_err_abi.ty, MemFlagsData::new(), value, 8);
         let err_value = self.repack_value(kernel_id, err_value, from.1, to.1, builder)?;
         let err_value =
             self.emit_tagged_reference(kernel_id, 1, Some((err_value, to.1)), builder)?;
@@ -6159,7 +6204,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        let tag = builder.ins().load(types::I64, MemFlags::new(), value, 0);
+        let tag = builder.ins().load(types::I64, MemFlagsData::new(), value, 0);
         let exit_block = builder.create_block();
         builder.append_block_param(exit_block, self.pointer_type());
         let mut dispatch_block = builder.create_block();
@@ -6170,7 +6215,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             builder.switch_to_block(dispatch_block);
             let matched_block = builder.create_block();
             let next_block = builder.create_block();
-            let is_match = builder.ins().icmp_imm(IntCC::Equal, tag, *variant_tag);
+            let is_match = builder.ins().icmp_imm_s(IntCC::Equal, tag, *variant_tag);
             builder
                 .ins()
                 .brif(is_match, matched_block, &[], next_block, &[]);
@@ -6183,7 +6228,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         self.field_abi_shape(kernel_id, *from_payload, "opaque payload")?;
                     let payload = builder
                         .ins()
-                        .load(payload_abi.ty, MemFlags::new(), value, 8);
+                        .load(payload_abi.ty, MemFlagsData::new(), value, 8);
                     let payload =
                         self.repack_value(kernel_id, payload, *from_payload, *to_payload, builder)?;
                     self.emit_tagged_reference(
@@ -6277,7 +6322,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let element_ptr = builder.inst_results(get_call)[0];
         let element = builder
             .ins()
-            .load(element_abi.ty, MemFlags::new(), element_ptr, 0);
+            .load(element_abi.ty, MemFlagsData::new(), element_ptr, 0);
         let step_acc = self.repack_value(
             kernel_id,
             accumulator,
@@ -6309,7 +6354,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             plan.loop_layout,
             builder,
         )?;
-        let next_index = builder.ins().iadd_imm(index, 1);
+        let next_index = builder.ins().iadd_imm_s(index, 1);
         builder.ins().jump(
             loop_block,
             &[BlockArg::Value(next_index), BlockArg::Value(next)],
@@ -6384,7 +6429,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let element_ptr = builder.inst_results(get_call)[0];
         let element = builder
             .ins()
-            .load(input_element_abi.ty, MemFlags::new(), element_ptr, 0);
+            .load(input_element_abi.ty, MemFlagsData::new(), element_ptr, 0);
         let step_element = self.repack_value(
             kernel_id,
             element,
@@ -6405,8 +6450,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         )?;
         let offset = builder.ins().imul(index, output_stride_value);
         let offset = builder.ins().iadd(output_ptr, offset);
-        builder.ins().store(MemFlags::new(), mapped, offset, 0);
-        let next_index = builder.ins().iadd_imm(index, 1);
+        builder.ins().store(MemFlagsData::new(), mapped, offset, 0);
+        let next_index = builder.ins().iadd_imm_s(index, 1);
         builder.ins().jump(loop_block, &[BlockArg::Value(next_index)]);
 
         builder.seal_block(done_block);
@@ -6475,7 +6520,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let element_ptr = builder.inst_results(get_call)[0];
         let element = builder
             .ins()
-            .load(element_abi.ty, MemFlags::new(), element_ptr, 0);
+            .load(element_abi.ty, MemFlagsData::new(), element_ptr, 0);
         let step_element = self.repack_value(
             kernel_id,
             element,
@@ -6494,9 +6539,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         builder.switch_to_block(keep_block);
         let out_offset = builder.ins().imul(kept, stride_value);
         let out_ptr = builder.ins().iadd(output_ptr, out_offset);
-        builder.ins().store(MemFlags::new(), element, out_ptr, 0);
-        let next_index = builder.ins().iadd_imm(index, 1);
-        let next_kept = builder.ins().iadd_imm(kept, 1);
+        builder.ins().store(MemFlagsData::new(), element, out_ptr, 0);
+        let next_index = builder.ins().iadd_imm_s(index, 1);
+        let next_kept = builder.ins().iadd_imm_s(kept, 1);
         builder.ins().jump(
             loop_block,
             &[BlockArg::Value(next_index), BlockArg::Value(next_kept)],
@@ -6504,7 +6549,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
 
         builder.seal_block(skip_block);
         builder.switch_to_block(skip_block);
-        let next_index = builder.ins().iadd_imm(index, 1);
+        let next_index = builder.ins().iadd_imm_s(index, 1);
         builder
             .ins()
             .jump(loop_block, &[BlockArg::Value(next_index), BlockArg::Value(kept)]);
@@ -6588,7 +6633,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let element_ptr = builder.inst_results(get_call)[0];
         let element = builder
             .ins()
-            .load(element_abi.ty, MemFlags::new(), element_ptr, 0);
+            .load(element_abi.ty, MemFlagsData::new(), element_ptr, 0);
         let step_element = self.repack_value(
             kernel_id,
             element,
@@ -6601,7 +6646,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         step_arguments.push(step_element);
         let predicate =
             self.lower_direct_item_call(kernel_id, plan.step_body, &step_arguments, builder)?;
-        let next_index = builder.ins().iadd_imm(index, 1);
+        let next_index = builder.ins().iadd_imm_s(index, 1);
         let true_value = builder.ins().iconst(types::I8, 1);
         builder.ins().brif(
             predicate,
@@ -6673,7 +6718,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let element_ptr = builder.inst_results(get_call)[0];
         let element = builder
             .ins()
-            .load(element_abi.ty, MemFlags::new(), element_ptr, 0);
+            .load(element_abi.ty, MemFlagsData::new(), element_ptr, 0);
         let step_element = self.repack_value(
             kernel_id,
             element,
@@ -6692,7 +6737,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 self.lower_inline_scalar_option_some(kind, element, builder)
             }
         };
-        let next_index = builder.ins().iadd_imm(index, 1);
+        let next_index = builder.ins().iadd_imm_s(index, 1);
         builder.ins().brif(
             matched,
             done_block,
@@ -6764,7 +6809,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let element_ptr = builder.inst_results(get_call)[0];
         let element = builder
             .ins()
-            .load(input_element_abi.ty, MemFlags::new(), element_ptr, 0);
+            .load(input_element_abi.ty, MemFlagsData::new(), element_ptr, 0);
         let step_element = self.repack_value(
             kernel_id,
             element,
@@ -6786,7 +6831,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         )?;
         let append_call = builder.ins().call(list_append, &[acc, mapped, element_size]);
         let next_acc = builder.inst_results(append_call)[0];
-        let next_index = builder.ins().iadd_imm(index, 1);
+        let next_index = builder.ins().iadd_imm_s(index, 1);
         builder.ins().jump(
             loop_block,
             &[BlockArg::Value(next_index), BlockArg::Value(next_acc)],
@@ -6842,7 +6887,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
     ) -> Value {
         builder
             .ins()
-            .load(self.pointer_type(), MemFlags::new(), descriptor, 0)
+            .load(self.pointer_type(), MemFlagsData::new(), descriptor, 0)
     }
 
     fn lower_direct_apply(
@@ -6983,7 +7028,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 // Domain is by-reference (pointer to i64); load the inner value.
                 Ok(builder
                     .ins()
-                    .load(types::I64, MemFlags::new(), *argument, 0))
+                    .load(types::I64, MemFlagsData::new(), *argument, 0))
             }
             DirectApplyPlan::DomainMember(DomainMemberCallPlan::RepresentationalRepackUnary {
                 from_layout,
@@ -7018,8 +7063,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     ));
                 };
                 // Domain values are ByReference pointers; load the inner i64.
-                let lhs = builder.ins().load(types::I64, MemFlags::new(), *left, 0);
-                let rhs = builder.ins().load(types::I64, MemFlags::new(), *right, 0);
+                let lhs = builder.ins().load(types::I64, MemFlagsData::new(), *left, 0);
+                let rhs = builder.ins().load(types::I64, MemFlagsData::new(), *right, 0);
                 match operator {
                     BinaryOperator::Add
                     | BinaryOperator::Subtract
@@ -7065,7 +7110,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         "direct structural equality lowering expected exactly two materialized arguments",
                     ));
                 };
-                self.lower_native_equality_shape(kernel_id, expr_id, &shape, *left, *right, builder)
+                self.lower_native_equality_shape(kernel_id, &shape, *left, *right, builder)
             }
             DirectApplyPlan::Builtin(BuiltinCallPlan::NativeCompare {
                 kind,
@@ -7092,14 +7137,14 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             self.declare_ptr_cmp_func("aivi_decimal_lt", kernel_id, builder)?;
                         let call = builder.ins().call(func_ref, &[*left, *right]);
                         let cmp = builder.inst_results(call)[0];
-                        builder.ins().icmp_imm(IntCC::NotEqual, cmp, 0)
+                        builder.ins().icmp_imm_s(IntCC::NotEqual, cmp, 0)
                     }
                     NativeCompareKind::BigInt => {
                         let func_ref =
                             self.declare_ptr_cmp_func("aivi_bigint_lt", kernel_id, builder)?;
                         let call = builder.ins().call(func_ref, &[*left, *right]);
                         let cmp = builder.inst_results(call)[0];
-                        builder.ins().icmp_imm(IntCC::NotEqual, cmp, 0)
+                        builder.ins().icmp_imm_s(IntCC::NotEqual, cmp, 0)
                     }
                     NativeCompareKind::DomainInt => {
                         return Err(self.unsupported_expression(
@@ -7117,14 +7162,14 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             self.declare_ptr_cmp_func("aivi_decimal_eq", kernel_id, builder)?;
                         let call = builder.ins().call(func_ref, &[*left, *right]);
                         let cmp = builder.inst_results(call)[0];
-                        builder.ins().icmp_imm(IntCC::NotEqual, cmp, 0)
+                        builder.ins().icmp_imm_s(IntCC::NotEqual, cmp, 0)
                     }
                     NativeCompareKind::BigInt => {
                         let func_ref =
                             self.declare_ptr_cmp_func("aivi_bigint_eq", kernel_id, builder)?;
                         let call = builder.ins().call(func_ref, &[*left, *right]);
                         let cmp = builder.inst_results(call)[0];
-                        builder.ins().icmp_imm(IntCC::NotEqual, cmp, 0)
+                        builder.ins().icmp_imm_s(IntCC::NotEqual, cmp, 0)
                     }
                     NativeCompareKind::DomainInt => unreachable!(),
                 };
@@ -7301,7 +7346,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 };
                 Ok(builder
                     .ins()
-                    .load(types::I64, MemFlags::new(), *argument, 0))
+                    .load(types::I64, MemFlagsData::new(), *argument, 0))
             }
             DirectApplyPlan::Intrinsic(IntrinsicCallPlan::BytesGet) => {
                 let [index, bytes] = arguments else {
@@ -8527,7 +8572,6 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
     fn lower_native_equality_shape(
         &mut self,
         kernel_id: KernelId,
-        expr_id: KernelExprId,
         shape: &NativeEqualityShape,
         lhs: Value,
         rhs: Value,
@@ -8547,13 +8591,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 Ok(builder.inst_results(call)[0])
             }
             NativeEqualityShape::TaggedNullarySum => {
-                let left_tag = builder.ins().load(types::I64, MemFlags::new(), lhs, 0);
-                let right_tag = builder.ins().load(types::I64, MemFlags::new(), rhs, 0);
+                let left_tag = builder.ins().load(types::I64, MemFlagsData::new(), lhs, 0);
+                let right_tag = builder.ins().load(types::I64, MemFlagsData::new(), rhs, 0);
                 Ok(builder.ins().icmp(IntCC::Equal, left_tag, right_tag))
             }
             NativeEqualityShape::TaggedPayloadSum(variants) => {
-                let left_tag = builder.ins().load(types::I64, MemFlags::new(), lhs, 0);
-                let right_tag = builder.ins().load(types::I64, MemFlags::new(), rhs, 0);
+                let left_tag = builder.ins().load(types::I64, MemFlagsData::new(), lhs, 0);
+                let right_tag = builder.ins().load(types::I64, MemFlagsData::new(), rhs, 0);
                 let tags_equal = builder.ins().icmp(IntCC::Equal, left_tag, right_tag);
                 let bool_ty = builder.func.dfg.value_type(tags_equal);
                 let true_value = builder.ins().iconst(bool_ty, 1);
@@ -8583,7 +8627,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     };
 
                     builder.switch_to_block(dispatch_block);
-                    let is_match = builder.ins().icmp_imm(IntCC::Equal, left_tag, variant.tag);
+                    let is_match = builder.ins().icmp_imm_s(IntCC::Equal, left_tag, variant.tag);
                     if let Some(next_block) = next_block {
                         builder
                             .ins()
@@ -8609,12 +8653,11 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             "tagged payload equality",
                         )?;
                         let left_payload =
-                            builder.ins().load(payload_abi.ty, MemFlags::new(), lhs, 8);
+                            builder.ins().load(payload_abi.ty, MemFlagsData::new(), lhs, 8);
                         let right_payload =
-                            builder.ins().load(payload_abi.ty, MemFlags::new(), rhs, 8);
+                            builder.ins().load(payload_abi.ty, MemFlagsData::new(), rhs, 8);
                         self.lower_native_equality_shape(
                             kernel_id,
-                            expr_id,
                             payload_shape,
                             left_payload,
                             right_payload,
@@ -8649,14 +8692,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         self.field_abi_shape(kernel_id, field.layout, "native equality field")?;
                     let left_field = builder
                         .ins()
-                        .load(abi.ty, MemFlags::new(), lhs, field.offset);
+                        .load(abi.ty, MemFlagsData::new(), lhs, field.offset);
                     let right_field =
                         builder
                             .ins()
-                            .load(abi.ty, MemFlags::new(), rhs, field.offset);
+                            .load(abi.ty, MemFlagsData::new(), rhs, field.offset);
                     let field_equal = self.lower_native_equality_shape(
                         kernel_id,
-                        expr_id,
                         field.shape.as_ref(),
                         left_field,
                         right_field,
@@ -8689,7 +8731,6 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 builder.switch_to_block(payload_block);
                 let some_equal = self.lower_native_equality_shape(
                     kernel_id,
-                    expr_id,
                     payload.as_ref(),
                     lhs,
                     rhs,
@@ -8738,11 +8779,11 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
 
         builder.seal_block(load_lengths_block);
         builder.switch_to_block(load_lengths_block);
-        let left_len = builder.ins().load(types::I64, MemFlags::new(), lhs, 0);
-        let right_len = builder.ins().load(types::I64, MemFlags::new(), rhs, 0);
+        let left_len = builder.ins().load(types::I64, MemFlagsData::new(), lhs, 0);
+        let right_len = builder.ins().load(types::I64, MemFlagsData::new(), rhs, 0);
         let same_len = builder.ins().icmp(IntCC::Equal, left_len, right_len);
-        let left_bytes = builder.ins().iadd_imm(lhs, 8);
-        let right_bytes = builder.ins().iadd_imm(rhs, 8);
+        let left_bytes = builder.ins().iadd_imm_s(lhs, 8);
+        let right_bytes = builder.ins().iadd_imm_s(rhs, 8);
         let zero_index = builder.ins().iconst(types::I64, 0);
         builder.ins().brif(
             same_len,
@@ -8781,12 +8822,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         };
         let left_addr = builder.ins().iadd(left_bytes, index_as_ptr);
         let right_addr = builder.ins().iadd(right_bytes, index_as_ptr);
-        let left_byte = builder.ins().load(types::I8, MemFlags::new(), left_addr, 0);
+        let left_byte = builder.ins().load(types::I8, MemFlagsData::new(), left_addr, 0);
         let right_byte = builder
             .ins()
-            .load(types::I8, MemFlags::new(), right_addr, 0);
+            .load(types::I8, MemFlagsData::new(), right_addr, 0);
         let byte_equal = builder.ins().icmp(IntCC::Equal, left_byte, right_byte);
-        let next_index = builder.ins().iadd_imm(index, 1);
+        let next_index = builder.ins().iadd_imm_s(index, 1);
         builder.ins().brif(
             byte_equal,
             loop_block,
@@ -8820,12 +8861,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let payload_bits = match kind {
             ScalarOptionKind::Int => builder.ins().sextend(types::I128, payload),
             ScalarOptionKind::Float => {
-                let bits = builder.ins().bitcast(types::I64, MemFlags::new(), payload);
+                let bits = builder.ins().bitcast(types::I64, MemFlagsData::new(), payload);
                 builder.ins().uextend(types::I128, bits)
             }
             ScalarOptionKind::Bool => builder.ins().uextend(types::I128, payload),
         };
-        let shifted = builder.ins().ishl_imm(payload_bits, 64);
+        let shifted = builder.ins().ishl_imm_u(payload_bits, 64);
         let tag_i64 = builder.ins().iconst(types::I64, 1);
         let tag = builder.ins().uextend(types::I128, tag_i64);
         builder.ins().bor(shifted, tag)
@@ -8879,7 +8920,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         bytes: Value,
         builder: &mut FunctionBuilder<'_>,
     ) -> Value {
-        let negative_index = builder.ins().icmp_imm(IntCC::SignedLessThan, index, 0);
+        let negative_index = builder.ins().icmp_imm_s(IntCC::SignedLessThan, index, 0);
         let bounds_block = builder.create_block();
         let payload_block = builder.create_block();
         let done_block = builder.create_block();
@@ -8900,7 +8941,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         builder.seal_block(bounds_block);
         builder.switch_to_block(bounds_block);
         let index = builder.block_params(bounds_block)[0];
-        let len = builder.ins().load(types::I64, MemFlags::new(), bytes, 0);
+        let len = builder.ins().load(types::I64, MemFlagsData::new(), bytes, 0);
         let in_bounds = builder.ins().icmp(IntCC::UnsignedLessThan, index, len);
         builder.ins().brif(
             in_bounds,
@@ -8914,7 +8955,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         builder.switch_to_block(payload_block);
         let index = builder.block_params(payload_block)[0];
         let byte =
-            self.lower_load_byte_sequence_byte(builder.ins().iadd_imm(bytes, 8), index, builder);
+            self.lower_load_byte_sequence_byte(builder.ins().iadd_imm_s(bytes, 8), index, builder);
         let some = self.lower_inline_scalar_option_some(ScalarOptionKind::Int, byte, builder);
         builder.ins().jump(done_block, &[BlockArg::Value(some)]);
 
@@ -8926,8 +8967,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
     fn lower_bytes_to_text_option(&self, bytes: Value, builder: &mut FunctionBuilder<'_>) -> Value {
         let pointer_ty = self.pointer_type();
         let zero_ptr = builder.ins().iconst(pointer_ty, 0);
-        let len = builder.ins().load(types::I64, MemFlags::new(), bytes, 0);
-        let bytes_base = builder.ins().iadd_imm(bytes, 8);
+        let len = builder.ins().load(types::I64, MemFlagsData::new(), bytes, 0);
+        let bytes_base = builder.ins().iadd_imm_s(bytes, 8);
 
         let loop_block = builder.create_block();
         let inspect_block = builder.create_block();
@@ -8982,8 +9023,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         builder.switch_to_block(inspect_block);
         let index = builder.block_params(inspect_block)[0];
         let first = self.lower_load_byte_sequence_byte(bytes_base, index, builder);
-        let is_ascii = builder.ins().icmp_imm(IntCC::UnsignedLessThan, first, 0x80);
-        let next_ascii = builder.ins().iadd_imm(index, 1);
+        let is_ascii = builder.ins().icmp_imm_s(IntCC::UnsignedLessThan, first, 0x80);
+        let next_ascii = builder.ins().iadd_imm_s(index, 1);
         builder.ins().brif(
             is_ascii,
             loop_block,
@@ -9010,7 +9051,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         builder.seal_block(non_two_block);
         builder.switch_to_block(validate_two_block);
         let index = builder.block_params(validate_two_block)[0];
-        let required_end = builder.ins().iadd_imm(index, 2);
+        let required_end = builder.ins().iadd_imm_s(index, 2);
         let enough = builder
             .ins()
             .icmp(IntCC::UnsignedLessThanOrEqual, required_end, len);
@@ -9027,11 +9068,11 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let index = builder.block_params(validate_two_body_block)[0];
         let second = self.lower_load_byte_sequence_byte(
             bytes_base,
-            builder.ins().iadd_imm(index, 1),
+            builder.ins().iadd_imm_s(index, 1),
             builder,
         );
         let second_ok = self.lower_unsigned_byte_range(second, 0x80, 0xBF, builder);
-        let next_index = builder.ins().iadd_imm(index, 2);
+        let next_index = builder.ins().iadd_imm_s(index, 2);
         builder.ins().brif(
             second_ok,
             loop_block,
@@ -9059,7 +9100,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let validate_three_params = builder.block_params(validate_three_block).to_vec();
         let index = validate_three_params[0];
         let first = validate_three_params[1];
-        let required_end = builder.ins().iadd_imm(index, 3);
+        let required_end = builder.ins().iadd_imm_s(index, 3);
         let enough = builder
             .ins()
             .icmp(IntCC::UnsignedLessThanOrEqual, required_end, len);
@@ -9078,16 +9119,16 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let first = validate_three_body_params[1];
         let second = self.lower_load_byte_sequence_byte(
             bytes_base,
-            builder.ins().iadd_imm(index, 1),
+            builder.ins().iadd_imm_s(index, 1),
             builder,
         );
         let third = self.lower_load_byte_sequence_byte(
             bytes_base,
-            builder.ins().iadd_imm(index, 2),
+            builder.ins().iadd_imm_s(index, 2),
             builder,
         );
-        let head_e0 = builder.ins().icmp_imm(IntCC::Equal, first, 0xE0);
-        let head_ed = builder.ins().icmp_imm(IntCC::Equal, first, 0xED);
+        let head_e0 = builder.ins().icmp_imm_s(IntCC::Equal, first, 0xE0);
+        let head_ed = builder.ins().icmp_imm_s(IntCC::Equal, first, 0xED);
         let second_default = self.lower_unsigned_byte_range(second, 0x80, 0xBF, builder);
         let second_e0 = self.lower_unsigned_byte_range(second, 0xA0, 0xBF, builder);
         let second_ed = self.lower_unsigned_byte_range(second, 0x80, 0x9F, builder);
@@ -9102,7 +9143,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let special_ok = builder.ins().bor(e0_ok, ed_ok);
         let second_ok = builder.ins().bor(special_ok, default_ok);
         let sequence_ok = builder.ins().band(second_ok, third_ok);
-        let next_index = builder.ins().iadd_imm(index, 3);
+        let next_index = builder.ins().iadd_imm_s(index, 3);
         builder.ins().brif(
             sequence_ok,
             loop_block,
@@ -9129,7 +9170,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let validate_four_params = builder.block_params(validate_four_block).to_vec();
         let index = validate_four_params[0];
         let first = validate_four_params[1];
-        let required_end = builder.ins().iadd_imm(index, 4);
+        let required_end = builder.ins().iadd_imm_s(index, 4);
         let enough = builder
             .ins()
             .icmp(IntCC::UnsignedLessThanOrEqual, required_end, len);
@@ -9148,21 +9189,21 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let first = validate_four_body_params[1];
         let second = self.lower_load_byte_sequence_byte(
             bytes_base,
-            builder.ins().iadd_imm(index, 1),
+            builder.ins().iadd_imm_s(index, 1),
             builder,
         );
         let third = self.lower_load_byte_sequence_byte(
             bytes_base,
-            builder.ins().iadd_imm(index, 2),
+            builder.ins().iadd_imm_s(index, 2),
             builder,
         );
         let fourth = self.lower_load_byte_sequence_byte(
             bytes_base,
-            builder.ins().iadd_imm(index, 3),
+            builder.ins().iadd_imm_s(index, 3),
             builder,
         );
-        let head_f0 = builder.ins().icmp_imm(IntCC::Equal, first, 0xF0);
-        let head_f4 = builder.ins().icmp_imm(IntCC::Equal, first, 0xF4);
+        let head_f0 = builder.ins().icmp_imm_s(IntCC::Equal, first, 0xF0);
+        let head_f4 = builder.ins().icmp_imm_s(IntCC::Equal, first, 0xF4);
         let second_default = self.lower_unsigned_byte_range(second, 0x80, 0xBF, builder);
         let second_f0 = self.lower_unsigned_byte_range(second, 0x90, 0xBF, builder);
         let second_f4 = self.lower_unsigned_byte_range(second, 0x80, 0x8F, builder);
@@ -9179,7 +9220,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let second_ok = builder.ins().bor(special_ok, default_ok);
         let tail_ok = builder.ins().band(third_ok, fourth_ok);
         let sequence_ok = builder.ins().band(second_ok, tail_ok);
-        let next_index = builder.ins().iadd_imm(index, 4);
+        let next_index = builder.ins().iadd_imm_s(index, 4);
         builder.ins().brif(
             sequence_ok,
             loop_block,
@@ -9216,7 +9257,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         builder: &mut FunctionBuilder<'_>,
     ) -> Value {
         let addr = self.lower_byte_sequence_index_address(bytes_base, index, builder);
-        let byte = builder.ins().load(types::I8, MemFlags::new(), addr, 0);
+        let byte = builder.ins().load(types::I8, MemFlagsData::new(), addr, 0);
         builder.ins().uextend(types::I64, byte)
     }
 
@@ -9229,10 +9270,10 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
     ) -> Value {
         let at_least = builder
             .ins()
-            .icmp_imm(IntCC::UnsignedGreaterThanOrEqual, value, start);
+            .icmp_imm_s(IntCC::UnsignedGreaterThanOrEqual, value, start);
         let at_most = builder
             .ins()
-            .icmp_imm(IntCC::UnsignedLessThanOrEqual, value, end);
+            .icmp_imm_s(IntCC::UnsignedLessThanOrEqual, value, end);
         builder.ins().band(at_least, at_most)
     }
 
@@ -9251,7 +9292,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             let abi = self.field_abi_shape(kernel_id, step.layout, "projected field")?;
             let loaded = builder
                 .ins()
-                .load(abi.ty, MemFlags::new(), current, step.offset);
+                .load(abi.ty, MemFlagsData::new(), current, step.offset);
             if index + 1 == steps.len() {
                 return Ok(loaded);
             }
@@ -9955,23 +9996,26 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
 
     fn emit_truthy_falsy_condition(
         &self,
-        kernel_id: KernelId,
-        pipe_expr: KernelExprId,
-        stage_index: usize,
+        location: InlinePipeStageLocation,
         current: Value,
         input_layout: LayoutId,
         truthy_constructor: &crate::BuiltinTerm,
         builder: &mut FunctionBuilder<'_>,
     ) -> Result<Value, CodegenError> {
+        let InlinePipeStageLocation {
+            kernel: kernel_id,
+            pipe_expr,
+            stage_index,
+        } = location;
         match truthy_constructor {
-            crate::BuiltinTerm::True => Ok(builder.ins().icmp_imm(IntCC::NotEqual, current, 0)),
+            crate::BuiltinTerm::True => Ok(builder.ins().icmp_imm_s(IntCC::NotEqual, current, 0)),
             crate::BuiltinTerm::Some => match self.option_codegen_contract(input_layout) {
                 Some(OptionCodegenContract::NicheReference) => {
-                    Ok(builder.ins().icmp_imm(IntCC::NotEqual, current, 0))
+                    Ok(builder.ins().icmp_imm_s(IntCC::NotEqual, current, 0))
                 }
                 Some(OptionCodegenContract::InlineScalar(_)) => {
                     let low = builder.ins().ireduce(types::I64, current);
-                    Ok(builder.ins().icmp_imm(IntCC::NotEqual, low, 0))
+                    Ok(builder.ins().icmp_imm_s(IntCC::NotEqual, low, 0))
                 }
                 None => Err(self.unsupported_inline_pipe_stage(
                     kernel_id,
@@ -9981,22 +10025,22 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 )),
             },
             crate::BuiltinTerm::Ok => {
-                let loaded_tag = builder.ins().load(types::I64, MemFlags::new(), current, 0);
-                Ok(builder.ins().icmp_imm(IntCC::Equal, loaded_tag, 0))
+                let loaded_tag = builder.ins().load(types::I64, MemFlagsData::new(), current, 0);
+                Ok(builder.ins().icmp_imm_s(IntCC::Equal, loaded_tag, 0))
             }
             crate::BuiltinTerm::Err => {
-                let loaded_tag = builder.ins().load(types::I64, MemFlags::new(), current, 0);
-                Ok(builder.ins().icmp_imm(IntCC::Equal, loaded_tag, 1))
+                let loaded_tag = builder.ins().load(types::I64, MemFlagsData::new(), current, 0);
+                Ok(builder.ins().icmp_imm_s(IntCC::Equal, loaded_tag, 1))
             }
             crate::BuiltinTerm::Valid => {
-                let loaded_tag = builder.ins().load(types::I64, MemFlags::new(), current, 0);
-                Ok(builder.ins().icmp_imm(IntCC::Equal, loaded_tag, 0))
+                let loaded_tag = builder.ins().load(types::I64, MemFlagsData::new(), current, 0);
+                Ok(builder.ins().icmp_imm_s(IntCC::Equal, loaded_tag, 0))
             }
             crate::BuiltinTerm::Invalid => {
-                let loaded_tag = builder.ins().load(types::I64, MemFlags::new(), current, 0);
-                Ok(builder.ins().icmp_imm(IntCC::Equal, loaded_tag, 1))
+                let loaded_tag = builder.ins().load(types::I64, MemFlagsData::new(), current, 0);
+                Ok(builder.ins().icmp_imm_s(IntCC::Equal, loaded_tag, 1))
             }
-            crate::BuiltinTerm::False => Ok(builder.ins().icmp_imm(IntCC::Equal, current, 0)),
+            crate::BuiltinTerm::False => Ok(builder.ins().icmp_imm_s(IntCC::Equal, current, 0)),
             _ => Err(self.unsupported_inline_pipe_stage(
                 kernel_id,
                 pipe_expr,
@@ -10059,7 +10103,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 }
                 Ok(first_layout)
             }
-            crate::InlinePipeStageKind::FanOut { map_expr } => Ok(kernel.exprs()[*map_expr].layout),
+            crate::InlinePipeStageKind::FanOut { .. } => Ok(stage.result_layout),
         }
     }
 
@@ -10085,13 +10129,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             crate::BuiltinTerm::Some => match self.option_codegen_contract(input_layout) {
                 Some(OptionCodegenContract::NicheReference) => current,
                 Some(OptionCodegenContract::InlineScalar(kind)) => {
-                    let shifted = builder.ins().ushr_imm(current, 64);
+                    let shifted = builder.ins().ushr_imm_u(current, 64);
                     let payload_i64 = builder.ins().ireduce(types::I64, shifted);
                     match kind {
                         ScalarOptionKind::Int => payload_i64,
                         ScalarOptionKind::Float => builder.ins().bitcast(
                             cranelift_codegen::ir::types::F64,
-                            MemFlags::new(),
+                            MemFlagsData::new(),
                             payload_i64,
                         ),
                         ScalarOptionKind::Bool => builder
@@ -10108,7 +10152,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             | crate::BuiltinTerm::Invalid => {
                 builder
                     .ins()
-                    .load(self.pointer_type(), MemFlags::new(), current, 8)
+                    .load(self.pointer_type(), MemFlagsData::new(), current, 8)
             }
             _ => current,
         }
@@ -10120,454 +10164,538 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         current: Value,
         pattern: &crate::InlinePipePattern,
         input_layout: LayoutId,
-        inline_subjects: &mut Vec<Option<Value>>,
         builder: &mut FunctionBuilder<'_>,
     ) -> Result<Value, CodegenError> {
-        match &pattern.kind {
-            crate::InlinePipePatternKind::Wildcard => Ok(builder.ins().iconst(types::I8, 1)),
-            crate::InlinePipePatternKind::Binding { .. } => Ok(builder.ins().iconst(types::I8, 1)),
-            crate::InlinePipePatternKind::Integer(lit) => {
-                let n = lit.raw.parse::<i64>().unwrap_or(0);
-                Ok(builder.ins().icmp_imm(IntCC::Equal, current, n))
+        enum Task<'pattern> {
+            Visit {
+                current: Value,
+                pattern: &'pattern crate::InlinePipePattern,
+                input_layout: LayoutId,
+            },
+            CombineAnd {
+                base: Value,
+                child_count: usize,
+            },
+            FinishNicheSome {
+                some_block: cranelift_codegen::ir::Block,
+                none_block: cranelift_codegen::ir::Block,
+                merge_block: cranelift_codegen::ir::Block,
+            },
+        }
+
+        fn as_i8(builder: &mut FunctionBuilder<'_>, value: Value) -> Value {
+            if builder.func.dfg.value_type(value) == types::I8 {
+                value
+            } else {
+                builder.ins().ireduce(types::I8, value)
             }
-            crate::InlinePipePatternKind::Text(text) => {
-                match &self.program.layouts()[input_layout].kind {
-                    LayoutKind::Primitive(PrimitiveType::Text)
-                        if self.program.layouts()[input_layout].abi == AbiPassMode::ByReference =>
-                    {
-                        let literal = self.materialize_text_constant(kernel_id, text.as_ref(), builder)?;
-                        Ok(self.lower_native_byte_sequence_equality(current, literal, builder))
-                    }
-                    _ => Err(CodegenError::UnsupportedLayout {
-                        kernel: kernel_id,
-                        layout: input_layout,
-                        detail: "lazy JIT does not lower inline text literal patterns for this layout yet"
-                            .into(),
-                    }),
-                }
-            }
-            crate::InlinePipePatternKind::Constructor {
-                constructor,
-                arguments,
-            } => {
-                match constructor {
-                    crate::InlinePipeConstructor::Builtin(crate::BuiltinTerm::None) => {
-                        if !arguments.is_empty() {
-                            return Err(CodegenError::UnsupportedLayout {
-                                kernel: kernel_id,
-                                layout: input_layout,
-                                detail:
-                                    "lazy JIT only supports zero-argument None patterns".into(),
-                            });
-                        }
-                        match self.option_codegen_contract(input_layout) {
-                            Some(OptionCodegenContract::NicheReference) => {
-                                Ok(builder.ins().icmp_imm(IntCC::Equal, current, 0))
-                            }
-                            Some(OptionCodegenContract::InlineScalar(_)) => {
-                                let low = builder.ins().ireduce(types::I64, current);
-                                Ok(builder.ins().icmp_imm(IntCC::Equal, low, 0))
-                            }
-                            None => Ok(builder.ins().iconst(types::I8, 1)),
-                        }
-                    }
-                    crate::InlinePipeConstructor::Builtin(crate::BuiltinTerm::Some) => {
-                        match self.option_codegen_contract(input_layout) {
-                            Some(OptionCodegenContract::NicheReference) => {
-                                let is_some = builder.ins().icmp_imm(IntCC::NotEqual, current, 0);
-                                match arguments.as_slice() {
-                                    [] => Ok(is_some),
-                                    [sub_pat]
-                                        if matches!(
-                                            sub_pat.kind,
-                                            crate::InlinePipePatternKind::Wildcard
-                                                | crate::InlinePipePatternKind::Binding { .. }
-                                        ) => Ok(is_some),
-                                    [sub_pat] => {
-                                        let element_layout =
-                                            match &self.program.layouts()[input_layout].kind {
-                                                LayoutKind::Option { element } => *element,
-                                                _ => input_layout,
-                                            };
-                                        let some_block = builder.create_block();
-                                        let none_block = builder.create_block();
-                                        let merge_block = builder.create_block();
-                                        builder.append_block_param(merge_block, types::I8);
-                                        builder
-                                            .ins()
-                                            .brif(is_some, some_block, &[], none_block, &[]);
+        }
 
-                                        builder.switch_to_block(some_block);
-                                        let sub_test = self.emit_pattern_test(
-                                            kernel_id,
-                                            current,
-                                            sub_pat,
-                                            element_layout,
-                                            inline_subjects,
-                                            builder,
-                                        )?;
-                                        let sub_test = if builder.func.dfg.value_type(sub_test)
-                                            == types::I8
-                                        {
-                                            sub_test
-                                        } else {
-                                            builder.ins().ireduce(types::I8, sub_test)
-                                        };
-                                        builder.ins().jump(merge_block, &[sub_test.into()]);
-                                        builder.seal_block(some_block);
+        let mut work = vec![Task::Visit {
+            current,
+            pattern,
+            input_layout,
+        }];
+        let mut tests = Vec::new();
 
-                                        builder.switch_to_block(none_block);
-                                        let no_match = builder.ins().iconst(types::I8, 0);
-                                        builder.ins().jump(merge_block, &[no_match.into()]);
-                                        builder.seal_block(none_block);
-
-                                        builder.switch_to_block(merge_block);
-                                        builder.seal_block(merge_block);
-                                        Ok(builder.block_params(merge_block)[0])
-                                    }
-                                    _ => Err(CodegenError::UnsupportedLayout {
-                                        kernel: kernel_id,
-                                        layout: input_layout,
-                                        detail:
-                                            "lazy JIT only supports single-payload Some patterns"
-                                                .into(),
-                                    }),
-                                }
-                            }
-                            Some(OptionCodegenContract::InlineScalar(_)) => {
-                                let low = builder.ins().ireduce(types::I64, current);
-                                let is_some = builder.ins().icmp_imm(IntCC::NotEqual, low, 0);
-                                match arguments.as_slice() {
-                                    [] => Ok(is_some),
-                                    [sub_pat] => {
-                                        let shifted = builder.ins().ushr_imm(current, 64);
-                                        let payload_i64 =
-                                            builder.ins().ireduce(types::I64, shifted);
-                                        let payload = match self.option_codegen_contract(input_layout)
-                                        {
-                                            Some(OptionCodegenContract::InlineScalar(
-                                                ScalarOptionKind::Int,
-                                            )) => payload_i64,
-                                            Some(OptionCodegenContract::InlineScalar(
-                                                ScalarOptionKind::Float,
-                                            )) => builder.ins().bitcast(
-                                                cranelift_codegen::ir::types::F64,
-                                                MemFlags::new(),
-                                                payload_i64,
-                                            ),
-                                            Some(OptionCodegenContract::InlineScalar(
-                                                ScalarOptionKind::Bool,
-                                            )) => builder.ins().ireduce(
-                                                cranelift_codegen::ir::types::I8,
-                                                payload_i64,
-                                            ),
-                                            _ => payload_i64,
-                                        };
-                                        let element_layout =
-                                            match &self.program.layouts()[input_layout].kind {
-                                                LayoutKind::Option { element } => *element,
-                                                _ => input_layout,
-                                            };
-                                        let sub_test = self.emit_pattern_test(
-                                            kernel_id,
-                                            payload,
-                                            sub_pat,
-                                            element_layout,
-                                            inline_subjects,
-                                            builder,
-                                        )?;
-                                        let is_some = if builder.func.dfg.value_type(is_some)
-                                            == types::I8
-                                        {
-                                            is_some
-                                        } else {
-                                            builder.ins().ireduce(types::I8, is_some)
-                                        };
-                                        let sub_test = if builder.func.dfg.value_type(sub_test)
-                                            == types::I8
-                                        {
-                                            sub_test
-                                        } else {
-                                            builder.ins().ireduce(types::I8, sub_test)
-                                        };
-                                        Ok(builder.ins().band(is_some, sub_test))
-                                    }
-                                    _ => Err(CodegenError::UnsupportedLayout {
-                                        kernel: kernel_id,
-                                        layout: input_layout,
-                                        detail:
-                                            "lazy JIT only supports single-payload Some patterns"
-                                                .into(),
-                                    }),
-                                }
-                            }
-                            None => Ok(builder.ins().iconst(types::I8, 1)),
-                        }
+        while let Some(task) = work.pop() {
+            match task {
+                Task::Visit {
+                    current,
+                    pattern,
+                    input_layout,
+                } => match &pattern.kind {
+                    crate::InlinePipePatternKind::Wildcard
+                    | crate::InlinePipePatternKind::Binding { .. } => {
+                        tests.push(builder.ins().iconst(types::I8, 1));
                     }
-                    crate::InlinePipeConstructor::Builtin(crate::BuiltinTerm::True) => {
-                        if !arguments.is_empty() {
-                            return Err(CodegenError::UnsupportedLayout {
-                                kernel: kernel_id,
-                                layout: input_layout,
-                                detail:
-                                    "lazy JIT only supports zero-argument True patterns".into(),
-                            });
-                        }
-                        Ok(builder.ins().icmp_imm(IntCC::Equal, current, 1))
+                    crate::InlinePipePatternKind::Integer(literal) => {
+                        let value = literal.raw.parse::<i64>().unwrap_or(0);
+                        tests.push(builder.ins().icmp_imm_s(IntCC::Equal, current, value));
                     }
-                    crate::InlinePipeConstructor::Builtin(crate::BuiltinTerm::False) => {
-                        if !arguments.is_empty() {
-                            return Err(CodegenError::UnsupportedLayout {
-                                kernel: kernel_id,
-                                layout: input_layout,
-                                detail:
-                                    "lazy JIT only supports zero-argument False patterns".into(),
-                            });
-                        }
-                        Ok(builder.ins().icmp_imm(IntCC::Equal, current, 0))
-                    }
-                    crate::InlinePipeConstructor::Sum(handle) => {
-                        let tag = match &self.program.layouts()[input_layout].kind {
-                            LayoutKind::Sum(variants) => variants
-                                .iter()
-                                .position(|v| v.name.as_ref() == handle.variant_name.as_ref())
-                                .unwrap_or(0)
-                                as i64,
-                            LayoutKind::Opaque { .. } | LayoutKind::Domain { .. } => {
-                                sum_variant_tag_for_opaque(handle.variant_name.as_ref())
+                    crate::InlinePipePatternKind::Text(text) => {
+                        match &self.program.layouts()[input_layout].kind {
+                            LayoutKind::Primitive(PrimitiveType::Text)
+                                if self.program.layouts()[input_layout].abi
+                                    == AbiPassMode::ByReference =>
+                            {
+                                let literal = self.materialize_text_constant(
+                                    kernel_id,
+                                    text.as_ref(),
+                                    builder,
+                                )?;
+                                tests.push(
+                                    self.lower_native_byte_sequence_equality(
+                                        current, literal, builder,
+                                    ),
+                                );
                             }
-                            _ => return Ok(builder.ins().iconst(types::I8, 1)),
-                        };
-                        let loaded_tag =
-                            builder.ins().load(types::I64, MemFlags::new(), current, 0);
-                        let tag_test = builder.ins().icmp_imm(IntCC::Equal, loaded_tag, tag);
-                        let combined = if builder.func.dfg.value_type(tag_test) == types::I8 {
-                            tag_test
-                        } else {
-                            builder.ins().ireduce(types::I8, tag_test)
-                        };
-                        if arguments.iter().all(|pattern| {
-                            matches!(
-                                pattern.kind,
-                                crate::InlinePipePatternKind::Wildcard
-                                    | crate::InlinePipePatternKind::Binding { .. }
-                            )
-                        }) {
-                            Ok(combined)
-                        } else if let [sub_pat] = arguments.as_slice() {
-                            let payload_layout = crate::layout::variant_payload_layout(
-                                &self.program.layouts()[input_layout].kind,
-                                handle.variant_name.as_ref(),
-                            )
-                            .flatten()
-                            .ok_or_else(|| CodegenError::UnsupportedLayout {
-                                kernel: kernel_id,
-                                layout: input_layout,
-                                detail: "lazy JIT expected a single payload layout for this constructor pattern"
-                                    .into(),
-                            })?;
-                            let payload_abi =
-                                self.field_abi_shape(kernel_id, payload_layout, "sum payload pattern")?;
-                            let payload =
-                                builder.ins().load(payload_abi.ty, MemFlags::new(), current, 8);
-                            let sub_test = self.emit_pattern_test(
-                                kernel_id,
-                                payload,
-                                sub_pat,
-                                payload_layout,
-                                inline_subjects,
-                                builder,
-                            )?;
-                            let sub_test = if builder.func.dfg.value_type(sub_test) == types::I8 {
-                                sub_test
-                            } else {
-                                builder.ins().ireduce(types::I8, sub_test)
-                            };
-                            Ok(builder.ins().band(combined, sub_test))
-                        } else {
-                            Err(CodegenError::UnsupportedLayout {
-                                kernel: kernel_id,
-                                layout: input_layout,
-                                detail:
-                                    "lazy JIT does not lower payload-sensitive sum constructor patterns yet"
+                            _ => {
+                                return Err(CodegenError::UnsupportedLayout {
+                                    kernel: kernel_id,
+                                    layout: input_layout,
+                                    detail: "lazy JIT does not lower inline text literal patterns for this layout yet"
                                         .into(),
-                            })
+                                });
+                            }
                         }
                     }
-                    // Result/Validation constructors used in patterns
-                    crate::InlinePipeConstructor::Builtin(
-                        crate::BuiltinTerm::Ok
-                        | crate::BuiltinTerm::Err
-                        | crate::BuiltinTerm::Valid
-                        | crate::BuiltinTerm::Invalid,
-                    ) => {
-                        let tag = match (constructor, &self.program.layouts()[input_layout].kind) {
-                            (
-                                crate::InlinePipeConstructor::Builtin(crate::BuiltinTerm::Ok),
-                                LayoutKind::Result { .. },
-                            ) => 0i64,
-                            (
-                                crate::InlinePipeConstructor::Builtin(crate::BuiltinTerm::Err),
-                                LayoutKind::Result { .. },
-                            ) => 1i64,
-                            (
-                                crate::InlinePipeConstructor::Builtin(crate::BuiltinTerm::Valid),
-                                LayoutKind::Validation { .. },
-                            ) => 0i64,
-                            (
-                                crate::InlinePipeConstructor::Builtin(crate::BuiltinTerm::Invalid),
-                                LayoutKind::Validation { .. },
-                            ) => 1i64,
-                            _ => return Ok(builder.ins().iconst(types::I8, 1)),
-                        };
-                        let loaded_tag =
-                            builder.ins().load(types::I64, MemFlags::new(), current, 0);
-                        let tag_test = builder.ins().icmp_imm(IntCC::Equal, loaded_tag, tag);
-                        let combined = if builder.func.dfg.value_type(tag_test) == types::I8 {
-                            tag_test
-                        } else {
-                            builder.ins().ireduce(types::I8, tag_test)
-                        };
-                        if arguments.is_empty()
-                            || arguments.iter().all(|pattern| {
+                    crate::InlinePipePatternKind::Constructor {
+                        constructor,
+                        arguments,
+                    } => match constructor {
+                        crate::InlinePipeConstructor::Builtin(crate::BuiltinTerm::None) => {
+                            if !arguments.is_empty() {
+                                return Err(CodegenError::UnsupportedLayout {
+                                    kernel: kernel_id,
+                                    layout: input_layout,
+                                    detail: "lazy JIT only supports zero-argument None patterns"
+                                        .into(),
+                                });
+                            }
+                            let test = match self.option_codegen_contract(input_layout) {
+                                Some(OptionCodegenContract::NicheReference) => {
+                                    builder.ins().icmp_imm_s(IntCC::Equal, current, 0)
+                                }
+                                Some(OptionCodegenContract::InlineScalar(_)) => {
+                                    let low = builder.ins().ireduce(types::I64, current);
+                                    builder.ins().icmp_imm_s(IntCC::Equal, low, 0)
+                                }
+                                None => builder.ins().iconst(types::I8, 1),
+                            };
+                            tests.push(test);
+                        }
+                        crate::InlinePipeConstructor::Builtin(crate::BuiltinTerm::Some) => {
+                            match self.option_codegen_contract(input_layout) {
+                                Some(OptionCodegenContract::NicheReference) => {
+                                    let is_some =
+                                        builder.ins().icmp_imm_s(IntCC::NotEqual, current, 0);
+                                    match arguments.as_slice() {
+                                        [] => tests.push(is_some),
+                                        [sub_pattern]
+                                            if matches!(
+                                                sub_pattern.kind,
+                                                crate::InlinePipePatternKind::Wildcard
+                                                    | crate::InlinePipePatternKind::Binding { .. }
+                                            ) =>
+                                        {
+                                            tests.push(is_some);
+                                        }
+                                        [sub_pattern] => {
+                                            let element_layout =
+                                                match &self.program.layouts()[input_layout].kind {
+                                                    LayoutKind::Option { element } => *element,
+                                                    _ => input_layout,
+                                                };
+                                            let some_block = builder.create_block();
+                                            let none_block = builder.create_block();
+                                            let merge_block = builder.create_block();
+                                            builder.append_block_param(merge_block, types::I8);
+                                            builder.ins().brif(
+                                                is_some,
+                                                some_block,
+                                                &[],
+                                                none_block,
+                                                &[],
+                                            );
+
+                                            builder.switch_to_block(some_block);
+                                            work.push(Task::FinishNicheSome {
+                                                some_block,
+                                                none_block,
+                                                merge_block,
+                                            });
+                                            work.push(Task::Visit {
+                                                current,
+                                                pattern: sub_pattern,
+                                                input_layout: element_layout,
+                                            });
+                                        }
+                                        _ => {
+                                            return Err(CodegenError::UnsupportedLayout {
+                                                kernel: kernel_id,
+                                                layout: input_layout,
+                                                detail: "lazy JIT only supports single-payload Some patterns"
+                                                    .into(),
+                                            });
+                                        }
+                                    }
+                                }
+                                Some(OptionCodegenContract::InlineScalar(kind)) => {
+                                    let low = builder.ins().ireduce(types::I64, current);
+                                    let is_some =
+                                        builder.ins().icmp_imm_s(IntCC::NotEqual, low, 0);
+                                    match arguments.as_slice() {
+                                        [] => tests.push(is_some),
+                                        [sub_pattern] => {
+                                            let shifted = builder.ins().ushr_imm_u(current, 64);
+                                            let payload_i64 =
+                                                builder.ins().ireduce(types::I64, shifted);
+                                            let payload = match kind {
+                                                ScalarOptionKind::Int => payload_i64,
+                                                ScalarOptionKind::Float => builder.ins().bitcast(
+                                                    cranelift_codegen::ir::types::F64,
+                                                    MemFlagsData::new(),
+                                                    payload_i64,
+                                                ),
+                                                ScalarOptionKind::Bool => builder.ins().ireduce(
+                                                    cranelift_codegen::ir::types::I8,
+                                                    payload_i64,
+                                                ),
+                                            };
+                                            let element_layout =
+                                                match &self.program.layouts()[input_layout].kind {
+                                                    LayoutKind::Option { element } => *element,
+                                                    _ => input_layout,
+                                                };
+                                            work.push(Task::CombineAnd {
+                                                base: as_i8(builder, is_some),
+                                                child_count: 1,
+                                            });
+                                            work.push(Task::Visit {
+                                                current: payload,
+                                                pattern: sub_pattern,
+                                                input_layout: element_layout,
+                                            });
+                                        }
+                                        _ => {
+                                            return Err(CodegenError::UnsupportedLayout {
+                                                kernel: kernel_id,
+                                                layout: input_layout,
+                                                detail: "lazy JIT only supports single-payload Some patterns"
+                                                    .into(),
+                                            });
+                                        }
+                                    }
+                                }
+                                None => tests.push(builder.ins().iconst(types::I8, 1)),
+                            }
+                        }
+                        crate::InlinePipeConstructor::Builtin(crate::BuiltinTerm::True) => {
+                            if !arguments.is_empty() {
+                                return Err(CodegenError::UnsupportedLayout {
+                                    kernel: kernel_id,
+                                    layout: input_layout,
+                                    detail: "lazy JIT only supports zero-argument True patterns"
+                                        .into(),
+                                });
+                            }
+                            tests.push(builder.ins().icmp_imm_s(IntCC::Equal, current, 1));
+                        }
+                        crate::InlinePipeConstructor::Builtin(crate::BuiltinTerm::False) => {
+                            if !arguments.is_empty() {
+                                return Err(CodegenError::UnsupportedLayout {
+                                    kernel: kernel_id,
+                                    layout: input_layout,
+                                    detail: "lazy JIT only supports zero-argument False patterns"
+                                        .into(),
+                                });
+                            }
+                            tests.push(builder.ins().icmp_imm_s(IntCC::Equal, current, 0));
+                        }
+                        crate::InlinePipeConstructor::Sum(handle) => {
+                            let tag = match &self.program.layouts()[input_layout].kind {
+                                LayoutKind::Sum(variants) => variants
+                                    .iter()
+                                    .position(|variant| {
+                                        variant.name.as_ref() == handle.variant_name.as_ref()
+                                    })
+                                    .unwrap_or(0) as i64,
+                                LayoutKind::Opaque { .. } | LayoutKind::Domain { .. } => {
+                                    sum_variant_tag_for_opaque(handle.variant_name.as_ref())
+                                }
+                                _ => {
+                                    tests.push(builder.ins().iconst(types::I8, 1));
+                                    continue;
+                                }
+                            };
+                            let loaded_tag =
+                                builder.ins().load(types::I64, MemFlagsData::new(), current, 0);
+                            let tag_test =
+                                builder.ins().icmp_imm_s(IntCC::Equal, loaded_tag, tag);
+                            let combined = as_i8(builder, tag_test);
+                            if arguments.iter().all(|pattern| {
                                 matches!(
                                     pattern.kind,
                                     crate::InlinePipePatternKind::Wildcard
                                         | crate::InlinePipePatternKind::Binding { .. }
                                 )
-                            })
-                        {
-                            Ok(combined)
-                        } else {
-                            Err(CodegenError::UnsupportedLayout {
-                                kernel: kernel_id,
-                                layout: input_layout,
-                                detail:
-                                    "lazy JIT does not lower payload-sensitive result/validation patterns yet"
+                            }) {
+                                tests.push(combined);
+                            } else if let [sub_pattern] = arguments.as_slice() {
+                                let payload_layout = crate::layout::variant_payload_layout(
+                                    &self.program.layouts()[input_layout].kind,
+                                    handle.variant_name.as_ref(),
+                                )
+                                .flatten()
+                                .ok_or_else(|| CodegenError::UnsupportedLayout {
+                                    kernel: kernel_id,
+                                    layout: input_layout,
+                                    detail: "lazy JIT expected a single payload layout for this constructor pattern"
                                         .into(),
-                            })
+                                })?;
+                                let payload_abi = self.field_abi_shape(
+                                    kernel_id,
+                                    payload_layout,
+                                    "sum payload pattern",
+                                )?;
+                                let payload = builder.ins().load(
+                                    payload_abi.ty,
+                                    MemFlagsData::new(),
+                                    current,
+                                    8,
+                                );
+                                work.push(Task::CombineAnd {
+                                    base: combined,
+                                    child_count: 1,
+                                });
+                                work.push(Task::Visit {
+                                    current: payload,
+                                    pattern: sub_pattern,
+                                    input_layout: payload_layout,
+                                });
+                            } else {
+                                return Err(CodegenError::UnsupportedLayout {
+                                    kernel: kernel_id,
+                                    layout: input_layout,
+                                    detail: "lazy JIT does not lower payload-sensitive sum constructor patterns yet"
+                                        .into(),
+                                });
+                            }
                         }
+                        crate::InlinePipeConstructor::Builtin(
+                            crate::BuiltinTerm::Ok
+                            | crate::BuiltinTerm::Err
+                            | crate::BuiltinTerm::Valid
+                            | crate::BuiltinTerm::Invalid,
+                        ) => {
+                            let tag = match (
+                                constructor,
+                                &self.program.layouts()[input_layout].kind,
+                            ) {
+                                (
+                                    crate::InlinePipeConstructor::Builtin(
+                                        crate::BuiltinTerm::Ok,
+                                    ),
+                                    LayoutKind::Result { .. },
+                                )
+                                | (
+                                    crate::InlinePipeConstructor::Builtin(
+                                        crate::BuiltinTerm::Valid,
+                                    ),
+                                    LayoutKind::Validation { .. },
+                                ) => 0,
+                                (
+                                    crate::InlinePipeConstructor::Builtin(
+                                        crate::BuiltinTerm::Err,
+                                    ),
+                                    LayoutKind::Result { .. },
+                                )
+                                | (
+                                    crate::InlinePipeConstructor::Builtin(
+                                        crate::BuiltinTerm::Invalid,
+                                    ),
+                                    LayoutKind::Validation { .. },
+                                ) => 1,
+                                _ => {
+                                    tests.push(builder.ins().iconst(types::I8, 1));
+                                    continue;
+                                }
+                            };
+                            let loaded_tag =
+                                builder.ins().load(types::I64, MemFlagsData::new(), current, 0);
+                            let tag_test =
+                                builder.ins().icmp_imm_s(IntCC::Equal, loaded_tag, tag);
+                            let combined = as_i8(builder, tag_test);
+                            if arguments.is_empty()
+                                || arguments.iter().all(|pattern| {
+                                    matches!(
+                                        pattern.kind,
+                                        crate::InlinePipePatternKind::Wildcard
+                                            | crate::InlinePipePatternKind::Binding { .. }
+                                    )
+                                })
+                            {
+                                tests.push(combined);
+                            } else {
+                                return Err(CodegenError::UnsupportedLayout {
+                                    kernel: kernel_id,
+                                    layout: input_layout,
+                                    detail: "lazy JIT does not lower payload-sensitive result/validation patterns yet"
+                                        .into(),
+                                });
+                            }
+                        }
+                    },
+                    crate::InlinePipePatternKind::Tuple(sub_patterns) => {
+                        let LayoutKind::Tuple(element_layouts) =
+                            &self.program.layouts()[input_layout].kind
+                        else {
+                            tests.push(builder.ins().iconst(types::I8, 1));
+                            continue;
+                        };
+                        let element_layouts = element_layouts.clone();
+                        let mut offset = 0u32;
+                        let mut children = Vec::with_capacity(sub_patterns.len());
+                        for (sub_pattern, element_layout) in
+                            sub_patterns.iter().zip(element_layouts)
+                        {
+                            let abi = self.field_abi_shape(
+                                kernel_id,
+                                element_layout,
+                                "tuple element",
+                            )?;
+                            offset = align_to(offset, abi.align);
+                            let element = builder.ins().load(
+                                abi.ty,
+                                MemFlagsData::new(),
+                                current,
+                                offset as i32,
+                            );
+                            children.push((element, sub_pattern, element_layout));
+                            offset += abi.size;
+                        }
+                        work.push(Task::CombineAnd {
+                            base: builder.ins().iconst(types::I8, 1),
+                            child_count: children.len(),
+                        });
+                        work.extend(children.into_iter().rev().map(
+                            |(current, pattern, input_layout)| Task::Visit {
+                                current,
+                                pattern,
+                                input_layout,
+                            },
+                        ));
                     }
-                }
-            }
-            crate::InlinePipePatternKind::Tuple(sub_patterns) => {
-                let element_layouts: Vec<LayoutId> =
-                    match &self.program.layouts()[input_layout].kind.clone() {
-                        LayoutKind::Tuple(elements) => elements.clone(),
-                        _ => return Ok(builder.ins().iconst(types::I8, 1)),
-                    };
-                let mut test = builder.ins().iconst(types::I8, 1);
-                let mut offset = 0u32;
-                for (i, sub_pat) in sub_patterns.iter().enumerate() {
-                    if i >= element_layouts.len() {
-                        break;
+                    crate::InlinePipePatternKind::Record(field_patterns) => {
+                        let mut children = Vec::with_capacity(field_patterns.len());
+                        for field_pattern in field_patterns {
+                            let (offset, field_layout) = self.compute_record_field_offset(
+                                kernel_id,
+                                input_layout,
+                                &field_pattern.label,
+                            )?;
+                            let abi = self.field_abi_shape(
+                                kernel_id,
+                                field_layout,
+                                "record pattern field",
+                            )?;
+                            let field = builder.ins().load(
+                                abi.ty,
+                                MemFlagsData::new(),
+                                current,
+                                offset as i32,
+                            );
+                            children.push((field, &field_pattern.pattern, field_layout));
+                        }
+                        work.push(Task::CombineAnd {
+                            base: builder.ins().iconst(types::I8, 1),
+                            child_count: children.len(),
+                        });
+                        work.extend(children.into_iter().rev().map(
+                            |(current, pattern, input_layout)| Task::Visit {
+                                current,
+                                pattern,
+                                input_layout,
+                            },
+                        ));
                     }
-                    let elem_layout = element_layouts[i];
-                    let abi = self.field_abi_shape(kernel_id, elem_layout, "tuple element")?;
-                    offset = align_to(offset, abi.align);
-                    let elem_val =
-                        builder
-                            .ins()
-                            .load(abi.ty, MemFlags::new(), current, offset as i32);
-                    let sub_test = self.emit_pattern_test(
-                        kernel_id,
-                        elem_val,
-                        sub_pat,
-                        elem_layout,
-                        inline_subjects,
-                        builder,
-                    )?;
-                    let sub8 = if builder.func.dfg.value_type(sub_test) == types::I8 {
-                        sub_test
-                    } else {
-                        builder.ins().ireduce(types::I8, sub_test)
-                    };
-                    test = builder.ins().band(test, sub8);
-                    offset += abi.size;
+                    crate::InlinePipePatternKind::List { elements, rest } => {
+                        let LayoutKind::List { element } =
+                            &self.program.layouts()[input_layout].kind
+                        else {
+                            tests.push(builder.ins().iconst(types::I8, 1));
+                            continue;
+                        };
+                        let element_layout = *element;
+                        let list_len = self.declare_list_len_func(kernel_id, builder)?;
+                        let call = builder.ins().call(list_len, &[current]);
+                        let length = builder.inst_results(call)[0];
+                        let expected = elements.len() as i64;
+                        let length_test = if rest.is_some() {
+                            builder.ins().icmp_imm_s(
+                                IntCC::SignedGreaterThanOrEqual,
+                                length,
+                                expected,
+                            )
+                        } else {
+                            builder.ins().icmp_imm_s(IntCC::Equal, length, expected)
+                        };
+                        let element_abi = self.field_abi_shape(
+                            kernel_id,
+                            element_layout,
+                            "list pattern element",
+                        )?;
+                        let mut children = Vec::with_capacity(elements.len());
+                        for (index, sub_pattern) in elements.iter().enumerate() {
+                            let list_get = self.declare_list_get_func(kernel_id, builder)?;
+                            let index = builder.ins().iconst(types::I64, index as i64);
+                            let call = builder.ins().call(list_get, &[current, index]);
+                            let element_pointer = builder.inst_results(call)[0];
+                            let element = builder.ins().load(
+                                element_abi.ty,
+                                MemFlagsData::new(),
+                                element_pointer,
+                                0,
+                            );
+                            children.push((element, sub_pattern, element_layout));
+                        }
+                        work.push(Task::CombineAnd {
+                            base: as_i8(builder, length_test),
+                            child_count: children.len(),
+                        });
+                        work.extend(children.into_iter().rev().map(
+                            |(current, pattern, input_layout)| Task::Visit {
+                                current,
+                                pattern,
+                                input_layout,
+                            },
+                        ));
+                    }
+                },
+                Task::CombineAnd { base, child_count } => {
+                    let start = tests
+                        .len()
+                        .checked_sub(child_count)
+                        .expect("pattern-test worklist must produce one value per child");
+                    let child_tests = tests.split_off(start);
+                    let mut combined = as_i8(builder, base);
+                    for child_test in child_tests {
+                        let child_test = as_i8(builder, child_test);
+                        combined = builder.ins().band(combined, child_test);
+                    }
+                    tests.push(combined);
                 }
-                Ok(test)
-            }
-            crate::InlinePipePatternKind::Record(field_patterns) => {
-                let mut test = builder.ins().iconst(types::I8, 1);
-                let record_layout = input_layout;
-                for field_pat in field_patterns {
-                    let (offset, field_layout) = self.compute_record_field_offset(
-                        kernel_id,
-                        record_layout,
-                        &field_pat.label,
-                    )?;
-                    let abi =
-                        self.field_abi_shape(kernel_id, field_layout, "record pattern field")?;
-                    let field_val =
-                        builder
-                            .ins()
-                            .load(abi.ty, MemFlags::new(), current, offset as i32);
-                    let sub_test = self.emit_pattern_test(
-                        kernel_id,
-                        field_val,
-                        &field_pat.pattern,
-                        field_layout,
-                        inline_subjects,
-                        builder,
-                    )?;
-                    let sub8 = if builder.func.dfg.value_type(sub_test) == types::I8 {
-                        sub_test
-                    } else {
-                        builder.ins().ireduce(types::I8, sub_test)
-                    };
-                    test = builder.ins().band(test, sub8);
+                Task::FinishNicheSome {
+                    some_block,
+                    none_block,
+                    merge_block,
+                } => {
+                    let sub_test = tests
+                        .pop()
+                        .expect("niche Some pattern child must produce one test value");
+                    let sub_test = as_i8(builder, sub_test);
+                    builder.ins().jump(merge_block, &[sub_test.into()]);
+                    builder.seal_block(some_block);
+
+                    builder.switch_to_block(none_block);
+                    let no_match = builder.ins().iconst(types::I8, 0);
+                    builder.ins().jump(merge_block, &[no_match.into()]);
+                    builder.seal_block(none_block);
+
+                    builder.switch_to_block(merge_block);
+                    builder.seal_block(merge_block);
+                    tests.push(builder.block_params(merge_block)[0]);
                 }
-                Ok(test)
-            }
-            crate::InlinePipePatternKind::List { elements, rest } => {
-                let element_layout = match &self.program.layouts()[input_layout].kind {
-                    LayoutKind::List { element } => *element,
-                    _ => return Ok(builder.ins().iconst(types::I8, 1)),
-                };
-                let list_len_func = self.declare_list_len_func(kernel_id, builder)?;
-                let len_call = builder.ins().call(list_len_func, &[current]);
-                let len = builder.inst_results(len_call)[0];
-                let expected = elements.len() as i64;
-                let len_test = if rest.is_some() {
-                    builder
-                        .ins()
-                        .icmp_imm(IntCC::SignedGreaterThanOrEqual, len, expected)
-                } else {
-                    builder.ins().icmp_imm(IntCC::Equal, len, expected)
-                };
-                let mut test = if builder.func.dfg.value_type(len_test) == types::I8 {
-                    len_test
-                } else {
-                    builder.ins().ireduce(types::I8, len_test)
-                };
-                let elem_abi =
-                    self.field_abi_shape(kernel_id, element_layout, "list pattern element")?;
-                for (i, sub_pat) in elements.iter().enumerate() {
-                    let list_get_func = self.declare_list_get_func(kernel_id, builder)?;
-                    let idx = builder.ins().iconst(types::I64, i as i64);
-                    let get_call = builder.ins().call(list_get_func, &[current, idx]);
-                    let elem_ptr = builder.inst_results(get_call)[0];
-                    let elem_val = builder
-                        .ins()
-                        .load(elem_abi.ty, MemFlags::new(), elem_ptr, 0);
-                    let sub_test = self.emit_pattern_test(
-                        kernel_id,
-                        elem_val,
-                        sub_pat,
-                        element_layout,
-                        inline_subjects,
-                        builder,
-                    )?;
-                    let sub8 = if builder.func.dfg.value_type(sub_test) == types::I8 {
-                        sub_test
-                    } else {
-                        builder.ins().ireduce(types::I8, sub_test)
-                    };
-                    test = builder.ins().band(test, sub8);
-                }
-                Ok(test)
             }
         }
+
+        assert_eq!(
+            tests.len(),
+            1,
+            "pattern-test worklist must produce exactly one result"
+        );
+        Ok(tests.pop().expect("pattern-test result must exist"))
     }
 
     fn apply_pattern_bindings(
@@ -10576,20 +10704,21 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         current: Value,
         pattern: &crate::InlinePipePattern,
         input_layout: LayoutId,
-        inline_subjects: &mut Vec<Option<Value>>,
+        inline_subjects: &mut [Option<Value>],
         builder: &mut FunctionBuilder<'_>,
     ) {
-        match &pattern.kind {
-            crate::InlinePipePatternKind::Binding { subject } => {
-                inline_subjects[subject.index()] = Some(current);
-            }
-            crate::InlinePipePatternKind::Constructor {
-                constructor,
-                arguments,
-            } => {
-                match constructor {
+        let mut work = vec![(current, pattern, input_layout)];
+        while let Some((current, pattern, input_layout)) = work.pop() {
+            match &pattern.kind {
+                crate::InlinePipePatternKind::Binding { subject } => {
+                    inline_subjects[subject.index()] = Some(current);
+                }
+                crate::InlinePipePatternKind::Constructor {
+                    constructor,
+                    arguments,
+                } => match constructor {
                     crate::InlinePipeConstructor::Builtin(crate::BuiltinTerm::Some) => {
-                        if let [sub_pat] = arguments.as_slice() {
+                        if let [sub_pattern] = arguments.as_slice() {
                             let element_layout = match &self.program.layouts()[input_layout].kind {
                                 LayoutKind::Option { element } => *element,
                                 _ => input_layout,
@@ -10597,13 +10726,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             let payload = match self.option_codegen_contract(input_layout) {
                                 Some(OptionCodegenContract::NicheReference) => current,
                                 Some(OptionCodegenContract::InlineScalar(kind)) => {
-                                    let shifted = builder.ins().ushr_imm(current, 64);
+                                    let shifted = builder.ins().ushr_imm_u(current, 64);
                                     let payload_i64 = builder.ins().ireduce(types::I64, shifted);
                                     match kind {
                                         ScalarOptionKind::Int => payload_i64,
                                         ScalarOptionKind::Float => builder.ins().bitcast(
                                             cranelift_codegen::ir::types::F64,
-                                            MemFlags::new(),
+                                            MemFlagsData::new(),
                                             payload_i64,
                                         ),
                                         ScalarOptionKind::Bool => builder
@@ -10613,14 +10742,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 }
                                 None => current,
                             };
-                            self.apply_pattern_bindings(
-                                kernel_id,
-                                payload,
-                                sub_pat,
-                                element_layout,
-                                inline_subjects,
-                                builder,
-                            );
+                            work.push((payload, sub_pattern, element_layout));
                         }
                     }
                     crate::InlinePipeConstructor::Sum(handle) => {
@@ -10631,103 +10753,77 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         .flatten();
                         match arguments.as_slice() {
                             [] => {}
-                            [sub_pat] => {
-                                if let Some(pl) = payload_layout {
-                                    let payload_abi =
-                                        self.field_abi_shape(kernel_id, pl, "sum payload").ok();
-                                    let payload = if let Some(abi) = payload_abi {
-                                        builder.ins().load(abi.ty, MemFlags::new(), current, 8)
-                                    } else {
-                                        builder.ins().load(
-                                            self.pointer_type(),
-                                            MemFlags::new(),
-                                            current,
-                                            8,
-                                        )
-                                    };
-                                    self.apply_pattern_bindings(
-                                        kernel_id,
-                                        payload,
-                                        sub_pat,
-                                        pl,
-                                        inline_subjects,
-                                        builder,
-                                    );
+                            [sub_pattern] => {
+                                let (payload_layout, payload_type) = if let Some(layout) = payload_layout
+                                {
+                                    let payload_type = self
+                                        .field_abi_shape(kernel_id, layout, "sum payload")
+                                        .map_or_else(|_| self.pointer_type(), |abi| abi.ty);
+                                    (layout, payload_type)
                                 } else {
-                                    let payload = builder.ins().load(
-                                        self.pointer_type(),
-                                        MemFlags::new(),
-                                        current,
-                                        8,
-                                    );
-                                    self.apply_pattern_bindings(
-                                        kernel_id,
-                                        payload,
-                                        sub_pat,
-                                        input_layout,
-                                        inline_subjects,
-                                        builder,
-                                    );
-                                }
+                                    (input_layout, self.pointer_type())
+                                };
+                                let payload = builder.ins().load(
+                                    payload_type,
+                                    MemFlagsData::new(),
+                                    current,
+                                    8,
+                                );
+                                work.push((payload, sub_pattern, payload_layout));
                             }
                             sub_patterns => {
-                                let Some(pl) = payload_layout else {
-                                    return;
+                                let Some(payload_layout) = payload_layout else {
+                                    continue;
                                 };
                                 let LayoutKind::Tuple(field_layouts) =
-                                    &self.program.layouts()[pl].kind
+                                    &self.program.layouts()[payload_layout].kind
                                 else {
-                                    return;
+                                    continue;
                                 };
                                 if field_layouts.len() != sub_patterns.len() {
-                                    return;
+                                    continue;
                                 }
+                                let field_layouts = field_layouts.clone();
                                 let payload = builder.ins().load(
                                     self.pointer_type(),
-                                    MemFlags::new(),
+                                    MemFlagsData::new(),
                                     current,
                                     8,
                                 );
                                 let mut offset = 0u32;
-                                for (sub_pat, &field_layout) in
-                                    sub_patterns.iter().zip(field_layouts.iter())
+                                let mut children = Vec::with_capacity(sub_patterns.len());
+                                for (sub_pattern, field_layout) in
+                                    sub_patterns.iter().zip(field_layouts)
                                 {
-                                    let abi = match self.field_abi_shape(
+                                    let Ok(abi) = self.field_abi_shape(
                                         kernel_id,
                                         field_layout,
                                         "sum payload field",
-                                    ) {
-                                        Ok(abi) => abi,
-                                        Err(_) => return,
+                                    ) else {
+                                        children.clear();
+                                        break;
                                     };
                                     offset = align_to(offset, abi.align);
                                     let field = builder.ins().load(
                                         abi.ty,
-                                        MemFlags::new(),
+                                        MemFlagsData::new(),
                                         payload,
                                         offset as i32,
                                     );
-                                    self.apply_pattern_bindings(
-                                        kernel_id,
-                                        field,
-                                        sub_pat,
-                                        field_layout,
-                                        inline_subjects,
-                                        builder,
-                                    );
+                                    children.push((field, sub_pattern, field_layout));
                                     offset += abi.size;
                                 }
+                                work.extend(children.into_iter().rev());
                             }
                         }
                     }
-                    // Result/Validation constructors with payload bindings
                     crate::InlinePipeConstructor::Builtin(
                         crate::BuiltinTerm::Ok
                         | crate::BuiltinTerm::Err
                         | crate::BuiltinTerm::Valid
                         | crate::BuiltinTerm::Invalid,
                     ) => {
-                        if let [sub_pat] = arguments.as_slice() {
+                        if let [sub_pattern] = arguments.as_slice() {
                             let payload_layout =
                                 match (constructor, &self.program.layouts()[input_layout].kind) {
                                     (
@@ -10755,141 +10851,124 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                         LayoutKind::Validation { error, .. },
                                     ) => Some(*error),
                                     _ => None,
-                                };
+                                }
+                                .unwrap_or(input_layout);
                             let payload = builder.ins().load(
                                 self.pointer_type(),
-                                MemFlags::new(),
+                                MemFlagsData::new(),
                                 current,
                                 8,
                             );
-                            let pl = payload_layout.unwrap_or(input_layout);
-                            self.apply_pattern_bindings(
-                                kernel_id,
-                                payload,
-                                sub_pat,
-                                pl,
-                                inline_subjects,
-                                builder,
-                            );
+                            work.push((payload, sub_pattern, payload_layout));
                         }
                     }
                     _ => {}
-                }
-            }
-            crate::InlinePipePatternKind::Tuple(sub_patterns) => {
-                let element_layouts: Vec<LayoutId> =
-                    match &self.program.layouts()[input_layout].kind.clone() {
-                        LayoutKind::Tuple(elements) => elements.clone(),
-                        _ => return,
-                    };
-                let mut offset = 0u32;
-                for (i, sub_pat) in sub_patterns.iter().enumerate() {
-                    if i >= element_layouts.len() {
-                        break;
-                    }
-                    let elem_layout = element_layouts[i];
-                    let abi = match self.field_abi_shape(kernel_id, elem_layout, "tuple binding") {
-                        Ok(a) => a,
-                        Err(_) => break,
-                    };
-                    offset = align_to(offset, abi.align);
-                    let elem_val =
-                        builder
-                            .ins()
-                            .load(abi.ty, MemFlags::new(), current, offset as i32);
-                    self.apply_pattern_bindings(
-                        kernel_id,
-                        elem_val,
-                        sub_pat,
-                        elem_layout,
-                        inline_subjects,
-                        builder,
-                    );
-                    offset += abi.size;
-                }
-            }
-            crate::InlinePipePatternKind::Record(field_patterns) => {
-                let record_layout = input_layout;
-                for field_pat in field_patterns {
-                    let Ok((offset, field_layout)) = self.compute_record_field_offset(
-                        kernel_id,
-                        record_layout,
-                        &field_pat.label,
-                    ) else {
-                        continue;
-                    };
-                    let Ok(abi) = self.field_abi_shape(kernel_id, field_layout, "record binding")
+                },
+                crate::InlinePipePatternKind::Tuple(sub_patterns) => {
+                    let LayoutKind::Tuple(element_layouts) =
+                        &self.program.layouts()[input_layout].kind
                     else {
                         continue;
                     };
-                    let field_val =
-                        builder
-                            .ins()
-                            .load(abi.ty, MemFlags::new(), current, offset as i32);
-                    self.apply_pattern_bindings(
-                        kernel_id,
-                        field_val,
-                        &field_pat.pattern,
-                        field_layout,
-                        inline_subjects,
-                        builder,
-                    );
+                    let element_layouts = element_layouts.clone();
+                    let mut offset = 0u32;
+                    let mut children = Vec::with_capacity(sub_patterns.len());
+                    for (sub_pattern, element_layout) in
+                        sub_patterns.iter().zip(element_layouts)
+                    {
+                        let Ok(abi) =
+                            self.field_abi_shape(kernel_id, element_layout, "tuple binding")
+                        else {
+                            break;
+                        };
+                        offset = align_to(offset, abi.align);
+                        let element = builder.ins().load(
+                            abi.ty,
+                            MemFlagsData::new(),
+                            current,
+                            offset as i32,
+                        );
+                        children.push((element, sub_pattern, element_layout));
+                        offset += abi.size;
+                    }
+                    work.extend(children.into_iter().rev());
                 }
-            }
-            crate::InlinePipePatternKind::List { elements, rest } => {
-                let element_layout = match &self.program.layouts()[input_layout].kind {
-                    LayoutKind::List { element } => *element,
-                    _ => return,
-                };
-                let elem_abi =
-                    match self.field_abi_shape(kernel_id, element_layout, "list binding element") {
-                        Ok(a) => a,
-                        Err(_) => return,
+                crate::InlinePipePatternKind::Record(field_patterns) => {
+                    let mut children = Vec::with_capacity(field_patterns.len());
+                    for field_pattern in field_patterns {
+                        let Ok((offset, field_layout)) = self.compute_record_field_offset(
+                            kernel_id,
+                            input_layout,
+                            &field_pattern.label,
+                        ) else {
+                            continue;
+                        };
+                        let Ok(abi) =
+                            self.field_abi_shape(kernel_id, field_layout, "record binding")
+                        else {
+                            continue;
+                        };
+                        let field = builder.ins().load(
+                            abi.ty,
+                            MemFlagsData::new(),
+                            current,
+                            offset as i32,
+                        );
+                        children.push((field, &field_pattern.pattern, field_layout));
+                    }
+                    work.extend(children.into_iter().rev());
+                }
+                crate::InlinePipePatternKind::List { elements, rest } => {
+                    let LayoutKind::List { element } =
+                        &self.program.layouts()[input_layout].kind
+                    else {
+                        continue;
                     };
-                for (i, sub_pat) in elements.iter().enumerate() {
-                    let list_get_func = match self.declare_list_get_func(kernel_id, builder) {
-                        Ok(f) => f,
-                        Err(_) => return,
-                    };
-                    let idx = builder.ins().iconst(types::I64, i as i64);
-                    let get_call = builder.ins().call(list_get_func, &[current, idx]);
-                    let elem_ptr = builder.inst_results(get_call)[0];
-                    let elem_val = builder
-                        .ins()
-                        .load(elem_abi.ty, MemFlags::new(), elem_ptr, 0);
-                    self.apply_pattern_bindings(
+                    let element_layout = *element;
+                    let Ok(element_abi) = self.field_abi_shape(
                         kernel_id,
-                        elem_val,
-                        sub_pat,
                         element_layout,
-                        inline_subjects,
-                        builder,
-                    );
-                }
-                if let Some(rest_pat) = rest {
-                    let list_slice_func = match self.declare_list_slice_func(kernel_id, builder) {
-                        Ok(f) => f,
-                        Err(_) => return,
+                        "list binding element",
+                    ) else {
+                        continue;
                     };
-                    let start = builder.ins().iconst(types::I64, elements.len() as i64);
-                    let stride = builder.ins().iconst(types::I64, elem_abi.size as i64);
-                    let slice_call = builder
-                        .ins()
-                        .call(list_slice_func, &[current, start, stride]);
-                    let rest_list = builder.inst_results(slice_call)[0];
-                    self.apply_pattern_bindings(
-                        kernel_id,
-                        rest_list,
-                        rest_pat,
-                        input_layout,
-                        inline_subjects,
-                        builder,
-                    );
+                    let mut children = Vec::with_capacity(elements.len() + usize::from(rest.is_some()));
+                    let mut failed = false;
+                    for (index, sub_pattern) in elements.iter().enumerate() {
+                        let Ok(list_get) = self.declare_list_get_func(kernel_id, builder) else {
+                            failed = true;
+                            break;
+                        };
+                        let index = builder.ins().iconst(types::I64, index as i64);
+                        let call = builder.ins().call(list_get, &[current, index]);
+                        let element_pointer = builder.inst_results(call)[0];
+                        let element = builder.ins().load(
+                            element_abi.ty,
+                            MemFlagsData::new(),
+                            element_pointer,
+                            0,
+                        );
+                        children.push((element, sub_pattern, element_layout));
+                    }
+                    if failed {
+                        continue;
+                    }
+                    if let Some(rest_pattern) = rest.as_deref() {
+                        let Ok(list_slice) = self.declare_list_slice_func(kernel_id, builder) else {
+                            continue;
+                        };
+                        let start = builder.ins().iconst(types::I64, elements.len() as i64);
+                        let stride = builder.ins().iconst(types::I64, element_abi.size as i64);
+                        let call = builder.ins().call(list_slice, &[current, start, stride]);
+                        let rest = builder.inst_results(call)[0];
+                        children.push((rest, rest_pattern, input_layout));
+                    }
+                    work.extend(children.into_iter().rev());
                 }
+                crate::InlinePipePatternKind::Wildcard
+                | crate::InlinePipePatternKind::Integer(_)
+                | crate::InlinePipePatternKind::Text(_) => {}
             }
-            crate::InlinePipePatternKind::Wildcard
-            | crate::InlinePipePatternKind::Integer(_)
-            | crate::InlinePipePatternKind::Text(_) => {}
         }
     }
 
@@ -11853,7 +11932,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 }
                 Task::BuildMap { len } => {
                     let entries = drain_tail(&mut values, len * 2)
-                        .chunks_exact(2)
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
                         .map(|pair| RuntimeMapEntry {
                             key: pair[0].clone(),
                             value: pair[1].clone(),
@@ -11867,7 +11948,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         fields
                             .iter()
                             .map(|field| field.label.clone())
-                            .zip(values_tail.into_iter())
+                            .zip(values_tail)
                             .map(|(label, value)| RuntimeRecordField { label, value })
                             .collect(),
                     ));

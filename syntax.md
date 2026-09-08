@@ -49,8 +49,12 @@ Allowed top-level forms:
 - `from`
 - `use`
 - `export`
+- `hoist`
 - `provider`
 - decorators `@name` including `@source`, `@recur.timer`, `@recur.backoff`
+
+For `hoist` kind filters, hiding, and import precedence, use the
+[module reference](manual/guide/modules.md#publishing-names-project-wide-with-hoist).
 
 ### 2.1 Comments
 
@@ -611,21 +615,21 @@ Rules:
 
 | Operator | Shape | Meaning / guardrails |
 |---|---|---|
-| `|>` | `x |> f` or `x |> .field` | transform current subject |
-| Pipe memo `#name` | `x |> #before f before #after` | name a stage input/result without leaving the pipe |
-| `?|>` | `x ?|> predicate` | gate; predicate must be pure `Bool` |
-| `||>` | `x ||> Pattern -> expr` | case split / pattern match |
-| `T|>` / `F|>` | adjacent pair in one spine | truthy/falsy sugar for canonical carriers |
-| `*|>` | `xs *|> body` | map / fan-out; pure mapping only |
-| `<|*` | `xs *|> f <|* g` | explicit join after `*|>` only |
-| `|` | `x | observer` | tap; ignores observer result |
-| `!|>` | `x !|> validate` | dependent validation stage; body must return `Result` or `Validation`, preserving any existing carrier/error type |
-| `~|>` | `signal ~|> seed` | previous committed value, seeded form |
-| `+|>` | `signal +|> seed step` | stateful accumulation |
-| `-|>` | `signal -|> diffFn` | diff current vs previous |
-| `&|>` | applicative cluster stage | combine independent values under one applicative |
-| `@|>` / `<|@` | recurrent region | explicit recurrence; avoid unless runtime lowering target is known |
-| `<|` | `target <| patch` | structural patch application |
+| `\|>` | `x \|> f` or `x \|> .field` | transform current subject |
+| Pipe memo `#name` | `x \|> #before f before #after` | name a stage input/result without leaving the pipe |
+| `?\|>` | `x ?\|> predicate` | gate; predicate must be pure `Bool` |
+| `\|\|>` | `x \|\|> Pattern -> expr` | case split / pattern match |
+| `T\|>` / `F\|>` | adjacent pair in one spine | truthy/falsy sugar for canonical carriers |
+| `*\|>` | `xs *\|> body` | map / fan-out; pure mapping only |
+| `<\|*` | `xs *\|> f <\|* g` | explicit join after `*\|>` only |
+| `\|` | `x \| observer` | tap; ignores observer result |
+| `!\|>` | `x !\|> validate` | dependent validation stage; body must return `Result` or `Validation`, preserving any existing carrier/error type |
+| `~\|>` | `signal ~\|> seed` | previous committed value, seeded form |
+| `+\|>` | `signal +\|> seed step` | stateful accumulation |
+| `-\|>` | `signal -\|> diffFn` | diff current vs previous |
+| `&\|>` | applicative cluster stage | combine independent values under one applicative |
+| `@\|>` / `<\|@` | recurrent region | explicit recurrence; avoid unless runtime lowering target is known |
+| `<\|` | `target <\| patch` | structural patch application |
 
 ### 6.1.1 Pipe memos `#name`
 
@@ -1093,13 +1097,13 @@ Important:
 
 | Do not write | Use instead |
 |---|---|
-| `if cond then a else b` | `cond T|> a F|> b` or `expr ||> Pattern -> ...` |
-| `case x of ...` | `x ||> Pattern -> expr` |
-| `match x with ...` | `x ||> Pattern -> expr` or markup `<match on={x}>` |
+| `if cond then a else b` | `cond T\|> a F\|> b` or `expr \|\|> Pattern -> ...` |
+| `case x of ...` | `x \|\|> Pattern -> expr` |
+| `match x with ...` | `x \|\|> Pattern -> expr` or markup `<match on={x}>` |
 | `Maybe a` / `Either e a` | `Option A` / `Result E A` |
-| `do` notation / `>>=` on `Signal` | `&|>` or explicit source/runtime nodes |
+| `do` notation / `>>=` on `Signal` | `&\|>` or explicit source/runtime nodes |
 | open records / row-polymorphic record assumptions | closed records plus `Pick` / `Omit` / `Rename` |
-| `{ record | field = value }` | `record <| { field: value }` |
+| `{ record \| field = value }` | `record <\| { field: value }` |
 | `\x -> ...` | not specified here; prefer named `func` or existing in-repo precedent only |
 | OCaml-style `fun x -> ...` | not AIVI `func`; AIVI uses a named `func` with a leading `type` signature |
 | `where` blocks | not specified here |
@@ -1141,7 +1145,7 @@ Important:
 | `"a" ++ "b"` or `"a" ^ "b"` | `"{a}{b}"` or `"{left} {right}"` |
 | map literal as plain `{ ... }` | `Map { ... }` |
 | set literal as plain `{ ... }` | `Set [ ... ]` |
-| patch as record update syntax | `target <| { path.to.field: value }` |
+| patch as record update syntax | `target <\| { path.to.field: value }` |
 | assume patch literals use ordinary record commas | patch entries are path updates; follow existing patch formatting |
 
 ## 11. Not specified here: avoid inventing

@@ -52,8 +52,6 @@ func describeResult = result => result
 
 Transforms the `Right` value, leaving `Left` unchanged.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.either (
@@ -76,8 +74,6 @@ func doubleRight = result =>
 
 Transforms the `Left` value, leaving `Right` unchanged.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.either (
@@ -100,8 +96,6 @@ func wrapError = result =>
 
 Transforms both sides independently.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.either (
@@ -124,8 +118,6 @@ func transformBoth = e =>
 
 Reduces an `Either` to a single value by applying the appropriate function.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.either (
@@ -152,8 +144,6 @@ func toLength = e =>
 
 Predicates that test which case an `Either` holds.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.either (
@@ -173,8 +163,6 @@ func hasError = e =>
 
 Extract the value from the expected case, returning a default if the other case is held.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.either (
@@ -193,8 +181,6 @@ func getValueOrZero = e =>
 
 Swaps the `Left` and `Right` cases.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.either (
@@ -213,8 +199,6 @@ func flipEither = e =>
 
 Converts to `Option`, keeping only `Right` values.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.either (
@@ -233,8 +217,6 @@ func rightOrNone = e =>
 
 Converts a `Result E A` into an `Either E A`. `Ok value` becomes `Right value`; `Err error` becomes `Left error`.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.either (
@@ -253,8 +235,6 @@ func resultToEither = result =>
 
 Splits a list of `Either` values into a tuple of lefts and rights.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.either (

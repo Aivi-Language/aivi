@@ -6,8 +6,22 @@ requests using the proven HTTP infrastructure.
 
 ## Declaring an API handle
 
-```aivi
-@source api "./petstore.yaml" with {
+```aivi group=petstore
+use aivi.api (
+    ApiSource
+    BearerToken
+)
+
+domain Duration over Int = {
+    suffix sec
+    type sec : Int
+    sec = value => Duration value
+}
+
+value serverUrl : Text = "https://api.petstore.io/v2"
+value apiToken : Text = "secret"
+
+@source api "manual/examples/petstore.yaml" with {
     baseUrl: serverUrl,
     auth: BearerToken apiToken,
     timeout: 30sec
@@ -15,8 +29,8 @@ requests using the proven HTTP infrastructure.
 signal petstore : ApiSource
 ```
 
-- The first argument is the path to the OpenAPI spec file (YAML or JSON). It is resolved relative
-  to the source file at compile time and is only used for validation — the runtime uses `baseUrl`.
+- The first argument is the path to the OpenAPI spec file (YAML or JSON). The current compiler reads
+  it from the workspace invocation directory and uses it for validation; the runtime uses `baseUrl`.
 - The `with { ... }` block accepts standard HTTP options (`timeout`, `retry`, `headers`,
   `refreshEvery`, `decode`, `refreshOn`, `activeWhen`) plus two API-specific options:
 
@@ -31,7 +45,13 @@ Member access on a handle is validated against the spec's `operationId`s at comp
 
 ### Read operations (GET) — use as `signal`
 
-```aivi
+```aivi group=petstore
+type Pet = {
+    id: Int,
+    name: Text,
+    status: Option Text
+}
+
 signal allPets : Signal (Result ApiError (List Pet)) = petstore.listPets
 ```
 
@@ -41,18 +61,24 @@ runtime.
 
 ### Write operations (POST / PUT / PATCH / DELETE) — use as `value`
 
-```aivi
-value createNewPet : (NewPet -> Task ApiError Pet) = petstore.createPet
+```aivi group=petstore
+type NewPet = {
+    name: Text,
+    status: Option Text
+}
+
+value createNewPet : Text -> Text -> Task Text Text = petstore.createPet
 ```
 
 `createPet` maps to `POST /pets` in the spec. The compiler lowers this to an `HttpPost` intrinsic
-call with the composed URL.
+call with the composed URL. The current mutation task surface is still the low-level text request
+adapter shown above; generated request/response records do not yet change that task signature.
 
 ## Generating type declarations
 
 Use `aivi openapi-gen` to derive AIVI type declarations from the spec schemas:
 
-```
+```sh
 aivi openapi-gen ./petstore.yaml -o types/petstore.aivi
 ```
 
@@ -65,7 +91,7 @@ The generated file contains:
 
 You can then import the generated types in your module. The generated module path matches the output file you passed to `aivi openapi-gen` — for example, if you wrote the output to `types/petstore.aivi`, import from that module:
 
-```aivi
+```aivi-fragment
 use types.petstore (
     Pet
     NewPet
@@ -86,34 +112,8 @@ The `auth` option accepts an `ApiAuth` sum value imported from `aivi.api`:
 | `ApiKeyQuery Text` | Key appended as query parameter (runtime: deferred) |
 | `OAuth2 Text` | `Authorization: Bearer <token>` header |
 
-## Full example
-
-```aivi
-use aivi.api (
-    ApiSource
-    ApiError
-    BearerToken
-)
-
-type Pet = {
-    id: Int,
-    name: Text,
-    status: Option Text
-}
-
-type NewPet = { name: Text }
-
-value serverUrl : Text = "https://api.petstore.io/v2"
-value apiToken : Text = "secret"
-
-@source api "./petstore.yaml" with {
-    baseUrl: serverUrl,
-    auth: BearerToken apiToken
-}
-signal petstore : ApiSource
-
-signal pets : Signal (Result ApiError (List Pet)) = petstore.listPets
-```
+The three checked fragments above form one complete module; the manual verifier compiles them
+together against [`manual/examples/petstore.yaml`](../examples/petstore.yaml).
 
 ## See also
 

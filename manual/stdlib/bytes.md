@@ -1,6 +1,6 @@
 # aivi.core.bytes
 
-Byte sequence operations. All functions are runtime intrinsics — import them directly:
+Byte sequence intrinsics and pure stdlib helpers — import them directly:
 
 ```aivi
 use aivi.core.bytes (
@@ -23,7 +23,7 @@ use aivi.core.bytes (
 
 ---
 
-## Type
+## Error vocabulary
 
 ### `BytesDecodeError`
 
@@ -32,7 +32,19 @@ type BytesDecodeError =
   | InvalidUtf8
 ```
 
-Returned when `toText` fails because the byte sequence is not valid UTF-8.
+Shared error vocabulary, not the return value of `toText`: that intrinsic returns
+`None` for invalid UTF-8. `BytesTask` aliases `Task BytesDecodeError Bytes`.
+
+`BytesEncoding` exports `Utf8`, `Base64`, and `Hex` labels. These labels do not add
+Base64/hex encode or decode functions; the text intrinsics below use UTF-8.
+
+## Pure helpers
+
+| Helper | Type | Behavior |
+| --- | --- | --- |
+| `isEmpty` | `Bytes -> Bool` | True for zero bytes |
+| `nonEmpty` | `Bytes -> Bool` | True for at least one byte |
+| `concat` | `List Bytes -> Bytes` | Concatenate buffers from left to right |
 
 ---
 

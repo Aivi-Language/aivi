@@ -56,7 +56,7 @@ pub struct FanoutSegmentElaboration {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FanoutSegmentOutcome {
-    Planned(FanoutSegmentPlan),
+    Planned(Box<FanoutSegmentPlan>),
     Blocked(BlockedFanoutSegment),
 }
 
@@ -498,7 +498,7 @@ pub(crate) fn elaborate_fanout_segment(
         });
     }
 
-    FanoutSegmentOutcome::Planned(FanoutSegmentPlan {
+    FanoutSegmentOutcome::Planned(Box::new(FanoutSegmentPlan {
         carrier,
         input_subject: subject.clone(),
         element_subject,
@@ -508,7 +508,7 @@ pub(crate) fn elaborate_fanout_segment(
         filters,
         join,
         result_type,
-    })
+    }))
 }
 
 fn lower_fanout_filter_predicate(

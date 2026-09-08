@@ -14,6 +14,7 @@ you start with a goal, and the guide gives you the shortest dependable path to t
 | Start a splash window and additional companion entries together | [How to launch multiple entries](/how-to/launch-multiple-entries) |
 | Use an OpenAPI spec as the source of truth | [OpenAPI source guide](/guide/openapi-source) |
 | Survey the main built-in integration patterns | [Integration patterns](/guide/integrations) |
+| Prepare, verify, and hand off a repository change | [How to contribute](/how-to/contribute) |
 
 ## When not to use a how-to guide
 

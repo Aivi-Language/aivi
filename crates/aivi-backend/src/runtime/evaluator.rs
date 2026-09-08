@@ -1,3 +1,15 @@
+#[derive(Clone, Copy)]
+struct EvaluationLocation {
+    kernel: KernelId,
+    expr: KernelExprId,
+}
+
+#[derive(Clone, Copy)]
+struct BuiltinCallSite {
+    location: EvaluationLocation,
+    intrinsic: BuiltinClassMemberIntrinsic,
+}
+
 pub struct KernelEvaluator<'a> {
     program: &'a Program,
     item_cache: BTreeMap<ItemId, RuntimeValue>,
@@ -98,7 +110,7 @@ impl<'a> KernelEvaluator<'a> {
             return Err(EvaluationError::KernelResultLayoutMismatch {
                 kernel: kernel_id,
                 expected,
-                found: result,
+                found: Box::new(result),
             });
         }
         Ok(result)
@@ -180,7 +192,7 @@ impl<'a> KernelEvaluator<'a> {
                     return Err(EvaluationError::KernelInputLayoutMismatch {
                         kernel: kernel_id,
                         expected,
-                        found: value.clone(),
+                        found: Box::new(value.clone()),
                     });
                 }
             }
@@ -210,7 +222,7 @@ impl<'a> KernelEvaluator<'a> {
                     kernel: kernel_id,
                     slot: EnvSlotId::from_raw(index as u32),
                     expected: *expected,
-                    found: value.clone(),
+                    found: Box::new(value.clone()),
                 });
             }
         }
@@ -307,7 +319,7 @@ impl<'a> KernelEvaluator<'a> {
                 return Err(EvaluationError::KernelResultLayoutMismatch {
                     kernel,
                     expected,
-                    found: raw_result,
+                    found: Box::new(raw_result),
                 });
             };
             raw_result
@@ -446,20 +458,16 @@ impl<'a> KernelEvaluator<'a> {
                             if let Some(item_id) = self
                                 .program
                                 .domain_member_item(handle.domain, handle.member_index)
+                                && let Some(item) = self.program.items().get(item_id)
+                                && let Some(body_kernel) = item.body
                             {
-                                if let Some(item) = self.program.items().get(item_id) {
-                                    if let Some(body_kernel) = item.body {
-                                        values.push(RuntimeValue::Callable(
-                                            RuntimeCallable::ItemBody {
-                                                item: item_id,
-                                                kernel: body_kernel,
-                                                parameters: item.parameters.clone(),
-                                                bound_arguments: Vec::new(),
-                                            },
-                                        ));
-                                        continue;
-                                    }
-                                }
+                                values.push(RuntimeValue::Callable(RuntimeCallable::ItemBody {
+                                    item: item_id,
+                                    kernel: body_kernel,
+                                    parameters: item.parameters.clone(),
+                                    bound_arguments: Vec::new(),
+                                }));
+                                continue;
                             }
                             let (parameters, result) =
                                 callable_signature(self.program, expr.layout);
@@ -638,8 +646,10 @@ impl<'a> KernelEvaluator<'a> {
                                 _ => unreachable!(),
                             };
                             values.push(self.evaluate_inline_pipe(
-                                kernel_id,
-                                expr_id,
+                                EvaluationLocation {
+                                    kernel: kernel_id,
+                                    expr: expr_id,
+                                },
                                 pipe,
                                 input_subject,
                                 environment,
@@ -673,7 +683,7 @@ impl<'a> KernelEvaluator<'a> {
                                     return Err(EvaluationError::InvalidInterpolationValue {
                                         kernel: kernel_id,
                                         expr,
-                                        found: value,
+                                        found: Box::new(value),
                                     });
                                 }
                                 value
@@ -698,7 +708,9 @@ impl<'a> KernelEvaluator<'a> {
                 }
                 Task::BuildMap { len } => {
                     let entries = drain_tail(&mut values, len * 2)
-                        .chunks_exact(2)
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
                         .map(|pair| RuntimeMapEntry {
                             key: pair[0].clone(),
                             value: pair[1].clone(),
@@ -712,7 +724,7 @@ impl<'a> KernelEvaluator<'a> {
                     values.push(RuntimeValue::Record(
                         labels
                             .into_iter()
-                            .zip(values_tail.into_iter())
+                            .zip(values_tail)
                             .map(|(label, value)| RuntimeRecordField { label, value })
                             .collect(),
                     ));
@@ -758,14 +770,17 @@ impl<'a> KernelEvaluator<'a> {
 
     fn evaluate_inline_pipe(
         &mut self,
-        kernel_id: KernelId,
-        expr_id: KernelExprId,
+        location: EvaluationLocation,
         pipe: &crate::InlinePipeExpr,
         input_subject: Option<&RuntimeValue>,
         environment: &[RuntimeValue],
         inline_subjects: &[Option<RuntimeValue>],
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, EvaluationError> {
+        let EvaluationLocation {
+            kernel: kernel_id,
+            expr: expr_id,
+        } = location;
         let kernel = &self.program.kernels()[kernel_id];
         let mut current = self.evaluate_expr(
             kernel_id,
@@ -782,7 +797,7 @@ impl<'a> KernelEvaluator<'a> {
                 EvaluationError::KernelResultLayoutMismatch {
                     kernel: kernel_id,
                     expected: stage.input_layout,
-                    found: stage_found,
+                    found: Box::new(stage_found),
                 },
             )?;
             pipe_subjects[stage.subject.index()] = Some(current.clone());
@@ -864,7 +879,7 @@ impl<'a> KernelEvaluator<'a> {
                     matched.ok_or_else(|| EvaluationError::InlinePipeCaseNoMatch {
                         kernel: kernel_id,
                         expr: expr_id,
-                        subject: current.clone(),
+                        subject: Box::new(current.clone()),
                     })?
                 }
                 InlinePipeStageKind::TruthyFalsy { truthy, falsy } => {
@@ -916,7 +931,7 @@ impl<'a> KernelEvaluator<'a> {
                 EvaluationError::KernelResultLayoutMismatch {
                     kernel: kernel_id,
                     expected: stage.result_layout,
-                    found: result_found,
+                    found: Box::new(result_found),
                 },
             )?;
             if let Some(slot) = stage.result_memo {
@@ -956,164 +971,233 @@ impl<'a> KernelEvaluator<'a> {
         value: &RuntimeValue,
         inline_subjects: &mut [Option<RuntimeValue>],
     ) -> Result<bool, EvaluationError> {
-        match &pattern.kind {
-            InlinePipePatternKind::Wildcard => Ok(true),
-            InlinePipePatternKind::Binding { subject } => {
-                let expected = kernel.inline_subjects.get(subject.index()).copied().ok_or(
-                    EvaluationError::UnknownInlineSubject {
-                        kernel: kernel_id,
-                        expr: expr_id,
-                        slot: *subject,
-                    },
-                )?;
-                if !value_matches_layout(self.program, value, expected) {
-                    return Err(EvaluationError::UnsupportedInlinePipePattern {
-                        kernel: kernel_id,
-                        expr: expr_id,
-                    });
+        enum ValueTask<'a> {
+            Borrowed(&'a RuntimeValue),
+            Owned(RuntimeValue),
+        }
+
+        impl ValueTask<'_> {
+            fn as_ref(&self) -> &RuntimeValue {
+                match self {
+                    Self::Borrowed(value) => value,
+                    Self::Owned(value) => value,
                 }
-                inline_subjects[subject.index()] = Some(value.clone());
-                Ok(true)
             }
-            InlinePipePatternKind::Integer(integer) => Ok(matches!(
-                value,
-                RuntimeValue::Int(found) if integer.raw.parse::<i64>().ok() == Some(*found)
-            )),
-            InlinePipePatternKind::Text(raw) => {
-                Ok(matches!(value, RuntimeValue::Text(found) if found.as_ref() == raw.as_ref()))
-            }
-            InlinePipePatternKind::Tuple(elements) => {
-                let RuntimeValue::Tuple(values) = value else {
-                    return Ok(false);
-                };
-                if values.len() != elements.len() {
-                    return Ok(false);
-                }
-                for (pattern, value) in elements.iter().zip(values.iter()) {
-                    if !self.match_inline_pipe_pattern(
-                        kernel_id,
-                        expr_id,
-                        kernel,
-                        pattern,
-                        value,
-                        inline_subjects,
-                    )? {
-                        return Ok(false);
-                    }
-                }
-                Ok(true)
-            }
-            InlinePipePatternKind::List { elements, rest } => {
-                let RuntimeValue::List(values) = value else {
-                    return Ok(false);
-                };
-                if values.len() < elements.len() {
-                    return Ok(false);
-                }
-                if rest.is_none() && values.len() != elements.len() {
-                    return Ok(false);
-                }
-                for (pattern, value) in elements.iter().zip(values.iter()) {
-                    if !self.match_inline_pipe_pattern(
-                        kernel_id,
-                        expr_id,
-                        kernel,
-                        pattern,
-                        value,
-                        inline_subjects,
-                    )? {
-                        return Ok(false);
-                    }
-                }
-                if let Some(rest) = rest {
-                    let remaining = RuntimeValue::List(values[elements.len()..].to_vec());
-                    if !self.match_inline_pipe_pattern(
-                        kernel_id,
-                        expr_id,
-                        kernel,
-                        rest,
-                        &remaining,
-                        inline_subjects,
-                    )? {
-                        return Ok(false);
-                    }
-                }
-                Ok(true)
-            }
-            InlinePipePatternKind::Record(fields) => {
-                let RuntimeValue::Record(values) = value else {
-                    return Ok(false);
-                };
-                for field in fields {
-                    let Some(value) = values
-                        .iter()
-                        .find(|candidate| candidate.label.as_ref() == field.label.as_ref())
-                    else {
-                        return Ok(false);
-                    };
-                    if !self.match_inline_pipe_pattern(
-                        kernel_id,
-                        expr_id,
-                        kernel,
-                        &field.pattern,
-                        &value.value,
-                        inline_subjects,
-                    )? {
-                        return Ok(false);
-                    }
-                }
-                Ok(true)
-            }
-            InlinePipePatternKind::Constructor {
-                constructor,
-                arguments,
-            } => match constructor {
-                InlinePipeConstructor::Builtin(constructor) => {
-                    let Some(payload) = truthy_falsy_payload(value, *constructor) else {
-                        return Ok(false);
-                    };
-                    match (payload, arguments.as_slice()) {
-                        (None, []) => Ok(true),
-                        (Some(payload), [argument]) => self.match_inline_pipe_pattern(
-                            kernel_id,
-                            expr_id,
-                            kernel,
-                            argument,
-                            &payload,
-                            inline_subjects,
-                        ),
-                        _ => Err(EvaluationError::UnsupportedInlinePipePattern {
+        }
+
+        let mut work = vec![(pattern, ValueTask::Borrowed(value))];
+        while let Some((pattern, value)) = work.pop() {
+            match &pattern.kind {
+                InlinePipePatternKind::Wildcard => {}
+                InlinePipePatternKind::Binding { subject } => {
+                    let expected = kernel.inline_subjects.get(subject.index()).copied().ok_or(
+                        EvaluationError::UnknownInlineSubject {
                             kernel: kernel_id,
                             expr: expr_id,
-                        }),
+                            slot: *subject,
+                        },
+                    )?;
+                    if !value_matches_layout(self.program, value.as_ref(), expected) {
+                        return Err(EvaluationError::UnsupportedInlinePipePattern {
+                            kernel: kernel_id,
+                            expr: expr_id,
+                        });
+                    }
+                    inline_subjects[subject.index()] = Some(value.as_ref().clone());
+                }
+                InlinePipePatternKind::Integer(integer) => {
+                    if !matches!(
+                        value.as_ref(),
+                        RuntimeValue::Int(found)
+                            if integer.raw.parse::<i64>().ok() == Some(*found)
+                    ) {
+                        return Ok(false);
                     }
                 }
-                InlinePipeConstructor::Sum(handle) => {
-                    let RuntimeValue::Sum(value) = value else {
-                        return Ok(false);
-                    };
-                    if value.item != handle.item
-                        || value.variant_name.as_ref() != handle.variant_name.as_ref()
-                        || value.fields.len() != arguments.len()
-                    {
+                InlinePipePatternKind::Text(raw) => {
+                    if !matches!(
+                        value.as_ref(),
+                        RuntimeValue::Text(found) if found.as_ref() == raw.as_ref()
+                    ) {
                         return Ok(false);
                     }
-                    for (argument, field) in arguments.iter().zip(value.fields.iter()) {
-                        if !self.match_inline_pipe_pattern(
-                            kernel_id,
-                            expr_id,
-                            kernel,
-                            argument,
-                            field,
-                            inline_subjects,
-                        )? {
+                }
+                InlinePipePatternKind::Tuple(elements) => match value {
+                    ValueTask::Borrowed(RuntimeValue::Tuple(values)) => {
+                        if values.len() != elements.len() {
                             return Ok(false);
                         }
+                        work.extend(
+                            elements
+                                .iter()
+                                .zip(values.iter())
+                                .rev()
+                                .map(|(pattern, value)| {
+                                    (pattern, ValueTask::Borrowed(value))
+                                }),
+                        );
                     }
-                    Ok(true)
-                }
-            },
+                    ValueTask::Owned(RuntimeValue::Tuple(values)) => {
+                        if values.len() != elements.len() {
+                            return Ok(false);
+                        }
+                        work.extend(
+                            elements
+                                .iter()
+                                .zip(values)
+                                .rev()
+                                .map(|(pattern, value)| (pattern, ValueTask::Owned(value))),
+                        );
+                    }
+                    _ => return Ok(false),
+                },
+                InlinePipePatternKind::List { elements, rest } => match value {
+                    ValueTask::Borrowed(RuntimeValue::List(values)) => {
+                        if values.len() < elements.len()
+                            || (rest.is_none() && values.len() != elements.len())
+                        {
+                            return Ok(false);
+                        }
+                        if let Some(rest) = rest {
+                            work.push((
+                                rest,
+                                ValueTask::Owned(RuntimeValue::List(
+                                    values[elements.len()..].to_vec(),
+                                )),
+                            ));
+                        }
+                        work.extend(
+                            elements
+                                .iter()
+                                .zip(values.iter())
+                                .rev()
+                                .map(|(pattern, value)| {
+                                    (pattern, ValueTask::Borrowed(value))
+                                }),
+                        );
+                    }
+                    ValueTask::Owned(RuntimeValue::List(mut values)) => {
+                        if values.len() < elements.len()
+                            || (rest.is_none() && values.len() != elements.len())
+                        {
+                            return Ok(false);
+                        }
+                        let remaining = values.split_off(elements.len());
+                        if let Some(rest) = rest {
+                            work.push((rest, ValueTask::Owned(RuntimeValue::List(remaining))));
+                        }
+                        work.extend(
+                            elements
+                                .iter()
+                                .zip(values)
+                                .rev()
+                                .map(|(pattern, value)| (pattern, ValueTask::Owned(value))),
+                        );
+                    }
+                    _ => return Ok(false),
+                },
+                InlinePipePatternKind::Record(fields) => match value {
+                    ValueTask::Borrowed(RuntimeValue::Record(values)) => {
+                        let mut children = Vec::with_capacity(fields.len());
+                        for field in fields {
+                            let Some(value) = values.iter().find(|candidate| {
+                                candidate.label.as_ref() == field.label.as_ref()
+                            }) else {
+                                return Ok(false);
+                            };
+                            children.push((&field.pattern, &value.value));
+                        }
+                        work.extend(
+                            children
+                                .into_iter()
+                                .rev()
+                                .map(|(pattern, value)| {
+                                    (pattern, ValueTask::Borrowed(value))
+                                }),
+                        );
+                    }
+                    ValueTask::Owned(RuntimeValue::Record(mut values)) => {
+                        let mut children = Vec::with_capacity(fields.len());
+                        for field in fields {
+                            let Some(index) = values.iter().position(|candidate| {
+                                candidate.label.as_ref() == field.label.as_ref()
+                            }) else {
+                                return Ok(false);
+                            };
+                            children.push((&field.pattern, values.swap_remove(index).value));
+                        }
+                        work.extend(
+                            children
+                                .into_iter()
+                                .rev()
+                                .map(|(pattern, value)| (pattern, ValueTask::Owned(value))),
+                        );
+                    }
+                    _ => return Ok(false),
+                },
+                InlinePipePatternKind::Constructor {
+                    constructor,
+                    arguments,
+                } => match constructor {
+                    InlinePipeConstructor::Builtin(constructor) => {
+                        let Some(payload) = truthy_falsy_payload(value.as_ref(), *constructor)
+                        else {
+                            return Ok(false);
+                        };
+                        match (payload, arguments.as_slice()) {
+                            (None, []) => {}
+                            (Some(payload), [argument]) => {
+                                work.push((argument, ValueTask::Owned(payload)));
+                            }
+                            _ => {
+                                return Err(EvaluationError::UnsupportedInlinePipePattern {
+                                    kernel: kernel_id,
+                                    expr: expr_id,
+                                });
+                            }
+                        }
+                    }
+                    InlinePipeConstructor::Sum(handle) => match value {
+                        ValueTask::Borrowed(RuntimeValue::Sum(value)) => {
+                            if value.item != handle.item
+                                || value.variant_name.as_ref() != handle.variant_name.as_ref()
+                                || value.fields.len() != arguments.len()
+                            {
+                                return Ok(false);
+                            }
+                            work.extend(
+                                arguments
+                                    .iter()
+                                    .zip(value.fields.iter())
+                                    .rev()
+                                    .map(|(pattern, value)| {
+                                        (pattern, ValueTask::Borrowed(value))
+                                    }),
+                            );
+                        }
+                        ValueTask::Owned(RuntimeValue::Sum(value)) => {
+                            if value.item != handle.item
+                                || value.variant_name.as_ref() != handle.variant_name.as_ref()
+                                || value.fields.len() != arguments.len()
+                            {
+                                return Ok(false);
+                            }
+                            work.extend(
+                                arguments
+                                    .iter()
+                                    .zip(value.fields)
+                                    .rev()
+                                    .map(|(pattern, value)| {
+                                        (pattern, ValueTask::Owned(value))
+                                    }),
+                            );
+                        }
+                        _ => return Ok(false),
+                    },
+                },
+            }
         }
+        Ok(true)
     }
 
     fn subject_value(
@@ -1153,7 +1237,7 @@ impl<'a> KernelEvaluator<'a> {
             return Err(EvaluationError::InvalidCallee {
                 kernel: kernel_id,
                 expr,
-                found: callee,
+                found: Box::new(callee),
             });
         };
         match callable {
@@ -1510,6 +1594,13 @@ impl<'a> KernelEvaluator<'a> {
         arguments: Vec<RuntimeValue>,
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, EvaluationError> {
+        let call_site = BuiltinCallSite {
+            location: EvaluationLocation {
+                kernel: kernel_id,
+                expr,
+            },
+            intrinsic,
+        };
         match intrinsic {
             BuiltinClassMemberIntrinsic::StructuralEq => {
                 let [left, right] = expect_arity::<2>(arguments).map_err(|reason| {
@@ -1562,9 +1653,7 @@ impl<'a> KernelEvaluator<'a> {
                         reason,
                     }
                 })?;
-                self.map_builtin_carrier(
-                    kernel_id, expr, intrinsic, carrier, function, subject, globals,
-                )
+                self.map_builtin_carrier(call_site, carrier, function, subject, globals)
             }
             BuiltinClassMemberIntrinsic::Bimap(carrier) => {
                 let [left, right, subject] = expect_arity::<3>(arguments).map_err(|reason| {
@@ -1575,9 +1664,7 @@ impl<'a> KernelEvaluator<'a> {
                         reason,
                     }
                 })?;
-                self.bimap_builtin_carrier(
-                    kernel_id, expr, intrinsic, carrier, left, right, subject, globals,
-                )
+                self.bimap_builtin_carrier(call_site, carrier, left, right, subject, globals)
             }
             BuiltinClassMemberIntrinsic::Pure(carrier) => {
                 let [payload] = expect_arity::<1>(arguments).map_err(|reason| {
@@ -1599,9 +1686,7 @@ impl<'a> KernelEvaluator<'a> {
                         reason,
                     }
                 })?;
-                self.apply_builtin_carrier(
-                    kernel_id, expr, intrinsic, carrier, functions, values, globals,
-                )
+                self.apply_builtin_carrier(call_site, carrier, functions, values, globals)
             }
             BuiltinClassMemberIntrinsic::Chain(carrier) => {
                 let [function, subject] = expect_arity::<2>(arguments).map_err(|reason| {
@@ -1612,9 +1697,7 @@ impl<'a> KernelEvaluator<'a> {
                         reason,
                     }
                 })?;
-                self.chain_builtin_carrier(
-                    kernel_id, expr, intrinsic, carrier, function, subject, globals,
-                )
+                self.chain_builtin_carrier(call_site, carrier, function, subject, globals)
             }
             BuiltinClassMemberIntrinsic::Join(carrier) => {
                 let [subject] = expect_arity::<1>(arguments).map_err(|reason| {
@@ -1638,7 +1721,7 @@ impl<'a> KernelEvaluator<'a> {
                         }
                     })?;
                 self.reduce_builtin_carrier(
-                    kernel_id, expr, intrinsic, carrier, function, initial, subject, globals,
+                    call_site, carrier, function, initial, subject, globals,
                 )
             }
             BuiltinClassMemberIntrinsic::Traverse {
@@ -1654,9 +1737,7 @@ impl<'a> KernelEvaluator<'a> {
                     }
                 })?;
                 self.traverse_builtin_carrier(
-                    kernel_id,
-                    expr,
-                    intrinsic,
+                    call_site,
                     traversable,
                     applicative,
                     function,
@@ -1673,9 +1754,7 @@ impl<'a> KernelEvaluator<'a> {
                         reason,
                     }
                 })?;
-                self.filter_map_builtin_carrier(
-                    kernel_id, expr, intrinsic, carrier, function, subject, globals,
-                )
+                self.filter_map_builtin_carrier(call_site, carrier, function, subject, globals)
             }
         }
     }
@@ -1795,14 +1874,20 @@ impl<'a> KernelEvaluator<'a> {
 
     fn map_builtin_carrier(
         &mut self,
-        kernel_id: KernelId,
-        expr: KernelExprId,
-        intrinsic: BuiltinClassMemberIntrinsic,
+        call_site: BuiltinCallSite,
         carrier: BuiltinFunctorCarrier,
         function: RuntimeValue,
         subject: RuntimeValue,
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, EvaluationError> {
+        let BuiltinCallSite {
+            location:
+                EvaluationLocation {
+                    kernel: kernel_id,
+                    expr,
+                },
+            intrinsic,
+        } = call_site;
         match carrier {
             BuiltinFunctorCarrier::List => match strip_signal(subject) {
                 RuntimeValue::List(values) => {
@@ -1904,15 +1989,21 @@ impl<'a> KernelEvaluator<'a> {
 
     fn bimap_builtin_carrier(
         &mut self,
-        kernel_id: KernelId,
-        expr: KernelExprId,
-        intrinsic: BuiltinClassMemberIntrinsic,
+        call_site: BuiltinCallSite,
         carrier: BuiltinBifunctorCarrier,
         left_function: RuntimeValue,
         right_function: RuntimeValue,
         subject: RuntimeValue,
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, EvaluationError> {
+        let BuiltinCallSite {
+            location:
+                EvaluationLocation {
+                    kernel: kernel_id,
+                    expr,
+                },
+            intrinsic,
+        } = call_site;
         match carrier {
             BuiltinBifunctorCarrier::Result => match strip_signal(subject) {
                 RuntimeValue::ResultErr(error) => Ok(RuntimeValue::ResultErr(Box::new(
@@ -1955,14 +2046,20 @@ impl<'a> KernelEvaluator<'a> {
 
     fn apply_builtin_carrier(
         &mut self,
-        kernel_id: KernelId,
-        expr: KernelExprId,
-        intrinsic: BuiltinClassMemberIntrinsic,
+        call_site: BuiltinCallSite,
         carrier: BuiltinApplyCarrier,
         functions: RuntimeValue,
         values: RuntimeValue,
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, EvaluationError> {
+        let BuiltinCallSite {
+            location:
+                EvaluationLocation {
+                    kernel: kernel_id,
+                    expr,
+                },
+            intrinsic,
+        } = call_site;
         match carrier {
             BuiltinApplyCarrier::List => match (strip_signal(functions), strip_signal(values)) {
                 (RuntimeValue::List(functions), RuntimeValue::List(values)) => {
@@ -2120,14 +2217,20 @@ impl<'a> KernelEvaluator<'a> {
 
     fn chain_builtin_carrier(
         &mut self,
-        kernel_id: KernelId,
-        expr: KernelExprId,
-        intrinsic: BuiltinClassMemberIntrinsic,
+        call_site: BuiltinCallSite,
         carrier: BuiltinMonadCarrier,
         function: RuntimeValue,
         subject: RuntimeValue,
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, EvaluationError> {
+        let BuiltinCallSite {
+            location:
+                EvaluationLocation {
+                    kernel: kernel_id,
+                    expr,
+                },
+            intrinsic,
+        } = call_site;
         match carrier {
             BuiltinMonadCarrier::List => match strip_signal(subject) {
                 RuntimeValue::List(values) => {
@@ -2347,15 +2450,21 @@ impl<'a> KernelEvaluator<'a> {
 
     fn reduce_builtin_carrier(
         &mut self,
-        kernel_id: KernelId,
-        expr: KernelExprId,
-        intrinsic: BuiltinClassMemberIntrinsic,
+        call_site: BuiltinCallSite,
         carrier: BuiltinFoldableCarrier,
         function: RuntimeValue,
         initial: RuntimeValue,
         subject: RuntimeValue,
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, EvaluationError> {
+        let BuiltinCallSite {
+            location:
+                EvaluationLocation {
+                    kernel: kernel_id,
+                    expr,
+                },
+            intrinsic,
+        } = call_site;
         let initial = strip_signal(initial);
         match carrier {
             BuiltinFoldableCarrier::List => match strip_signal(subject) {
@@ -2420,15 +2529,21 @@ impl<'a> KernelEvaluator<'a> {
 
     fn traverse_builtin_carrier(
         &mut self,
-        kernel_id: KernelId,
-        expr: KernelExprId,
-        intrinsic: BuiltinClassMemberIntrinsic,
+        call_site: BuiltinCallSite,
         traversable: BuiltinTraversableCarrier,
         applicative: BuiltinApplicativeCarrier,
         function: RuntimeValue,
         subject: RuntimeValue,
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, EvaluationError> {
+        let BuiltinCallSite {
+            location:
+                EvaluationLocation {
+                    kernel: kernel_id,
+                    expr,
+                },
+            intrinsic,
+        } = call_site;
         match traversable {
             BuiltinTraversableCarrier::List => match strip_signal(subject) {
                 RuntimeValue::List(values) => {
@@ -2535,14 +2650,20 @@ impl<'a> KernelEvaluator<'a> {
 
     fn filter_map_builtin_carrier(
         &mut self,
-        kernel_id: KernelId,
-        expr: KernelExprId,
-        intrinsic: BuiltinClassMemberIntrinsic,
+        call_site: BuiltinCallSite,
         carrier: BuiltinFilterableCarrier,
         function: RuntimeValue,
         subject: RuntimeValue,
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, EvaluationError> {
+        let BuiltinCallSite {
+            location:
+                EvaluationLocation {
+                    kernel: kernel_id,
+                    expr,
+                },
+            intrinsic,
+        } = call_site;
         match carrier {
             BuiltinFilterableCarrier::List => match strip_signal(subject) {
                 RuntimeValue::List(values) => {
@@ -2618,7 +2739,7 @@ impl<'a> KernelEvaluator<'a> {
                 kernel: kernel_id,
                 expr,
                 operator,
-                operand,
+                operand: Box::new(operand),
             }),
         }
     }
@@ -2642,8 +2763,8 @@ impl<'a> KernelEvaluator<'a> {
                         kernel: kernel_id,
                         expr,
                         operator,
-                        left: RuntimeValue::Int(*left),
-                        right: RuntimeValue::Int(*right),
+                        left: Box::new(RuntimeValue::Int(*left)),
+                        right: Box::new(RuntimeValue::Int(*right)),
                         reason: "signed addition overflow",
                     }),
                 (RuntimeValue::Float(lv), RuntimeValue::Float(rv)) => {
@@ -2653,8 +2774,8 @@ impl<'a> KernelEvaluator<'a> {
                             kernel: kernel_id,
                             expr,
                             operator,
-                            left: RuntimeValue::Float(*lv),
-                            right: RuntimeValue::Float(*rv),
+                            left: Box::new(RuntimeValue::Float(*lv)),
+                            right: Box::new(RuntimeValue::Float(*rv)),
                             reason: "float addition result is not finite",
                         })
                 }
@@ -2676,8 +2797,8 @@ impl<'a> KernelEvaluator<'a> {
                         kernel: kernel_id,
                         expr,
                         operator,
-                        left: RuntimeValue::Int(*left),
-                        right: RuntimeValue::Int(*right),
+                        left: Box::new(RuntimeValue::Int(*left)),
+                        right: Box::new(RuntimeValue::Int(*right)),
                         reason: "signed subtraction overflow",
                     }),
                 (RuntimeValue::Float(lv), RuntimeValue::Float(rv)) => {
@@ -2687,8 +2808,8 @@ impl<'a> KernelEvaluator<'a> {
                             kernel: kernel_id,
                             expr,
                             operator,
-                            left: RuntimeValue::Float(*lv),
-                            right: RuntimeValue::Float(*rv),
+                            left: Box::new(RuntimeValue::Float(*lv)),
+                            right: Box::new(RuntimeValue::Float(*rv)),
                             reason: "float subtraction result is not finite",
                         })
                 }
@@ -2710,8 +2831,8 @@ impl<'a> KernelEvaluator<'a> {
                         kernel: kernel_id,
                         expr,
                         operator,
-                        left: RuntimeValue::Int(*left),
-                        right: RuntimeValue::Int(*right),
+                        left: Box::new(RuntimeValue::Int(*left)),
+                        right: Box::new(RuntimeValue::Int(*right)),
                         reason: "signed multiplication overflow",
                     }),
                 (RuntimeValue::Float(lv), RuntimeValue::Float(rv)) => {
@@ -2721,8 +2842,8 @@ impl<'a> KernelEvaluator<'a> {
                             kernel: kernel_id,
                             expr,
                             operator,
-                            left: RuntimeValue::Float(*lv),
-                            right: RuntimeValue::Float(*rv),
+                            left: Box::new(RuntimeValue::Float(*lv)),
+                            right: Box::new(RuntimeValue::Float(*rv)),
                             reason: "float multiplication result is not finite",
                         })
                 }
@@ -2744,8 +2865,8 @@ impl<'a> KernelEvaluator<'a> {
                         kernel: kernel_id,
                         expr,
                         operator,
-                        left: left.clone(),
-                        right: right.clone(),
+                        left: Box::new(left.clone()),
+                        right: Box::new(right.clone()),
                         reason: if *right_int == 0 {
                             "division by zero"
                         } else {
@@ -2759,8 +2880,8 @@ impl<'a> KernelEvaluator<'a> {
                             kernel: kernel_id,
                             expr,
                             operator,
-                            left: RuntimeValue::Float(*lf),
-                            right: RuntimeValue::Float(*rf),
+                            left: Box::new(RuntimeValue::Float(*lf)),
+                            right: Box::new(RuntimeValue::Float(*rf)),
                             reason: "float division result is not finite",
                         })
                 }
@@ -2772,8 +2893,8 @@ impl<'a> KernelEvaluator<'a> {
                             kernel: kernel_id,
                             expr,
                             operator,
-                            left,
-                            right,
+                            left: Box::new(left),
+                            right: Box::new(right),
                         });
                     };
                     left_int
@@ -2783,8 +2904,8 @@ impl<'a> KernelEvaluator<'a> {
                             kernel: kernel_id,
                             expr,
                             operator,
-                            left: left.clone(),
-                            right: right.clone(),
+                            left: Box::new(left.clone()),
+                            right: Box::new(right.clone()),
                             reason: if right_int == 0 {
                                 "division by zero"
                             } else {
@@ -2801,8 +2922,8 @@ impl<'a> KernelEvaluator<'a> {
                         kernel: kernel_id,
                         expr,
                         operator,
-                        left: left.clone(),
-                        right: right.clone(),
+                        left: Box::new(left.clone()),
+                        right: Box::new(right.clone()),
                         reason: if *right_int == 0 {
                             "modulo by zero"
                         } else {
@@ -2817,8 +2938,8 @@ impl<'a> KernelEvaluator<'a> {
                             kernel: kernel_id,
                             expr,
                             operator,
-                            left,
-                            right,
+                            left: Box::new(left),
+                            right: Box::new(right),
                         });
                     };
                     left_int
@@ -2828,8 +2949,8 @@ impl<'a> KernelEvaluator<'a> {
                             kernel: kernel_id,
                             expr,
                             operator,
-                            left: left.clone(),
-                            right: right.clone(),
+                            left: Box::new(left.clone()),
+                            right: Box::new(right.clone()),
                             reason: if right_int == 0 {
                                 "modulo by zero"
                             } else {
@@ -2910,8 +3031,8 @@ impl<'a> KernelEvaluator<'a> {
                     kernel: kernel_id,
                     expr,
                     operator,
-                    left,
-                    right,
+                    left: Box::new(left),
+                    right: Box::new(right),
                 }),
             },
             BinaryOperator::Or => match (&left, &right) {
@@ -2922,8 +3043,8 @@ impl<'a> KernelEvaluator<'a> {
                     kernel: kernel_id,
                     expr,
                     operator,
-                    left,
-                    right,
+                    left: Box::new(left),
+                    right: Box::new(right),
                 }),
             },
             BinaryOperator::Equals | BinaryOperator::NotEquals => {
@@ -2955,8 +3076,8 @@ fn apply_i64_like_binary(
             kernel,
             expr,
             operator,
-            left: left.clone(),
-            right: right.clone(),
+            left: Box::new(left.clone()),
+            right: Box::new(right.clone()),
         });
     };
     operation(left_int, right_int)
@@ -2965,8 +3086,8 @@ fn apply_i64_like_binary(
             kernel,
             expr,
             operator,
-            left: left.clone(),
-            right: right.clone(),
+            left: Box::new(left.clone()),
+            right: Box::new(right.clone()),
             reason: overflow_reason,
         })
 }
@@ -2984,8 +3105,8 @@ fn apply_i64_like_comparison(
             kernel,
             expr,
             operator,
-            left: left.clone(),
-            right: right.clone(),
+            left: Box::new(left.clone()),
+            right: Box::new(right.clone()),
         });
     };
     Ok(RuntimeValue::Bool(comparison(left_int, right_int)))

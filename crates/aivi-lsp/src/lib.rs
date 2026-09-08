@@ -3,12 +3,15 @@
 //! AIVI Language Server Protocol server.
 
 pub mod analysis;
+pub mod analysis_pool;
 pub mod code_actions;
 pub mod code_lens;
 pub mod completion;
 pub mod definition;
 pub mod diagnostics;
+pub mod document_highlights;
 pub mod documents;
+pub mod folding_ranges;
 pub mod formatting;
 pub mod hover;
 pub mod implementation;
@@ -18,10 +21,12 @@ pub mod references;
 pub mod rename;
 pub mod semantic_tokens;
 pub mod server;
+pub mod signature_help;
 pub mod state;
 pub mod symbols;
 pub mod type_annotations;
 pub mod unused;
+mod workspace_index;
 
 /// Collect unused-symbol warnings as native [`aivi_base::Diagnostic`] items.
 /// Only meaningful when the module has no HIR errors.

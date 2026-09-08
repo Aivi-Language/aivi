@@ -83,6 +83,61 @@ fn open_file_reuses_existing_handle_for_the_same_path() {
 }
 
 #[test]
+fn workspace_revision_advances_only_for_real_source_mutations() {
+    let db = RootDatabase::new();
+    assert_eq!(db.workspace_revision(), 0);
+
+    let file = SourceFile::new(
+        &db,
+        PathBuf::from("revision.aivi"),
+        "value answer = 42".to_owned(),
+    );
+    assert_eq!(db.workspace_revision(), 1);
+
+    let reopened = SourceFile::new(
+        &db,
+        PathBuf::from("revision.aivi"),
+        "value answer = 42".to_owned(),
+    );
+    assert_eq!(reopened, file);
+    assert_eq!(db.workspace_revision(), 1);
+
+    assert!(!file.set_text(&db, "value answer = 42".to_owned()));
+    assert_eq!(db.workspace_revision(), 1);
+
+    assert!(file.set_text(&db, "value answer = 43".to_owned()));
+    assert_eq!(db.workspace_revision(), 2);
+
+    db.remove_file(file);
+    assert_eq!(db.workspace_revision(), 3);
+}
+
+#[test]
+fn removing_a_file_invalidates_registered_reverse_dependents() {
+    let db = RootDatabase::new();
+    let dependency = SourceFile::new(
+        &db,
+        PathBuf::from("shared/dependency.aivi"),
+        "value shared = 1".to_owned(),
+    );
+    let importer = SourceFile::new(
+        &db,
+        PathBuf::from("main.aivi"),
+        "value answer = 42".to_owned(),
+    );
+    let before = hir_module(&db, importer);
+    db.register_file_deps(importer, &[dependency]);
+
+    db.remove_file(dependency);
+
+    let after = hir_module(&db, importer);
+    assert!(
+        !Arc::ptr_eq(&before, &after),
+        "removing a dependency must evict cached HIR for its reverse dependents",
+    );
+}
+
+#[test]
 fn parsed_and_hir_queries_reuse_cached_snapshots_until_text_changes() {
     let db = RootDatabase::new();
     let file = SourceFile::new(
@@ -341,7 +396,7 @@ fn hir_queries_fallback_to_bundled_root_and_prelude_modules() {
     let workspace = TempDir::new("bundled-root-prelude-fallback");
     let main_path = workspace.write(
         "main.aivi",
-        "use aivi (\n    Option\n    Result\n    Validation\n    Signal\n    Task\n    Some\n    None\n    Ok\n    Err\n    Valid\n    Invalid\n)\n\nuse aivi.prelude (\n    Int\n    Bool\n    Text\n    List\n    Eq\n    Default\n    Functor\n    Applicative\n    Monad\n    Foldable\n    getOrElse\n    withDefault\n    isValid\n    validationToResult\n    length\n    head\n    join\n)\n\ntype NameSignal = Signal Text\ntype CountTask = Task Text Int\n\nvalue maybeName:Option Text = Some \"Ada\"\nvalue missingName:Option Text = None\nvalue chosenName:Text = getOrElse \"guest\" missingName\n\nvalue okCount:Result Text Int = Ok 2\nvalue errCount:Result Text Int = Err \"missing\"\nvalue chosenCount:Int = withDefault 0 okCount\n\nvalue checkedName:Validation Text Text = Valid \"Ada\"\nvalue checkedOk:Bool = isValid checkedName\nvalue checkedResult:Result Text Text = validationToResult checkedName\nvalue nameCount:Int = length [\"Ada\", \"Grace\"]\nvalue firstName:Option Text = head [\"Ada\", \"Grace\"]\nvalue labels:Text = join \", \" [\"Ada\", \"Grace\"]\nvalue sameCount:Bool = chosenCount == 2\n",
+        "use aivi (\n    Option\n    Result\n    Validation\n    Signal\n    Task\n    Some\n    None\n    Ok\n    Err\n    Valid\n    Invalid\n)\n\nuse aivi.prelude (\n    Int\n    Bool\n    Text\n    List\n    Eq\n    Default\n    Functor\n    Applicative\n    Monad\n    Foldable\n    getOrElse\n    withDefault\n    isValid\n    validationToResult\n    length\n    head\n    textNonEmpty\n)\n\ntype NameSignal = Signal Text\ntype CountTask = Task Text Int\n\nvalue maybeName:Option Text = Some \"Ada\"\nvalue missingName:Option Text = None\nvalue chosenName:Text = getOrElse \"guest\" missingName\n\nvalue okCount:Result Text Int = Ok 2\nvalue errCount:Result Text Int = Err \"missing\"\nvalue chosenCount:Int = withDefault 0 okCount\n\nvalue checkedName:Validation Text Text = Valid \"Ada\"\nvalue checkedOk:Bool = isValid checkedName\nvalue checkedResult:Result Text Text = validationToResult checkedName\nvalue nameCount:Int = length [\"Ada\", \"Grace\"]\nvalue firstName:Option Text = head [\"Ada\", \"Grace\"]\nvalue hasLabel:Bool = textNonEmpty \"Ada\"\nvalue sameCount:Bool = chosenCount == 2\n",
     );
 
     let db = RootDatabase::new();
@@ -375,7 +430,7 @@ fn hir_queries_fallback_to_bundled_root_and_prelude_modules() {
     assert!(prelude_exports.find("getOrElse").is_some());
     assert!(prelude_exports.find("validationToResult").is_some());
     assert!(prelude_exports.find("length").is_some());
-    assert!(prelude_exports.find("join").is_some());
+    assert!(prelude_exports.find("textNonEmpty").is_some());
 }
 
 #[test]

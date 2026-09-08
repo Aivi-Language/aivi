@@ -310,7 +310,7 @@ pub enum PipeStageKind {
     Case {
         arms: Vec<PipeCaseArm>,
     },
-    TruthyFalsy(PipeTruthyFalsyStage),
+    TruthyFalsy(Box<PipeTruthyFalsyStage>),
     FanOut {
         map_expr: ExprId,
     },

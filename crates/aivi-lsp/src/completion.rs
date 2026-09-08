@@ -8,14 +8,11 @@ use tower_lsp::lsp_types::{
 
 use crate::{analysis::FileAnalysis, state::ServerState};
 
-pub async fn completion(
-    params: CompletionParams,
-    state: Arc<ServerState>,
-) -> Option<CompletionResponse> {
+pub fn completion(params: CompletionParams, state: Arc<ServerState>) -> Option<CompletionResponse> {
     let uri = &params.text_document_position.text_document.uri;
     let lsp_pos = params.text_document_position.position;
 
-    let file = *state.files.get(uri)?;
+    let file = state.file(uri)?;
     let current_analysis = FileAnalysis::load(&state.db, file);
 
     // Reject out-of-range cursor positions before returning any items.
@@ -26,41 +23,33 @@ pub async fn completion(
             character: lsp_pos.character,
         })?;
 
+    let workspace = state.workspace_index.snapshot(&state);
     let mut items: Vec<CompletionItem> = Vec::new();
-
-    // 1. Top-level symbols from the current file.
-    collect_top_level(&current_analysis, &mut items);
-
-    // 2. Exported symbols from all other tracked files.
-    for entry in state.files.iter() {
-        let other_uri = entry.key();
-        if other_uri == uri {
-            continue;
-        }
-        let &other_file = entry.value();
-        let other_analysis = FileAnalysis::load(&state.db, other_file);
-        collect_top_level(&other_analysis, &mut items);
-    }
-
-    // Deduplicate by label (keep first occurrence).
     let mut seen = std::collections::HashSet::new();
-    items.retain(|item| seen.insert(item.label.clone()));
+    // Preserve the current file's declarations when another open file uses
+    // the same label, then append the remaining workspace declarations.
+    for current_file in [true, false] {
+        for symbol in workspace
+            .symbols()
+            .iter()
+            .filter(|symbol| symbol.top_level && ((symbol.location.uri == *uri) == current_file))
+        {
+            if !seen.insert(symbol.name.clone()) {
+                continue;
+            }
+            items.push(CompletionItem {
+                label: symbol.name.clone(),
+                kind: Some(lsp_symbol_kind_to_completion_kind(symbol.kind)),
+                detail: symbol.detail.clone(),
+                ..Default::default()
+            });
+        }
+    }
 
     if items.is_empty() {
         None
     } else {
         Some(CompletionResponse::Array(items))
-    }
-}
-
-fn collect_top_level(analysis: &FileAnalysis, out: &mut Vec<CompletionItem>) {
-    for sym in analysis.symbols.iter() {
-        out.push(CompletionItem {
-            label: sym.name.clone(),
-            kind: Some(lsp_symbol_kind_to_completion_kind(sym.kind)),
-            detail: sym.detail.clone(),
-            ..Default::default()
-        });
     }
 }
 

@@ -3,7 +3,7 @@ use tower_lsp::lsp_types::{self as lsp, CodeLens, Command, Range};
 
 use crate::diagnostics::lsp_range;
 
-/// Collect code lens entries for all `@test` decorated items in the module.
+/// Collect code lens entries for all `@test` decorated values in the module.
 ///
 /// Each test item gets a ▶ "Run test" lens above it that triggers the
 /// `aivi.runTest` command with the file URI and the test value's name.
@@ -57,9 +57,6 @@ fn item_has_test_decorator(module: &Module, item_id: ItemId) -> bool {
 fn item_name_and_span(module: &Module, item_id: ItemId) -> Option<(&str, aivi_base::SourceSpan)> {
     match &module.items()[item_id] {
         Item::Value(item) => Some((item.name.text(), item.name.span())),
-        Item::Function(item) => Some((item.name.text(), item.name.span())),
-        Item::Signal(item) => Some((item.name.text(), item.name.span())),
-        Item::Type(item) => Some((item.name.text(), item.name.span())),
         _ => None,
     }
 }

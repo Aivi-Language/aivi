@@ -16,7 +16,7 @@ pub fn code_actions(
     state: Arc<ServerState>,
 ) -> Option<CodeActionResponse> {
     let uri = &params.text_document.uri;
-    let file = *state.files.get(uri)?;
+    let file = state.file(uri)?;
     let analysis = FileAnalysis::load(&state.db, file);
     let hir = aivi_query::hir_module(&state.db, file);
 

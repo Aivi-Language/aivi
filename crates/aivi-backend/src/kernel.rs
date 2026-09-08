@@ -384,18 +384,30 @@ pub struct Kernel {
     exprs: Arena<KernelExprId, KernelExpr>,
 }
 
+pub struct KernelSignature {
+    pub input_subject: Option<LayoutId>,
+    pub inline_subjects: Vec<LayoutId>,
+    pub environment: Vec<LayoutId>,
+    pub result_layout: LayoutId,
+    pub convention: CallingConvention,
+    pub global_items: Vec<ItemId>,
+}
+
 impl Kernel {
     pub fn new(
         origin: KernelOrigin,
-        input_subject: Option<LayoutId>,
-        inline_subjects: Vec<LayoutId>,
-        environment: Vec<LayoutId>,
-        result_layout: LayoutId,
-        convention: CallingConvention,
-        global_items: Vec<ItemId>,
+        signature: KernelSignature,
         root: KernelExprId,
         exprs: Arena<KernelExprId, KernelExpr>,
     ) -> Self {
+        let KernelSignature {
+            input_subject,
+            inline_subjects,
+            environment,
+            result_layout,
+            convention,
+            global_items,
+        } = signature;
         Self {
             origin,
             input_subject,
@@ -566,7 +578,7 @@ pub struct InlinePipeTruthyFalsyBranch {
     pub body: KernelExprId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct InlinePipePattern {
     pub span: SourceSpan,
     pub kind: InlinePipePatternKind,
@@ -578,7 +590,7 @@ pub enum InlinePipeConstructor {
     Sum(SumConstructorHandle),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum InlinePipePatternKind {
     Wildcard,
     Binding {
@@ -602,6 +614,277 @@ pub enum InlinePipePatternKind {
 pub struct InlinePipeRecordPatternField {
     pub label: Box<str>,
     pub pattern: InlinePipePattern,
+}
+
+impl Clone for InlinePipePattern {
+    fn clone(&self) -> Self {
+        enum BuildKind {
+            Tuple {
+                child_count: usize,
+            },
+            List {
+                element_count: usize,
+                has_rest: bool,
+            },
+            Record {
+                labels: Vec<Box<str>>,
+            },
+            Constructor {
+                constructor: InlinePipeConstructor,
+                child_count: usize,
+            },
+        }
+
+        enum Task<'pattern> {
+            Visit(&'pattern InlinePipePattern),
+            Build { span: SourceSpan, kind: BuildKind },
+        }
+
+        fn take_tail(values: &mut Vec<InlinePipePattern>, count: usize) -> Vec<InlinePipePattern> {
+            let start = values
+                .len()
+                .checked_sub(count)
+                .expect("pattern clone worklist must produce one value per child");
+            values.split_off(start)
+        }
+
+        let mut work = vec![Task::Visit(self)];
+        let mut values = Vec::new();
+        while let Some(task) = work.pop() {
+            match task {
+                Task::Visit(pattern) => match &pattern.kind {
+                    InlinePipePatternKind::Wildcard => values.push(Self {
+                        span: pattern.span,
+                        kind: InlinePipePatternKind::Wildcard,
+                    }),
+                    InlinePipePatternKind::Binding { subject } => values.push(Self {
+                        span: pattern.span,
+                        kind: InlinePipePatternKind::Binding { subject: *subject },
+                    }),
+                    InlinePipePatternKind::Integer(integer) => values.push(Self {
+                        span: pattern.span,
+                        kind: InlinePipePatternKind::Integer(integer.clone()),
+                    }),
+                    InlinePipePatternKind::Text(text) => values.push(Self {
+                        span: pattern.span,
+                        kind: InlinePipePatternKind::Text(text.clone()),
+                    }),
+                    InlinePipePatternKind::Tuple(elements) => {
+                        work.push(Task::Build {
+                            span: pattern.span,
+                            kind: BuildKind::Tuple {
+                                child_count: elements.len(),
+                            },
+                        });
+                        work.extend(elements.iter().rev().map(Task::Visit));
+                    }
+                    InlinePipePatternKind::List { elements, rest } => {
+                        work.push(Task::Build {
+                            span: pattern.span,
+                            kind: BuildKind::List {
+                                element_count: elements.len(),
+                                has_rest: rest.is_some(),
+                            },
+                        });
+                        if let Some(rest) = rest {
+                            work.push(Task::Visit(rest));
+                        }
+                        work.extend(elements.iter().rev().map(Task::Visit));
+                    }
+                    InlinePipePatternKind::Record(fields) => {
+                        work.push(Task::Build {
+                            span: pattern.span,
+                            kind: BuildKind::Record {
+                                labels: fields.iter().map(|field| field.label.clone()).collect(),
+                            },
+                        });
+                        work.extend(fields.iter().rev().map(|field| Task::Visit(&field.pattern)));
+                    }
+                    InlinePipePatternKind::Constructor {
+                        constructor,
+                        arguments,
+                    } => {
+                        work.push(Task::Build {
+                            span: pattern.span,
+                            kind: BuildKind::Constructor {
+                                constructor: constructor.clone(),
+                                child_count: arguments.len(),
+                            },
+                        });
+                        work.extend(arguments.iter().rev().map(Task::Visit));
+                    }
+                },
+                Task::Build { span, kind } => {
+                    let kind = match kind {
+                        BuildKind::Tuple { child_count } => {
+                            InlinePipePatternKind::Tuple(take_tail(&mut values, child_count))
+                        }
+                        BuildKind::List {
+                            element_count,
+                            has_rest,
+                        } => {
+                            let mut children =
+                                take_tail(&mut values, element_count + usize::from(has_rest));
+                            let rest = has_rest.then(|| {
+                                Box::new(
+                                    children
+                                        .pop()
+                                        .expect("list rest clone must produce one value"),
+                                )
+                            });
+                            InlinePipePatternKind::List {
+                                elements: children,
+                                rest,
+                            }
+                        }
+                        BuildKind::Record { labels } => {
+                            let patterns = take_tail(&mut values, labels.len());
+                            InlinePipePatternKind::Record(
+                                labels
+                                    .into_iter()
+                                    .zip(patterns)
+                                    .map(|(label, pattern)| InlinePipeRecordPatternField {
+                                        label,
+                                        pattern,
+                                    })
+                                    .collect(),
+                            )
+                        }
+                        BuildKind::Constructor {
+                            constructor,
+                            child_count,
+                        } => InlinePipePatternKind::Constructor {
+                            constructor,
+                            arguments: take_tail(&mut values, child_count),
+                        },
+                    };
+                    values.push(Self { span, kind });
+                }
+            }
+        }
+
+        assert_eq!(
+            values.len(),
+            1,
+            "pattern clone worklist must produce exactly one root"
+        );
+        values.pop().expect("cloned pattern root must exist")
+    }
+}
+
+enum PatternDebugTask<'pattern> {
+    Pattern(&'pattern InlinePipePattern),
+    Kind(&'pattern InlinePipePatternKind),
+    Value(&'pattern dyn fmt::Debug),
+    Static(&'static str),
+}
+
+fn format_pattern_debug(root: PatternDebugTask<'_>, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let mut work = vec![root];
+    while let Some(task) = work.pop() {
+        match task {
+            PatternDebugTask::Pattern(pattern) => {
+                f.write_str("InlinePipePattern { span: ")?;
+                work.push(PatternDebugTask::Static(" }"));
+                work.push(PatternDebugTask::Kind(&pattern.kind));
+                work.push(PatternDebugTask::Static(", kind: "));
+                work.push(PatternDebugTask::Value(&pattern.span));
+            }
+            PatternDebugTask::Kind(kind) => match kind {
+                InlinePipePatternKind::Wildcard => f.write_str("Wildcard")?,
+                InlinePipePatternKind::Binding { subject } => {
+                    f.write_str("Binding { subject: ")?;
+                    work.push(PatternDebugTask::Static(" }"));
+                    work.push(PatternDebugTask::Value(subject));
+                }
+                InlinePipePatternKind::Integer(integer) => {
+                    f.write_str("Integer(")?;
+                    work.push(PatternDebugTask::Static(")"));
+                    work.push(PatternDebugTask::Value(integer));
+                }
+                InlinePipePatternKind::Text(text) => {
+                    f.write_str("Text(")?;
+                    work.push(PatternDebugTask::Static(")"));
+                    work.push(PatternDebugTask::Value(text));
+                }
+                InlinePipePatternKind::Tuple(elements) => {
+                    f.write_str("Tuple([")?;
+                    work.push(PatternDebugTask::Static("])"));
+                    for (index, element) in elements.iter().enumerate().rev() {
+                        work.push(PatternDebugTask::Pattern(element));
+                        if index > 0 {
+                            work.push(PatternDebugTask::Static(", "));
+                        }
+                    }
+                }
+                InlinePipePatternKind::List { elements, rest } => {
+                    f.write_str("List { elements: [")?;
+                    work.push(PatternDebugTask::Static(" }"));
+                    match rest {
+                        Some(rest) => {
+                            work.push(PatternDebugTask::Static(")"));
+                            work.push(PatternDebugTask::Pattern(rest));
+                            work.push(PatternDebugTask::Static("] , rest: Some("));
+                        }
+                        None => work.push(PatternDebugTask::Static("] , rest: None")),
+                    }
+                    for (index, element) in elements.iter().enumerate().rev() {
+                        work.push(PatternDebugTask::Pattern(element));
+                        if index > 0 {
+                            work.push(PatternDebugTask::Static(", "));
+                        }
+                    }
+                }
+                InlinePipePatternKind::Record(fields) => {
+                    f.write_str("Record([")?;
+                    work.push(PatternDebugTask::Static("])"));
+                    for (index, field) in fields.iter().enumerate().rev() {
+                        work.push(PatternDebugTask::Static(" }"));
+                        work.push(PatternDebugTask::Pattern(&field.pattern));
+                        work.push(PatternDebugTask::Static(", pattern: "));
+                        work.push(PatternDebugTask::Value(&field.label));
+                        work.push(PatternDebugTask::Static(
+                            "InlinePipeRecordPatternField { label: ",
+                        ));
+                        if index > 0 {
+                            work.push(PatternDebugTask::Static(", "));
+                        }
+                    }
+                }
+                InlinePipePatternKind::Constructor {
+                    constructor,
+                    arguments,
+                } => {
+                    f.write_str("Constructor { constructor: ")?;
+                    work.push(PatternDebugTask::Static(" }"));
+                    work.push(PatternDebugTask::Static("]"));
+                    for (index, argument) in arguments.iter().enumerate().rev() {
+                        work.push(PatternDebugTask::Pattern(argument));
+                        if index > 0 {
+                            work.push(PatternDebugTask::Static(", "));
+                        }
+                    }
+                    work.push(PatternDebugTask::Static(", arguments: ["));
+                    work.push(PatternDebugTask::Value(constructor));
+                }
+            },
+            PatternDebugTask::Value(value) => write!(f, "{value:?}")?,
+            PatternDebugTask::Static(value) => f.write_str(value)?,
+        }
+    }
+    Ok(())
+}
+
+impl fmt::Debug for InlinePipePattern {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        format_pattern_debug(PatternDebugTask::Pattern(self), f)
+    }
+}
+
+impl fmt::Debug for InlinePipePatternKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        format_pattern_debug(PatternDebugTask::Kind(self), f)
+    }
 }
 
 pub fn describe_expr_kind(kind: &KernelExprKind) -> String {

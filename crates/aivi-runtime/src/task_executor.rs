@@ -386,29 +386,35 @@ pub fn execute_runtime_task_plan_with_context(
             ))
         }
         RuntimeTaskPlan::HttpGet { url } => {
-            let body = ureq::get(url.as_ref())
+            let mut response = ureq::get(url.as_ref())
                 .call()
-                .map_err(|e| task_error(format!("http get: {e}")))?
-                .into_string()
+                .map_err(|e| task_error(format!("http get: {e}")))?;
+            let body = response
+                .body_mut()
+                .with_config()
+                .limit(u64::MAX)
+                .read_to_string()
                 .map_err(|e| task_error(format!("http read: {e}")))?;
             Ok(RuntimeValue::Text(body.into()))
         }
         RuntimeTaskPlan::HttpGetBytes { url } => {
-            let mut bytes = Vec::new();
-            ureq::get(url.as_ref())
+            let mut response = ureq::get(url.as_ref())
                 .call()
-                .map_err(|e| task_error(format!("http get: {e}")))?
-                .into_reader()
-                .read_to_end(&mut bytes)
+                .map_err(|e| task_error(format!("http get: {e}")))?;
+            let bytes = response
+                .body_mut()
+                .with_config()
+                .limit(u64::MAX)
+                .read_to_vec()
                 .map_err(|e| task_error(format!("http read: {e}")))?;
             Ok(RuntimeValue::Bytes(bytes.into_boxed_slice()))
         }
         RuntimeTaskPlan::HttpGetStatus { url } => {
             let status = ureq::get(url.as_ref())
                 .call()
-                .map(|r| r.status() as i64)
+                .map(|r| i64::from(r.status().as_u16()))
                 .unwrap_or_else(|e| match e {
-                    ureq::Error::Status(code, _) => code as i64,
+                    ureq::Error::StatusCode(code) => i64::from(code),
                     _ => 0,
                 });
             Ok(RuntimeValue::Int(status))
@@ -419,10 +425,13 @@ pub fn execute_runtime_task_plan_with_context(
             body,
         } => {
             let response = ureq::post(url.as_ref())
-                .set("Content-Type", content_type.as_ref())
-                .send_string(body.as_ref())
+                .header("Content-Type", content_type.as_ref())
+                .send(body.as_ref())
                 .map_err(|e| task_error(format!("http post: {e}")))?
-                .into_string()
+                .body_mut()
+                .with_config()
+                .limit(u64::MAX)
+                .read_to_string()
                 .map_err(|e| task_error(format!("http read: {e}")))?;
             Ok(RuntimeValue::Text(response.into()))
         }
@@ -432,10 +441,13 @@ pub fn execute_runtime_task_plan_with_context(
             body,
         } => {
             let response = ureq::put(url.as_ref())
-                .set("Content-Type", content_type.as_ref())
-                .send_string(body.as_ref())
+                .header("Content-Type", content_type.as_ref())
+                .send(body.as_ref())
                 .map_err(|e| task_error(format!("http put: {e}")))?
-                .into_string()
+                .body_mut()
+                .with_config()
+                .limit(u64::MAX)
+                .read_to_string()
                 .map_err(|e| task_error(format!("http read: {e}")))?;
             Ok(RuntimeValue::Text(response.into()))
         }
@@ -443,7 +455,10 @@ pub fn execute_runtime_task_plan_with_context(
             let response = ureq::delete(url.as_ref())
                 .call()
                 .map_err(|e| task_error(format!("http delete: {e}")))?
-                .into_string()
+                .body_mut()
+                .with_config()
+                .limit(u64::MAX)
+                .read_to_string()
                 .map_err(|e| task_error(format!("http read: {e}")))?;
             Ok(RuntimeValue::Text(response.into()))
         }
@@ -451,14 +466,14 @@ pub fn execute_runtime_task_plan_with_context(
             let response = ureq::head(url.as_ref())
                 .call()
                 .map_err(|e| task_error(format!("http head: {e}")))?;
-            let names = response.headers_names();
-            let headers: Vec<RuntimeValue> = names
+            let headers: Vec<RuntimeValue> = response
+                .headers()
                 .iter()
-                .filter_map(|name| {
-                    response.header(name).map(|val| {
+                .filter_map(|(name, value)| {
+                    value.to_str().ok().map(|value| {
                         RuntimeValue::Tuple(vec![
-                            RuntimeValue::Text(name.clone().into()),
-                            RuntimeValue::Text(val.into()),
+                            RuntimeValue::Text(name.as_str().into()),
+                            RuntimeValue::Text(value.into()),
                         ])
                     })
                 })
@@ -467,10 +482,13 @@ pub fn execute_runtime_task_plan_with_context(
         }
         RuntimeTaskPlan::HttpPostJson { url, body } => {
             let response = ureq::post(url.as_ref())
-                .set("Content-Type", "application/json")
-                .send_string(body.as_ref())
+                .header("Content-Type", "application/json")
+                .send(body.as_ref())
                 .map_err(|e| task_error(format!("http post json: {e}")))?
-                .into_string()
+                .body_mut()
+                .with_config()
+                .limit(u64::MAX)
+                .read_to_string()
                 .map_err(|e| task_error(format!("http read: {e}")))?;
             Ok(RuntimeValue::Text(response.into()))
         }
@@ -1213,11 +1231,16 @@ fn runtime_exchange_pkce_token(
     let body = url::form_urlencoded::Serializer::new(String::new())
         .extend_pairs(params.iter().copied())
         .finish();
-    let response = ureq::post(config.token_endpoint.as_ref())
-        .set("Content-Type", "application/x-www-form-urlencoded")
-        .send_string(&body)
+    let mut payload = ureq::post(config.token_endpoint.as_ref())
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .send(body.as_str())
         .map_err(|error| runtime_pkce_network_error(error.to_string()))?;
-    let payload = response.into_string().map_err(runtime_pkce_network_error)?;
+    let payload = payload
+        .body_mut()
+        .with_config()
+        .limit(u64::MAX)
+        .read_to_string()
+        .map_err(runtime_pkce_network_error)?;
     let json: serde_json::Value = serde_json::from_str(&payload)
         .map_err(|error| runtime_pkce_invalid_response(error.to_string()))?;
     runtime_pkce_token_from_json(&json, fallback_refresh_token)
@@ -1532,12 +1555,16 @@ fn runtime_pkce_error(variant_name: &str, fields: Vec<RuntimeValue>) -> RuntimeT
 }
 
 #[cfg(test)]
-static TEST_BROWSER_OPENER: std::sync::OnceLock<
-    std::sync::Mutex<Option<fn(&str) -> Result<(), String>>>,
-> = std::sync::OnceLock::new();
+type BrowserOpener = fn(&str) -> Result<(), String>;
 
 #[cfg(test)]
-fn set_test_browser_opener(opener: Option<fn(&str) -> Result<(), String>>) {
+type BrowserOpenerSlot = std::sync::Mutex<Option<BrowserOpener>>;
+
+#[cfg(test)]
+static TEST_BROWSER_OPENER: std::sync::OnceLock<BrowserOpenerSlot> = std::sync::OnceLock::new();
+
+#[cfg(test)]
+fn set_test_browser_opener(opener: Option<BrowserOpener>) {
     *TEST_BROWSER_OPENER
         .get_or_init(|| std::sync::Mutex::new(None))
         .lock()
@@ -2487,11 +2514,7 @@ mod tests {
             let (mut stream, _) = token_listener
                 .accept()
                 .expect("refresh request should connect");
-            let mut buffer = [0u8; 4096];
-            let read = stream
-                .read(&mut buffer)
-                .expect("refresh request should read");
-            let request = String::from_utf8_lossy(&buffer[..read]);
+            let request = read_http_request(&mut stream);
             let body = request
                 .split("\r\n\r\n")
                 .nth(1)

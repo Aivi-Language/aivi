@@ -1,6 +1,9 @@
 # aivi.core.set
 
-Unordered set for any `Eq` type. `Set A` is backed by a deduplicated list. All operations are O(n). Use for small membership collections; for large sets prefer index-backed structures.
+Set helpers for any `Eq` type, backed by a list. Membership and insertion scan the list;
+`fromList` and unions can take quadratic work, while intersection, difference, and subset
+checks compare the two collections with nested scans. Costs also depend on element equality.
+This module is intended for small membership collections, not hash-set performance.
 
 ```aivi
 use aivi.core.set (
@@ -30,7 +33,10 @@ use aivi.core.set (
 type Set A = { items: List A }
 ```
 
-An unordered, deduplicated collection of `A` values. The element type `A` can be any type that supports equality. The empty set is the literal `{ items: [] }`.
+The helper constructors preserve deduplication, but `Set` is a public record: directly
+constructing `{ items: [...] }` can introduce duplicates. Prefer `fromList` for nonempty
+input. The element type can be any type that supports equality. The empty set is
+`{ items: [] }`.
 
 ---
 
@@ -47,7 +53,7 @@ use aivi.core.set (
 value tags : (Set Text) = singleton "urgent"
 ```
 
-### `fromList : Eq A -> List A -> Set A`
+### `fromList : Eq A => List A -> Set A`
 
 Build a set from a list, discarding duplicates (first occurrence wins).
 
@@ -80,7 +86,7 @@ use aivi.core.set (
 value noTags : Bool = isEmpty (fromList [])
 ```
 
-### `member : Eq A -> A -> Set A -> Bool`
+### `member : Eq A => A -> Set A -> Bool`
 
 ```aivi
 use aivi.core.set (
@@ -139,7 +145,7 @@ value items : (List Text) =
 
 ## Modification
 
-### `insert : Eq A -> A -> Set A -> Set A`
+### `insert : Eq A => A -> Set A -> Set A`
 
 Add a value. If already present, the set is unchanged.
 
@@ -157,7 +163,7 @@ value tags : (Set Text) =
     )
 ```
 
-### `remove : Eq A -> A -> Set A -> Set A`
+### `remove : Eq A => A -> Set A -> Set A`
 
 Remove a value. No-op if not present.
 
@@ -180,7 +186,7 @@ value tags : (Set Text) =
 
 ## Set algebra
 
-### `union : Eq A -> Set A -> Set A -> Set A`
+### `union : Eq A => Set A -> Set A -> Set A`
 
 All items from both sets (items from `b` appended when not already in `a`).
 
@@ -199,7 +205,7 @@ value merged : (Set Text) =
     )
 ```
 
-### `intersection : Eq A -> Set A -> Set A -> Set A`
+### `intersection : Eq A => Set A -> Set A -> Set A`
 
 Items that appear in both sets.
 
@@ -218,7 +224,7 @@ value shared : (Set Text) =
     )
 ```
 
-### `difference : Eq A -> Set A -> Set A -> Set A`
+### `difference : Eq A => Set A -> Set A -> Set A`
 
 Items in `a` that are not in `b`.
 
@@ -236,7 +242,7 @@ value remaining : (Set Text) =
     )
 ```
 
-### `subsetOf : Eq A -> Set A -> Set A -> Bool`
+### `subsetOf : Eq A => Set A -> Set A -> Bool`
 
 `True` when every item in `a` is also in `b`.
 

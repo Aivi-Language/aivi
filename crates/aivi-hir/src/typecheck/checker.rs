@@ -14,10 +14,18 @@ struct TypeChecker<'a> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum BinaryOperatorExpectation {
-    BoolOperands,
-    MatchingNumericOperands,
-    MatchingOrderedOperands,
-    CommonTypeOperands,
+    Bool,
+    MatchingNumeric,
+    MatchingOrdered,
+    CommonType,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct BinaryExpr {
+    expr_id: ExprId,
+    left: ExprId,
+    operator: BinaryOperator,
+    right: ExprId,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -466,8 +474,10 @@ impl<'a> TypeChecker<'a> {
         body: ExprId,
         expected: &GateType,
     ) {
-        let mut env = GateExprEnv::default();
-        env.current_domain = Some(owner);
+        let mut env = GateExprEnv {
+            current_domain: Some(owner),
+            ..GateExprEnv::default()
+        };
         let mut current = expected.clone();
         for parameter in &member.parameters {
             let GateType::Arrow {
@@ -734,10 +744,12 @@ impl<'a> TypeChecker<'a> {
                 operator,
                 right,
             } => Some(self.check_binary_expr(
-                expr_id,
-                left,
-                operator,
-                right,
+                BinaryExpr {
+                    expr_id,
+                    left,
+                    operator,
+                    right,
+                },
                 env,
                 expected,
                 value_stack,
@@ -774,20 +786,14 @@ impl<'a> TypeChecker<'a> {
 
     fn check_binary_expr(
         &mut self,
-        expr_id: ExprId,
-        left: ExprId,
-        operator: BinaryOperator,
-        right: ExprId,
+        binary: BinaryExpr,
         env: &GateExprEnv,
         expected: Option<&GateType>,
         value_stack: &mut Vec<ItemId>,
     ) -> bool {
-        match operator {
+        match binary.operator {
             BinaryOperator::And | BinaryOperator::Or => self.check_bool_binary_expr(
-                expr_id,
-                left,
-                operator,
-                right,
+                binary,
                 env,
                 expected,
                 value_stack,
@@ -797,10 +803,7 @@ impl<'a> TypeChecker<'a> {
             | BinaryOperator::Multiply
             | BinaryOperator::Divide
             | BinaryOperator::Modulo => self.check_numeric_binary_expr(
-                expr_id,
-                left,
-                operator,
-                right,
+                binary,
                 env,
                 expected,
                 value_stack,
@@ -809,19 +812,13 @@ impl<'a> TypeChecker<'a> {
             | BinaryOperator::LessThan
             | BinaryOperator::GreaterThanOrEqual
             | BinaryOperator::LessThanOrEqual => self.check_ordered_binary_expr(
-                expr_id,
-                left,
-                operator,
-                right,
+                binary,
                 env,
                 expected,
                 value_stack,
             ),
             BinaryOperator::Equals | BinaryOperator::NotEquals => self.check_equality_binary_expr(
-                expr_id,
-                left,
-                operator,
-                right,
+                binary,
                 env,
                 expected,
                 value_stack,
@@ -831,14 +828,17 @@ impl<'a> TypeChecker<'a> {
 
     fn check_bool_binary_expr(
         &mut self,
-        expr_id: ExprId,
-        left: ExprId,
-        operator: BinaryOperator,
-        right: ExprId,
+        binary: BinaryExpr,
         env: &GateExprEnv,
         expected: Option<&GateType>,
         value_stack: &mut Vec<ItemId>,
     ) -> bool {
+        let BinaryExpr {
+            expr_id,
+            left,
+            operator,
+            right,
+        } = binary;
         let bool_ty = GateType::Primitive(BuiltinType::Bool);
         let left_actual = self.inferred_expr_type(left, env);
         let right_actual = self.inferred_expr_type(right, env);
@@ -852,7 +852,7 @@ impl<'a> TypeChecker<'a> {
                     operator,
                     left_actual.as_ref(),
                     right_actual.as_ref(),
-                    BinaryOperatorExpectation::BoolOperands,
+                    BinaryOperatorExpectation::Bool,
                 );
             }
             return false;
@@ -862,14 +862,17 @@ impl<'a> TypeChecker<'a> {
 
     fn check_numeric_binary_expr(
         &mut self,
-        expr_id: ExprId,
-        left: ExprId,
-        operator: BinaryOperator,
-        right: ExprId,
+        binary: BinaryExpr,
         env: &GateExprEnv,
         expected: Option<&GateType>,
         value_stack: &mut Vec<ItemId>,
     ) -> bool {
+        let BinaryExpr {
+            expr_id,
+            left,
+            operator,
+            right,
+        } = binary;
         let left_actual = self.inferred_expr_type(left, env);
         let right_actual = self.inferred_expr_type(right, env);
         if let (Some(left_actual), Some(right_actual)) =
@@ -893,7 +896,7 @@ impl<'a> TypeChecker<'a> {
                             operator,
                             Some(left_actual),
                             Some(right_actual),
-                            BinaryOperatorExpectation::MatchingNumericOperands,
+                            BinaryOperatorExpectation::MatchingNumeric,
                         );
                     }
                     return false;
@@ -915,7 +918,7 @@ impl<'a> TypeChecker<'a> {
                     operator,
                     left_actual.as_ref(),
                     right_actual.as_ref(),
-                    BinaryOperatorExpectation::MatchingNumericOperands,
+                    BinaryOperatorExpectation::MatchingNumeric,
                 );
             }
             return false;
@@ -931,7 +934,7 @@ impl<'a> TypeChecker<'a> {
                     operator,
                     left_actual.as_ref(),
                     right_actual.as_ref(),
-                    BinaryOperatorExpectation::MatchingNumericOperands,
+                    BinaryOperatorExpectation::MatchingNumeric,
                 );
             }
             return false;
@@ -950,14 +953,17 @@ impl<'a> TypeChecker<'a> {
 
     fn check_ordered_binary_expr(
         &mut self,
-        expr_id: ExprId,
-        left: ExprId,
-        operator: BinaryOperator,
-        right: ExprId,
+        binary: BinaryExpr,
         env: &GateExprEnv,
         expected: Option<&GateType>,
         value_stack: &mut Vec<ItemId>,
     ) -> bool {
+        let BinaryExpr {
+            expr_id,
+            left,
+            operator,
+            right,
+        } = binary;
         let left_actual = self.inferred_expr_type(left, env);
         let right_actual = self.inferred_expr_type(right, env);
         let Some(operand_ty) = left_actual
@@ -976,7 +982,7 @@ impl<'a> TypeChecker<'a> {
                     operator,
                     left_actual.as_ref(),
                     right_actual.as_ref(),
-                    BinaryOperatorExpectation::MatchingOrderedOperands,
+                    BinaryOperatorExpectation::MatchingOrdered,
                 );
             }
             return false;
@@ -991,7 +997,7 @@ impl<'a> TypeChecker<'a> {
                     operator,
                     left_actual.as_ref(),
                     right_actual.as_ref(),
-                    BinaryOperatorExpectation::MatchingOrderedOperands,
+                    BinaryOperatorExpectation::MatchingOrdered,
                 );
             }
             return false;
@@ -1007,7 +1013,7 @@ impl<'a> TypeChecker<'a> {
                     operator,
                     left_actual.as_ref(),
                     right_actual.as_ref(),
-                    BinaryOperatorExpectation::MatchingOrderedOperands,
+                    BinaryOperatorExpectation::MatchingOrdered,
                 );
             }
             return false;
@@ -1018,14 +1024,17 @@ impl<'a> TypeChecker<'a> {
 
     fn check_equality_binary_expr(
         &mut self,
-        expr_id: ExprId,
-        left: ExprId,
-        operator: BinaryOperator,
-        right: ExprId,
+        binary: BinaryExpr,
         env: &GateExprEnv,
         expected: Option<&GateType>,
         value_stack: &mut Vec<ItemId>,
     ) -> bool {
+        let BinaryExpr {
+            expr_id,
+            left,
+            operator,
+            right,
+        } = binary;
         let left_actual = self.inferred_expr_type(left, env);
         let right_actual = self.inferred_expr_type(right, env);
         let Some(operand_ty) = left_actual.clone().or_else(|| right_actual.clone()) else {
@@ -1038,7 +1047,7 @@ impl<'a> TypeChecker<'a> {
                     operator,
                     left_actual.as_ref(),
                     right_actual.as_ref(),
-                    BinaryOperatorExpectation::CommonTypeOperands,
+                    BinaryOperatorExpectation::CommonType,
                 );
             }
             return false;
@@ -3216,19 +3225,19 @@ impl<'a> TypeChecker<'a> {
         expectation: BinaryOperatorExpectation,
     ) {
         let (expected_operands, label) = match expectation {
-            BinaryOperatorExpectation::BoolOperands => (
+            BinaryOperatorExpectation::Bool => (
                 "`Bool` operands",
                 "both operands must have type `Bool` here",
             ),
-            BinaryOperatorExpectation::MatchingNumericOperands => (
+            BinaryOperatorExpectation::MatchingNumeric => (
                 "matching numeric operands",
                 "both operands must resolve to the same numeric type here",
             ),
-            BinaryOperatorExpectation::MatchingOrderedOperands => (
+            BinaryOperatorExpectation::MatchingOrdered => (
                 "matching operands whose shared type implements `Ord`",
                 "both operands must resolve to the same ordered type here",
             ),
-            BinaryOperatorExpectation::CommonTypeOperands => (
+            BinaryOperatorExpectation::CommonType => (
                 "operands that resolve to one common type",
                 "both operands must resolve to one shared type here",
             ),
@@ -3244,11 +3253,11 @@ impl<'a> TypeChecker<'a> {
 
         // Suggest fixes for common mismatches.
         match expectation {
-            BinaryOperatorExpectation::BoolOperands => {
+            BinaryOperatorExpectation::Bool => {
                 diag =
                     diag.with_help("logical operators `and`, `or` require both sides to be `Bool`");
             }
-            BinaryOperatorExpectation::MatchingNumericOperands => {
+            BinaryOperatorExpectation::MatchingNumeric => {
                 if let (Some(l), Some(r)) = (left, right)
                     && l != r {
                         diag = diag.with_help(
@@ -3256,7 +3265,7 @@ impl<'a> TypeChecker<'a> {
                         );
                     }
             }
-            BinaryOperatorExpectation::MatchingOrderedOperands => {
+            BinaryOperatorExpectation::MatchingOrdered => {
                 if let (Some(l), Some(r)) = (left, right)
                     && l != r {
                         diag = diag.with_help(
@@ -3268,7 +3277,7 @@ impl<'a> TypeChecker<'a> {
                         );
                     }
             }
-            BinaryOperatorExpectation::CommonTypeOperands => {}
+            BinaryOperatorExpectation::CommonType => {}
         }
 
         self.diagnostics.push(diag);
@@ -3387,7 +3396,7 @@ impl<'a> TypeChecker<'a> {
             {
                 for (slot, named_parameter_ty) in parameter_types
                     .iter_mut()
-                    .zip(named_parameter_types.into_iter())
+                    .zip(named_parameter_types)
                 {
                     if named_parameter_ty.is_some() {
                         *slot = named_parameter_ty;
@@ -3458,7 +3467,8 @@ impl<'a> TypeChecker<'a> {
                 .match_poly_hir_type(annotation, actual, &mut direct_bindings)
             {
                 bindings = direct_bindings;
-            } else if let Some(payload) = payload {
+            } else {
+                let payload = payload?;
                 let mut payload_bindings = bindings.clone();
                 if !self
                     .typing
@@ -3467,8 +3477,6 @@ impl<'a> TypeChecker<'a> {
                     return None;
                 }
                 bindings = payload_bindings;
-            } else {
-                return None;
             }
             instantiated_parameters.push(
                 self.typing

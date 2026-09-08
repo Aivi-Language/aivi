@@ -371,8 +371,10 @@ fn validate_item_body(
         (Some(closure), Some(root)) => validate_expected_closure(
             module,
             closure,
-            item_id,
-            ClosureKind::ItemBody,
+            ExpectedClosureIdentity {
+                owner: item_id,
+                kind: ClosureKind::ItemBody,
+            },
             None,
             &item.parameters,
             root,
@@ -435,8 +437,10 @@ fn validate_pipe(
                         validate_expected_closure(
                             module,
                             wakeup.runtime,
-                            pipe.owner,
-                            ClosureKind::RecurrenceWakeupWitness,
+                            ExpectedClosureIdentity {
+                                owner: pipe.owner,
+                                kind: ClosureKind::RecurrenceWakeupWitness,
+                            },
                             None,
                             &[],
                             core_wakeup.runtime_witness,
@@ -472,8 +476,7 @@ fn validate_recurrence_stage(
     validate_expected_closure(
         module,
         stage.runtime,
-        owner,
-        kind,
+        ExpectedClosureIdentity { owner, kind },
         Some(&stage.input_subject),
         &[],
         core_stage.runtime_expr,
@@ -503,8 +506,10 @@ fn validate_stage(
             validate_expected_closure(
                 module,
                 *when_true,
-                owner,
-                ClosureKind::GateTrue,
+                ExpectedClosureIdentity {
+                    owner,
+                    kind: ClosureKind::GateTrue,
+                },
                 Some(&stage.input_subject),
                 &[],
                 *core_true,
@@ -513,8 +518,10 @@ fn validate_stage(
             validate_expected_closure(
                 module,
                 *when_false,
-                owner,
-                ClosureKind::GateFalse,
+                ExpectedClosureIdentity {
+                    owner,
+                    kind: ClosureKind::GateFalse,
+                },
                 Some(&stage.input_subject),
                 &[],
                 *core_false,
@@ -537,8 +544,10 @@ fn validate_stage(
             validate_expected_closure(
                 module,
                 *predicate,
-                owner,
-                ClosureKind::SignalFilterPredicate,
+                ExpectedClosureIdentity {
+                    owner,
+                    kind: ClosureKind::SignalFilterPredicate,
+                },
                 Some(payload_type),
                 &[],
                 *core_predicate,
@@ -553,8 +562,10 @@ fn validate_stage(
             validate_expected_closure(
                 module,
                 *seed,
-                owner,
-                ClosureKind::PreviousSeed,
+                ExpectedClosureIdentity {
+                    owner,
+                    kind: ClosureKind::PreviousSeed,
+                },
                 None,
                 &[],
                 *seed_expr,
@@ -569,8 +580,10 @@ fn validate_stage(
             validate_expected_closure(
                 module,
                 *diff,
-                owner,
-                ClosureKind::DiffFunction,
+                ExpectedClosureIdentity {
+                    owner,
+                    kind: ClosureKind::DiffFunction,
+                },
                 None,
                 &[],
                 *diff_expr,
@@ -585,8 +598,10 @@ fn validate_stage(
             validate_expected_closure(
                 module,
                 *seed,
-                owner,
-                ClosureKind::DiffSeed,
+                ExpectedClosureIdentity {
+                    owner,
+                    kind: ClosureKind::DiffSeed,
+                },
                 None,
                 &[],
                 *seed_expr,
@@ -601,8 +616,10 @@ fn validate_stage(
             validate_expected_closure(
                 module,
                 *duration,
-                owner,
-                ClosureKind::DelayDuration,
+                ExpectedClosureIdentity {
+                    owner,
+                    kind: ClosureKind::DelayDuration,
+                },
                 None,
                 &[],
                 *duration_expr,
@@ -620,8 +637,10 @@ fn validate_stage(
             validate_expected_closure(
                 module,
                 *every,
-                owner,
-                ClosureKind::BurstEvery,
+                ExpectedClosureIdentity {
+                    owner,
+                    kind: ClosureKind::BurstEvery,
+                },
                 None,
                 &[],
                 *every_expr,
@@ -630,8 +649,10 @@ fn validate_stage(
             validate_expected_closure(
                 module,
                 *count,
-                owner,
-                ClosureKind::BurstCount,
+                ExpectedClosureIdentity {
+                    owner,
+                    kind: ClosureKind::BurstCount,
+                },
                 None,
                 &[],
                 *count_expr,
@@ -652,8 +673,10 @@ fn validate_stage(
             validate_expected_closure(
                 module,
                 fanout.map,
-                owner,
-                ClosureKind::FanoutMap,
+                ExpectedClosureIdentity {
+                    owner,
+                    kind: ClosureKind::FanoutMap,
+                },
                 Some(&core_fanout.element_subject),
                 &[],
                 core_fanout.runtime_map,
@@ -671,8 +694,10 @@ fn validate_stage(
                 validate_expected_closure(
                     module,
                     filter.runtime,
-                    owner,
-                    ClosureKind::FanoutFilterPredicate,
+                    ExpectedClosureIdentity {
+                        owner,
+                        kind: ClosureKind::FanoutFilterPredicate,
+                    },
                     Some(&core_filter.input_subject),
                     &[],
                     core_filter.runtime_predicate,
@@ -694,8 +719,10 @@ fn validate_stage(
                     validate_expected_closure(
                         module,
                         join.runtime,
-                        owner,
-                        ClosureKind::FanoutJoin,
+                        ExpectedClosureIdentity {
+                            owner,
+                            kind: ClosureKind::FanoutJoin,
+                        },
                         Some(&core_join.collection_subject),
                         &[],
                         core_join.runtime_expr,
@@ -710,16 +737,25 @@ fn validate_stage(
     }
 }
 
+#[derive(Clone, Copy)]
+struct ExpectedClosureIdentity {
+    owner: core::ItemId,
+    kind: ClosureKind,
+}
+
 fn validate_expected_closure(
     module: &Module,
     closure_id: ClosureId,
-    expected_owner: core::ItemId,
-    expected_kind: ClosureKind,
+    identity: ExpectedClosureIdentity,
     expected_subject: Option<&core::Type>,
     expected_parameters: &[Parameter],
     expected_root: core::ExprId,
     errors: &mut Vec<ValidationError>,
 ) {
+    let ExpectedClosureIdentity {
+        owner: expected_owner,
+        kind: expected_kind,
+    } = identity;
     let Some(closure) = module.closures().get(closure_id) else {
         errors.push(ValidationError::UnknownClosure {
             closure: closure_id,

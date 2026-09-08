@@ -83,6 +83,8 @@ names.
 ### GoaAccount
 
 ```aivi
+use aivi.gnome.onlineAccounts (GoaAccountId)
+
 type GoaAccount = {
     id: GoaAccountId
 }
@@ -90,14 +92,18 @@ type GoaAccount = {
 
 Account record.
 
-Right now it is intentionally small: the only stored field is the account `id`.
+Right now it is intentionally small: the only stored field is the account `id`. Account IDs come
+from the GOA provider; the module does not export a constructor for manufacturing one from text.
 
 ```aivi
-use aivi.gnome.onlineAccounts (GoaAccount)
+use aivi.gnome.onlineAccounts (
+    GoaAccount
+    GoaAccountId
+)
 
-value account : GoaAccount = {
-    id: "personal-mail"
-}
+type GoaAccount -> GoaAccountId
+func accountId = account =>
+    account.id
 ```
 
 ### AccessToken
@@ -132,6 +138,8 @@ OAuth token payload with optional refresh-token support.
 ### GoaMailAuth
 
 ```aivi
+use aivi.gnome.onlineAccounts (OAuthToken)
+
 type GoaMailAuth =
   | GoaMailPassword Text
   | GoaMailOAuthToken OAuthToken
@@ -173,6 +181,8 @@ High-level state of an account.
 ### GoaEvent
 
 ```aivi
+use aivi.gnome.onlineAccounts (GoaAccountId)
+
 type GoaEvent =
   | AccountAdded GoaAccountId
   | AccountRemoved GoaAccountId
@@ -199,6 +209,13 @@ func describeEvent = event => event
 ### GoaMailAccount
 
 ```aivi
+use aivi.gnome.onlineAccounts (
+    GoaAccountId
+    GoaAccountState
+    GoaMailAuth
+    GoaProvider
+)
+
 type GoaMailAccount = {
     id: GoaAccountId,
     provider: GoaProvider,
@@ -230,6 +247,11 @@ Mail-ready account record published by the current GOA source provider.
 ## Source provider
 
 ```aivi
+use aivi.gnome.onlineAccounts (
+    GoaError
+    GoaMailAccount
+)
+
 @source goa.mailAccounts
 signal accounts : Signal (Result GoaError (List GoaMailAccount))
 ```

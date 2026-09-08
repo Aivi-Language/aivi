@@ -63,7 +63,7 @@ Accumulation step function. Use it with `+|>` to turn a `Result`-producing signa
 
 **Type:** `AsyncTracker E A -> Result E A -> AsyncTracker E A`
 
-```aivi
+```aivi group=tracker-projections
 use aivi.async (
     AsyncTracker
     step
@@ -96,7 +96,7 @@ signal users : Signal (AsyncTracker HttpError (List User)) = rawUsers
 
 The three projections are now independent reactive signals:
 
-```aivi
+```aivi group=tracker-projections
 // Spinner visible while loading
 signal loading = users.pending
 
@@ -202,7 +202,7 @@ value main =
             <Box />
             <Label text="Failed to load" />
             <Label text="No data yet" />
-            <Label text="{items}" />
+            <Label text="Users loaded" />
         </Box>
     </Window>
 
@@ -247,8 +247,8 @@ value initialUsers : AsyncTracker HttpError (List User) = {
 signal users : Signal (AsyncTracker HttpError (List User)) = rawUsers
  +|> initialUsers step
 
-type Bool -> Option (List User) -> Bool
-func trackFirstLoad = hasFired newDone => hasFired
+type Option (List User) -> Bool -> Bool
+func trackFirstLoad = newDone hasFired => hasFired
  T|> True
  F|> isSome newDone
 
@@ -257,5 +257,6 @@ signal firstLoadDone : Signal Bool = users.done
 ```
 
 `firstLoadDone` is a `Signal Bool` that is `False` until the first successful result arrives,
-then becomes `True` permanently. Use it with `activeWhen` on a follow-up source to gate a
-side-effect to fire only once.
+then becomes `True` permanently. Use it with `activeWhen` to activate a follow-up source.
+For one-shot behavior, that source must also have no retry, refresh, restart, or changing
+configuration triggers. The gate alone does not make an effect exactly-once.

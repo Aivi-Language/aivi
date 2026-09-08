@@ -188,6 +188,10 @@ value view =
 
 ## Widget catalog
 
+This guide gives worked descriptions for the common widgets below. The final
+[additional schema entries](#additional-schema-entries) section lists other registered
+names; schema registration alone does not prove every native integration is complete.
+
 ### `Window`
 
 Top-level application window.
@@ -703,7 +707,7 @@ A factory-backed GTK list for large item sequences. It accepts ordinary child wi
 value view =
     <Window title="App">
         <ScrolledWindow vexpand={True}>
-            <ListView showSeparators={True} singleClickActivate={True} onActivate={index}>
+            <ListView showSeparators={True} singleClickActivate={True} onActivate={.}>
                 <Label text="Thread A" />
                 <Label text="Thread B" />
                 <Label text="Thread C" />
@@ -724,7 +728,7 @@ A factory-backed GTK grid for large tile collections. Like `ListView`, it accept
 value view =
     <Window title="App">
         <ScrolledWindow vexpand={True}>
-            <GridView minColumns={2} maxColumns={4} singleClickActivate={True} onActivate={index}>
+            <GridView minColumns={2} maxColumns={4} singleClickActivate={True} onActivate={.}>
                 <Button label="Card 1" />
                 <Button label="Card 2" />
                 <Button label="Card 3" />
@@ -1015,11 +1019,13 @@ value view =
 
 `ViewStack` is the primary Adwaita page-navigation container. `ViewSwitcher` is a tab bar
 that presents the pages of a `ViewStack`. Since AIVI uses reactive state instead of
-cross-widget references, both widgets share state through a common `visibleChildName`
-signal rather than a direct object link.
+cross-widget references, page selection on the stack is exposed as `visibleChildName`.
+The current bridge does not attach `ViewSwitcher` to a stack; an unbound switcher does
+not provide working page navigation. Use explicit controls that update the stack's
+selection signal until that connection is implemented.
 
 ```aivi
-signal activePage : Text = "home"
+signal activePage : Signal Text = "home"
 
 value view =
     <Window title="App">
@@ -1050,16 +1056,16 @@ value view =
 - `onSwitch` (Text) — fires with the name of the newly visible page when navigation changes
 
 **ViewStack children:**
-- `pages` — sequence of child widgets; each is added as a named page via `add_named`.
-  To assign a name to a page, set the child widget's GObject `name` property via the
-  `visibleChildName` setter on the stack or use reactive state.
+- `pages` — sequence of `ViewStackPage` wrappers. Set each wrapper's `name`, `title`,
+  and `iconName`; the bridge uses those values when adding the page. The stack's
+  `visibleChildName` selects a page by that name; it does not rename child widgets.
 
 **ViewSwitcher properties:**
 - `policy` (Text) — `"Narrow"` (icon-only) or `"Wide"` (icon + label); default `Narrow`
 
 > **Note:** ViewSwitcher does not automatically link to a ViewStack in AIVI's declarative
-> model. Connect them reactively: bind the `ViewStack.visibleChildName` signal to both
-> the stack and a switcher state signal.
+> model. The example shows page metadata and stack selection, not a complete switcher
+> connection. A shared signal alone cannot create the missing GTK stack association.
 
 ### AlertDialog
 
@@ -1067,15 +1073,19 @@ value view =
 dismiss it by binding a Bool signal to the `visible` property.
 
 ```aivi
-signal showConfirm : Bool = False
-signal lastResponse : Text = ""
+signal showConfirm : Signal Bool = False
+signal lastResponse : Signal Text = ""
 
 value view =
     <Window title="App">
-        <AlertDialog visible={showConfirm} heading="Delete item?" body="This action cannot be undone." defaultResponse="delete" closeResponse="cancel" responses="delete:Delete:destructive|cancel:Cancel"></AlertDialog>
-        <Button label="Delete" cssClasses="destructive-action"></Window>
+        <AlertDialog visible={showConfirm} heading="Delete item?" body="This action cannot be undone." defaultResponse="delete" closeResponse="cancel" responses="delete:Delete:destructive|cancel:Cancel" />
+        <Button label="Delete" cssClasses="destructive-action" />
     </Window>
-``` — `True` presents the dialog, `False` closes it
+```
+
+**Properties:**
+
+- `visible` (Bool) — `True` presents the dialog, `False` closes it
 - `heading` (Text) — dialog heading text
 - `body` (Text) — dialog body text
 - `defaultResponse` (Text) — ID of the response activated by pressing Enter
@@ -1092,13 +1102,13 @@ value view =
 Month calendar with optional day selection.
 
 ```aivi
-signal selectedDay : Int = 1
-signal selectedMonth : Int = 0
-signal selectedYear : Int = 2025
+signal selectedDay : Signal Int = 1
+signal selectedMonth : Signal Int = 0
+signal selectedYear : Signal Int = 2025
 
 value view =
     <Window title="App">
-        <Calendar year={selectedYear} month={selectedMonth} day={selectedDay} onDaySelected={.}></Window>
+        <Calendar year={selectedYear} month={selectedMonth} day={selectedDay} onDaySelected={.} />
     </Window>
 ```
 
@@ -1152,7 +1162,7 @@ value view =
 A button that opens a `Popover` when clicked.
 
 ```aivi
-signal menuOpen : Bool = False
+signal menuOpen : Signal Bool = False
 
 value view =
     <Window title="App">
@@ -1251,10 +1261,12 @@ value view =
 Adwaita About dialog showing application metadata. Acts as a top-level window; set `visible` reactively to show or hide it.
 
 ```aivi
+signal showAbout : Signal Bool = False
+
 value view =
     <Window title="App">
         <AboutDialog visible={showAbout} appName="My App" version="1.0.0" developerName="Jane Doe" website="https://example.com" issueUrl="https://github.com/example/issues" licenseType="MIT" applicationIcon="my-app" />
-        <Button label="About" onClick={True}></Window>
+        <Button label="About" onClick={True} />
     </Window>
 ```
 
@@ -1337,6 +1349,8 @@ value view =
 Like `NavigationSplitView` but the sidebar slides over the content rather than pushing it.
 
 ```aivi
+signal sidebarOpen : Signal Bool = False
+
 value view =
     <Window title="App" defaultWidth={800} defaultHeight={600}>
         <OverlaySplitView showSidebar={sidebarOpen}>
@@ -1368,6 +1382,8 @@ value view =
 A tabbed interface. `TabView` holds pages; `TabBar` provides the tab strip.
 
 ```aivi
+signal activeTab : Signal Int = 0
+
 value view =
     <Window title="App">
         <Box orientation="Vertical">
@@ -1483,10 +1499,12 @@ value view =
 A native file-chooser dialog backed by `gtk::FileChooserNative`. Set `visible` to `True` to show the dialog; the response is delivered via `onResponse`.
 
 ```aivi
+signal dialogOpen : Signal Bool = False
+
 value view =
     <Window title="App">
-        <FileDialog visible={dialogOpen} title="Open file" mode="Open" acceptLabel="Open" cancelLabel="Cancel" onResponse={code}>
-            <Button label="Open file…" onClick={True}></Window>
+        <FileDialog visible={dialogOpen} title="Open file" mode="Open" acceptLabel="Open" cancelLabel="Cancel" onResponse={.}>
+            <Button label="Open file…" onClick={True} />
         </FileDialog>
     </Window>
 ```
@@ -1501,4 +1519,22 @@ value view =
 | `acceptLabel` | Text | Label for the accept button |
 | `cancelLabel` | Text | Label for the cancel button |
 
-**Events:** `onResponse` (Int) — response code; `1` = accepted, `0` = cancelled (matches `gtk::ResponseType`)
+**Events:** `onResponse` (Int) — AIVI's response mapping: `1` = accepted, `0` = cancelled,
+`-4` = window deleted, custom responses retain their integer value, and other responses
+map to `-1`. These are not the raw numeric values of `gtk::ResponseType`.
+
+## Additional schema entries
+
+The current schema also registers the following names. They have no worked walkthrough
+on this page yet; consult `crates/aivi-gtk/src/schema.rs` for the exact accepted properties,
+events, and child slots, and `crates/aivi-gtk/src/host.rs` for their runtime wiring.
+
+| Area | Registered names |
+| --- | --- |
+| GTK controls and views | `InfoBar`, `LevelBar`, `LinkButton`, `Stack`, `StackSwitcher`, `StackSidebar`, `TreeExpander`, `GLArea` |
+| Adwaita controls and layout | `Breakpoint`, `ViewSwitcherBar`, `ViewSwitcherTitle`, `Avatar`, `Squeezer`, `Flap`, `ButtonContent`, `WindowTitle`, `MultiLayoutView`, `AdwDialog` |
+| Gestures and controllers | `GestureClick`, `GestureDrag`, `GestureSwipe`, `GestureLongPress`, `GestureRotate`, `GestureZoom`, `DragSource`, `DropTarget`, `ShortcutController` |
+| Styling | `CssProvider` |
+
+Do not infer an arbitrary GTK API from a widget's name. In particular, the `ViewSwitcher`
+family's registration does not supply the missing stack association described above.

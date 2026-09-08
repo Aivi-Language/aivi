@@ -3,6 +3,7 @@ name = "aivi-backend"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 aivi-ffi-call = { path = "../aivi-ffi-call" }
@@ -11,13 +12,13 @@ aivi-core = { path = "../aivi-core" }
 aivi-hir.workspace = true
 aivi-lambda.workspace = true
 aivi-typing.workspace = true
-bincode.workspace = true
-cranelift-codegen = "0.130.0"
-cranelift-frontend = "0.130.0"
-cranelift-jit = "0.130.0"
-cranelift-module = "0.130.0"
-cranelift-native = "0.130.0"
-cranelift-object = "0.130.0"
+postcard.workspace = true
+cranelift-codegen.workspace = true
+cranelift-frontend.workspace = true
+cranelift-jit.workspace = true
+cranelift-module.workspace = true
+cranelift-native.workspace = true
+cranelift-object.workspace = true
 indexmap = { version = "2", features = ["serde"] }
 num-bigint = { version = "0.4.6", features = ["serde"] }
 num-traits = "0.2"
@@ -31,5 +32,5 @@ serde_json.workspace = true
 aivi-query.workspace = true
 aivi-syntax.workspace = true
 
-[lints]
-workspace = true
+[lints.rust]
+unsafe_code = "deny"

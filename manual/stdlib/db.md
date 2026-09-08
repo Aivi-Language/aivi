@@ -71,6 +71,8 @@ value appDb : Connection = {
 ## `TableRef A`
 
 ```aivi
+use aivi.db (Connection)
+
 type TableRef A = {
     name: Text,
     conn: Connection,
@@ -111,17 +113,15 @@ type DbRow = Dict Text Text
 A raw result row keyed by column name. Every field value is stored as `Text`, so decoding into richer application types happens somewhere else.
 
 ```aivi
+use aivi.core.dict (fromList)
+
 use aivi.db (DbRow)
 
-value sampleRow : DbRow = {
-    entries: [
-        { key: "id", value: "7" },
-        {
-            key: "email",
-            value: "ada@example.com"
-        }
+value sampleRow : DbRow =
+    fromList [
+        ("id", "7"),
+        ("email", "ada@example.com")
     ]
-}
 ```
 
 ---
@@ -165,6 +165,8 @@ func textParam = value =>
 ## `DbStatement`
 
 ```aivi
+use aivi.db (DbParam)
+
 type DbStatement = {
     sql: Text,
     arguments: List DbParam
@@ -283,8 +285,7 @@ func describeDbError = error => error
 use aivi.db (
     DbSource
     Connection
-    DbRow
-    DbStatement
+    statement
 )
 
 value connection : Connection = {
@@ -294,12 +295,7 @@ value connection : Connection = {
 @source db connection
 signal database : DbSource
 
-value loadUsersQuery : DbStatement = {
-    sql: "select * from users",
-    arguments: []
-}
-
-value loadUsers : Task Text (List DbRow) = database.query loadUsersQuery
+value loadUsers : Task Text (List (Map Text Text)) = database.query (statement "select * from users" [])
 ```
 
 The source-backed side of the family stays on `db.connect` / `db.live`. On-demand database work
@@ -350,27 +346,29 @@ fires. After a successful `database.commit`, the runtime automatically advances 
 ### Inserting a row
 
 ```aivi
-type Text -> DbParam
-func textParam = value =>
-    {
-        kind: "text",
-        bool: None,
-        int: None,
-        float: None,
-        decimal: None,
-        bigInt: None,
-        text: Some value,
-        bytes: None
-    }
+use aivi.db (
+    Connection
+    DbSource
+    paramText
+    statement
+)
 
-type Text -> DbStatement
+value insertConnection : Connection = {
+    database: "data/todos.db"
+}
+
+@source db insertConnection
+signal insertDatabase : DbSource
+
 func insertTodo = title =>
-    {
-        sql: "insert into todos (title, done) values (?, 0)",
-        arguments: [textParam title]
-    }
+    statement "insert into todos (title, done) values (?, 0)" [
+        paramText title
+    ]
 
-value addTask : Task Text Unit = database.commit (insertTodo "Buy groceries")
+value addTask : Task Text Unit =
+    insertDatabase.commit ["todos"] [
+        insertTodo "Buy groceries"
+    ]
 ```
 
 After the commit succeeds, `db.live` signals with `refreshOn: database` automatically re-query.
@@ -477,7 +475,7 @@ export main
 
 The data flow:
 
-```
+```text
 db.connect  →  database handle
                     ↓
 db.live     →  todoRows signal (auto-refreshes after commits)

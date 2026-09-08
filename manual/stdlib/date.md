@@ -71,7 +71,16 @@ use aivi.date (
 
 ### Product types
 
-```aivi
+```aivi group=date-products
+use aivi.date (
+    Day
+    Hour
+    Minute
+    Month
+    Second
+    Year
+)
+
 type Date =
   Date year:Year month:Month day:Day
 
@@ -87,7 +96,7 @@ type ZonedDateTime =
 
 Construction is positional:
 
-```aivi
+```aivi group=date-products
 value today = Date 2024 6 15
 value noon = TimeOfDay 12 0 0
 value now = DateTime today noon
@@ -151,10 +160,13 @@ domain DateDelta over Int
 | `daysInFeb` | `Year → Day` | 28 or 29 depending on leap year |
 | `daysInMonth` | `Month → Year → Day` | Number of days in a given month |
 
-```aivi
-```
 
 ## Formatting
+
+`pad2 : Int -> Text` and `pad4 : Int -> Text` are also exported. They left-pad decimal
+text with zeroes to a minimum width; they do not validate calendar values or truncate
+longer input. Formatting likewise assumes valid date/time components and uses the supplied
+zone text without timezone conversion.
 
 | Function | Type | Description |
 | --- | --- | --- |
@@ -163,8 +175,6 @@ domain DateDelta over Int
 | `dateTimeToIso` | `DateTime → Text` | `"2024-06-15T14:30:00"` |
 | `zonedToIso` | `ZonedDateTime → Text` | `"2024-06-15T14:30:00+00:00"` |
 
-```aivi
-```
 
 ## Comparison
 
@@ -211,15 +221,15 @@ use aivi.date (
     dateTimeToIso
     isLeapYear
     daysInMonth
+    epoch
     midnight
     toDateTime
     toZoned
 )
 
-value birthday = Date 1990 3 14
-value label = dateToIso birthday
+value label = dateToIso epoch
 value feb = daysInMonth 2 2024
-value meeting = toDateTime (Date 2024 12 25) midnight
+value meeting = toDateTime epoch midnight
 value utcMeeting = toZoned meeting "+00:00"
 ```
 

@@ -38,7 +38,7 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 
 ## At a glance
 
-| Module | Description | Key exports |
+| Module | Description | Selected exports or capability members |
 | --- | --- | --- |
 | [aivi.prelude](prelude.md) | Convenience re-exports and built-in types | `Validation`, `isValid`, `validationToResult`, `min`, `Functor` |
 | [aivi.async](async.md) | Async operation lifecycle tracker | `AsyncTracker`, `step`, `isPending`, `isDone`, `isFailed` |
@@ -50,13 +50,13 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 | [aivi.nonEmpty](nonEmpty.md) | Non-empty list guaranteed at the type level | `head`, `last`, `singleton`, `cons`, `fromList` |
 | [aivi.pair](pair.md) | Two-element tuples | `first`, `second`, `mapFirst`, `mapSecond` |
 | [aivi.matrix](matrix.md) | Rectangular 2D collections | `init`, `fromRows`, `width`, `height`, `rows` |
-| [aivi.core.dict](dict.md) | Association map keyed by any `Eq` type | `entries`, `merge`, `combine` |
+| [aivi.core.dict](dict.md) | Association map keyed by any `Eq` type | `Dict`, `get`, `mergeWith`, `union` |
 | [aivi.core.set](set.md) | Unordered set for any `Eq` type | `singleton`, `member`, `insert`, `union` |
-| [aivi.core.range](range.md) | Inclusive integer range `[start, end]` | `start`, `end`, `toList`, `contains` |
-| [aivi.core.fn](fn.md) | Higher-order function combinators | `compose`, `const`, `flip`, `combine` |
+| [aivi.core.range](range.md) | Inclusive integer range `[start, end]` | `RangeInt`, `make`, `length`, `contains` |
+| [aivi.core.fn](fn.md) | Higher-order function combinators | `compose`, `const`, `flip`, `on` |
 | [aivi.arithmetic](arithmetic.md) | Compiler-backed integer arithmetic intrinsics | `add`, `sub`, `mul`, `div`, `mod`, `neg` |
 | [aivi.order](order.md) | `Ord`-driven ordering plus explicit comparator helpers | `min`, `max`, `minBy`, `clampBy` |
-| [aivi.bool](bool.md) | Boolean helpers | `and`, `or`, `not`, `all`, `any` |
+| [aivi.bool](bool.md) | Boolean helpers | `both`, `either`, `not`, `xor` |
 | [aivi.bits](bits.md) | Compiler-backed bitwise integer intrinsics | `and`, `or`, `xor`, `not`, `shiftLeft` |
 | [aivi.defaults](defaults.md) | Default values for common types | `defaultText`, `defaultInt`, `defaultBool` |
 | [aivi.math](math.md) | Integer arithmetic utilities | `abs`, `clamp`, `min`, `max`, `gcd` |
@@ -68,18 +68,19 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 | [aivi.data.json](json.md) | JSON text helpers plus structural JSON types | `validate`, `get`, `pretty`, `Json` |
 | [aivi.duration](duration.md) | Typed time spans | `ms`, `sec`, `min`, `hr`, `millis` |
 | [aivi.time](time.md) | Clock, timestamp, and formatting helpers | `nowMs`, `monotonicMs`, `format`, `parse` |
-| [aivi.timer](timer.md) | Marker types for timer-backed signals | `immediate` |
-| [aivi.random](random.md) | Randomness vocabulary and `RandomSource` | `randomInt`, `randomFloat`, `randomBytes` |
-| [aivi.fs](fs.md) | Filesystem vocabulary and `FsSource` | `readText`, `writeText`, `deleteFile` |
-| [aivi.path](path.md) | Lexical path manipulation | `join`, `basename`, `dirname`, `extension` |
-| [aivi.env](env.md) | Environment vocabulary and `EnvSource` | `get`, `getAll`, `EnvSource` |
-| [aivi.stdio](stdio.md) | Standard I/O vocabulary and `StdioSource` | `StdioSource`, `StdinLine`, `stdout` |
+| [aivi.date](date.md) | Calendar data and pure formatting | `Date`, `TimeOfDay`, `DateDelta`, `dateToIso` |
+| [aivi.timer](timer.md) | Marker types for timer-backed signals | `TimerTick`, `TimerReady`, `TimerMode` |
+| [aivi.random](random.md) | Randomness vocabulary and `RandomSource` | `RandomSource`, `RandomError` |
+| [aivi.fs](fs.md) | Filesystem vocabulary and `FsSource` | `FsSource`, `FsError`, `FsEvent` |
+| [aivi.path](path.md) | Lexical path manipulation | `join`, `filename`, `parent`, `extension` |
+| [aivi.env](env.md) | Environment vocabulary and `EnvSource` | `EnvSource`, `EnvEntry` |
+| [aivi.stdio](stdio.md) | Standard I/O vocabulary and `StdioSource` | `StdioSource`, `Stream`, `Stdout`, `Stderr` |
 | [aivi.log](log.md) | Logging vocabulary and `LogSource` | `levelToText`, `kv`, `LogSource` |
 | [aivi.process](process.md) | Process vocabulary and `ProcessSource` | `command`, `args`, `workingDir`, `env` |
-| [aivi.url](url.md) | Typed URLs with explicit parsing | `parse`, `scheme`, `host`, `path` |
-| [aivi.http](http.md) | HTTP vocabulary and `HttpSource` | `HttpSource`, `Request`, `Response` |
+| [aivi.url](url.md) | Typed URLs with explicit parsing | `Url`, `UrlError` (domain members are not public yet) |
+| [aivi.http](http.md) | HTTP vocabulary and `HttpSource` | `HttpSource`, `HttpResponse`, `HttpError` |
 | [aivi.api](api.md) | OpenAPI capability auth and error vocabulary | `ApiAuth`, `ApiError`, `ApiResponse` |
-| [aivi.auth](auth.md) | OAuth 2.0 / PKCE sign-in records | `OAuthConfig`, `OAuthToken`, `SignInState` |
+| [aivi.auth](auth.md) | OAuth 2.0 / PKCE sign-in records | `PkceConfig`, `PkceToken`, `PkceState` |
 | [aivi.db](db.md) | Database vocabulary and `DbSource` | `query`, `commit`, `DbSource` |
 | [aivi.imap](imap.md) | Mailbox and folder types for IMAP integrations | `FolderSummary`, `MailEvent`, `lastSyncedAt` |
 | [aivi.smtp](smtp.md) | Outgoing mail configuration and messages | `from`, `to`, `subject`, `bodyText`, `SmtpConfig` |
@@ -89,15 +90,17 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 | [aivi.portal](portal.md) | Desktop portal result vocabulary plus built-in portal sources | `openFile`, `openUri`, `screenshot` |
 | [aivi.dbus](dbus.md) | D-Bus vocabulary and `DbusSource` | `destination`, `path`, `interface`, `member` |
 | [aivi.gnome.tray](tray.md) | GNOME tray bridge vocabulary | `TraySource`, `defaultPath`, `actionMember` |
-| [aivi.gnome.settings](settings.md) | GSettings schema, key, and value types | `make`, `parse`, `GSettingsSource` |
+| [aivi.gnome.settings](settings.md) | GSettings schema, key, and value types | `SettingsSchema`, `SettingsKey`, `SettingValue` |
 | [aivi.gnome.onlineAccounts](onlineAccounts.md) | Desktop account and token records | `id`, `token`, `tokenType`, `expiresAt` |
 | [aivi.gnome.notifications](notifications.md) | Desktop notification capability vocabulary | `NotificationSource`, `NotificationTask`, `NotificationEvent` |
 | [aivi.clipboard](clipboard.md) | Clipboard content types and watcher shapes | `ClipboardContent`, `ClipboardSource` |
-| [aivi.color](color.md) | Packed ARGB color domain with blend and GNOME palette | `argb`, `blend`, `gnomeBlue3`, `gnomeRed3` |
-| [aivi.px](px.md) | Pixel dimension domain for type-safe sizing | `px`, `(+)`, `(-)`, `scale`, `zero` |
+| [aivi.color](color.md) | Packed ARGB color domain with blend and GNOME palette | `Color`, `blend`, `gnomeBlue3`, `gnomeRed3` |
+| [aivi.px](px.md) | Pixel dimension domain for type-safe sizing | `px`, `addPx`, `subPx`, `scalePx`, `zero` |
 | [aivi.gtk.styles](styles.md) | Adwaita CSS class name constants | `suggestedAction`, `destructiveAction`, `classes` |
+| [aivi.gtk.icons](icons.md) | Icon-name text constants | `documentOpen`, `documentSave`, `goHomeSymbolic` |
+| [aivi.secret](secret.md) | Desktop keyring capability vocabulary | `SecretSource`, `SecretError`, `SecretTask` |
 | [aivi.image](image.md) | Image data, metadata, and load errors | `format`, `size`, `bytes`, `hasAlpha` |
-| [aivi.gresource](gresource.md) | Bundled GResource paths and load errors | `readText`, `readBytes` |
+| [aivi.gresource](gresource.md) | Bundled GResource paths and load errors | `ResourcePath`, `ResourceError`, `ResourceTask` |
 | [aivi.i18n](i18n.md) | Internationalisation marker helpers | `tr`, `trn` |
 
 ## Built-in types you will see often
@@ -151,17 +154,18 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 
 - [`aivi.duration`](/stdlib/duration) — typed time spans such as `5sec`.
 - [`aivi.time`](/stdlib/time) — clocks, timestamps, and time formatting helpers.
+- [`aivi.date`](/stdlib/date) — calendar data types and pure formatting.
 - [`aivi.timer`](/stdlib/timer) — marker types for timer-backed signals.
 - [`aivi.random`](/stdlib/random) — randomness vocabulary plus `RandomSource`.
 
 ### Files, environment, and processes
 
 - [`aivi.fs`](/stdlib/fs) — filesystem vocabulary plus `FsSource`.
-- [`aivi.path`](/stdlib/path) — checked path values.
+- [`aivi.path`](/stdlib/path) — lexical path helpers and a distinct nominal `Path` domain.
 - [`aivi.env`](/stdlib/env) — environment vocabulary plus `EnvSource`.
 - [`aivi.stdio`](/stdlib/stdio) — stdio vocabulary plus `StdioSource`.
 - [`aivi.log`](/stdlib/log) — logging vocabulary plus `LogSource`.
-- [`aivi.process`](/stdlib/process) — process vocabulary plus future capability shapes.
+- [`aivi.process`](/stdlib/process) — process vocabulary plus `ProcessSource` capabilities.
 
 ### Network and services
 
@@ -188,36 +192,23 @@ place to look when wiring a Linux desktop app together.
 - [`aivi.portal`](/stdlib/portal) — desktop portal results and built-in sources for file picking, opening URIs, and screenshots.
 - [`aivi.dbus`](/stdlib/dbus) — D-Bus vocabulary plus `DbusSource`.
 - [`aivi.gnome.settings`](/stdlib/settings) — GSettings schema, key, and value types.
+- [`aivi.secret`](/stdlib/secret) — desktop keyring capabilities.
+- [`aivi.gnome.tray`](/stdlib/tray) — the application-side tray bridge.
 - [`aivi.gnome.onlineAccounts`](/stdlib/onlineAccounts) — desktop account and token records.
 - [`aivi.gnome.notifications`](/stdlib/notifications) — desktop notification payloads, tasks, and response events.
 - [`aivi.clipboard`](/stdlib/clipboard) — clipboard content types and watcher shapes.
 - [`aivi.color`](/stdlib/color) — packed UI colors and channel helpers.
+- [`aivi.px`](/stdlib/px) — pixel dimensions.
+- [`aivi.gtk.icons`](/stdlib/icons) — icon-name constants.
+- [`aivi.gtk.styles`](/stdlib/styles) — CSS class constants.
 - [`aivi.image`](/stdlib/image) — image data, metadata, and load errors.
 - [`aivi.gresource`](/stdlib/gresource) — bundled resource paths and load errors.
 - [`aivi.i18n`](/stdlib/i18n) — translation marker helpers.
 
 ## Common interfaces (typeclasses)
 
-If you have not used typeclasses before, think of them as shared capabilities that different
-types can implement. The table below describes the current built-in support in the executable
-language/runtime slice.
-
-| Interface | What it gives you | Built-in support includes |
-|---|---|---|
-| `Eq A` | Equality via `==` and `!=` | primitive scalars, `Ordering`, `Option`, `Result`, `Validation`, `List` |
-| `Ord A` | Ordering via `compare` | `Int`, `Text`, `Ordering` |
-| `Default A` | A fallback value via `default` | same-module `Default` instances; `Option` omission via `use aivi.defaults (Option)`; `Text` / `Int` / `Bool` omission via `use aivi.defaults (defaultText, defaultInt, defaultBool)` |
-| `Functor F` | Mapping over a wrapped value | `Option`, `Result`, `List`, `Validation`, `Signal` |
-| `Semigroup A` | Combining two values with `<>` | `Text`, `List` |
-| `Monoid A` | An identity value via `empty` | `Text`, `List` |
-| `Foldable F` | Reducing a structure to one value | `List`, `Option`, `Result`, `Validation` |
-| `Filterable F` | Keeping some values while dropping others | `List`, `Option` |
-| `Apply F` | Applying wrapped functions to wrapped values | `Option`, `Result`, `List`, `Validation`, `Signal` |
-| `Applicative F` | Lifting plain values into a context with `pure` | `Option`, `Result`, `List`, `Validation`, `Signal`, `Task` |
-| `Monad F` | Chaining context-producing steps | `List`, `Option`, `Result`, `Task` |
-| `Bifunctor F` | Mapping both sides of a two-parameter type | `Result`, `Validation` |
-| `Traversable F` | Walking a structure while building effects | `List`, `Option`, `Result`, `Validation` |
-
-This table describes the current executable built-in slice. For the full higher-kinded hierarchy,
-the canonical executable support reference, and the current imported-unary-instance slice for user-authored higher-kinded
-classes and instances, see [Typeclasses & Higher-Kinded Support](/guide/typeclasses).
+Classes describe operations shared by multiple types. Use the
+[canonical executable-support table](/guide/typeclasses#canonical-builtin-executable-support)
+for the exact builtin carrier/class matrix, and [class laws](/guide/class-laws) for semantic
+contracts. That table distinguishes builtin support from imported authored instances and
+avoids treating parser acceptance as proof of runtime support.

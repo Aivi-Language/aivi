@@ -820,12 +820,11 @@ where
         group: &GtkChildGroup,
     ) -> Result<(), GtkExecutorError<H::Error>> {
         if group.owner == context.node {
-            let mut insert_index = self.instance_state(context)?.children.len();
-            for &root in group.roots.iter() {
+            let first_insert_index = self.instance_state(context)?.children.len();
+            for (offset, &root) in group.roots.iter().enumerate() {
                 let child =
                     self.mount_subtree(root, Some(context.clone()), context.path.clone())?;
-                self.attach_existing_child(context, insert_index, child)?;
-                insert_index += 1;
+                self.attach_existing_child(context, first_insert_index + offset, child)?;
             }
             return Ok(());
         }

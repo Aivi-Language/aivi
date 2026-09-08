@@ -18,7 +18,7 @@ fn inline_uri(name: &str) -> Url {
 fn open_inline(name: &str, text: &str) -> (Arc<ServerState>, Url) {
     let state = Arc::new(ServerState::new());
     let uri = inline_uri(name);
-    open_document(&state, &uri, text.to_owned());
+    open_document(&state, &uri, 1, text.to_owned());
     (state, uri)
 }
 

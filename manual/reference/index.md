@@ -37,3 +37,11 @@ you want and need the exact surface, rules, or shipped catalog.
 
 The standard library has its own reference map at [/stdlib/](/stdlib/). Use it when you need to
 know what a module exports today, not when you are still learning the shape of the language.
+
+## Tooling and delivery
+
+| Topic | Page |
+| --- | --- |
+| Supported compiler toolchain, CLI outputs, artifacts, and caches | [Toolchain & Artifacts](/reference/toolchain-and-artifacts) |
+| Diagnostic structure, LSP capabilities, and VS Code integration | [Diagnostics & Editor Tooling](/reference/editor-tooling) |
+| Criterion suites and performance evidence | [Benchmarking](/reference/benchmarking) |

@@ -1,27 +1,33 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use tower_lsp::{
     Client, LanguageServer,
-    jsonrpc::Result,
+    jsonrpc::{Error, Result},
     lsp_types::request::{GotoImplementationParams, GotoImplementationResponse},
     lsp_types::{
         CodeActionOptions, CodeActionParams, CodeActionProviderCapability, CodeLens,
         CodeLensOptions, CodeLensParams, CompletionOptions, CompletionParams, CompletionResponse,
         DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-        DocumentFormattingParams, DocumentSymbolParams, DocumentSymbolResponse,
+        DocumentFormattingParams, DocumentHighlight, DocumentHighlightParams, DocumentSymbolParams,
+        DocumentSymbolResponse, FoldingRange, FoldingRangeParams, FoldingRangeProviderCapability,
         GotoDefinitionParams, GotoDefinitionResponse, Hover, HoverParams, HoverProviderCapability,
         ImplementationProviderCapability, InitializeParams, InitializeResult, InitializedParams,
         InlayHint, InlayHintParams, Location, MessageType, OneOf, PrepareRenameResponse,
-        ReferenceParams, RenameOptions, RenameParams, SemanticTokensFullOptions,
-        SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult,
-        SemanticTokensServerCapabilities, ServerCapabilities, SymbolInformation, SymbolKind,
-        TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
-        TextDocumentSyncOptions, TextEdit, WorkDoneProgressOptions, WorkspaceEdit,
-        WorkspaceSymbolParams,
+        ReferenceParams, RenameOptions, RenameParams, SemanticTokensDeltaParams,
+        SemanticTokensFullDeltaResult, SemanticTokensFullOptions, SemanticTokensLegend,
+        SemanticTokensOptions, SemanticTokensParams, SemanticTokensRangeParams,
+        SemanticTokensRangeResult, SemanticTokensResult, SemanticTokensServerCapabilities,
+        ServerCapabilities, SignatureHelp, SignatureHelpOptions, SignatureHelpParams,
+        SymbolInformation, SymbolKind, TextDocumentPositionParams, TextDocumentSyncCapability,
+        TextDocumentSyncKind, TextDocumentSyncOptions, TextEdit, WorkDoneProgressOptions,
+        WorkspaceEdit, WorkspaceSymbolParams,
     },
 };
 
-use crate::state::{ServerConfig, ServerState};
+use crate::{
+    analysis_pool::{AnalysisPoolError, CancellationToken},
+    state::{DocumentSnapshot, ServerConfig, ServerState},
+};
 
 pub struct Backend {
     pub client: Client,
@@ -36,21 +42,203 @@ impl Backend {
         }
     }
 
-    async fn publish_diagnostics_for_uri(&self, uri: tower_lsp::lsp_types::Url) {
-        let maybe_file = self.state.files.get(&uri).map(|file| *file);
-        let Some(file) = maybe_file else {
+    fn schedule_diagnostics(&self, uri: tower_lsp::lsp_types::Url, debounce: Duration) {
+        let Some(snapshot) = self.state.document_snapshot(&uri) else {
             tracing::error!(
-                "publish_diagnostics_for_uri: URI {} is not tracked; diagnostics will not be published",
+                "schedule_diagnostics: URI {} is not tracked; diagnostics will not be published",
                 uri
             );
             return;
         };
 
-        let lsp_diags = crate::diagnostics::collect_lsp_diagnostics(&self.state.db, file, &uri);
-        self.client
-            .publish_diagnostics(uri.clone(), lsp_diags, None)
+        let (request_id, cancellation) = self.state.start_diagnostics(&uri);
+        let state = Arc::clone(&self.state);
+        let client = self.client.clone();
+        tokio::spawn(async move {
+            run_diagnostics_request(
+                Arc::clone(&state),
+                client,
+                uri.clone(),
+                snapshot,
+                cancellation,
+                debounce,
+            )
             .await;
-        tracing::debug!("Published diagnostics for {}", uri);
+            state.finish_diagnostics(&uri, request_id);
+        });
+    }
+
+    async fn analyze<T, F>(&self, work: F) -> Result<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(Arc<ServerState>) -> T + Send + 'static,
+    {
+        let cancellation = CancellationToken::default();
+        let cancel_on_drop = CancelOnDrop::new(cancellation.clone());
+        let worker_cancellation = cancellation.clone();
+        let state = Arc::clone(&self.state);
+        let analysis_access = Arc::clone(&state.analysis_access);
+        let result = self
+            .state
+            .analysis_pool
+            .execute(cancellation, move || {
+                let _analysis = analysis_access.blocking_read();
+                (!worker_cancellation.is_cancelled()).then(|| work(state))
+            })
+            .await;
+        cancel_on_drop.disarm();
+
+        match result {
+            Ok(Some(value)) => Ok(value),
+            Ok(None) | Err(AnalysisPoolError::Cancelled) => Err(Error::request_cancelled()),
+            Err(error) => {
+                tracing::error!(?error, "LSP request analysis failed");
+                Err(Error::internal_error())
+            }
+        }
+    }
+}
+
+struct CancelOnDrop {
+    cancellation: Option<CancellationToken>,
+}
+
+impl CancelOnDrop {
+    fn new(cancellation: CancellationToken) -> Self {
+        Self {
+            cancellation: Some(cancellation),
+        }
+    }
+
+    fn disarm(mut self) {
+        self.cancellation.take();
+    }
+}
+
+impl Drop for CancelOnDrop {
+    fn drop(&mut self) {
+        if let Some(cancellation) = self.cancellation.take() {
+            cancellation.cancel();
+        }
+    }
+}
+
+async fn run_diagnostics_request(
+    state: Arc<ServerState>,
+    client: Client,
+    uri: tower_lsp::lsp_types::Url,
+    snapshot: DocumentSnapshot,
+    cancellation: CancellationToken,
+    debounce: Duration,
+) {
+    if !debounce.is_zero() {
+        tokio::select! {
+            () = tokio::time::sleep(debounce) => {}
+            () = cancellation.cancelled() => return,
+        }
+    }
+
+    let analysis_state = Arc::clone(&state);
+    let analysis_access = Arc::clone(&state.analysis_access);
+    let analysis_uri = uri.clone();
+    let analysis_file = snapshot.file;
+    let analysis_snapshot = snapshot.clone();
+    let worker_cancellation = cancellation.clone();
+    let result = state
+        .analysis_pool
+        .execute(cancellation.clone(), move || {
+            let _analysis_access = analysis_access.blocking_read();
+            if worker_cancellation.is_cancelled()
+                || !analysis_state.document_is_current(&analysis_uri, &analysis_snapshot)
+            {
+                None
+            } else {
+                Some(crate::diagnostics::collect_lsp_diagnostics(
+                    &analysis_state.db,
+                    analysis_file,
+                    &analysis_uri,
+                ))
+            }
+        })
+        .await;
+    let diagnostics = match result {
+        Ok(Some(diagnostics)) => diagnostics,
+        Ok(None) => return,
+        Err(AnalysisPoolError::Cancelled) => return,
+        Err(error) => {
+            tracing::error!(?error, %uri, "diagnostic analysis failed");
+            return;
+        }
+    };
+
+    // Serialize the final version check with document notifications. This
+    // closes the check/publish race without keeping a document-map guard over
+    // an await. The version travels with the notification as a second client-
+    // side stale-result defense.
+    let _publication = state.diagnostic_publication.lock().await;
+    if cancellation.is_cancelled() || !state.document_is_current(&uri, &snapshot) {
+        return;
+    }
+    client
+        .publish_diagnostics(uri.clone(), diagnostics, Some(snapshot.version))
+        .await;
+    tracing::debug!(
+        version = snapshot.version,
+        "published diagnostics for {uri}"
+    );
+}
+
+fn server_capabilities(config: ServerConfig) -> ServerCapabilities {
+    ServerCapabilities {
+        text_document_sync: Some(TextDocumentSyncCapability::Options(
+            TextDocumentSyncOptions {
+                open_close: Some(true),
+                change: Some(TextDocumentSyncKind::INCREMENTAL),
+                ..Default::default()
+            },
+        )),
+        document_symbol_provider: Some(OneOf::Left(true)),
+        document_formatting_provider: Some(OneOf::Left(true)),
+        hover_provider: Some(HoverProviderCapability::Simple(true)),
+        completion_provider: Some(CompletionOptions {
+            resolve_provider: Some(false),
+            trigger_characters: Some(vec![".".to_owned()]),
+            ..Default::default()
+        }),
+        signature_help_provider: Some(SignatureHelpOptions {
+            trigger_characters: Some(vec![" ".to_owned(), "(".to_owned()]),
+            retrigger_characters: Some(vec![" ".to_owned()]),
+            work_done_progress_options: WorkDoneProgressOptions::default(),
+        }),
+        definition_provider: Some(OneOf::Left(true)),
+        implementation_provider: Some(ImplementationProviderCapability::Simple(true)),
+        references_provider: Some(OneOf::Left(true)),
+        document_highlight_provider: Some(OneOf::Left(true)),
+        folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
+        rename_provider: Some(OneOf::Right(RenameOptions {
+            prepare_provider: Some(true),
+            work_done_progress_options: WorkDoneProgressOptions::default(),
+        })),
+        inlay_hint_provider: config.inlay_hints_enabled.then_some(OneOf::Left(true)),
+        code_action_provider: Some(CodeActionProviderCapability::Options(
+            CodeActionOptions::default(),
+        )),
+        workspace_symbol_provider: Some(OneOf::Left(true)),
+        code_lens_provider: config.code_lens_enabled.then_some(CodeLensOptions {
+            resolve_provider: Some(false),
+        }),
+        semantic_tokens_provider: Some(SemanticTokensServerCapabilities::SemanticTokensOptions(
+            SemanticTokensOptions {
+                work_done_progress_options: WorkDoneProgressOptions::default(),
+                legend: SemanticTokensLegend {
+                    token_types: crate::semantic_tokens::TOKEN_TYPES.to_vec(),
+                    token_modifiers: Vec::new(),
+                },
+                range: Some(true),
+                full: Some(SemanticTokensFullOptions::Delta { delta: Some(true) }),
+            },
+        )),
+        ..Default::default()
     }
 }
 
@@ -61,52 +249,7 @@ impl LanguageServer for Backend {
         self.state.set_config(config);
 
         Ok(InitializeResult {
-            capabilities: ServerCapabilities {
-                text_document_sync: Some(TextDocumentSyncCapability::Options(
-                    TextDocumentSyncOptions {
-                        open_close: Some(true),
-                        change: Some(TextDocumentSyncKind::FULL),
-                        ..Default::default()
-                    },
-                )),
-                document_symbol_provider: Some(OneOf::Left(true)),
-                document_formatting_provider: Some(OneOf::Left(true)),
-                hover_provider: Some(HoverProviderCapability::Simple(true)),
-                completion_provider: Some(CompletionOptions {
-                    resolve_provider: Some(false),
-                    trigger_characters: Some(vec![".".to_owned()]),
-                    ..Default::default()
-                }),
-                definition_provider: Some(OneOf::Left(true)),
-                implementation_provider: Some(ImplementationProviderCapability::Simple(true)),
-                references_provider: Some(OneOf::Left(true)),
-                rename_provider: Some(OneOf::Right(RenameOptions {
-                    prepare_provider: Some(true),
-                    work_done_progress_options: WorkDoneProgressOptions::default(),
-                })),
-                inlay_hint_provider: config.inlay_hints_enabled.then_some(OneOf::Left(true)),
-                code_action_provider: Some(CodeActionProviderCapability::Options(
-                    CodeActionOptions::default(),
-                )),
-                workspace_symbol_provider: Some(OneOf::Left(true)),
-                code_lens_provider: config.code_lens_enabled.then_some(CodeLensOptions {
-                    resolve_provider: Some(false),
-                }),
-                semantic_tokens_provider: Some(
-                    SemanticTokensServerCapabilities::SemanticTokensOptions(
-                        SemanticTokensOptions {
-                            work_done_progress_options: WorkDoneProgressOptions::default(),
-                            legend: SemanticTokensLegend {
-                                token_types: crate::semantic_tokens::TOKEN_TYPES.to_vec(),
-                                token_modifiers: Vec::new(),
-                            },
-                            range: None,
-                            full: Some(SemanticTokensFullOptions::Bool(true)),
-                        },
-                    ),
-                ),
-                ..Default::default()
-            },
+            capabilities: server_capabilities(config),
             ..Default::default()
         })
     }
@@ -123,205 +266,209 @@ impl LanguageServer for Backend {
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let uri = params.text_document.uri;
+        let version = params.text_document.version;
         let text = params.text_document.text;
-        crate::documents::open_document(&self.state, &uri, text);
-        self.publish_diagnostics_for_uri(uri).await;
+        let _publication = self.state.diagnostic_publication.lock().await;
+        let _analysis = self.state.analysis_access.write().await;
+        crate::documents::open_document(&self.state, &uri, version, text);
+        drop(_publication);
+        self.schedule_diagnostics(uri, Duration::ZERO);
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri;
-        if let Some(change) = params.content_changes.into_iter().last() {
-            crate::documents::change_document(&self.state, &uri, change.text);
+        let version = params.text_document.version;
+        let _publication = self.state.diagnostic_publication.lock().await;
+        let _analysis = self.state.analysis_access.write().await;
+        if let Err(error) =
+            crate::documents::change_document(&self.state, &uri, version, &params.content_changes)
+        {
+            tracing::warn!(?error, %uri, version, "rejected invalid document change");
+            return;
         }
-        // Cancel any in-flight diagnostics task for this URI.
-        if let Some((_, handle)) = self.state.pending_diagnostics.remove(&uri) {
-            handle.abort();
-        }
-        // Spawn a debounced diagnostics task: if no further edits arrive within
-        // the configured debounce window, diagnostics are published.
-        let state_clone = Arc::clone(&self.state);
-        let client_clone = self.client.clone();
-        let uri_clone = uri.clone();
+        drop(_publication);
+
         let debounce_ms = self.state.config().diagnostics_debounce_ms;
-        let handle = tokio::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(debounce_ms)).await;
-            let maybe_file = state_clone.files.get(&uri_clone).map(|f| *f);
-            let Some(file) = maybe_file else {
-                tracing::error!(
-                    "did_change debounce: URI {} is not tracked; diagnostics will not be published",
-                    uri_clone
-                );
-                return;
-            };
-            let lsp_diags =
-                crate::diagnostics::collect_lsp_diagnostics(&state_clone.db, file, &uri_clone);
-            client_clone
-                .publish_diagnostics(uri_clone.clone(), lsp_diags, None)
-                .await;
-            tracing::debug!("Published diagnostics for {}", uri_clone);
-        });
-        self.state.pending_diagnostics.insert(uri, handle);
+        self.schedule_diagnostics(uri, Duration::from_millis(debounce_ms));
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         let uri = params.text_document.uri;
-        // Cancel any pending debounced task before removing the document.
-        if let Some((_, handle)) = self.state.pending_diagnostics.remove(&uri) {
-            handle.abort();
-        }
-        crate::documents::close_document(&self.state, &uri);
-        self.client.publish_diagnostics(uri, Vec::new(), None).await;
+        let _publication = self.state.diagnostic_publication.lock().await;
+        let _analysis = self.state.analysis_access.write().await;
+        self.state.cancel_diagnostics(&uri);
+        let version =
+            crate::documents::close_document(&self.state, &uri).map(|document| document.version);
+        self.client
+            .publish_diagnostics(uri, Vec::new(), version)
+            .await;
     }
 
     async fn document_symbol(
         &self,
         params: DocumentSymbolParams,
     ) -> Result<Option<DocumentSymbolResponse>> {
-        let uri = &params.text_document.uri;
-        let maybe_file = self.state.files.get(uri).map(|file| *file);
-        let Some(file) = maybe_file else {
-            return Ok(None);
-        };
-
-        let analysis = crate::analysis::FileAnalysis::load(&self.state.db, file);
-        let doc_symbols =
-            crate::symbols::convert_symbols(analysis.symbols.as_ref(), analysis.source.as_ref());
-        Ok(Some(DocumentSymbolResponse::Nested(doc_symbols)))
+        self.analyze(move |state| {
+            let file = state.file(&params.text_document.uri)?;
+            let analysis = crate::analysis::FileAnalysis::load(&state.db, file);
+            let symbols = crate::symbols::convert_symbols(
+                analysis.symbols.as_ref(),
+                analysis.source.as_ref(),
+            );
+            Some(DocumentSymbolResponse::Nested(symbols))
+        })
+        .await
     }
 
     async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
-        let uri = &params.text_document.uri;
-        let maybe_file = self.state.files.get(uri).map(|file| *file);
-        let Some(file) = maybe_file else {
-            return Ok(None);
-        };
-
-        Ok(crate::formatting::format_document(&self.state.db, file))
+        self.analyze(move |state| {
+            let file = state.file(&params.text_document.uri)?;
+            crate::formatting::format_document(&state.db, file)
+        })
+        .await
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
-        Ok(crate::hover::hover(params, Arc::clone(&self.state)).await)
+        self.analyze(move |state| crate::hover::hover(params, state))
+            .await
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        Ok(crate::completion::completion(params, Arc::clone(&self.state)).await)
+        self.analyze(move |state| crate::completion::completion(params, state))
+            .await
+    }
+
+    async fn signature_help(&self, params: SignatureHelpParams) -> Result<Option<SignatureHelp>> {
+        self.analyze(move |state| crate::signature_help::signature_help(params, state))
+            .await
     }
 
     async fn goto_definition(
         &self,
         params: GotoDefinitionParams,
     ) -> Result<Option<GotoDefinitionResponse>> {
-        Ok(crate::definition::definition(params, Arc::clone(&self.state)).await)
+        self.analyze(move |state| crate::definition::definition(params, state))
+            .await
     }
 
     async fn goto_implementation(
         &self,
         params: GotoImplementationParams,
     ) -> Result<Option<GotoImplementationResponse>> {
-        Ok(crate::implementation::implementation(params, Arc::clone(&self.state)).await)
+        self.analyze(move |state| crate::implementation::implementation(params, state))
+            .await
     }
 
     async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
-        Ok(crate::references::references(params, Arc::clone(&self.state)).await)
+        self.analyze(move |state| crate::references::references(params, state))
+            .await
+    }
+
+    async fn document_highlight(
+        &self,
+        params: DocumentHighlightParams,
+    ) -> Result<Option<Vec<DocumentHighlight>>> {
+        self.analyze(move |state| crate::document_highlights::document_highlights(params, state))
+            .await
+    }
+
+    async fn folding_range(&self, params: FoldingRangeParams) -> Result<Option<Vec<FoldingRange>>> {
+        self.analyze(move |state| crate::folding_ranges::folding_ranges(params, state))
+            .await
     }
 
     async fn prepare_rename(
         &self,
         params: TextDocumentPositionParams,
     ) -> Result<Option<PrepareRenameResponse>> {
-        Ok(crate::rename::prepare_rename(params, Arc::clone(&self.state)).await)
+        self.analyze(move |state| crate::rename::prepare_rename(params, state))
+            .await
     }
 
     async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
-        Ok(crate::rename::rename(params, Arc::clone(&self.state)).await)
+        self.analyze(move |state| crate::rename::rename(params, state))
+            .await
     }
 
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
-        Ok(crate::inlay_hints::inlay_hints(
-            params,
-            Arc::clone(&self.state),
-        ))
+        self.analyze(move |state| crate::inlay_hints::inlay_hints(params, state))
+            .await
     }
 
     async fn code_action(
         &self,
         params: CodeActionParams,
     ) -> Result<Option<tower_lsp::lsp_types::CodeActionResponse>> {
-        Ok(crate::code_actions::code_actions(
-            params,
-            Arc::clone(&self.state),
-        ))
+        self.analyze(move |state| crate::code_actions::code_actions(params, state))
+            .await
     }
 
     async fn symbol(
         &self,
         params: WorkspaceSymbolParams,
     ) -> Result<Option<Vec<SymbolInformation>>> {
-        let query = params.query.to_ascii_lowercase();
-        let mut results: Vec<SymbolInformation> = Vec::new();
-
-        for entry in self.state.files.iter() {
-            let (uri, file) = (entry.key().clone(), *entry.value());
-            let analysis = crate::analysis::FileAnalysis::load(&self.state.db, file);
-            let source = analysis.source.as_ref();
-
-            let mut stack: Vec<&aivi_hir::LspSymbol> = analysis.symbols.iter().collect();
-            while let Some(sym) = stack.pop() {
-                if query.is_empty() || sym.name.to_ascii_lowercase().contains(&query) {
-                    let range = source.span_to_lsp_range(sym.span.span());
-                    let lsp_range = tower_lsp::lsp_types::Range {
-                        start: tower_lsp::lsp_types::Position {
-                            line: range.start.line,
-                            character: range.start.character,
-                        },
-                        end: tower_lsp::lsp_types::Position {
-                            line: range.end.line,
-                            character: range.end.character,
-                        },
-                    };
+        self.analyze(move |state| {
+            let query = params.query.to_ascii_lowercase();
+            let workspace = state.workspace_index.snapshot(&state);
+            let results = workspace
+                .symbols()
+                .iter()
+                .filter(|symbol| query.is_empty() || symbol.normalized_name.contains(&query))
+                .map(|symbol| {
                     #[allow(deprecated)]
-                    results.push(SymbolInformation {
-                        name: sym.name.clone(),
-                        kind: aivi_lsp_kind_to_symbol_kind(sym.kind),
+                    SymbolInformation {
+                        name: symbol.name.clone(),
+                        kind: aivi_lsp_kind_to_symbol_kind(symbol.kind),
                         tags: None,
                         deprecated: None,
-                        location: Location {
-                            uri: uri.clone(),
-                            range: lsp_range,
-                        },
-                        container_name: None,
-                    });
-                }
-                stack.extend(sym.children.iter());
-            }
-        }
+                        location: symbol.location.clone(),
+                        container_name: symbol.container_name.clone(),
+                    }
+                })
+                .collect::<Vec<_>>();
 
-        Ok(Some(results))
+            Some(results)
+        })
+        .await
     }
 
     async fn semantic_tokens_full(
         &self,
         params: SemanticTokensParams,
     ) -> Result<Option<SemanticTokensResult>> {
-        Ok(crate::semantic_tokens::semantic_tokens_full(params, Arc::clone(&self.state)).await)
+        self.analyze(move |state| crate::semantic_tokens::semantic_tokens_full(params, state))
+            .await
+    }
+
+    async fn semantic_tokens_full_delta(
+        &self,
+        params: SemanticTokensDeltaParams,
+    ) -> Result<Option<SemanticTokensFullDeltaResult>> {
+        self.analyze(move |state| crate::semantic_tokens::semantic_tokens_full_delta(params, state))
+            .await
+    }
+
+    async fn semantic_tokens_range(
+        &self,
+        params: SemanticTokensRangeParams,
+    ) -> Result<Option<SemanticTokensRangeResult>> {
+        self.analyze(move |state| crate::semantic_tokens::semantic_tokens_range(params, state))
+            .await
     }
 
     async fn code_lens(&self, params: CodeLensParams) -> Result<Option<Vec<CodeLens>>> {
-        if !self.state.config().code_lens_enabled {
-            return Ok(None);
-        }
+        self.analyze(move |state| {
+            if !state.config().code_lens_enabled {
+                return None;
+            }
 
-        let uri = &params.text_document.uri;
-        let Some(file) = self.state.files.get(uri).map(|f| *f) else {
-            return Ok(None);
-        };
-        let hir = aivi_query::hir_module(&self.state.db, file);
-        let lenses = crate::code_lens::collect_code_lenses(hir.module(), hir.source(), uri);
-        Ok(if lenses.is_empty() {
-            None
-        } else {
-            Some(lenses)
+            let uri = &params.text_document.uri;
+            let file = state.file(uri)?;
+            let hir = aivi_query::hir_module(&state.db, file);
+            let lenses = crate::code_lens::collect_code_lenses(hir.module(), hir.source(), uri);
+            (!lenses.is_empty()).then_some(lenses)
         })
+        .await
     }
 }
 
@@ -353,5 +500,182 @@ fn aivi_lsp_kind_to_symbol_kind(kind: aivi_hir::LspSymbolKind) -> SymbolKind {
         aivi_hir::LspSymbolKind::Event => SymbolKind::EVENT,
         aivi_hir::LspSymbolKind::Operator => SymbolKind::OPERATOR,
         aivi_hir::LspSymbolKind::TypeParameter => SymbolKind::TYPE_PARAMETER,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        path::PathBuf,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        },
+        time::Duration,
+    };
+
+    use futures::StreamExt;
+    use serde_json::json;
+    use tower::{Service, ServiceExt};
+    use tower_lsp::lsp_types::{
+        FoldingRangeProviderCapability, PublishDiagnosticsParams, SemanticTokensFullOptions,
+        SemanticTokensServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind,
+        TextDocumentSyncOptions, Url,
+    };
+    use tower_lsp::{LspService, jsonrpc::Request};
+
+    use super::{Backend, server_capabilities};
+    use crate::state::ServerConfig;
+
+    #[test]
+    fn advertises_incremental_document_synchronization() {
+        let capabilities = server_capabilities(ServerConfig::default());
+        let Some(TextDocumentSyncCapability::Options(TextDocumentSyncOptions {
+            change: Some(change),
+            ..
+        })) = capabilities.text_document_sync
+        else {
+            panic!("server should advertise text document sync options");
+        };
+
+        assert_eq!(change, TextDocumentSyncKind::INCREMENTAL);
+    }
+
+    #[test]
+    fn advertises_the_complete_protocol_quality_surface() {
+        let capabilities = server_capabilities(ServerConfig::default());
+        assert!(capabilities.signature_help_provider.is_some());
+        assert!(capabilities.document_highlight_provider.is_some());
+        assert!(matches!(
+            capabilities.folding_range_provider,
+            Some(FoldingRangeProviderCapability::Simple(true))
+        ));
+        let Some(SemanticTokensServerCapabilities::SemanticTokensOptions(options)) =
+            capabilities.semantic_tokens_provider
+        else {
+            panic!("server should advertise semantic token options");
+        };
+        assert_eq!(options.range, Some(true));
+        assert!(matches!(
+            options.full,
+            Some(SemanticTokensFullOptions::Delta { delta: Some(true) })
+        ));
+    }
+
+    #[tokio::test]
+    async fn queued_request_does_not_starve_tokio_and_drop_cancels_its_work() {
+        let (service, _) = LspService::new(Backend::new);
+        let state = Arc::clone(&service.inner().state);
+        let write_access = state.analysis_access.write().await;
+        let work_ran = Arc::new(AtomicBool::new(false));
+        let work_flag = Arc::clone(&work_ran);
+        let mut request = Box::pin(service.inner().analyze(move |_| {
+            work_flag.store(true, Ordering::Release);
+        }));
+
+        tokio::select! {
+            result = &mut request => panic!("analysis unexpectedly completed: {result:?}"),
+            () = tokio::time::sleep(Duration::from_millis(25)) => {}
+        }
+        drop(request);
+        drop(write_access);
+
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        assert!(
+            !work_ran.load(Ordering::Acquire),
+            "dropping the request future must cancel work queued behind the query writer"
+        );
+    }
+
+    #[tokio::test]
+    async fn rapid_edits_publish_only_the_latest_debounced_version() {
+        let (mut service, mut client_messages) = LspService::new(Backend::new);
+        let uri = Url::from_file_path(PathBuf::from("/server-tests/rapid.aivi"))
+            .expect("test URI should be valid");
+
+        service
+            .ready()
+            .await
+            .expect("service should initialize")
+            .call(
+                Request::build("initialize")
+                    .params(json!({
+                        "capabilities": {},
+                        "initializationOptions": { "diagnosticsDebounceMs": 50 }
+                    }))
+                    .id(1)
+                    .finish(),
+            )
+            .await
+            .expect("initialize request should succeed");
+        service
+            .ready()
+            .await
+            .expect("service should accept didOpen")
+            .call(
+                Request::build("textDocument/didOpen")
+                    .params(json!({
+                        "textDocument": {
+                            "uri": uri,
+                            "languageId": "aivi",
+                            "version": 1,
+                            "text": "value answer = 42\n"
+                        }
+                    }))
+                    .finish(),
+            )
+            .await
+            .expect("didOpen notification should succeed");
+
+        let initial = tokio::time::timeout(Duration::from_secs(2), client_messages.next())
+            .await
+            .expect("initial diagnostics should not starve the runtime")
+            .expect("client channel should stay open");
+        let initial: PublishDiagnosticsParams = serde_json::from_value(
+            initial
+                .params()
+                .expect("diagnostic notification should have params")
+                .clone(),
+        )
+        .expect("diagnostic params should deserialize");
+        assert_eq!(initial.version, Some(1));
+
+        for (version, text) in [(2, "invalid ="), (3, "value latest = 3\n")] {
+            service
+                .ready()
+                .await
+                .expect("service should accept didChange")
+                .call(
+                    Request::build("textDocument/didChange")
+                        .params(json!({
+                            "textDocument": { "uri": uri, "version": version },
+                            "contentChanges": [{ "text": text }]
+                        }))
+                        .finish(),
+                )
+                .await
+                .expect("didChange notification should succeed");
+        }
+
+        let latest = tokio::time::timeout(Duration::from_secs(2), client_messages.next())
+            .await
+            .expect("latest diagnostics should not starve the runtime")
+            .expect("client channel should stay open");
+        assert_eq!(latest.method(), "textDocument/publishDiagnostics");
+        let latest: PublishDiagnosticsParams = serde_json::from_value(
+            latest
+                .params()
+                .expect("diagnostic notification should have params")
+                .clone(),
+        )
+        .expect("diagnostic params should deserialize");
+        assert_eq!(latest.version, Some(3));
+
+        assert!(
+            tokio::time::timeout(Duration::from_millis(150), client_messages.next())
+                .await
+                .is_err(),
+            "superseded version 2 diagnostics must not be published later"
+        );
     }
 }

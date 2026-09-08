@@ -35,6 +35,13 @@ use aivi.http (
 ## Capability handle
 
 ```aivi
+use aivi.http (HttpSource)
+
+type User = {
+    id: Int,
+    name: Text
+}
+
 @source http "https://api.example.com"
 signal api : HttpSource
 
@@ -47,6 +54,7 @@ value healthStatus : Task Text Int = api.getStatus "/health"
 ## Exported vocabulary
 
 - `HttpSource` - nominal handle annotation for `@source http`.
+- `Url` - a text alias in this HTTP vocabulary, distinct from the nominal `aivi.url.Url` domain.
 - `HttpError` - typed source-side failures: `Timeout`, `DecodeFailure`, `RequestFailure`.
 - `HttpHeaders` / `HttpQuery` - request metadata maps.
 - `HttpResponse A` - decoded signal result shape.

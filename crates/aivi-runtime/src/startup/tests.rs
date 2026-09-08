@@ -556,23 +556,25 @@ fn linked_runtime_tables_resolve_workspace_signal_import_alias_dependencies() {
                     item: current_backend_item,
                 },
             },
-            None,
-            Vec::new(),
-            vec![int_layout],
-            int_layout,
-            CallingConvention {
-                kind: CallingConventionKind::RuntimeKernelV1,
-                parameters: vec![AbiParameter {
-                    role: ParameterRole::Environment(aivi_backend::EnvSlotId::from_raw(0)),
-                    layout: int_layout,
-                    pass_mode: aivi_backend::AbiPassMode::ByValue,
-                }],
-                result: AbiResult {
-                    layout: int_layout,
-                    pass_mode: aivi_backend::AbiPassMode::ByValue,
+            aivi_backend::KernelSignature {
+                input_subject: None,
+                inline_subjects: Vec::new(),
+                environment: vec![int_layout],
+                result_layout: int_layout,
+                convention: CallingConvention {
+                    kind: CallingConventionKind::RuntimeKernelV1,
+                    parameters: vec![AbiParameter {
+                        role: ParameterRole::Environment(aivi_backend::EnvSlotId::from_raw(0)),
+                        layout: int_layout,
+                        pass_mode: aivi_backend::AbiPassMode::ByValue,
+                    }],
+                    result: AbiResult {
+                        layout: int_layout,
+                        pass_mode: aivi_backend::AbiPassMode::ByValue,
+                    },
                 },
+                global_items: vec![aivi_backend::ItemId::from_raw(1)],
             },
-            vec![aivi_backend::ItemId::from_raw(1)],
             root,
             exprs,
         ))
@@ -1907,7 +1909,6 @@ signal activeUsers : Signal User =
 }
 
 #[test]
-#[ignore = "known pre-existing failure: layout mismatch in backend body kernel for fanout pipelines"]
 fn linked_runtime_executes_signal_fanout_map_and_join_pipelines() {
     let lowered = lower_text(
         "runtime-startup-signal-fanout.aivi",

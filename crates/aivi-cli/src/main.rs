@@ -26,7 +26,7 @@ use std::os::unix::fs::PermissionsExt;
 use aivi_backend::{
     BackendExecutableProgram, BackendExecutionEngineHandle, DetachedRuntimeValue,
     ItemId as BackendItemId, KernelEvaluationProfile, Program as BackendProgram, RuntimeFloat,
-    RuntimeRecordField, RuntimeValue, cache::compute_program_fingerprint, compile_program_cached,
+    RuntimeRecordField, RuntimeValue, compile_program_cached,
     lower_module_with_hir as lower_backend_module, validate_program,
 };
 use aivi_base::{Diagnostic, FileId, Severity, SourceDatabase, SourceSpan};

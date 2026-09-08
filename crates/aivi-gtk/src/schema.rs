@@ -762,12 +762,10 @@ impl GtkPropertySetter {
             Self::Text(GtkTextPropertySetter::ViewSwitcherPolicy) => {
                 "text naming a valid ViewSwitcherPolicy (Narrow, Wide)"
             }
-            Self::Text(GtkTextPropertySetter::GestureType) => {
-                "text naming a gesture type"
-            }
-            Self::Text(GtkTextPropertySetter::DragSourceActions | GtkTextPropertySetter::DropTargetActions) => {
-                "text naming a valid DragAction (Copy, Move, Link)"
-            }
+            Self::Text(GtkTextPropertySetter::GestureType) => "text naming a gesture type",
+            Self::Text(
+                GtkTextPropertySetter::DragSourceActions | GtkTextPropertySetter::DropTargetActions,
+            ) => "text naming a valid DragAction (Copy, Move, Link)",
             Self::Text(_) => "Text",
             Self::TextOrI64(_) => "Int or integer text",
             Self::I64(_) => "Int",
@@ -6135,10 +6133,7 @@ const STACK_SIDEBAR_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     markup_name: "StackSidebar",
     kind: GtkConcreteWidgetKind::StackSidebar,
     root_kind: GtkWidgetRootKind::Embedded,
-    properties: &[
-        VISIBLE_PROPERTY,
-        SENSITIVE_PROPERTY,
-    ],
+    properties: &[VISIBLE_PROPERTY, SENSITIVE_PROPERTY],
     events: &[],
     default_child_group_override: None,
     child_groups: &[],
@@ -6148,10 +6143,7 @@ const TREE_EXPANDER_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     markup_name: "TreeExpander",
     kind: GtkConcreteWidgetKind::TreeExpander,
     root_kind: GtkWidgetRootKind::Embedded,
-    properties: &[
-        VISIBLE_PROPERTY,
-        SENSITIVE_PROPERTY,
-    ],
+    properties: &[VISIBLE_PROPERTY, SENSITIVE_PROPERTY],
     events: &[],
     default_child_group_override: Some(&TREE_EXPANDER_CHILD_GROUP),
     child_groups: &[TREE_EXPANDER_CHILD_GROUP],
@@ -6181,9 +6173,7 @@ const BREAKPOINT_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     markup_name: "Breakpoint",
     kind: GtkConcreteWidgetKind::Breakpoint,
     root_kind: GtkWidgetRootKind::Embedded,
-    properties: &[
-        WIDTH_REQUEST_PROPERTY,
-    ],
+    properties: &[WIDTH_REQUEST_PROPERTY],
     events: &[],
     default_child_group_override: None,
     child_groups: &[],
@@ -6362,7 +6352,11 @@ const GESTURE_CLICK_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         GESTURE_EXCLUSIVE_PROPERTY,
         GESTURE_N_POINTS_PROPERTY,
     ],
-    events: &[GESTURE_PRESSED_EVENT, GESTURE_RELEASED_EVENT, GESTURE_STOPPED_EVENT],
+    events: &[
+        GESTURE_PRESSED_EVENT,
+        GESTURE_RELEASED_EVENT,
+        GESTURE_STOPPED_EVENT,
+    ],
     default_child_group_override: None,
     child_groups: &[],
 };
@@ -6377,7 +6371,11 @@ const GESTURE_DRAG_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
         GESTURE_N_POINTS_PROPERTY,
         GESTURE_DRAG_THRESHOLD_PROPERTY,
     ],
-    events: &[GESTURE_DRAG_BEGIN_EVENT, GESTURE_DRAG_UPDATE_EVENT, GESTURE_DRAG_END_EVENT],
+    events: &[
+        GESTURE_DRAG_BEGIN_EVENT,
+        GESTURE_DRAG_UPDATE_EVENT,
+        GESTURE_DRAG_END_EVENT,
+    ],
     default_child_group_override: None,
     child_groups: &[],
 };
@@ -6400,10 +6398,7 @@ const GESTURE_LONG_PRESS_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     markup_name: "GestureLongPress",
     kind: GtkConcreteWidgetKind::GestureLongPress,
     root_kind: GtkWidgetRootKind::Embedded,
-    properties: &[
-        GESTURE_TOUCH_ONLY_PROPERTY,
-        GESTURE_EXCLUSIVE_PROPERTY,
-    ],
+    properties: &[GESTURE_TOUCH_ONLY_PROPERTY, GESTURE_EXCLUSIVE_PROPERTY],
     events: &[GESTURE_LONG_PRESS_FIRED_EVENT, GESTURE_PRESSED_EVENT],
     default_child_group_override: None,
     child_groups: &[],
@@ -6413,10 +6408,7 @@ const GESTURE_ROTATE_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     markup_name: "GestureRotate",
     kind: GtkConcreteWidgetKind::GestureRotate,
     root_kind: GtkWidgetRootKind::Embedded,
-    properties: &[
-        GESTURE_TOUCH_ONLY_PROPERTY,
-        GESTURE_EXCLUSIVE_PROPERTY,
-    ],
+    properties: &[GESTURE_TOUCH_ONLY_PROPERTY, GESTURE_EXCLUSIVE_PROPERTY],
     events: &[GESTURE_ROTATION_CHANGED_EVENT],
     default_child_group_override: None,
     child_groups: &[],
@@ -6426,10 +6418,7 @@ const GESTURE_ZOOM_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     markup_name: "GestureZoom",
     kind: GtkConcreteWidgetKind::GestureZoom,
     root_kind: GtkWidgetRootKind::Embedded,
-    properties: &[
-        GESTURE_TOUCH_ONLY_PROPERTY,
-        GESTURE_EXCLUSIVE_PROPERTY,
-    ],
+    properties: &[GESTURE_TOUCH_ONLY_PROPERTY, GESTURE_EXCLUSIVE_PROPERTY],
     events: &[GESTURE_SCALE_CHANGED_EVENT],
     default_child_group_override: None,
     child_groups: &[],
@@ -6441,10 +6430,7 @@ const DRAG_SOURCE_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     markup_name: "DragSource",
     kind: GtkConcreteWidgetKind::DragSource,
     root_kind: GtkWidgetRootKind::Embedded,
-    properties: &[
-        DRAG_SOURCE_ENABLED_PROPERTY,
-        DRAG_SOURCE_ACTIONS_PROPERTY,
-    ],
+    properties: &[DRAG_SOURCE_ENABLED_PROPERTY, DRAG_SOURCE_ACTIONS_PROPERTY],
     events: &[DRAG_BEGIN_EVENT, DRAG_END_EVENT],
     default_child_group_override: None,
     child_groups: &[],
@@ -6454,10 +6440,7 @@ const DROP_TARGET_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     markup_name: "DropTarget",
     kind: GtkConcreteWidgetKind::DropTarget,
     root_kind: GtkWidgetRootKind::Embedded,
-    properties: &[
-        DROP_TARGET_ENABLED_PROPERTY,
-        DROP_TARGET_ACTIONS_PROPERTY,
-    ],
+    properties: &[DROP_TARGET_ENABLED_PROPERTY, DROP_TARGET_ACTIONS_PROPERTY],
     events: &[DROP_RECEIVED_EVENT],
     default_child_group_override: None,
     child_groups: &[],
@@ -6475,9 +6458,7 @@ const CSS_PROVIDER_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     markup_name: "CssProvider",
     kind: GtkConcreteWidgetKind::CssProvider,
     root_kind: GtkWidgetRootKind::Embedded,
-    properties: &[
-        CSS_TEXT_PROPERTY,
-    ],
+    properties: &[CSS_TEXT_PROPERTY],
     events: &[],
     default_child_group_override: None,
     child_groups: &[],

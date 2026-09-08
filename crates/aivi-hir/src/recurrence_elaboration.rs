@@ -11,8 +11,9 @@ use crate::{
     Module, PipeExpr, PipeStageKind, SignalItem, SourceDecorator, SourceMetadata,
     SourceProviderRef,
     gate_elaboration::{
-        GateElaborationBlocker, GateRuntimeExpr, GateRuntimeUnsupportedKind,
-        lower_gate_pipe_body_runtime_expr, lower_gate_pipe_body_runtime_expr_allow_signal_reads,
+        GateElaborationBlocker, GatePipeFunctionApplyInput, GateRuntimeExpr,
+        GateRuntimeUnsupportedKind, lower_gate_pipe_body_runtime_expr,
+        lower_gate_pipe_body_runtime_expr_allow_signal_reads,
         lower_gate_pipe_function_apply_runtime_expr_allow_signal_reads, lower_gate_runtime_expr,
     },
     validate::{
@@ -68,7 +69,7 @@ pub struct RecurrenceNodeElaboration {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RecurrenceNodeOutcome {
-    Planned(RecurrenceNodePlan),
+    Planned(Box<RecurrenceNodePlan>),
     Blocked(BlockedRecurrenceNode),
 }
 
@@ -181,12 +182,18 @@ enum LocalRecurrenceTargetHint {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum LocalRecurrenceWakeupHint {
-    BuiltinSource(SourceRecurrenceWakeupContext),
-    CustomSource(CustomSourceRecurrenceWakeupContext),
-    NonSource {
+    Builtin(SourceRecurrenceWakeupContext),
+    Custom(CustomSourceRecurrenceWakeupContext),
+    Non {
         cause: NonSourceWakeupCause,
         witness: ExprId,
     },
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct LocalRecurrenceRootHints {
+    target: Option<LocalRecurrenceTargetHint>,
+    wakeup: Option<LocalRecurrenceWakeupHint>,
 }
 
 pub fn elaborate_recurrences(module: &Module) -> RecurrenceElaborationReport {
@@ -215,8 +222,7 @@ pub fn elaborate_recurrences(module: &Module) -> RecurrenceElaborationReport {
                     owner,
                     item.body,
                     &GateExprEnv::default(),
-                    target,
-                    wakeup,
+                    LocalRecurrenceRootHints { target, wakeup },
                     &mut typing,
                     &mut nodes,
                 );
@@ -232,8 +238,7 @@ pub fn elaborate_recurrences(module: &Module) -> RecurrenceElaborationReport {
                     owner,
                     item.body,
                     &env,
-                    target,
-                    wakeup,
+                    LocalRecurrenceRootHints { target, wakeup },
                     &mut typing,
                     &mut nodes,
                 );
@@ -246,10 +251,12 @@ pub fn elaborate_recurrences(module: &Module) -> RecurrenceElaborationReport {
                         owner,
                         body,
                         &GateExprEnv::default(),
-                        Some(LocalRecurrenceTargetHint::Evidence(
-                            RecurrenceTargetEvidence::SignalItemBody,
-                        )),
-                        wakeup,
+                        LocalRecurrenceRootHints {
+                            target: Some(LocalRecurrenceTargetHint::Evidence(
+                                RecurrenceTargetEvidence::SignalItemBody,
+                            )),
+                            wakeup,
+                        },
                         &mut typing,
                         &mut nodes,
                     );
@@ -273,8 +280,10 @@ pub fn elaborate_recurrences(module: &Module) -> RecurrenceElaborationReport {
                         owner,
                         member.body,
                         &GateExprEnv::default(),
-                        target,
-                        None,
+                        LocalRecurrenceRootHints {
+                            target,
+                            wakeup: None,
+                        },
                         &mut typing,
                         &mut nodes,
                     );
@@ -298,8 +307,7 @@ fn collect_recurrence_nodes(
     owner: ItemId,
     root: ExprId,
     env: &GateExprEnv,
-    root_target: Option<LocalRecurrenceTargetHint>,
-    root_wakeup: Option<LocalRecurrenceWakeupHint>,
+    root_hints: LocalRecurrenceRootHints,
     typing: &mut GateTypeContext<'_>,
     nodes: &mut Vec<RecurrenceNodeElaboration>,
 ) {
@@ -315,8 +323,16 @@ fn collect_recurrence_nodes(
             pipe,
             suffix.prefix_stage_count(),
             env,
-            if is_root { root_target.as_ref() } else { None },
-            if is_root { root_wakeup.as_ref() } else { None },
+            if is_root {
+                root_hints.target.as_ref()
+            } else {
+                None
+            },
+            if is_root {
+                root_hints.wakeup.as_ref()
+            } else {
+                None
+            },
             typing,
         );
         nodes.push(RecurrenceNodeElaboration {
@@ -444,12 +460,14 @@ fn elaborate_accumulate_pipe(
     if let Some(seed) = seed.as_ref() {
         match lower_gate_pipe_function_apply_runtime_expr_allow_signal_reads(
             module,
-            stage.stage_span,
-            stage.step_expr,
-            vec![pipe.head],
+            GatePipeFunctionApplyInput {
+                span: stage.stage_span,
+                callee_expr: stage.step_expr,
+                explicit_arguments: vec![pipe.head],
+                expected_result: Some(&seed.ty),
+            },
             env,
             &seed.ty,
-            Some(&seed.ty),
             typing,
         ) {
             Ok(runtime_expr) => {
@@ -478,7 +496,7 @@ fn elaborate_accumulate_pipe(
 
     if blockers.is_empty() {
         let start = start.expect("planned accumulate nodes should have a start");
-        RecurrenceNodeOutcome::Planned(RecurrenceNodePlan {
+        RecurrenceNodeOutcome::Planned(Box::new(RecurrenceNodePlan {
             target,
             wakeup: wakeup.expect("planned accumulate nodes should have a wakeup"),
             wakeup_signal,
@@ -487,7 +505,7 @@ fn elaborate_accumulate_pipe(
             guards: Vec::new(),
             steps: Vec::new(),
             non_source_wakeup: None,
-        })
+        }))
     } else {
         RecurrenceNodeOutcome::Blocked(BlockedRecurrenceNode {
             target: Some(target),
@@ -530,7 +548,7 @@ fn elaborate_recurrence_pipe(
     };
 
     let wakeup = match wakeup_hint {
-        Some(LocalRecurrenceWakeupHint::BuiltinSource(context)) => {
+        Some(LocalRecurrenceWakeupHint::Builtin(context)) => {
             match RecurrenceWakeupPlanner::plan_source(*context) {
                 Ok(plan) => Some(plan),
                 Err(_) => {
@@ -539,7 +557,7 @@ fn elaborate_recurrence_pipe(
                 }
             }
         }
-        Some(LocalRecurrenceWakeupHint::CustomSource(context)) => {
+        Some(LocalRecurrenceWakeupHint::Custom(context)) => {
             match RecurrenceWakeupPlanner::plan_custom_source(*context) {
                 Ok(plan) => Some(plan),
                 Err(_) => {
@@ -548,7 +566,7 @@ fn elaborate_recurrence_pipe(
                 }
             }
         }
-        Some(LocalRecurrenceWakeupHint::NonSource { cause, .. }) => Some(
+        Some(LocalRecurrenceWakeupHint::Non { cause, .. }) => Some(
             RecurrenceWakeupPlanner::plan_non_source(*cause)
                 .expect("explicit non-source recurrence wakeup witnesses should always plan"),
         ),
@@ -677,7 +695,7 @@ fn elaborate_recurrence_pipe(
     }
 
     let non_source_wakeup = match wakeup_hint {
-        Some(LocalRecurrenceWakeupHint::NonSource { cause, witness }) => {
+        Some(LocalRecurrenceWakeupHint::Non { cause, witness }) => {
             match lower_gate_runtime_expr(module, *witness, env, None, typing) {
                 Ok(runtime_witness) => Some(RecurrenceNonSourceWakeupBinding {
                     cause: *cause,
@@ -692,8 +710,8 @@ fn elaborate_recurrence_pipe(
                 }
             }
         }
-        Some(LocalRecurrenceWakeupHint::BuiltinSource(_))
-        | Some(LocalRecurrenceWakeupHint::CustomSource(_))
+        Some(LocalRecurrenceWakeupHint::Builtin(_))
+        | Some(LocalRecurrenceWakeupHint::Custom(_))
         | None => None,
     };
 
@@ -710,7 +728,7 @@ fn elaborate_recurrence_pipe(
     };
 
     if blockers.is_empty() {
-        RecurrenceNodeOutcome::Planned(RecurrenceNodePlan {
+        RecurrenceNodeOutcome::Planned(Box::new(RecurrenceNodePlan {
             target: target.expect("planned recurrence nodes should have a target"),
             wakeup: wakeup.expect("planned recurrence nodes should have a wakeup"),
             wakeup_signal: None,
@@ -719,7 +737,7 @@ fn elaborate_recurrence_pipe(
             guards: guard_plans,
             steps: step_plans,
             non_source_wakeup,
-        })
+        }))
     } else {
         RecurrenceNodeOutcome::Blocked(BlockedRecurrenceNode {
             target,
@@ -886,7 +904,7 @@ fn recurrence_wakeup_hint_for_decorators(
         let DecoratorPayload::RecurrenceWakeup(ref wakeup) = decorator.payload else {
             return None;
         };
-        Some(LocalRecurrenceWakeupHint::NonSource {
+        Some(LocalRecurrenceWakeupHint::Non {
             cause: match wakeup.kind {
                 crate::RecurrenceWakeupDecoratorKind::Timer => NonSourceWakeupCause::ExplicitTimer,
                 crate::RecurrenceWakeupDecoratorKind::Backoff => {
@@ -921,7 +939,7 @@ fn recurrence_wakeup_hint_for_signal(
         {
             context = context.with_declared_wakeup(custom_source_wakeup_kind(wakeup));
         }
-        return Some(LocalRecurrenceWakeupHint::CustomSource(context));
+        return Some(LocalRecurrenceWakeupHint::Custom(context));
     };
 
     let mut context = SourceRecurrenceWakeupContext::new(provider);
@@ -949,7 +967,7 @@ fn recurrence_wakeup_hint_for_signal(
             };
         }
     }
-    Some(LocalRecurrenceWakeupHint::BuiltinSource(context))
+    Some(LocalRecurrenceWakeupHint::Builtin(context))
 }
 
 fn signal_source_decorator<'a>(

@@ -10,10 +10,10 @@ use std::{
 };
 
 use aivi_ffi_call::{
-    AbiValue, AbiValueKind, AllocationArena, decode_len_prefixed_bytes, decode_marshaled_map,
-    decode_marshaled_sequence, encode_len_prefixed_bytes, encode_marshaled_map,
-    encode_marshaled_sequence, read_bigint_constant_bytes, read_decimal_constant_bytes,
-    read_marshaled_field, with_active_arena,
+    AbiValue, AbiValueKind, AllocationArena, ReadableMemory, decode_len_prefixed_bytes,
+    decode_marshaled_map, decode_marshaled_sequence, encode_len_prefixed_bytes,
+    encode_marshaled_map, encode_marshaled_sequence, read_bigint_constant_bytes,
+    read_decimal_constant_bytes, read_marshaled_field, with_active_arena,
 };
 
 use crate::{
@@ -379,7 +379,7 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
                 return Err(EvaluationError::KernelResultLayoutMismatch {
                     kernel: kernel_id,
                     expected: kernel.result_layout,
-                    found: cached_result,
+                    found: Box::new(cached_result),
                 });
             }
             return Ok(cached_result);
@@ -472,7 +472,7 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
                 return Err(EvaluationError::KernelResultLayoutMismatch {
                     kernel: kernel_id,
                     expected: kernel.result_layout,
-                    found: cached_result,
+                    found: Box::new(cached_result),
                 });
             }
             return Ok(cached_result);
@@ -543,7 +543,7 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
             return Err(EvaluationError::InvalidCallee {
                 kernel: kernel_id,
                 expr: KernelExprId::from_raw(0),
-                found: callee,
+                found: Box::new(callee),
             });
         };
         match callable {
@@ -738,7 +738,7 @@ impl BackendExecutionEngine for NativeOnlyExecutionEngine<'_> {
                 return Err(EvaluationError::KernelResultLayoutMismatch {
                     kernel: kernel_id,
                     expected: result_layout,
-                    found: cached_result,
+                    found: Box::new(cached_result),
                 });
             }
             return Ok(cached_result);
@@ -980,7 +980,7 @@ fn validate_compiled_inputs(
                 expected: plan
                     .input_layout
                     .expect("compiled subject plan implies subject"),
-                found: value.clone(),
+                found: Box::new(value.clone()),
             });
         }
         (Some(_), None) => {
@@ -1013,7 +1013,7 @@ fn validate_compiled_inputs(
                 kernel: plan.kernel_id,
                 slot: crate::EnvSlotId::from_raw(index as u32),
                 expected: plan.environment_layouts[index],
-                found: value.clone(),
+                found: Box::new(value.clone()),
             });
         }
     }
@@ -1083,7 +1083,7 @@ fn execute_compiled_kernel(
         }
     }
 
-    let mut args =
+    let mut packed_args =
         Vec::with_capacity(plan.environment_plans.len() + usize::from(plan.input_plan.is_some()));
     {
         let mut arena_mut = arena.borrow_mut();
@@ -1096,7 +1096,7 @@ fn execute_compiled_kernel(
                     "failed to marshal native input subject".into(),
                 ));
             };
-            args.push(arg);
+            packed_args.push(arg);
         }
         for (index, (slot_plan, value)) in plan
             .environment_plans
@@ -1110,16 +1110,26 @@ fn execute_compiled_kernel(
                         .into_boxed_str(),
                 ));
             };
-            args.push(arg);
+            packed_args.push(arg);
         }
     }
+    let args = packed_args
+        .into_iter()
+        .map(|argument| argument.into_abi(Rc::clone(&arena)))
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| {
+            CompiledKernelFailure::Fallback("native argument pointer escaped its arena".into())
+        })?;
 
-    let call_result = with_active_arena(Rc::clone(&arena), || {
-        plan.artifact.caller.call(plan.artifact.function, &args)
-    })
-    .map_err(|_| CompiledKernelFailure::Fallback("native call failed".into()))?;
+    let call_result = with_active_arena(Rc::clone(&arena), || plan.artifact.call(&args))
+        .map_err(|_| CompiledKernelFailure::Fallback("native call failed".into()))?;
+    let arena_ref = arena.borrow();
+    let readable_memory = plan
+        .artifact
+        .readable_memory(&arena_ref)
+        .ok_or_else(|| CompiledKernelFailure::Fallback("native memory map unavailable".into()))?;
     plan.result_plan
-        .unpack_result(call_result, &hints)
+        .unpack_result(&call_result, &hints, &readable_memory)
         .ok_or_else(|| {
             CompiledKernelFailure::Fallback(
                 format!(
@@ -1132,7 +1142,7 @@ fn execute_compiled_kernel(
 }
 
 enum CachedKernelPlan {
-    Compiled(NativeKernelPlan),
+    Compiled(Box<NativeKernelPlan>),
     Fallback,
 }
 
@@ -1147,7 +1157,7 @@ impl CachedKernelPlan {
         else {
             return Self::Fallback;
         };
-        Self::Compiled(compiled)
+        Self::Compiled(Box::new(compiled))
     }
 
     fn build_from_runtime_meta(
@@ -1162,7 +1172,7 @@ impl CachedKernelPlan {
         ) else {
             return Self::Fallback;
         };
-        Self::Compiled(compiled)
+        Self::Compiled(Box::new(compiled))
     }
 
     fn build_from_frozen_catalog(
@@ -1177,7 +1187,7 @@ impl CachedKernelPlan {
         ) else {
             return Self::Fallback;
         };
-        Self::Compiled(compiled)
+        Self::Compiled(Box::new(compiled))
     }
 }
 
@@ -1702,6 +1712,26 @@ pub(crate) enum FrozenAbiValueKind {
     Pointer,
 }
 
+enum PackedAbiValue {
+    I8(i8),
+    I64(i64),
+    I128(u128),
+    F64(f64),
+    Pointer(*const c_void),
+}
+
+impl PackedAbiValue {
+    fn into_abi(self, arena: Rc<RefCell<AllocationArena>>) -> Option<AbiValue> {
+        match self {
+            Self::I8(value) => Some(AbiValue::I8(value)),
+            Self::I64(value) => Some(AbiValue::I64(value)),
+            Self::I128(value) => Some(AbiValue::I128(value)),
+            Self::F64(value) => Some(AbiValue::F64(value)),
+            Self::Pointer(pointer) => AbiValue::pointer_from_arena(pointer, arena),
+        }
+    }
+}
+
 impl MarshalPlan {
     fn for_layout(backend: BackendRuntimeView<'_>, layout: LayoutId) -> Option<Self> {
         Self::for_layout_with_options(backend, layout, false)
@@ -2051,30 +2081,32 @@ impl MarshalPlan {
         value: &RuntimeValue,
         arena: &mut AllocationArena,
         hints: &mut PackedValueHints,
-    ) -> Option<AbiValue> {
+    ) -> Option<PackedAbiValue> {
         let value = self.signal_coerced_value(value)?;
         match &self.kind {
             MarshalPlanKind::Signal { element } => element.pack_argument(value, arena, hints),
             MarshalPlanKind::Unit => match value {
-                RuntimeValue::Unit => Some(AbiValue::I8(0)),
+                RuntimeValue::Unit => Some(PackedAbiValue::I8(0)),
                 _ => None,
             },
             MarshalPlanKind::Int => match value {
-                RuntimeValue::Int(value) => Some(AbiValue::I64(*value)),
+                RuntimeValue::Int(value) => Some(PackedAbiValue::I64(*value)),
                 _ => None,
             },
             MarshalPlanKind::Float => match value {
-                RuntimeValue::Float(value) => Some(AbiValue::F64(value.to_f64())),
+                RuntimeValue::Float(value) => Some(PackedAbiValue::F64(value.to_f64())),
                 _ => None,
             },
             MarshalPlanKind::Bool => match value {
-                RuntimeValue::Bool(value) => Some(AbiValue::I8(i8::from(*value))),
+                RuntimeValue::Bool(value) => Some(PackedAbiValue::I8(i8::from(*value))),
                 _ => None,
             },
             MarshalPlanKind::InlineOption(kind) => {
-                Some(AbiValue::I128(pack_inline_option(*kind, value)?))
+                Some(PackedAbiValue::I128(pack_inline_option(*kind, value)?))
             }
-            _ => Some(AbiValue::Pointer(self.pack_reference(value, arena, hints)?)),
+            _ => Some(PackedAbiValue::Pointer(
+                self.pack_reference(value, arena, hints)?,
+            )),
         }
     }
 
@@ -2099,21 +2131,26 @@ impl MarshalPlan {
         true
     }
 
-    fn unpack_result(&self, value: AbiValue, hints: &PackedValueHints) -> Option<RuntimeValue> {
+    fn unpack_result(
+        &self,
+        value: &AbiValue,
+        hints: &PackedValueHints,
+        memory: &ReadableMemory<'_>,
+    ) -> Option<RuntimeValue> {
         if let MarshalPlanKind::Signal { element } = &self.kind {
-            return element.unpack_result(value, hints);
+            return element.unpack_result(value, hints, memory);
         }
         match (&self.kind, value) {
             (MarshalPlanKind::Unit, AbiValue::I8(_)) => Some(RuntimeValue::Unit),
-            (MarshalPlanKind::Int, AbiValue::I64(value)) => Some(RuntimeValue::Int(value)),
+            (MarshalPlanKind::Int, AbiValue::I64(value)) => Some(RuntimeValue::Int(*value)),
             (MarshalPlanKind::Float, AbiValue::F64(value)) => {
-                Some(RuntimeValue::Float(RuntimeFloat::new(value)?))
+                Some(RuntimeValue::Float(RuntimeFloat::new(*value)?))
             }
-            (MarshalPlanKind::Bool, AbiValue::I8(value)) => Some(RuntimeValue::Bool(value != 0)),
+            (MarshalPlanKind::Bool, AbiValue::I8(value)) => Some(RuntimeValue::Bool(*value != 0)),
             (MarshalPlanKind::InlineOption(kind), AbiValue::I128(bits)) => {
-                unpack_inline_option(*kind, bits)
+                unpack_inline_option(*kind, *bits)
             }
-            (_, AbiValue::Pointer(value)) => self.unpack_reference(value, hints),
+            (_, AbiValue::Pointer(value)) => self.unpack_reference(value.as_ptr(), hints, memory),
             _ => None,
         }
     }
@@ -2171,7 +2208,12 @@ impl MarshalPlan {
         }
     }
 
-    fn decode_cell_bytes(&self, bytes: &[u8], hints: &PackedValueHints) -> Option<RuntimeValue> {
+    fn decode_cell_bytes(
+        &self,
+        bytes: &[u8],
+        hints: &PackedValueHints,
+        memory: &ReadableMemory<'_>,
+    ) -> Option<RuntimeValue> {
         match &self.kind {
             MarshalPlanKind::Unit => Some(RuntimeValue::Unit),
             MarshalPlanKind::Int => Some(RuntimeValue::Int(i64::from_ne_bytes(
@@ -2184,8 +2226,8 @@ impl MarshalPlan {
             MarshalPlanKind::InlineOption(kind) => {
                 unpack_inline_option(*kind, u128::from_ne_bytes(bytes.try_into().ok()?))
             }
-            MarshalPlanKind::Signal { element } => element.decode_cell_bytes(bytes, hints),
-            _ => self.unpack_reference(pointer_from_bytes(bytes)?, hints),
+            MarshalPlanKind::Signal { element } => element.decode_cell_bytes(bytes, hints, memory),
+            _ => self.unpack_reference(pointer_from_bytes(bytes)?, hints, memory),
         }
     }
 
@@ -2400,6 +2442,7 @@ impl MarshalPlan {
         &self,
         pointer: *const c_void,
         hints: &PackedValueHints,
+        memory: &ReadableMemory<'_>,
     ) -> Option<RuntimeValue> {
         if pointer.is_null() {
             return match self.kind {
@@ -2413,40 +2456,48 @@ impl MarshalPlan {
         match &self.kind {
             MarshalPlanKind::Decimal => {
                 Some(RuntimeValue::Decimal(RuntimeDecimal::from_constant_bytes(
-                    read_decimal_constant_bytes(pointer)?.as_ref(),
+                    read_decimal_constant_bytes(memory, pointer)?.as_ref(),
                 )?))
             }
-            MarshalPlanKind::BigInt => Some(RuntimeValue::BigInt(
-                RuntimeBigInt::from_constant_bytes(read_bigint_constant_bytes(pointer)?.as_ref())?,
-            )),
-            MarshalPlanKind::Text => decode_text(pointer),
-            MarshalPlanKind::Bytes => {
-                Some(RuntimeValue::Bytes(decode_len_prefixed_bytes(pointer)?))
+            MarshalPlanKind::BigInt => {
+                Some(RuntimeValue::BigInt(RuntimeBigInt::from_constant_bytes(
+                    read_bigint_constant_bytes(memory, pointer)?.as_ref(),
+                )?))
             }
+            MarshalPlanKind::Text => decode_text(memory, pointer),
+            MarshalPlanKind::Bytes => Some(RuntimeValue::Bytes(decode_len_prefixed_bytes(
+                memory, pointer,
+            )?)),
             MarshalPlanKind::NicheOption { payload } => {
                 if pointer.is_null() {
                     Some(RuntimeValue::OptionNone)
                 } else {
                     Some(RuntimeValue::OptionSome(Box::new(
-                        payload.unpack_reference(pointer, hints)?,
+                        payload.unpack_reference(pointer, hints, memory)?,
                     )))
                 }
             }
             MarshalPlanKind::Tuple { fields, .. } => {
                 let mut values = Vec::with_capacity(fields.len());
                 for field in fields {
-                    let bytes = read_marshaled_field(pointer, field.offset, field.size)?;
-                    values.push(field.plan.decode_cell_bytes(bytes.as_ref(), hints)?);
+                    let bytes = read_marshaled_field(memory, pointer, field.offset, field.size)?;
+                    values.push(
+                        field
+                            .plan
+                            .decode_cell_bytes(bytes.as_ref(), hints, memory)?,
+                    );
                 }
                 Some(RuntimeValue::Tuple(values))
             }
             MarshalPlanKind::Record { fields, .. } => {
                 let mut values = Vec::with_capacity(fields.len());
                 for field in fields {
-                    let bytes = read_marshaled_field(pointer, field.offset, field.size)?;
+                    let bytes = read_marshaled_field(memory, pointer, field.offset, field.size)?;
                     values.push(RuntimeRecordField {
                         label: field.label.clone(),
-                        value: field.plan.decode_cell_bytes(bytes.as_ref(), hints)?,
+                        value: field
+                            .plan
+                            .decode_cell_bytes(bytes.as_ref(), hints, memory)?,
                     });
                 }
                 Some(RuntimeValue::Record(values))
@@ -2455,13 +2506,13 @@ impl MarshalPlan {
                 element,
                 element_size,
             } => {
-                let decoded = decode_marshaled_sequence(pointer)?;
+                let decoded = decode_marshaled_sequence(memory, pointer)?;
                 if decoded.element_size != *element_size {
                     return None;
                 }
                 let mut values = Vec::with_capacity(decoded.count);
                 for chunk in decoded.bytes.chunks_exact(*element_size) {
-                    values.push(element.decode_cell_bytes(chunk, hints)?);
+                    values.push(element.decode_cell_bytes(chunk, hints, memory)?);
                 }
                 Some(RuntimeValue::List(values))
             }
@@ -2469,13 +2520,13 @@ impl MarshalPlan {
                 element,
                 element_size,
             } => {
-                let decoded = decode_marshaled_sequence(pointer)?;
+                let decoded = decode_marshaled_sequence(memory, pointer)?;
                 if decoded.element_size != *element_size {
                     return None;
                 }
                 let mut values = Vec::with_capacity(decoded.count);
                 for chunk in decoded.bytes.chunks_exact(*element_size) {
-                    values.push(element.decode_cell_bytes(chunk, hints)?);
+                    values.push(element.decode_cell_bytes(chunk, hints, memory)?);
                 }
                 Some(RuntimeValue::Set(values))
             }
@@ -2485,7 +2536,7 @@ impl MarshalPlan {
                 value: value_plan,
                 value_size,
             } => {
-                let decoded = decode_marshaled_map(pointer)?;
+                let decoded = decode_marshaled_map(memory, pointer)?;
                 if decoded.key_size != *key_size || decoded.value_size != *value_size {
                     return None;
                 }
@@ -2495,23 +2546,28 @@ impl MarshalPlan {
                     let key_bytes = &chunk[..*key_size];
                     let value_bytes = &chunk[*key_size..entry_size];
                     entries.push(RuntimeMapEntry {
-                        key: key.decode_cell_bytes(key_bytes, hints)?,
-                        value: value_plan.decode_cell_bytes(value_bytes, hints)?,
+                        key: key.decode_cell_bytes(key_bytes, hints, memory)?,
+                        value: value_plan.decode_cell_bytes(value_bytes, hints, memory)?,
                     });
                 }
                 Some(RuntimeValue::Map(RuntimeMap::from_entries(entries)))
             }
             MarshalPlanKind::Result { ok, err } => {
-                unpack_tagged_payload(pointer, ok, err, RuntimeValueTag::Result, hints)
+                unpack_tagged_payload(pointer, ok, err, RuntimeValueTag::Result, hints, memory)
             }
-            MarshalPlanKind::Validation { valid, invalid } => {
-                unpack_tagged_payload(pointer, valid, invalid, RuntimeValueTag::Validation, hints)
-            }
-            MarshalPlanKind::Signal { element } => element.unpack_reference(pointer, hints),
+            MarshalPlanKind::Validation { valid, invalid } => unpack_tagged_payload(
+                pointer,
+                valid,
+                invalid,
+                RuntimeValueTag::Validation,
+                hints,
+                memory,
+            ),
+            MarshalPlanKind::Signal { element } => element.unpack_reference(pointer, hints, memory),
             MarshalPlanKind::AnonymousDomain {
                 carrier,
                 surface_member,
-            } => match unpack_domain_carrier_value(carrier, pointer, hints)? {
+            } => match unpack_domain_carrier_value(carrier, pointer, hints, memory)? {
                 RuntimeValue::Int(raw) => Some(RuntimeValue::SuffixedInteger {
                     raw: raw.to_string().into_boxed_str(),
                     suffix: surface_member.clone(),
@@ -2519,7 +2575,7 @@ impl MarshalPlan {
                 other => Some(other),
             },
             MarshalPlanKind::RepresentationalDomain { carrier } => {
-                unpack_domain_carrier_value(carrier, pointer, hints)
+                unpack_domain_carrier_value(carrier, pointer, hints, memory)
             }
             MarshalPlanKind::ErasedOpaque { .. } => None,
             MarshalPlanKind::Opaque {
@@ -2527,7 +2583,7 @@ impl MarshalPlan {
                 type_name,
                 variants,
             } => {
-                let tag_bytes = read_marshaled_field(pointer, 0, 8)?;
+                let tag_bytes = read_marshaled_field(memory, pointer, 0, 8)?;
                 let tag = i64::from_ne_bytes(tag_bytes.as_ref().try_into().ok()?);
                 let variant = variants.iter().find(|variant| variant.tag == tag)?;
                 let fields = decode_opaque_variant_fields(
@@ -2535,6 +2591,7 @@ impl MarshalPlan {
                     variant.payload.as_deref(),
                     pointer,
                     hints,
+                    memory,
                 )?;
                 Some(RuntimeValue::Sum(crate::RuntimeSumValue {
                     item: *item,
@@ -2547,7 +2604,7 @@ impl MarshalPlan {
                 if !decode_as_int {
                     return None;
                 }
-                let bytes = read_marshaled_field(pointer, 0, 8)?;
+                let bytes = read_marshaled_field(memory, pointer, 0, 8)?;
                 Some(RuntimeValue::Int(i64::from_ne_bytes(
                     bytes.as_ref().try_into().ok()?,
                 )))
@@ -2585,7 +2642,7 @@ pub(crate) fn encode_frozen_native_kernel_abi(
             .map(|slot| freeze_slot_abi(meta, cached.requested_kernel, slot))
             .collect::<Result<Vec<_>, _>>()?,
     };
-    bincode::serialize(&abi).map_err(|error| {
+    crate::cache::encode_binary(&abi).map_err(|error| {
         wrap_native_one(CodegenError::CraneliftModule {
             kernel: Some(cached.requested_kernel),
             message: format!("failed to encode frozen native kernel ABI: {error}").into(),
@@ -2596,7 +2653,7 @@ pub(crate) fn encode_frozen_native_kernel_abi(
 pub(crate) fn decode_frozen_native_kernel_abi(
     bytes: &[u8],
 ) -> Option<FrozenNativeKernelArtifactAbi> {
-    let abi: FrozenNativeKernelArtifactAbi = bincode::deserialize(bytes).ok()?;
+    let abi: FrozenNativeKernelArtifactAbi = crate::cache::decode_binary(bytes).ok()?;
     (abi.version == FROZEN_NATIVE_KERNEL_ABI_VERSION).then_some(abi)
 }
 
@@ -2855,10 +2912,12 @@ pub fn validate_frozen_requested_kernel_abi(
     Ok(())
 }
 
+type FrozenRequestedKernelPlans = (Option<MarshalPlan>, Vec<MarshalPlan>, Option<MarshalPlan>);
+
 fn freeze_requested_kernel_plans(
     meta: &BackendRuntimeMeta,
     kernel_id: KernelId,
-) -> Result<(Option<MarshalPlan>, Vec<MarshalPlan>, Option<MarshalPlan>), CodegenErrors> {
+) -> Result<FrozenRequestedKernelPlans, CodegenErrors> {
     let Some(kernel) = meta.kernels().get(kernel_id) else {
         return Err(wrap_native_one(CodegenError::CraneliftModule {
             kernel: Some(kernel_id),
@@ -2988,11 +3047,14 @@ fn unpack_domain_carrier_value(
     carrier: &MarshalPlan,
     pointer: *const c_void,
     hints: &PackedValueHints,
+    memory: &ReadableMemory<'_>,
 ) -> Option<RuntimeValue> {
-    carrier.unpack_reference(pointer, hints).or_else(|| {
-        let bytes = read_marshaled_field(pointer, 0, carrier.cell_size())?;
-        carrier.decode_cell_bytes(bytes.as_ref(), hints)
-    })
+    carrier
+        .unpack_reference(pointer, hints, memory)
+        .or_else(|| {
+            let bytes = read_marshaled_field(memory, pointer, 0, carrier.cell_size())?;
+            carrier.decode_cell_bytes(bytes.as_ref(), hints, memory)
+        })
 }
 
 #[derive(Clone, Copy)]
@@ -3145,32 +3207,33 @@ fn unpack_tagged_payload(
     alternate: &MarshalPlan,
     tag_kind: RuntimeValueTag,
     hints: &PackedValueHints,
+    memory: &ReadableMemory<'_>,
 ) -> Option<RuntimeValue> {
-    let tag_bytes = read_marshaled_field(pointer, 0, 8)?;
+    let tag_bytes = read_marshaled_field(memory, pointer, 0, 8)?;
     let tag = i64::from_ne_bytes(tag_bytes.as_ref().try_into().ok()?);
     match (tag_kind, tag) {
         (RuntimeValueTag::Result, 0) => {
-            let payload = read_marshaled_field(pointer, 8, primary.cell_size())?;
+            let payload = read_marshaled_field(memory, pointer, 8, primary.cell_size())?;
             Some(RuntimeValue::ResultOk(Box::new(
-                primary.decode_cell_bytes(payload.as_ref(), hints)?,
+                primary.decode_cell_bytes(payload.as_ref(), hints, memory)?,
             )))
         }
         (RuntimeValueTag::Result, 1) => {
-            let payload = read_marshaled_field(pointer, 8, alternate.cell_size())?;
+            let payload = read_marshaled_field(memory, pointer, 8, alternate.cell_size())?;
             Some(RuntimeValue::ResultErr(Box::new(
-                alternate.decode_cell_bytes(payload.as_ref(), hints)?,
+                alternate.decode_cell_bytes(payload.as_ref(), hints, memory)?,
             )))
         }
         (RuntimeValueTag::Validation, 0) => {
-            let payload = read_marshaled_field(pointer, 8, primary.cell_size())?;
+            let payload = read_marshaled_field(memory, pointer, 8, primary.cell_size())?;
             Some(RuntimeValue::ValidationValid(Box::new(
-                primary.decode_cell_bytes(payload.as_ref(), hints)?,
+                primary.decode_cell_bytes(payload.as_ref(), hints, memory)?,
             )))
         }
         (RuntimeValueTag::Validation, 1) => {
-            let payload = read_marshaled_field(pointer, 8, alternate.cell_size())?;
+            let payload = read_marshaled_field(memory, pointer, 8, alternate.cell_size())?;
             Some(RuntimeValue::ValidationInvalid(Box::new(
-                alternate.decode_cell_bytes(payload.as_ref(), hints)?,
+                alternate.decode_cell_bytes(payload.as_ref(), hints, memory)?,
             )))
         }
         _ => None,
@@ -3214,19 +3277,22 @@ fn decode_opaque_variant_fields(
     payload: Option<&MarshalPlan>,
     pointer: *const c_void,
     hints: &PackedValueHints,
+    memory: &ReadableMemory<'_>,
 ) -> Option<Vec<RuntimeValue>> {
     match (field_count, payload) {
         (0, None) => Some(Vec::new()),
         (1, Some(payload)) => {
-            let payload_bytes = read_marshaled_field(pointer, 8, payload.cell_size())?;
-            Some(vec![
-                payload.decode_cell_bytes(payload_bytes.as_ref(), hints)?,
-            ])
+            let payload_bytes = read_marshaled_field(memory, pointer, 8, payload.cell_size())?;
+            Some(vec![payload.decode_cell_bytes(
+                payload_bytes.as_ref(),
+                hints,
+                memory,
+            )?])
         }
         (count, Some(payload)) if count > 1 => {
-            let payload_bytes = read_marshaled_field(pointer, 8, payload.cell_size())?;
+            let payload_bytes = read_marshaled_field(memory, pointer, 8, payload.cell_size())?;
             let RuntimeValue::Tuple(fields) =
-                payload.decode_cell_bytes(payload_bytes.as_ref(), hints)?
+                payload.decode_cell_bytes(payload_bytes.as_ref(), hints, memory)?
             else {
                 return None;
             };
@@ -3433,8 +3499,8 @@ enum CompiledKernelFailure {
     Fallback(Box<str>),
 }
 
-fn decode_text(pointer: *const c_void) -> Option<RuntimeValue> {
-    let bytes = decode_len_prefixed_bytes(pointer)?;
+fn decode_text(memory: &ReadableMemory<'_>, pointer: *const c_void) -> Option<RuntimeValue> {
+    let bytes = decode_len_prefixed_bytes(memory, pointer)?;
     let text = String::from_utf8(bytes.into_vec()).ok()?;
     Some(RuntimeValue::Text(text.into_boxed_str()))
 }

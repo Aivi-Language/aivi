@@ -1,8 +1,18 @@
-use std::sync::Arc;
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
+};
 
+use aivi_base::LspPosition;
 use aivi_syntax::{TokenKind, lex_module};
 use tower_lsp::lsp_types::{
-    SemanticToken, SemanticTokenType, SemanticTokens, SemanticTokensParams, SemanticTokensResult,
+    Position, Range, SemanticToken, SemanticTokenType, SemanticTokens, SemanticTokensDelta,
+    SemanticTokensDeltaParams, SemanticTokensEdit, SemanticTokensFullDeltaResult,
+    SemanticTokensParams, SemanticTokensRangeParams, SemanticTokensRangeResult,
+    SemanticTokensResult, Url,
 };
 
 use crate::state::ServerState;
@@ -24,6 +34,66 @@ const IDX_KEYWORD: u32 = 3;
 const IDX_STRING: u32 = 4;
 const IDX_NUMBER: u32 = 5;
 const IDX_COMMENT: u32 = 7;
+const SEMANTIC_TOKEN_HISTORY_LIMIT: usize = 4;
+
+#[derive(Clone)]
+struct CachedSemanticTokens {
+    result_id: String,
+    data: Arc<[SemanticToken]>,
+}
+
+/// Bounded per-document history backing full/delta semantic token requests.
+#[derive(Default)]
+pub(crate) struct SemanticTokenHistory {
+    next_result_id: AtomicU64,
+    documents: Mutex<HashMap<Url, VecDeque<CachedSemanticTokens>>>,
+}
+
+impl SemanticTokenHistory {
+    fn record(&self, uri: &Url, data: &[SemanticToken]) -> String {
+        let sequence = self.next_result_id.fetch_add(1, Ordering::Relaxed);
+        let result_id = format!("aivi-semantic-{sequence}");
+        let mut documents = self
+            .documents
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let history = documents.entry(uri.clone()).or_default();
+        history.push_back(CachedSemanticTokens {
+            result_id: result_id.clone(),
+            data: Arc::from(data),
+        });
+        while history.len() > SEMANTIC_TOKEN_HISTORY_LIMIT {
+            history.pop_front();
+        }
+        result_id
+    }
+
+    fn get(&self, uri: &Url, result_id: &str) -> Option<Arc<[SemanticToken]>> {
+        self.documents
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(uri)?
+            .iter()
+            .find(|cached| cached.result_id == result_id)
+            .map(|cached| Arc::clone(&cached.data))
+    }
+
+    pub fn remove(&self, uri: &Url) {
+        self.documents
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .remove(uri);
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct AbsoluteSemanticToken {
+    line: u32,
+    start: u32,
+    length: u32,
+    token_type: u32,
+    token_modifiers_bitset: u32,
+}
 
 fn token_type_index(kind: TokenKind) -> Option<u32> {
     match kind {
@@ -116,19 +186,73 @@ fn token_type_index(kind: TokenKind) -> Option<u32> {
     }
 }
 
-pub async fn semantic_tokens_full(
+pub fn semantic_tokens_full(
     params: SemanticTokensParams,
     state: Arc<ServerState>,
 ) -> Option<SemanticTokensResult> {
     let uri = &params.text_document.uri;
-    let file = *state.files.get(uri)?;
-    let analysis = crate::analysis::FileAnalysis::load(&state.db, file);
-    let source = analysis.source.as_ref();
+    let file = state.file(uri)?;
+    let source = file.source(&state.db);
+    let data = encode_tokens(&collect_absolute_tokens(&source, None));
+    let result_id = state.semantic_tokens.record(uri, &data);
+    Some(SemanticTokensResult::Tokens(SemanticTokens {
+        result_id: Some(result_id),
+        data,
+    }))
+}
 
+pub fn semantic_tokens_full_delta(
+    params: SemanticTokensDeltaParams,
+    state: Arc<ServerState>,
+) -> Option<SemanticTokensFullDeltaResult> {
+    let uri = &params.text_document.uri;
+    let file = state.file(uri)?;
+    let source = file.source(&state.db);
+    let data = encode_tokens(&collect_absolute_tokens(&source, None));
+    let previous = state.semantic_tokens.get(uri, &params.previous_result_id);
+    let result_id = state.semantic_tokens.record(uri, &data);
+
+    let Some(previous) = previous else {
+        return Some(SemanticTokensFullDeltaResult::Tokens(SemanticTokens {
+            result_id: Some(result_id),
+            data,
+        }));
+    };
+    let Some(edits) = semantic_token_delta(&previous, &data) else {
+        return Some(SemanticTokensFullDeltaResult::Tokens(SemanticTokens {
+            result_id: Some(result_id),
+            data,
+        }));
+    };
+    Some(SemanticTokensFullDeltaResult::TokensDelta(
+        SemanticTokensDelta {
+            result_id: Some(result_id),
+            edits,
+        },
+    ))
+}
+
+pub fn semantic_tokens_range(
+    params: SemanticTokensRangeParams,
+    state: Arc<ServerState>,
+) -> Option<SemanticTokensRangeResult> {
+    let uri = &params.text_document.uri;
+    let file = state.file(uri)?;
+    let source = file.source(&state.db);
+    validate_range(&source, params.range)?;
+    let data = encode_tokens(&collect_absolute_tokens(&source, Some(params.range)));
+    Some(SemanticTokensRangeResult::Tokens(SemanticTokens {
+        result_id: None,
+        data,
+    }))
+}
+
+fn collect_absolute_tokens(
+    source: &aivi_base::SourceFile,
+    requested_range: Option<Range>,
+) -> Vec<AbsoluteSemanticToken> {
     let lexed = lex_module(source);
-    let mut result: Vec<SemanticToken> = Vec::new();
-    let mut prev_line: u32 = 0;
-    let mut prev_char: u32 = 0;
+    let mut result = Vec::new();
 
     for (index, token) in lexed.tokens().iter().copied().enumerate() {
         let Some(type_index) = soft_or_hard_token_type_index(token, lexed.tokens(), index, source)
@@ -150,29 +274,105 @@ pub async fn semantic_tokens_full(
             continue;
         }
 
-        let delta_line = token_line - prev_line;
-        let delta_start = if delta_line == 0 {
-            token_char - prev_char
-        } else {
-            token_char
+        let token_range = Range {
+            start: Position {
+                line: token_line,
+                character: token_char,
+            },
+            end: Position {
+                line: lsp_range.end.line,
+                character: lsp_range.end.character,
+            },
         };
+        if requested_range.is_some_and(|range| !ranges_overlap(token_range, range)) {
+            continue;
+        }
 
-        result.push(SemanticToken {
-            delta_line,
-            delta_start,
+        result.push(AbsoluteSemanticToken {
+            line: token_line,
+            start: token_char,
             length: token_len,
             token_type: type_index,
             token_modifiers_bitset: 0,
         });
+    }
+    result
+}
 
-        prev_line = token_line;
-        prev_char = token_char;
+fn encode_tokens(tokens: &[AbsoluteSemanticToken]) -> Vec<SemanticToken> {
+    let mut result = Vec::with_capacity(tokens.len());
+    let mut previous_line = 0;
+    let mut previous_start = 0;
+    for token in tokens {
+        let delta_line = token.line - previous_line;
+        let delta_start = if delta_line == 0 {
+            token.start - previous_start
+        } else {
+            token.start
+        };
+        result.push(SemanticToken {
+            delta_line,
+            delta_start,
+            length: token.length,
+            token_type: token.token_type,
+            token_modifiers_bitset: token.token_modifiers_bitset,
+        });
+        previous_line = token.line;
+        previous_start = token.start;
+    }
+    result
+}
+
+fn semantic_token_delta(
+    previous: &[SemanticToken],
+    current: &[SemanticToken],
+) -> Option<Vec<SemanticTokensEdit>> {
+    let prefix = previous
+        .iter()
+        .zip(current)
+        .take_while(|(left, right)| left == right)
+        .count();
+    let max_suffix = previous.len().min(current.len()).saturating_sub(prefix);
+    let suffix = previous
+        .iter()
+        .rev()
+        .zip(current.iter().rev())
+        .take(max_suffix)
+        .take_while(|(left, right)| left == right)
+        .count();
+    if prefix == previous.len() && prefix == current.len() {
+        return Some(Vec::new());
     }
 
-    Some(SemanticTokensResult::Tokens(SemanticTokens {
-        result_id: None,
-        data: result,
-    }))
+    let start = u32::try_from(prefix.checked_mul(5)?).ok()?;
+    let removed_tokens = previous.len().checked_sub(prefix + suffix)?;
+    let delete_count = u32::try_from(removed_tokens.checked_mul(5)?).ok()?;
+    let inserted_end = current.len().checked_sub(suffix)?;
+    let inserted = current[prefix..inserted_end].to_vec();
+    Some(vec![SemanticTokensEdit {
+        start,
+        delete_count,
+        data: (!inserted.is_empty()).then_some(inserted),
+    }])
+}
+
+fn validate_range(source: &aivi_base::SourceFile, range: Range) -> Option<()> {
+    if range.start > range.end {
+        return None;
+    }
+    source.lsp_position_to_offset(LspPosition {
+        line: range.start.line,
+        character: range.start.character,
+    })?;
+    source.lsp_position_to_offset(LspPosition {
+        line: range.end.line,
+        character: range.end.character,
+    })?;
+    Some(())
+}
+
+fn ranges_overlap(left: Range, right: Range) -> bool {
+    left.start < right.end && right.start < left.end
 }
 
 fn soft_or_hard_token_type_index(

@@ -5,8 +5,6 @@ on:
     branches: [main]
     paths:
       - 'manual/**'
-      - 'tooling/pnpm-lock.yaml'
-      - 'tooling/pnpm-workspace.yaml'
       - 'tooling/packages/vscode-aivi/syntaxes/**'
       - '.github/workflows/docs.yml'
   workflow_dispatch:
@@ -24,23 +22,23 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/configure-pages@v5
 
-      - uses: pnpm/action-setup@v3
+      - uses: pnpm/action-setup@v6
         with:
-          version: 10
+          version: 10.19.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '24'
           cache: pnpm
-          cache-dependency-path: tooling/pnpm-lock.yaml
+          cache-dependency-path: manual/pnpm-lock.yaml
 
-      - name: Install dependencies
+      - name: Install manual dependencies
         run: pnpm install --frozen-lockfile
-        working-directory: tooling
+        working-directory: manual
 
       - name: Compute manual base path
         id: manual-base

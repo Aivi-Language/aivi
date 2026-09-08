@@ -4,32 +4,23 @@
 
 Milestone 1 surface frontend: lexer, CST, parser, and formatter for the AIVI language.
 This crate translates raw source text into a concrete syntax tree (`Module`) and provides
-a formatter that round-trips that tree back to canonical source. It is the only layer that
-touches raw bytes; every later compiler layer operates on the typed CST it produces.
+a formatter that round-trips that tree back to canonical source. Later layers consume resolved or typed IR; the CST itself is syntactic, not a type-checked representation.
 
 ## Entry points
 
-```rust
-// Lex a source file into a token stream
-lex_module(source: &str) -> LexedModule
+- [`lex_module`](src/lex.rs) accepts a `SourceFile` and returns a lossless token stream with diagnostics.
+- [`parse_module`](src/parse/mod.rs) builds a `ParsedModule` from that token stream.
+- [`Formatter`](src/format.rs) renders the CST back to canonical source.
 
-// Parse a lexed module into a CST
-parse_module(lexed: &LexedModule) -> ParsedModule
-
-// Format a parsed module back to canonical text
-Formatter::new(source: &str).format(module: &Module) -> String
-```
-
-`ParsedModule` owns the `Module` tree and carries accumulated `Diagnostic` values.
-`LexedModule` exposes `tokens()` and `errors()` for inspection before parsing.
+Use the signatures in these source modules for argument and ownership details.
 
 ## Invariants
 
 - Lexing is total — every byte is consumed and emitted as some `Token`; no source is silently dropped.
-- Parsing is error-recovering — a `ParsedModule` is always returned; syntax errors appear in `diagnostics()`.
+- Parsing is error-recovering — a `ParsedModule` is always returned; syntax errors appear in the returned diagnostics.
 - The CST preserves every token including whitespace and comments via `TokenRange` on each node.
 - Parse recursion depth is bounded; exceeding the limit emits `syntax::parse-depth-exceeded` instead of overflowing the stack.
-- `format_module` is idempotent: formatting an already-formatted file is a no-op.
+- Formatting is intended to be idempotent: formatting an already-formatted file is a no-op.
 
 ## Diagnostic codes
 

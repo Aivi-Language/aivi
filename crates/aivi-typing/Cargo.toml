@@ -3,6 +3,7 @@ name = "aivi-typing"
 edition.workspace = true
 version.workspace = true
 rust-version.workspace = true
+license.workspace = true
 
 [dependencies]
 serde.workspace = true

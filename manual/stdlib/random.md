@@ -17,6 +17,8 @@ use aivi.random (
 ## Capability handle
 
 ```aivi
+use aivi.random (RandomSource)
+
 @source random
 signal entropy : RandomSource
 

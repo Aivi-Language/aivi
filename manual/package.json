@@ -5,14 +5,22 @@
   "type": "module",
   "scripts": {
     "dev": "vitepress dev",
+    "check": "node scripts/check-docs.mjs",
+    "test": "node --test --test-isolation=none scripts/*.test.mjs",
     "build": "vitepress build",
     "preview": "vitepress preview"
   },
   "devDependencies": {
-    "vitepress": "^1.6.3"
+    "vite": "^6.4.3",
+    "vitepress": "^1.6.4"
   },
   "dependencies": {
-    "@fontsource/fira-code": "^5.2.7",
-    "@fontsource/inter": "^5.2.5"
+    "@fontsource/fira-code": "^5.3.0",
+    "@fontsource/inter": "^5.3.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "vitepress>vite": "^6.4.3"
+    }
   }
 }

@@ -55,7 +55,7 @@ pub struct TruthyFalsyStageElaboration {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TruthyFalsyStageOutcome {
-    Planned(TruthyFalsyStagePlan),
+    Planned(Box<TruthyFalsyStagePlan>),
     Blocked(BlockedTruthyFalsyStage),
 }
 
@@ -112,6 +112,13 @@ pub enum TruthyFalsyElaborationBlocker {
         truthy: GateType,
         falsy: GateType,
     },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct TruthyFalsyPipeLocation {
+    owner: ItemId,
+    root_expr: ExprId,
+    pipe_expr: ExprId,
 }
 
 pub fn elaborate_truthy_falsy(module: &Module) -> TruthyFalsyElaborationReport {
@@ -205,9 +212,11 @@ fn collect_truthy_falsy_stages(
     walk_expr_tree(module, root, |pipe_expr, expr, _| {
         if let ExprKind::Pipe(pipe) = &expr.kind {
             collect_truthy_falsy_pipe(
-                owner,
-                root,
-                pipe_expr,
+                TruthyFalsyPipeLocation {
+                    owner,
+                    root_expr: root,
+                    pipe_expr,
+                },
                 pipe,
                 env,
                 root_expected.as_ref(),
@@ -219,9 +228,7 @@ fn collect_truthy_falsy_stages(
 }
 
 fn collect_truthy_falsy_pipe(
-    owner: ItemId,
-    root_expr: ExprId,
-    pipe_expr: ExprId,
+    location: TruthyFalsyPipeLocation,
     pipe: &PipeExpr,
     env: &GateExprEnv,
     root_expected: Option<&GateType>,
@@ -287,7 +294,7 @@ fn collect_truthy_falsy_pipe(
                     pair,
                     current,
                     current_env,
-                    if pipe_expr == root_expr {
+                    if location.pipe_expr == location.root_expr {
                         root_expected
                     } else {
                         None
@@ -295,8 +302,8 @@ fn collect_truthy_falsy_pipe(
                     typing,
                 );
                 truthy_falsy_stages.push(TruthyFalsyStageElaboration {
-                    owner,
-                    pipe_expr,
+                    owner: location.owner,
+                    pipe_expr: location.pipe_expr,
                     truthy_stage_index: pair.truthy_index,
                     truthy_stage_span: pair.truthy_stage.span,
                     truthy_expr: pair.truthy_expr,
@@ -412,7 +419,7 @@ fn elaborate_truthy_falsy_pair(
 
     let stage_result_type =
         typing.apply_truthy_falsy_result_type(subject, truthy_result_type.clone());
-    TruthyFalsyStageOutcome::Planned(TruthyFalsyStagePlan {
+    TruthyFalsyStageOutcome::Planned(Box::new(TruthyFalsyStagePlan {
         input_subject: subject.clone(),
         truthy: TruthyFalsyBranchPlan {
             stage_index: pair.truthy_index,
@@ -431,7 +438,7 @@ fn elaborate_truthy_falsy_pair(
             result_type: falsy_result_type,
         },
         result_type: stage_result_type,
-    })
+    }))
 }
 
 fn truthy_falsy_branch_expected(

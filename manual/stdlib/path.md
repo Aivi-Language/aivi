@@ -26,7 +26,9 @@ use aivi.path (
 type Path = Text
 ```
 
-A type alias for `Text` that signals intent. Use it in your own types to make path arguments self-documenting.
+A nominal domain over `Text`, not a type alias. It is distinct from `Text`; the lexical
+intrinsics below still accept and return plain text. The domain declares members internally,
+but does not currently export a public parser or carrier conversion.
 
 ```aivi
 use aivi.path (Path)
@@ -109,16 +111,16 @@ use aivi.path (normalize)
 
 ## Real-world example
 
+The module also exports `hasExtension : Text -> Bool` (whether `extension` is present)
+and `isRelative : Text -> Bool` (the negation of `isAbsolute`). Both are pure helpers.
+
 ```aivi
 use aivi.path (
     join
     normalize
 )
 
-use aivi.fs (
-    FsSource
-    FsError
-)
+use aivi.fs (FsSource)
 
 value configDir : Text = "/etc/demo"
 
@@ -127,7 +129,7 @@ signal files : FsSource
 
 value configPath : Text = join configDir "app.conf"
 value backupPath : Text = normalize (join configDir "../demo/app.conf.bak")
-value readConfig : Signal (Result FsError Text) = files.read "app.conf"
+value readConfig : Task Text Text = files.read "app.conf"
 value writeBackup : Task Text Unit = files.writeText "app.conf.bak" "..."
 ```
 

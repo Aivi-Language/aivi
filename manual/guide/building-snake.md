@@ -21,19 +21,20 @@ Our snake game has:
 - Game over when the snake hits a wall or itself
 - A keyboard-driven interface rendered in a GTK window
 
-The entire game is about 230 lines of AIVI. There are no mutable variables, no loops, and no callbacks.
+The complete demo remains compact despite covering the language and GTK boundary in depth. There
+are no mutable variables, surface loops, or callbacks.
 
 ## Standard library
 
-All standard library functions are available in every AIVI file without any
-`use` statement — the stdlib modules self-hoist their exports project-wide.
+The ambient prelude and hoisted core modules make the common helpers used here available
+without a `use` statement; this does not apply to every standard library export.
 `map`, `filter`, `indices`, `Duration`, and the rest are ready to use directly.
 Text joining is one intentional exception: we import `aivi.text.join` locally so
 bare `join` stays free for the generic `Monad.join` name.
 
 Two small `use` blocks keep the names clean:
 
-```aivi
+```aivi group=snake
 use aivi.text (join as textJoin)
 
 use aivi.nonEmpty (
@@ -52,7 +53,7 @@ references to the underlying helpers.
 
 The first thing to do in AIVI is define what things exist. We start with types:
 
-```aivi
+```aivi group=snake
 type Direction =
   | North
   | South
@@ -72,7 +73,7 @@ These types are **closed**. You cannot add a fifth direction later without updat
 
 The game responds to three kinds of events:
 
-```aivi
+```aivi group=snake
 type Event =
   | Tick
   | Turn Direction
@@ -87,7 +88,7 @@ type Key = Key Text
 
 Every piece of game logic is a pure function. Let us start with direction:
 
-```aivi
+```aivi group=snake
 type Direction -> Direction
 func opposite = arg1 => arg1
  ||> North -> South
@@ -100,7 +101,7 @@ This function takes a direction and returns its opposite. It uses `||>` for exha
 
 ### Moving a cell
 
-```aivi
+```aivi group=snake
 type Direction -> Cell -> Cell
 func moveDir = d c => (d, c)
  ||> (North, Cell x y) -> Cell x (y - 1)
@@ -113,7 +114,7 @@ This matches on a **tuple** of direction and cell. Each arm destructures the `Ce
 
 ### Boundary checking
 
-```aivi
+```aivi group=snake
 value boardW = 30
 value boardH = 20
 
@@ -124,7 +125,7 @@ func outside = arg1 => arg1
 
 ### Pseudo-random food placement
 
-```aivi
+```aivi group=snake
 value seed0 = 2463534242
 
 type Int -> Int
@@ -140,7 +141,7 @@ The game uses a simple linear congruential generator for pseudo-random numbers. 
 
 ### Cell equality
 
-```aivi
+```aivi group=snake
 type Cell -> Cell -> Bool
 func sameCell = target candidate =>
     candidate == target
@@ -153,42 +154,50 @@ func sameCell = target candidate =>
 
 The snake is a non-empty list of cells, but we want richer operations than a plain list provides. This is where **domains** come in:
 
-```aivi
+```aivi group=snake
 domain Snake over NonEmptyList Cell = {
     type fromCells : NonEmptyList Cell -> Snake
     fromCells = cells => cells
 
-    type head : Cell
-    head = nelHead self
+    type head : Snake -> Cell
+    head = snake => nelHead snake
 
-    type contains : Cell -> Bool
-    contains = cell => any (sameCell cell) (toList self)
+    type contains : Snake -> Cell -> Bool
+    contains = snake cell => any (sameCell cell) (toList snake)
 
-    type length : Int
-    length = nelLength self
+    type length : Snake -> Int
+    length = snake => nelLength snake
 
-    type grow : Cell -> Snake
-    grow = cell => cons cell self
+    type cells : Snake -> List Cell
+    cells = snake => toList snake
 
-    type move : Cell -> Snake
-    move = cell => fromHeadTail cell (nelInit self)
+    type grow : Snake -> Cell -> Snake
+    grow = snake cell => cons cell snake
 
-    type nextHead : Direction -> Cell
-    nextHead = dir => moveDir dir (nelHead self)
+    type move : Snake -> Cell -> Snake
+    move = snake cell => fromHeadTail cell (nelInit snake)
+
+    type nextHead : Snake -> Direction -> Cell
+    nextHead = snake dir => moveDir dir (nelHead snake)
 }
 ```
 
-A domain wraps a carrier type (`NonEmptyList Cell`) with a semantic name (`Snake`) and domain-specific operations. Inside the body, `self` refers to the domain-typed receiver, so `nelHead self` unwraps a `Snake` as the underlying `NonEmptyList Cell`. You call these operations with dot notation: `st.snake.head`, `st.snake.contains h`, `st.snake.grow h`.
+A domain wraps a carrier type (`NonEmptyList Cell`) with a semantic name (`Snake`) and
+domain-specific operations. Each operation names its `Snake` receiver explicitly. AIVI lets you call
+those operations with dot notation: `st.snake.head`, `st.snake.contains h`, `st.snake.grow h`.
 
 Using `NonEmptyList` rather than `List` as the carrier type guarantees the snake always has at least one cell — making `head` total (no need for a fallback value).
 
-The key insight is that outside the domain, you cannot accidentally treat a `Snake` as a raw `NonEmptyList Cell`. The domain boundary prevents mixing up snake-specific logic with general list operations. When you *do* need the underlying value — for example, to pass it to a generic list function — every domain has a built-in `.carrier` accessor that returns the carrier value at zero cost: `st.snake.carrier` yields the `NonEmptyList Cell`.
+The key insight is that outside the domain, you cannot accidentally treat a `Snake` as a raw
+`NonEmptyList Cell`. The domain boundary prevents mixing snake-specific logic with general list
+operations. When outside code needs a carrier-shaped view, expose a deliberate domain member such
+as `cells`; AIVI does not add an implicit carrier projection.
 
 ## Game state as a record
 
 With types and the snake domain in place, we can define the full game state:
 
-```aivi
+```aivi group=snake
 type GameState = {
     snake: Snake,
     dir: Direction,
@@ -201,7 +210,7 @@ type GameState = {
 
 And an initial state:
 
-```aivi
+```aivi group=snake
 value initial : GameState = {
     snake: fromCells (cons (Cell 6 10) (cons (Cell 5 10) (singleton (Cell 4 10)))),
     dir: East,
@@ -218,7 +227,7 @@ The initial snake is built by consing cells onto a singleton non-empty list. The
 
 The heart of the game is a single pure function that takes an event and a state, and returns the next state:
 
-```aivi
+```aivi group=snake
 type Event -> GameState -> GameState
 func step = ev st => ev
  ||> Restart -> initial
@@ -228,7 +237,7 @@ func step = ev st => ev
 
 Each event is routed to a handler. Let us trace through `handleTick`:
 
-```aivi
+```aivi group=snake
 type GameState -> GameState
 func handleTick = st => st.status
  ||> GameOver -> st
@@ -239,7 +248,7 @@ If the game is over, return the state unchanged. If running, compute the next he
 
 ### Handling turns
 
-```aivi
+```aivi group=snake
 type Direction -> GameState -> GameState
 func handleTurn = d st => st.status
  ||> GameOver -> st
@@ -255,7 +264,7 @@ Turns are ignored when the game is over. When running, a turn in the opposite di
 
 ### Advancing the snake
 
-```aivi
+```aivi group=snake
 type GameState -> Cell -> GameState
 func advance = st h => outside h or (st.snake.contains h)
  T|> st <| { status: GameOver }
@@ -268,7 +277,7 @@ The `<|` operator applies a structural patch: it copies every field of `st` and 
 
 ### Resolving a move
 
-```aivi
+```aivi group=snake
 type GameState -> Cell -> GameState
 func resolveMove = st h => h == st.food
  T|> st <| { snake: st.snake.grow h, food: spawnFood (nextSeed st.seed), score: st.score + 1, seed: nextSeed st.seed }
@@ -281,7 +290,7 @@ If the head lands on food, grow the snake, spawn new food, and increment the sco
 
 Two sources drive the game — a timer and the keyboard:
 
-```aivi
+```aivi group=snake
 @source timer.every 120ms with {
     immediate: False,
     coalesce: True
@@ -304,7 +313,7 @@ The keyboard source captures key presses without repeat, so holding a key does n
 Signal merge syntax lists the source signals separated by `|`, then `||>` arms discriminate by
 source name and payload pattern:
 
-```aivi
+```aivi group=snake
 signal event : Signal Event = tick | keyDown
   ||> tick _ => Tick
   ||> keyDown (Key "ArrowLeft") => Turn West
@@ -320,8 +329,8 @@ This is declarative routing, not imperative event handling.
 
 ## Accumulating state with `+|>`
 
-```aivi
-signal state : GameState = event
+```aivi group=snake
+signal state : Signal GameState = event
  +|> initial step
 ```
 
@@ -329,7 +338,7 @@ This is the accumulation pipe. It reads: *"start with `initial`, and each time `
 
 The entire game state still lives in this one signal so each tick remains atomic, but we can fan out stable sub-signals from it so unrelated UI work does not recompute:
 
-```aivi
+```aivi group=snake
 from state = {
     snake: .snake
     dir: .dir
@@ -364,7 +373,7 @@ This keeps the reducer where the rules need coherence, but moves rendering and l
 
 The board renders as text. Instead of nested loops, we use `indices` to generate coordinate sequences and `map` to transform them into glyphs:
 
-```aivi
+```aivi group=snake
 type List Cell -> Cell -> Cell -> Int -> Int -> Text
 func cellGlyph = body head food y x => (Cell x y == head, any (sameCell (Cell x y)) body, Cell x y == food)
  ||> (True, _, _)          -> "@"
@@ -377,7 +386,7 @@ This matches on a **triple of booleans** — is this cell the head, a body segme
 
 Each row is rendered by mapping `cellGlyph body head food y` over the column indices, then the rows are joined with newlines:
 
-```aivi
+```aivi group=snake
 type List Cell -> Cell -> Cell -> Int -> Text
 func renderRowAt = body head food y => indices boardW
   |> map (cellGlyph body head food y)
@@ -397,7 +406,7 @@ The expression `snake.cells` gives us the whole body list once in `renderBoard`,
 
 Several small functions format the status display using text interpolation:
 
-```aivi
+```aivi group=snake
 type Direction -> Text
 func dirLabel = arg1 => arg1
  ||> North -> "Up"
@@ -430,7 +439,7 @@ The `{.}` syntax is text interpolation — the `.` refers to the current pipe su
 
 Finally, the markup:
 
-```aivi
+```aivi group=snake
 value main =
     <Window title="AIVI Snake">
         <Box orientation="vertical" spacing={8}>
@@ -451,7 +460,7 @@ Each `<Label>` binds its `text` attribute to a signal. When the signal updates, 
 
 ## The complete data flow
 
-```
+```text
 Timer (120ms)  ──→  tick signal
                          ↓
 Keyboard  ──→  keyDown signal
@@ -485,7 +494,7 @@ Every arrow is a declared dependency. The runtime propagates changes through the
 | **Event routing** | Signal merge connects sources to events |
 | **Accumulation** | `+\|>` folds events into state over time |
 | **Text interpolation** | `"Score: {.}"` — inline formatting with pipe subject |
-| **Standard library** | All stdlib functions available project-wide — no `use` needed; `as` aliases resolve domain body name conflicts |
+| **Standard library** | Ambient and hoisted helpers need no import; explicit imports and `as` aliases select other exports and resolve name conflicts |
 | **Markup** | `<Window>`, `<Label>`, `<show>` — type-checked GTK UI |
 
 The game has zero mutable variables, zero loops, and zero callbacks. The entire architecture is a declared dependency graph with pure functions at every node.

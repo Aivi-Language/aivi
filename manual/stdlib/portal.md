@@ -141,6 +141,8 @@ Result of a screenshot request.
 ### PortalTask
 
 ```aivi
+use aivi.portal (PortalError)
+
 type PortalTask A = (Task PortalError A)
 ```
 
@@ -151,17 +153,24 @@ Generic alias for portal-related tasks.
 These source variants are implemented today:
 
 ```aivi
-@source portal.openFile {
-    title: "Open attachment"
-    multiple: true
-    filters: [{ name: "AIVI Files", patterns: ["*.aivi"] }]
-}
+use aivi.portal (
+    PortalError
+    PortalFileSelection
+    PortalScreenshotResult
+    PortalUriResult
+)
+
+@source portal.openFile { title: "Open attachment", multiple: True }
 signal openedFile : Signal (Result PortalError PortalFileSelection)
 
-@source portal.openUri "https://example.com" with { ask: true }
+@source portal.openUri "https://example.com" with {
+    ask: True
+}
 signal uriResult : Signal (Result PortalError PortalUriResult)
 
-@source portal.screenshot with { interactive: true }
+@source portal.screenshot with {
+    interactive: True
+}
 signal screenshot : Signal (Result PortalError PortalScreenshotResult)
 ```
 

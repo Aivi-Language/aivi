@@ -45,8 +45,9 @@ These families now have a preferred public handle surface:
 | Randomness | `@source random` + `RandomSource` | handle-member random tasks such as `entropy.bytes` |
 | Process / path / D-Bus / secret / auth / notifications | `@source process`, `@source path`, `@source dbus`, `@source secret`, `@source auth`, `@source notifications` | existing built-in providers plus handle-member host snapshots, `bus.call`, desktop keyring tasks, PKCE auth tasks, and desktop notification send/response streams |
 
-Incoming payloads decode directly into the annotated target type. JSON-as-text helpers are no
-longer part of the public external boundary.
+Incoming source payloads decode directly into the annotated target type. The older
+[JSON-as-text task helpers](/stdlib/json) remain available; prefer typed source decoding
+for new external integrations.
 
 ## Timers
 
@@ -89,7 +90,7 @@ Uses the same option surface and current limitations as `timer.every`, but fires
 | `refreshOn` | `Signal B` | Supported as an explicit trigger option. |
 | `refreshEvery` | `Duration` | Supported as polling cadence input. |
 | `activeWhen` | `Signal Bool` | Supported as a lifecycle gate. |
-| `body` | `A` | Supported. Sends the value as the request body (text or JSON-encoded). While uncommon, RFC 9110 permits request bodies on GET. |
+| `body` | `A` | Accepted by the request adapter (text or JSON-encoded). Avoid GET bodies unless the server explicitly supports them; intermediaries may reject them. |
 
 **Notes**
 
@@ -104,7 +105,7 @@ Uses the same option surface as `http.get`, plus:
 
 | Option | Type | Current support |
 | --- | --- | --- |
-| `body` | `A` | Supported for `http.post` only. |
+| `body` | `A` | Request body, normally used with POST. |
 
 ## Portals
 
@@ -175,7 +176,7 @@ operations (`createPet`, `deletePet`, etc.) lower to `api.post` / `api.put` / `a
 
 Generate AIVI type declarations from the spec with:
 
-```
+```sh
 aivi openapi-gen ./spec.yaml -o types/api.aivi
 ```
 
@@ -184,7 +185,21 @@ aivi openapi-gen ./spec.yaml -o types/api.aivi
 **Handle form:**
 
 ```aivi
-@source api "./spec.yaml" with {
+use aivi.api (
+    ApiSource
+    BearerToken
+)
+
+domain Duration over Int = {
+    suffix sec
+    type sec : Int
+    sec = value => Duration value
+}
+
+value serverUrl : Text = "https://api.petstore.io/v2"
+value apiToken : Text = "secret"
+
+@source api "manual/examples/petstore.yaml" with {
     baseUrl: serverUrl,
     auth: BearerToken apiToken,
     timeout: 30sec
@@ -346,8 +361,8 @@ These built-ins publish one host-context snapshot when the source starts. They d
 | --- | --- | --- |
 | `refreshOn` | `Signal B` | Supported through the existing source reconfiguration lifecycle, including pre-elaborated `.changed` projections. |
 | `debounce` | `Duration` | Supported for refresh reconfiguration; activation still loads immediately. |
-| `optimistic` | `Bool` | Supported. When `True`, the provider may publish the previous known-good value immediately while the query runs. Default: `False`. |
-| `onRollback` | `Signal DbError` | Supported as a lifecycle option. The runtime accepts this signal reference for rollback notification when an optimistic update is reverted. |
+| `optimistic` | `Bool` | Accepted and stored, but not used by the current query worker. No optimistic publication is implemented. |
+| `onRollback` | `Signal DbError` | Accepted but ignored by the current runtime; no rollback notification is published. |
 | `activeWhen` | `Signal Bool` | Supported through the existing source activation lifecycle. |
 
 **Notes**
@@ -370,7 +385,7 @@ These built-ins publish one host-context snapshot when the source starts. They d
 | --- | --- | --- |
 | `capture` | `Bool` | Supported. When `True`, the event controller uses the capture propagation phase. Default: `False`. |
 | `repeat` | `Bool` | Supported. |
-| `focusOnly` | `Bool` | Supported. When `False`, key events are captured even when the window is not focused. Default: `True`. |
+| `focusOnly` | `Bool` | Accepted by the source plan. It does not provide global keyboard capture; delivery still depends on the application's GTK window controller. Default: `True`. |
 
 **Notes**
 
@@ -392,9 +407,11 @@ each time the user changes the appearance preference in GNOME Settings.  Backed 
 type Theme = Light | Dark
 
 @source gtk.darkMode
-signal rawDark : Bool
+signal rawDark : Signal Bool
 
-signal theme : Theme
+signal theme : Signal Theme = rawDark
+ T|> Dark
+ F|> Light
 ```
 
 **Notes**
@@ -418,7 +435,7 @@ contents (images, files) yield an empty string.
 
 ```aivi
 @source clipboard.changed
-signal clipboardText : Text
+signal clipboardText : Signal Text
 
 value view =
     <Window title="Clipboard Watcher">
@@ -428,8 +445,8 @@ value view =
 
 **Notes**
 
-- The source fires one initial value before the first render tick, so `clipboardText`
-  is always populated when the UI first appears.
+- Startup requests an asynchronous clipboard read. The initial value is not guaranteed
+  to arrive before the first render tick.
 - Only the latest clipboard text is kept per tick (coalescing queue); rapid clipboard
   changes between scheduler ticks collapse to a single update.
 - Reads happen asynchronously on the GLib main thread; the signal updates on the next
@@ -448,11 +465,13 @@ height of the application's root window changes.
 
 ```aivi
 @source window.size
-signal windowDimensions : { width: Int, height: Int }
+signal windowDimensions : Signal { width: Int, height: Int }
+
+signal dimensionsLabel : Signal Text = "W={windowDimensions.width} H={windowDimensions.height}"
 
 value view =
     <Window title="App">
-        <Label text={"W=" + Int.toText windowDimensions.width + " H=" + Int.toText windowDimensions.height} halign="Center" valign="Center" />
+        <Label text={dimensionsLabel} halign="Center" valign="Center" />
     </Window>
 ```
 
@@ -474,11 +493,15 @@ Fires once at startup with the initial focus state.
 
 ```aivi
 @source window.focus
-signal hasFocus : Bool
+signal hasFocus : Signal Bool
+
+signal focusLabel : Signal Text = hasFocus
+ T|> "Focused"
+ F|> "Unfocused"
 
 value view =
     <Window title="App">
-        <Label text={if hasFocus "Focused" "Unfocused"} halign="Center" valign="Center" />
+        <Label text={focusLabel} halign="Center" valign="Center" />
     </Window>
 ```
 
@@ -525,9 +548,6 @@ value view =
 
 **Form:**
 
-```aivi
-@source dbus.method destination, replyTask with { ... }
-```
 
 | Option | Type | Current support |
 | --- | --- | --- |
@@ -608,6 +628,10 @@ No options.
 - Each `GoaMailAccount` currently includes resolved IMAP/SMTP endpoint data plus auth data from GOA (`GoaMailPassword` or `GoaMailOAuthToken`).
 
 ## IMAP
+
+The current connection code supports direct TLS (`imapUseSsl`) and plain connections.
+GOA accounts requesting STARTTLS (`imapUseTls` without `imapUseSsl`) are rejected; do not
+disable encryption to work around that limitation.
 
 ### `imap.connect`
 

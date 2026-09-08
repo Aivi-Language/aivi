@@ -48,7 +48,7 @@ pub enum LoweringError {
         pipe_expr: HirExprId,
         stage_index: usize,
         span: SourceSpan,
-        blocked: BlockedGateStage,
+        blocked: Box<BlockedGateStage>,
     },
     BlockedTruthyFalsyStage {
         owner: HirItemId,
@@ -56,44 +56,44 @@ pub enum LoweringError {
         truthy_stage_index: usize,
         falsy_stage_index: usize,
         span: SourceSpan,
-        blocked: BlockedTruthyFalsyStage,
+        blocked: Box<BlockedTruthyFalsyStage>,
     },
     BlockedFanoutStage {
         owner: HirItemId,
         pipe_expr: HirExprId,
         map_stage_index: usize,
         span: SourceSpan,
-        blocked: BlockedFanoutSegment,
+        blocked: Box<BlockedFanoutSegment>,
     },
     BlockedTemporalStage {
         owner: HirItemId,
         pipe_expr: HirExprId,
         stage_index: usize,
         span: SourceSpan,
-        blocked: BlockedTemporalStage,
+        blocked: Box<BlockedTemporalStage>,
     },
     BlockedRecurrence {
         owner: HirItemId,
         pipe_expr: HirExprId,
         start_stage_index: usize,
         span: SourceSpan,
-        blocked: BlockedRecurrenceNode,
+        blocked: Box<BlockedRecurrenceNode>,
     },
     BlockedSourceLifecycle {
         owner: HirItemId,
         span: SourceSpan,
-        blocked: BlockedSourceLifecycleNode,
+        blocked: Box<BlockedSourceLifecycleNode>,
     },
     BlockedDecodeProgram {
         owner: HirItemId,
         span: SourceSpan,
-        blocked: BlockedSourceDecodeProgram,
+        blocked: Box<BlockedSourceDecodeProgram>,
     },
     BlockedGeneralExpr {
         owner: HirItemId,
         body_expr: HirExprId,
         span: SourceSpan,
-        blocked: BlockedGeneralExprBody,
+        blocked: Box<BlockedGeneralExprBody>,
     },
     MissingGeneralExprElaboration {
         owner: HirItemId,
@@ -149,7 +149,7 @@ pub enum LoweringError {
         name: Box<str>,
         reason: &'static str,
     },
-    Validation(ValidationError),
+    Validation(Box<ValidationError>),
     /// An internal structural invariant was violated during lowering. This indicates a bug in the
     /// compiler, not in user input, but is reported as an error rather than a panic so that the
     /// compiler can continue and surface any additional diagnostics.

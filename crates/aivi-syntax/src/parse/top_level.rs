@@ -971,10 +971,7 @@ impl<'a> Parser<'a> {
         probe = first + 1;
 
         // Collect additional `| ident` sources.
-        loop {
-            let Some(next) = self.peek_nontrivia(probe, end) else {
-                break;
-            };
+        while let Some(next) = self.peek_nontrivia(probe, end) {
             if self.tokens[next].kind() == TokenKind::PipeTap && !self.tokens[next].line_start() {
                 let Some(ident_idx) = self.peek_nontrivia(next + 1, end) else {
                     break;

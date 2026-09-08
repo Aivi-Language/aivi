@@ -133,6 +133,85 @@ fn reachable_workspace_hir_modules_follow_project_imports() {
 }
 
 #[test]
+fn reachable_workspace_hir_modules_do_not_lower_unrelated_files() {
+    let db = RootDatabase::new();
+    let (main, _dependency, _) = open_workspace_math_program(&db, 1);
+    let unrelated = SourceFile::new(
+        &db,
+        PathBuf::from("workspace/unrelated/unused.aivi"),
+        "value unused = 0\n".to_owned(),
+    );
+
+    let modules = reachable_workspace_hir_modules(&db, main);
+    assert_eq!(modules.len(), 1);
+    assert_eq!(modules[0].name(), "shared.math");
+
+    let after_reachability = db.cache_stats();
+    let _ = hir_module(&db, unrelated);
+    let after_direct_query = db.cache_stats();
+    assert_eq!(
+        after_direct_query.hir_misses,
+        after_reachability.hir_misses + 1,
+        "an unrelated file must remain absent from the HIR cache until directly queried"
+    );
+}
+
+#[test]
+fn reachable_workspace_hir_modules_order_transitive_dependencies_first() {
+    let db = RootDatabase::new();
+    let root = PathBuf::from("workspace");
+    SourceFile::new(
+        &db,
+        root.join("graph/leaf.aivi"),
+        "value leaf = 1\n\nexport (leaf)\n".to_owned(),
+    );
+    SourceFile::new(
+        &db,
+        root.join("graph/middle.aivi"),
+        "use graph.leaf (leaf)\n\nvalue middle = leaf\n\nexport (middle)\n".to_owned(),
+    );
+    let main = SourceFile::new(
+        &db,
+        root.join("main.aivi"),
+        "use graph.middle (middle)\n\nvalue answer = middle\n".to_owned(),
+    );
+
+    let modules = reachable_workspace_hir_modules(&db, main);
+    let names = modules
+        .iter()
+        .map(|module| module.name())
+        .collect::<Vec<_>>();
+    assert_eq!(names, ["graph.leaf", "graph.middle"]);
+}
+
+#[test]
+fn reachable_workspace_hir_modules_order_cycles_deterministically() {
+    let db = RootDatabase::new();
+    let root = PathBuf::from("workspace");
+    SourceFile::new(
+        &db,
+        root.join("cycle/beta.aivi"),
+        "use cycle.alpha (alpha)\n\nvalue beta = 2\n\nexport (beta)\n".to_owned(),
+    );
+    SourceFile::new(
+        &db,
+        root.join("cycle/alpha.aivi"),
+        "use cycle.beta (beta)\n\nvalue alpha = 1\n\nexport (alpha)\n".to_owned(),
+    );
+    let main = SourceFile::new(
+        &db,
+        root.join("main.aivi"),
+        "use cycle.alpha (alpha)\n\nvalue answer = alpha\n".to_owned(),
+    );
+
+    let first = reachable_workspace_hir_modules(&db, main);
+    let second = reachable_workspace_hir_modules(&db, main);
+    assert!(Arc::ptr_eq(&first, &second));
+    let names = first.iter().map(|module| module.name()).collect::<Vec<_>>();
+    assert_eq!(names, ["cycle.alpha", "cycle.beta"]);
+}
+
+#[test]
 fn whole_program_backend_unit_invalidates_when_workspace_dependency_changes() {
     let db = RootDatabase::new();
     let (main, dependency, _) = open_workspace_math_program(&db, 1);

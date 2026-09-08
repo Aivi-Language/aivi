@@ -1,10 +1,14 @@
 name: CI
 
 on:
+  workflow_call:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -15,14 +19,14 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  build:
-    name: Build & Test
+  rust:
+    name: Rust workspace
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        profile: [dev, release]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
+
+      - name: Test release version policy
+        run: python3 -m unittest discover -s tooling/release -p 'test_*.py'
 
       - name: Install system dependencies
         run: |
@@ -35,68 +39,138 @@ jobs:
             libdbus-1-dev \
             libsecret-1-dev
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.98.0
         with:
-          toolchain: stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Build (${{ matrix.profile }})
-        if: matrix.profile == 'dev'
-        run: cargo build --workspace
-
-      - name: Build release
-        if: matrix.profile == 'release'
-        run: cargo build --workspace --release
-
-      - name: Run tests
-        run: cargo test --workspace
-        env:
-          GTK_A11Y: none
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq \
-            libgtk-4-dev \
-            libadwaita-1-dev \
-            libwebkitgtk-6.0-dev \
-            libssl-dev \
-            libdbus-1-dev \
-            libsecret-1-dev
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
           components: clippy, rustfmt
 
       - uses: Swatinem/rust-cache@v2
 
       - name: Check formatting
-        run: cargo fmt --all --check
+        run: cargo fmt --all -- --check
 
-      - name: Run clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Check every target and feature
+        run: cargo check --workspace --all-targets --all-features
 
-  fuzz:
-    name: Fuzz corpus check
+      - name: Run strict Clippy
+        run: cargo clippy --workspace --all-targets --all-features --no-deps -- -D warnings
+
+      - name: Run workspace tests
+        run: cargo test --workspace --all-features --exclude aivi-lsp -- --test-threads=1
+        env:
+          GTK_A11Y: none
+
+      - name: Run LSP tests
+        run: cargo test -p aivi-lsp --all-features -- --test-threads=1
+
+      - name: Build release workspace
+        run: cargo build --workspace --release --all-features
+
+  documentation-and-editor:
+    name: Manual and VS Code extension
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: nightly
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libgtk-4-dev \
+            libadwaita-1-dev \
+            libwebkitgtk-6.0-dev \
+            libssl-dev \
+            libdbus-1-dev \
+            libsecret-1-dev \
+            unzip
+
+      - uses: dtolnay/rust-toolchain@1.98.0
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: documentation-and-editor
 
-      - name: Build fuzz targets
-        run: |
-          cd fuzz
-          cargo +nightly build --fuzz-targets
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.19.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: pnpm
+          cache-dependency-path: |
+            manual/pnpm-lock.yaml
+            tooling/pnpm-lock.yaml
+
+      - name: Install manual dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: manual
+
+      - name: Install editor dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: tooling
+
+      - name: Check AIVI manual snippets
+        run: ./tooling/check-manual-aivi-snippets.sh
+
+      - name: Build manual and check links
+        run: pnpm build
+        working-directory: manual
+
+      - name: Lint and test VS Code extension
+        run: pnpm -F vscode-aivi lint && pnpm -F vscode-aivi test
+        working-directory: tooling
+
+      - name: Build and verify VSIX
+        run: pnpm -F vscode-aivi build && pnpm -F vscode-aivi package
+        working-directory: tooling
+
+      - name: Audit manual dependencies
+        run: pnpm audit --audit-level high
+        working-directory: manual
+
+      - name: Audit editor dependencies
+        run: pnpm audit --audit-level high
+        working-directory: tooling
+
+  dependency-policy:
+    name: Dependency policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@1.98.0
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny,cargo-machete
+          fallback: none
+
+      - name: Check advisories, licenses, and sources
+        run: cargo deny check
+
+      - name: Check unused direct dependencies
+        run: cargo machete
+
+  fuzz:
+    name: Bounded fuzz smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@nightly
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz -> target
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+
+      - name: Smoke parser losslessness
+        run: cargo +nightly fuzz run parser_lossless -- -runs=512 -max_total_time=30
+        working-directory: fuzz
+
+      - name: Smoke hostile decoder paths
+        run: cargo +nightly fuzz run decoder_paths -- -runs=512 -max_total_time=30
+        working-directory: fuzz

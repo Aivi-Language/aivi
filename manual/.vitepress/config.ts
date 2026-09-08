@@ -1,7 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitepress'
-import aiviGrammar from '../../tooling/packages/vscode-aivi/syntaxes/aivi.tmLanguage.json'
-import aiviDarkTheme from './theme/aivi-dark-theme.json'
+import { markdownOptions } from './markdown.mjs'
 import { nav, sidebar } from './navigation'
 
 const repoRoot = fileURLToPath(new URL('../../', import.meta.url))
@@ -28,8 +27,7 @@ export default defineConfig({
   head: [['link', { rel: 'icon', type: 'image/png', href: `${base}aivi-a.png` }]],
 
   markdown: {
-    languages: [aiviGrammar as any],
-    theme: aiviDarkTheme as any,
+    ...markdownOptions as any,
     config(md) {
       md.core.ruler.push('pipe_operator', (state) => {
         for (const blockToken of state.tokens) {

@@ -1200,12 +1200,15 @@ pub(crate) fn build_ordering_runtime_expr(
     module: &Module,
     typing: &mut GateTypeContext<'_>,
     env: &GateExprEnv,
-    span: SourceSpan,
-    ty: GateType,
-    operator: BinaryOperator,
-    left: GateRuntimeExpr,
-    right: GateRuntimeExpr,
+    input: OrderingRuntimeExprInput,
 ) -> GateRuntimeExpr {
+    let OrderingRuntimeExprInput {
+        span,
+        ty,
+        operator,
+        left,
+        right,
+    } = input;
     let callee = in_scope_ordering_evidence(env, module, &left.ty)
         .map(|evidence| GateRuntimeExpr {
             span,
@@ -1282,6 +1285,25 @@ pub(crate) fn build_ordering_runtime_expr(
         kind: GateRuntimeExprKind::Reference(GateRuntimeReference::SumConstructor(constructor)),
     };
     build_equality_runtime_expr(module, env, span, ty, equality_operator, compare, target)
+}
+
+pub(crate) struct OrderingRuntimeExprInput {
+    pub(crate) span: SourceSpan,
+    pub(crate) ty: GateType,
+    pub(crate) operator: BinaryOperator,
+    pub(crate) left: GateRuntimeExpr,
+    pub(crate) right: GateRuntimeExpr,
+}
+
+struct ShortCircuitValidateInput<'a> {
+    span: SourceSpan,
+    expr_id: ExprId,
+    carrier_subject: &'a GateType,
+    success_payload: &'a GateType,
+    failure_payload: &'a GateType,
+    success_constructor: BuiltinTerm,
+    failure_constructor: BuiltinTerm,
+    result_ty: &'a GateType,
 }
 
 pub(crate) fn lower_class_member_callee_with_evidence(
@@ -2040,8 +2062,10 @@ impl<'a> GeneralExprElaborator<'a> {
         member: &DomainMember,
         expected: &GateType,
     ) -> Result<(Vec<GeneralExprParameter>, GateExprEnv, GateType), Vec<GeneralExprBlocker>> {
-        let mut env = GateExprEnv::default();
-        env.current_domain = Some(owner);
+        let mut env = GateExprEnv {
+            current_domain: Some(owner),
+            ..GateExprEnv::default()
+        };
         let mut lowered = Vec::with_capacity(member.parameters.len());
         let mut current = expected.clone();
         for parameter in &member.parameters {
@@ -2514,11 +2538,13 @@ impl<'a> GeneralExprElaborator<'a> {
                         self.module,
                         &mut self.typing,
                         env,
-                        expr.span,
-                        ty,
-                        operator,
-                        left,
-                        right,
+                        OrderingRuntimeExprInput {
+                            span: expr.span,
+                            ty,
+                            operator,
+                            left,
+                            right,
+                        },
                     ));
                 }
                 GateRuntimeExprKind::Binary {
@@ -3502,20 +3528,20 @@ impl<'a> GeneralExprElaborator<'a> {
             input_subject: subject.gate_payload().clone(),
             result_subject: result_subject.clone(),
             kind: GateRuntimePipeStageKind::TruthyFalsy {
-                truthy: GateRuntimeTruthyFalsyBranch {
+                truthy: Box::new(GateRuntimeTruthyFalsyBranch {
                     span: pair.truthy_stage.span,
                     constructor: plan.truthy_constructor,
                     payload_subject: plan.truthy_payload,
                     result_type: truthy_body.ty.clone(),
                     body: truthy_body,
-                },
-                falsy: GateRuntimeTruthyFalsyBranch {
+                }),
+                falsy: Box::new(GateRuntimeTruthyFalsyBranch {
                     span: pair.falsy_stage.span,
                     constructor: plan.falsy_constructor,
                     payload_subject: plan.falsy_payload,
                     result_type: falsy_body.ty.clone(),
                     body: falsy_body,
-                },
+                }),
             },
         })
     }
@@ -3542,27 +3568,31 @@ impl<'a> GeneralExprElaborator<'a> {
             }
             ValidateStageSubject::Result { error, value } => self
                 .lower_short_circuit_validate_body(
-                    stage.span,
-                    *expr,
                     &stage_env,
-                    subject.gate_payload(),
-                    &value,
-                    &error,
-                    BuiltinTerm::Ok,
-                    BuiltinTerm::Err,
-                    &result_payload,
+                    ShortCircuitValidateInput {
+                        span: stage.span,
+                        expr_id: *expr,
+                        carrier_subject: subject.gate_payload(),
+                        success_payload: &value,
+                        failure_payload: &error,
+                        success_constructor: BuiltinTerm::Ok,
+                        failure_constructor: BuiltinTerm::Err,
+                        result_ty: &result_payload,
+                    },
                 )?,
             ValidateStageSubject::Validation { error, value } => self
                 .lower_short_circuit_validate_body(
-                    stage.span,
-                    *expr,
                     &stage_env,
-                    subject.gate_payload(),
-                    &value,
-                    &error,
-                    BuiltinTerm::Valid,
-                    BuiltinTerm::Invalid,
-                    &result_payload,
+                    ShortCircuitValidateInput {
+                        span: stage.span,
+                        expr_id: *expr,
+                        carrier_subject: subject.gate_payload(),
+                        success_payload: &value,
+                        failure_payload: &error,
+                        success_constructor: BuiltinTerm::Valid,
+                        failure_constructor: BuiltinTerm::Invalid,
+                        result_ty: &result_payload,
+                    },
                 )?,
         };
         Ok(GateRuntimePipeStage {
@@ -3580,16 +3610,19 @@ impl<'a> GeneralExprElaborator<'a> {
 
     fn lower_short_circuit_validate_body(
         &mut self,
-        span: SourceSpan,
-        expr_id: ExprId,
         env: &GateExprEnv,
-        carrier_subject: &GateType,
-        success_payload: &GateType,
-        failure_payload: &GateType,
-        success_constructor: BuiltinTerm,
-        failure_constructor: BuiltinTerm,
-        result_ty: &GateType,
+        input: ShortCircuitValidateInput<'_>,
     ) -> Result<GateRuntimeExpr, Vec<GeneralExprBlocker>> {
+        let ShortCircuitValidateInput {
+            span,
+            expr_id,
+            carrier_subject,
+            success_payload,
+            failure_payload,
+            success_constructor,
+            failure_constructor,
+            result_ty,
+        } = input;
         let success_body =
             self.lower_body_expr(expr_id, env, Some(success_payload), Some(result_ty))?;
         if !success_body.ty.same_shape(result_ty) {
@@ -3614,20 +3647,20 @@ impl<'a> GeneralExprElaborator<'a> {
                 input_subject: carrier_subject.clone(),
                 result_subject: result_ty.clone(),
                 kind: GateRuntimePipeStageKind::TruthyFalsy {
-                    truthy: GateRuntimeTruthyFalsyBranch {
+                    truthy: Box::new(GateRuntimeTruthyFalsyBranch {
                         span,
                         constructor: success_constructor,
                         payload_subject: Some(success_payload.clone()),
                         result_type: success_body.ty.clone(),
                         body: success_body,
-                    },
-                    falsy: GateRuntimeTruthyFalsyBranch {
+                    }),
+                    falsy: Box::new(GateRuntimeTruthyFalsyBranch {
                         span,
                         constructor: failure_constructor,
                         payload_subject: Some(failure_payload.clone()),
                         result_type: failure_body.ty.clone(),
                         body: failure_body,
-                    },
+                    }),
                 },
             }],
         };

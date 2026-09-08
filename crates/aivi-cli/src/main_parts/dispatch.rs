@@ -529,7 +529,7 @@ fn run_markup(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Stri
 
 fn run_launch_part(args: impl Iterator<Item = OsString>) -> Result<ExitCode, String> {
     #[cfg(target_os = "linux")]
-    rustix::process::set_parent_process_death_signal(Some(rustix::process::Signal::Term))
+    rustix::process::set_parent_process_death_signal(Some(rustix::process::Signal::TERM))
         .map_err(|error| format!("failed to supervise launched run part: {error}"))?;
     run_markup(args)
 }
@@ -612,6 +612,7 @@ fn run_execute(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Str
 
 fn run_test(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, String> {
     let mut requested_path = None;
+    let mut selected_test = None;
 
     while let Some(argument) = args.next() {
         if argument == "--help" || argument == "-h" {
@@ -627,13 +628,31 @@ fn run_test(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, String
             }
             continue;
         }
-        if requested_path.replace(PathBuf::from(&argument)).is_some() {
-            return Err("test path was provided more than once".to_owned());
+        if argument == "--name" {
+            let name = args
+                .next()
+                .ok_or_else(|| "expected a test name after `--name` for `test`".to_owned())?
+                .to_string_lossy()
+                .into_owned();
+            if selected_test.replace(name).is_some() {
+                return Err("test name was provided more than once".to_owned());
+            }
+            continue;
+        }
+        if requested_path.is_none() {
+            requested_path = Some(PathBuf::from(&argument));
+            continue;
+        }
+        if selected_test
+            .replace(argument.to_string_lossy().into_owned())
+            .is_some()
+        {
+            return Err("test name was provided more than once".to_owned());
         }
     }
 
     let path = resolve_command_entrypoint("test", requested_path.as_deref())?;
-    test_file(&path)
+    test_file_selected(&path, selected_test.as_deref())
 }
 
 fn validate_module_path(path: &[&str]) -> Result<(), String> {

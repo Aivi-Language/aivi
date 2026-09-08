@@ -2,7 +2,10 @@
 
 The `aivi.prelude` module is AIVI's convenience layer — it re-exports the most commonly used functions from across the standard library.
 
-Because `aivi.prelude` declares `hoist`, all of its exports are automatically available in every AIVI file. You do not need a `use aivi.prelude (...)` declaration. Types like `Int`, `Bool`, `Text`, `List`, `Option`, `Result`, and type class constraints like `Eq`, `Ord`, `Functor`, and more are simply in scope everywhere.
+The compiler supplies an ambient prelude, and several core stdlib modules additionally
+declare `hoist`. Common types and class members are therefore available without an
+explicit import. This does not mean every export of every standard library module is
+globally available; use explicit imports for module-specific helpers.
 
 ## At a glance
 
@@ -11,7 +14,23 @@ representative helper batteries that are available everywhere by default. Use th
 overview map; use the module pages like `aivi.option`, `aivi.result`, and `aivi.list` when you need
 the full per-module battery tables.
 
-## Built-in Types
+## Helper export map
+
+The examples below are representative, not an exhaustive list. Additional named wrappers
+are grouped here; the linked module pages explain their underlying operations:
+
+| Area | Additional exports |
+| --- | --- |
+| [Option](option.md) / [Result](result.md) | `isNone`, `isErr` |
+| [Validation](validation.md) | `Errors`, `isInvalid`, `validationMapErr`, `validationFromResult`, `validationToOption`, `validationMap`, `validationAndThen`, `zipValidation`, `validationFold` |
+| [List](list.md) | `at`, `last`, `tailOrEmpty`, `nonEmpty`, `flatten`, `reverse`, `replaceAt`, `take`, `drop`, `sum`, `contains`, `any`, `find`, `findMap` |
+| [Order](order.md) | `maxOf`, `comparing` |
+| [Text](text.md) | `textIsEmpty` (named wrapper for text emptiness) |
+| [Math](math.md) | `sign`, `isOdd`, `square`, `divides` |
+| [Bool](bool.md) | `implies`, `boolFromInt` (wrapper for `fromInt`) |
+| [Pair](pair.md) | `mapFirst`, `mapSecond`, `mapPair` (wrapper for `mapBoth`), `duplicate` |
+
+## Built-in types
 
 These types are always available and can be imported from `aivi.prelude`:
 
@@ -19,11 +38,11 @@ These types are always available and can be imported from `aivi.prelude`:
 |------|-------------|
 | `Int` | 64-bit signed integer |
 | `Float` | 64-bit floating point |
-| `Decimal` | Arbitrary-precision decimal |
+| `Decimal` | Fixed-precision decimal backed by `rust_decimal`; unlike `BigInt`, not arbitrary precision |
 | `BigInt` | Arbitrary-precision integer |
 | `Bool` | Boolean: `True` or `False` |
 | `Text` | Unicode text string |
-| `Unit` | The unit type (no value) |
+| `Unit` | The unit type, with one value: `Unit` |
 | `Ordering` | Result of comparison: `Less`, `Equal`, or `Greater` |
 | `List A` | Ordered collection |
 | `Option A` | Optional value: `Some value` or `None` |

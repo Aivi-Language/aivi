@@ -11,9 +11,9 @@ use crate::{
     TermReference, TermResolution, TextFragment, TextSegment, UnaryOperator,
     domain_operator_elaboration::select_domain_binary_operator,
     general_expr_elaboration::{
-        EqualityEvidenceCatalog, build_equality_runtime_expr, build_ordering_runtime_expr,
-        extend_gate_env_with_equality_evidence, lower_class_member_callee_with_evidence,
-        lower_name_expr_with_equality_evidence,
+        EqualityEvidenceCatalog, OrderingRuntimeExprInput, build_equality_runtime_expr,
+        build_ordering_runtime_expr, extend_gate_env_with_equality_evidence,
+        lower_class_member_callee_with_evidence, lower_name_expr_with_equality_evidence,
     },
     typecheck::resolve_class_member_dispatch,
     validate::{
@@ -122,6 +122,25 @@ pub enum GateElaborationBlocker {
 enum GateRuntimePurity {
     PureOnly,
     AllowSignalReads,
+}
+
+pub(crate) struct GatePipeFunctionApplyInput<'a> {
+    pub(crate) span: SourceSpan,
+    pub(crate) callee_expr: ExprId,
+    pub(crate) explicit_arguments: Vec<ExprId>,
+    pub(crate) expected_result: Option<&'a GateType>,
+}
+
+struct PipeFunctionLoweringContext<'a> {
+    env: &'a GateExprEnv,
+    ambient: &'a GateType,
+    purity: GateRuntimePurity,
+}
+
+struct ClusterRuntimeInput {
+    cluster_id: ClusterId,
+    span: SourceSpan,
+    cluster_ty: GateType,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -331,8 +350,8 @@ pub enum GateRuntimePipeStageKind {
         arms: Vec<GateRuntimeCaseArm>,
     },
     TruthyFalsy {
-        truthy: GateRuntimeTruthyFalsyBranch,
-        falsy: GateRuntimeTruthyFalsyBranch,
+        truthy: Box<GateRuntimeTruthyFalsyBranch>,
+        falsy: Box<GateRuntimeTruthyFalsyBranch>,
     },
     FanOut {
         map_expr: GateRuntimeExpr,
@@ -757,28 +776,34 @@ fn lower_function_pipe_body_runtime_expr(
         .match_pipe_function_signature(expr_id, env, ambient, None)
         .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span: expr.span })?;
     let equality_evidence = EqualityEvidenceCatalog::new(module);
+    let context = PipeFunctionLoweringContext {
+        env,
+        ambient,
+        purity,
+    };
     lower_pipe_function_runtime_expr_from_plan(
         module,
         expr.span,
         plan,
         &equality_evidence,
-        env,
-        ambient,
         typing,
-        purity,
+        &context,
     )
 }
 
 pub(crate) fn lower_gate_pipe_function_apply_runtime_expr_allow_signal_reads(
     module: &Module,
-    span: SourceSpan,
-    callee_expr: ExprId,
-    explicit_arguments: Vec<ExprId>,
+    input: GatePipeFunctionApplyInput<'_>,
     env: &GateExprEnv,
     ambient: &GateType,
-    expected_result: Option<&GateType>,
     typing: &mut GateTypeContext<'_>,
 ) -> Result<GateRuntimeExpr, GateElaborationBlocker> {
+    let GatePipeFunctionApplyInput {
+        span,
+        callee_expr,
+        explicit_arguments,
+        expected_result,
+    } = input;
     let plan = typing
         .match_pipe_function_signature_parts(
             callee_expr,
@@ -789,15 +814,18 @@ pub(crate) fn lower_gate_pipe_function_apply_runtime_expr_allow_signal_reads(
         )
         .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
     let equality_evidence = EqualityEvidenceCatalog::new(module);
+    let context = PipeFunctionLoweringContext {
+        env,
+        ambient,
+        purity: GateRuntimePurity::AllowSignalReads,
+    };
     lower_pipe_function_runtime_expr_from_plan(
         module,
         span,
         plan,
         &equality_evidence,
-        env,
-        ambient,
         typing,
-        GateRuntimePurity::AllowSignalReads,
+        &context,
     )
 }
 
@@ -806,11 +834,14 @@ fn lower_pipe_function_runtime_expr_from_plan(
     span: SourceSpan,
     plan: PipeFunctionSignatureMatch,
     equality_evidence: &EqualityEvidenceCatalog,
-    env: &GateExprEnv,
-    ambient: &GateType,
     typing: &mut GateTypeContext<'_>,
-    purity: GateRuntimePurity,
+    context: &PipeFunctionLoweringContext<'_>,
 ) -> Result<GateRuntimeExpr, GateElaborationBlocker> {
+    let PipeFunctionLoweringContext {
+        env,
+        ambient,
+        purity,
+    } = context;
     let callee_ty = arrow_type(&plan.parameter_types, plan.result_type.clone());
     let callee = if let ExprKind::Name(reference) = &module.exprs()[plan.callee_expr].kind {
         if matches!(
@@ -844,7 +875,7 @@ fn lower_pipe_function_runtime_expr_from_plan(
                 env,
                 Some(ambient),
                 typing,
-                purity,
+                *purity,
             ) {
                 Ok(lowered) => lowered,
                 Err(GateElaborationBlocker::UnknownRuntimeExprType { .. }) => GateRuntimeExpr {
@@ -866,7 +897,7 @@ fn lower_pipe_function_runtime_expr_from_plan(
             env,
             Some(ambient),
             typing,
-            purity,
+            *purity,
         )?
     };
     let mut arguments = Vec::with_capacity(plan.explicit_arguments.len() + 1);
@@ -884,15 +915,13 @@ fn lower_pipe_function_runtime_expr_from_plan(
             module,
             *argument,
             equality_evidence,
-            env,
-            Some(ambient),
             expected_parameter,
             *reads_signal_payload,
             typing,
-            purity,
+            context,
         )?);
     }
-    arguments.push(GateRuntimeExpr::ambient_subject(span, ambient.clone()));
+    arguments.push(GateRuntimeExpr::ambient_subject(span, (*ambient).clone()));
     Ok(GateRuntimeExpr::apply(
         span,
         plan.result_type,
@@ -905,15 +934,18 @@ fn lower_pipe_argument_runtime_expr(
     module: &Module,
     expr_id: ExprId,
     equality_evidence: &EqualityEvidenceCatalog,
-    env: &GateExprEnv,
-    ambient: Option<&GateType>,
     expected: &GateType,
     reads_signal_payload: bool,
     typing: &mut GateTypeContext<'_>,
-    purity: GateRuntimePurity,
+    context: &PipeFunctionLoweringContext<'_>,
 ) -> Result<GateRuntimeExpr, GateElaborationBlocker> {
+    let PipeFunctionLoweringContext {
+        env,
+        ambient,
+        purity,
+    } = context;
     if reads_signal_payload && let ExprKind::Name(reference) = &module.exprs()[expr_id].kind {
-        let info = typing.infer_expr(expr_id, env, ambient);
+        let info = typing.infer_expr(expr_id, env, Some(ambient));
         if let Some(GateType::Signal(payload)) = info.ty
             && payload.same_shape(expected)
         {
@@ -941,7 +973,7 @@ fn lower_pipe_argument_runtime_expr(
     {
         return Ok(lowered);
     }
-    lower_gate_runtime_expr_with_purity(module, expr_id, env, ambient, typing, purity)
+    lower_gate_runtime_expr_with_purity(module, expr_id, env, Some(ambient), typing, *purity)
 }
 
 fn arrow_type(parameters: &[GateType], result: GateType) -> GateType {
@@ -1306,7 +1338,16 @@ fn lower_gate_runtime_expr_with_purity(
                     }
                     ExprKind::Cluster(cluster_id) => {
                         let lowered = lower_cluster_as_gate_runtime_expr(
-                            module, cluster_id, expr.span, ty, env, ambient, typing, purity,
+                            module,
+                            ClusterRuntimeInput {
+                                cluster_id,
+                                span: expr.span,
+                                cluster_ty: ty,
+                            },
+                            env,
+                            ambient,
+                            typing,
+                            purity,
                         )?;
                         results.push(lowered);
                     }
@@ -1499,7 +1540,7 @@ fn lower_gate_runtime_expr_with_purity(
                         let scheduled_arguments = arguments
                             .iter()
                             .copied()
-                            .zip(argument_expected.into_iter())
+                            .zip(argument_expected)
                             .collect::<Vec<_>>();
                         for (arg, expected) in scheduled_arguments.into_iter().rev() {
                             work.push(LowerTask::Eval {
@@ -1548,7 +1589,16 @@ fn lower_gate_runtime_expr_with_purity(
                         | BinaryOperator::LessThanOrEqual
                 ) {
                     results.push(build_ordering_runtime_expr(
-                        module, typing, env, span, ty, operator, left, right,
+                        module,
+                        typing,
+                        env,
+                        OrderingRuntimeExprInput {
+                            span,
+                            ty,
+                            operator,
+                            left,
+                            right,
+                        },
                     ));
                 } else {
                     results.push(GateRuntimeExpr {
@@ -1611,11 +1661,16 @@ fn lower_gate_runtime_expr_with_purity(
                 // because children were pushed reversed onto `work`.
                 let start = results.len() - n * 2;
                 let flat: Vec<GateRuntimeExpr> = results.drain(start..).collect();
-                let entries = flat
-                    .chunks_exact(2)
-                    .map(|pair| GateRuntimeMapEntry {
-                        key: pair[0].clone(),
-                        value: pair[1].clone(),
+                let (pairs, remainder) = flat.as_chunks::<2>();
+                debug_assert!(
+                    remainder.is_empty(),
+                    "map lowering produces key/value pairs"
+                );
+                let entries = pairs
+                    .iter()
+                    .map(|[key, value]| GateRuntimeMapEntry {
+                        key: key.clone(),
+                        value: value.clone(),
                     })
                     .collect();
                 results.push(GateRuntimeExpr {
@@ -1692,14 +1747,17 @@ fn lower_gate_runtime_expr_with_purity(
 /// helper functions below rather than `self.*` methods.
 fn lower_cluster_as_gate_runtime_expr(
     module: &Module,
-    cluster_id: ClusterId,
-    span: SourceSpan,
-    cluster_ty: GateType,
+    input: ClusterRuntimeInput,
     env: &GateExprEnv,
     ambient: Option<&GateType>,
     typing: &mut GateTypeContext<'_>,
     purity: GateRuntimePurity,
 ) -> Result<GateRuntimeExpr, GateElaborationBlocker> {
+    let ClusterRuntimeInput {
+        cluster_id,
+        span,
+        cluster_ty,
+    } = input;
     let cluster = module
         .clusters()
         .get(cluster_id)

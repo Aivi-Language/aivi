@@ -402,6 +402,21 @@ value main =
 export main
 ```
 
+## Step 6: Check and run it
+
+Build the CLI using [the contributor setup](/how-to/contribute#_1-install-the-toolchains)
+and `cargo build --bin aivi`. Save the complete Step 5 block above as `tasks.aivi` at the
+repository root; it includes the earlier declarations, so do not concatenate the repeated
+blocks. From a graphical Linux desktop session, run:
+
+```sh
+target/debug/aivi check tasks.aivi
+target/debug/aivi run tasks.aivi
+```
+
+Add two tasks, toggle one, switch between All/Active/Done, then clear completed tasks.
+These checks exercise event routing and rendering; type-checking alone does not test UI behavior.
+
 ## What this app teaches
 
 | Concept | Where it appears |
@@ -410,13 +425,13 @@ export main
 | **Plain records** | `Todo` and `State` hold application data |
 | **Pure functions** | `step`, `addItem`, `toggleItem`, `visibleTodos` |
 | **Signals** | `event`, `state`, `draftText`, `visibleItems`, `canAdd`, `footerText` |
-| **Merge and accumulation** | UI events merge into `event`; `+|>` folds them into `state` |
+| **Merge and accumulation** | UI events merge into `event`; `+\|>` folds them into `state` |
 | **GTK markup** | `Entry`, `Button`, `Box`, `Label`, and `<each>` |
 | **Functional style without ceremony** | No mutable variables, no callback soup, no unnecessary memo names |
 
 ## The data flow
 
-```
+```text
 Entry + buttons  →  UI event signals
                         ↓
                merged into Event values

@@ -291,7 +291,11 @@ value missingMaybeInt:(Option Int) =
         .expect("compiled program should retain liftMaybeInt kernel metadata");
     assert!(lift_artifact.code_size > 0);
     assert!(lift_artifact.clif.contains("(i64) -> i128"));
-    assert!(lift_artifact.clif.contains("ishl_imm"));
+    assert!(
+        lift_artifact.clif.contains("ishl"),
+        "option packing should shift the payload into its i128 carrier; CLIF was:\n{}",
+        lift_artifact.clif
+    );
     assert!(lift_artifact.clif.contains("bor"));
 
     let missing_artifact = compiled
@@ -1478,7 +1482,11 @@ fn cranelift_codegen_compiles_scalar_option_carriers() {
         .expect("compiled program should retain Some carrier kernel metadata");
     assert!(when_true_artifact.code_size > 0);
     assert!(when_true_artifact.clif.contains("() -> i128"));
-    assert!(when_true_artifact.clif.contains("ishl_imm"));
+    assert!(
+        when_true_artifact.clif.contains("ishl"),
+        "option packing should shift the payload into its i128 carrier; CLIF was:\n{}",
+        when_true_artifact.clif
+    );
     assert!(when_true_artifact.clif.contains("bor"));
 
     let when_false_artifact = compiled

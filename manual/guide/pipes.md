@@ -3,6 +3,14 @@
 In most languages, you nest function calls: `addOne(double(5))`. The deeper the nesting, the harder it is to read. In AIVI, you write the same thing as a left-to-right pipeline:
 
 ```aivi
+type Int -> Int
+func double = n =>
+    n * 2
+
+type Int -> Int
+func addOne = n =>
+    n + 1
+
 value result = 5
   |> double
   |> addOne
@@ -331,6 +339,10 @@ for logging or side effects), but the subject flows through unchanged:
 
 ```aivi
 type Text -> Text
+func log = message =>
+    message
+
+type Text -> Text
 func greet = name =>
     "Hello, {name}"
 
@@ -372,6 +384,11 @@ For `Signal (List A)`, fan-out lifts pointwise — each tick maps the function a
 list:
 
 ```aivi
+type User = {
+    name: Text,
+    email: Text
+}
+
 signal userList : Signal (List User) = [
     {
         name: "Ada",
@@ -424,25 +441,22 @@ must share the same outer wrapper — `Option`, `Result`, `Validation`, `Signal`
 A typical use is combining several validations:
 
 ```aivi
-type ValidatedUser = {
-    name: Text,
-    email: Text,
-    age: Int
-}
+type ValidatedUser =
+  ValidatedUser Text Text Int
 
 type Text -> Validation (List Text) Text
 func validateName = name =>
+    Valid name
 
 type Text -> Validation (List Text) Text
 func validateEmail = email =>
+    Valid email
 
 type Text -> Validation (List Text) Int
-func validateAge = ageText => ageText
-  |> parseInt
- T|> .
- F|> Invalid ["Age must be a number"]
+func validateAge = ageText =>
+    Valid 30
 
-value draft = unit
+value draft =
  &|> validateName "Ada"
  &|> validateEmail "ada@example.com"
  &|> validateAge "30"
@@ -494,6 +508,11 @@ func step = event count => event
  ||> Increment -> count + 1
  ||> Decrement -> count - 1
  ||> Reset     -> 0
+
+type Key = Key Text
+
+@source window.keyDown
+signal keyDown : Signal Key
 
 signal event : Signal Event = keyDown
   ||> Key "ArrowUp" => Increment

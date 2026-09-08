@@ -98,7 +98,7 @@ fn position_at_byte(text: &str, byte_index: usize) -> Position {
 fn open_inline_document(name: &str, text: &str) -> (Arc<ServerState>, Url, String) {
     let state = Arc::new(ServerState::new());
     let uri = inline_uri(name);
-    open_document(&state, &uri, text.to_owned());
+    open_document(&state, &uri, 1, text.to_owned());
     (state, uri, text.to_owned())
 }
 
@@ -106,12 +106,12 @@ fn open_fixture_document(relative: &str) -> (Arc<ServerState>, Url, String) {
     let state = Arc::new(ServerState::new());
     let uri = fixture_uri(relative);
     let text = fixture_text(relative);
-    open_document(&state, &uri, text.clone());
+    open_document(&state, &uri, 1, text.clone());
     (state, uri, text)
 }
 
-#[tokio::test]
-async fn definition_resolves_local_binding_use_site() {
+#[test]
+fn definition_resolves_local_binding_use_site() {
     let text = "type Int -> Int\nfunc id x =>\n    x\n";
     let (state, uri, text) = open_inline_document("local-binding-nav.aivi", text);
 
@@ -119,7 +119,6 @@ async fn definition_resolves_local_binding_use_site() {
         definition_params(uri.clone(), position_of_nth(&text, "x", 1)),
         state,
     )
-    .await
     .expect("definition should resolve for a local binding use site");
 
     let locations = response_locations(response);
@@ -128,8 +127,8 @@ async fn definition_resolves_local_binding_use_site() {
     assert_eq!(locations[0].range.start, position_of_nth(&text, "x", 0));
 }
 
-#[tokio::test]
-async fn definition_resolves_sum_constructor_use_site() {
+#[test]
+fn definition_resolves_sum_constructor_use_site() {
     let text = "type Status =\n  | Idle\n  | Busy\n\nvalue current = Idle\n";
     let (state, uri, text) = open_inline_document("constructor-nav.aivi", text);
 
@@ -137,7 +136,6 @@ async fn definition_resolves_sum_constructor_use_site() {
         definition_params(uri.clone(), position_of_nth(&text, "Idle", 1)),
         state,
     )
-    .await
     .expect("definition should resolve for a constructor use site");
 
     let locations = response_locations(response);
@@ -146,8 +144,8 @@ async fn definition_resolves_sum_constructor_use_site() {
     assert_eq!(locations[0].range.start, position_of_nth(&text, "Idle", 0));
 }
 
-#[tokio::test]
-async fn definition_resolves_cross_file_imported_term() {
+#[test]
+fn definition_resolves_cross_file_imported_term() {
     let main_relative = "fixtures/frontend/milestone-2/valid/workspace-typeclass-prelude/main.aivi";
     let target_relative =
         "fixtures/frontend/milestone-2/valid/workspace-typeclass-prelude/shared/logic.aivi";
@@ -157,7 +155,6 @@ async fn definition_resolves_cross_file_imported_term() {
         definition_params(uri, position_of_nth(&text, "liftOne", 1)),
         state,
     )
-    .await
     .expect("definition should resolve for an imported term use site");
 
     let locations = response_locations(response);
@@ -169,8 +166,8 @@ async fn definition_resolves_cross_file_imported_term() {
     );
 }
 
-#[tokio::test]
-async fn definition_resolves_cross_file_imported_type() {
+#[test]
+fn definition_resolves_cross_file_imported_type() {
     let main_relative = "fixtures/frontend/milestone-2/valid/workspace-type-imports/main.aivi";
     let target_relative =
         "fixtures/frontend/milestone-2/valid/workspace-type-imports/shared/types.aivi";
@@ -180,7 +177,6 @@ async fn definition_resolves_cross_file_imported_type() {
         definition_params(uri, position_of_nth(&text, "Greeting", 1)),
         state,
     )
-    .await
     .expect("definition should resolve for an imported type use site");
 
     let locations = response_locations(response);
@@ -192,8 +188,8 @@ async fn definition_resolves_cross_file_imported_type() {
     );
 }
 
-#[tokio::test]
-async fn definition_resolves_class_member_use_site() {
+#[test]
+fn definition_resolves_class_member_use_site() {
     let relative = "fixtures/frontend/milestone-2/valid/instance-declarations/main.aivi";
     let (state, uri, text) = open_fixture_document(relative);
 
@@ -201,7 +197,6 @@ async fn definition_resolves_class_member_use_site() {
         definition_params(uri.clone(), position_of_nth(&text, "==", 2)),
         state,
     )
-    .await
     .expect("definition should resolve for a class member use site");
 
     let locations = response_locations(response);
@@ -210,8 +205,8 @@ async fn definition_resolves_class_member_use_site() {
     assert_eq!(locations[0].range.start, position_of_nth(&text, "(==)", 1));
 }
 
-#[tokio::test]
-async fn implementation_resolves_class_member_use_site() {
+#[test]
+fn implementation_resolves_class_member_use_site() {
     let relative = "fixtures/frontend/milestone-2/valid/instance-declarations/main.aivi";
     let (state, uri, text) = open_fixture_document(relative);
 
@@ -219,7 +214,6 @@ async fn implementation_resolves_class_member_use_site() {
         implementation_params(uri.clone(), position_of_nth(&text, "==", 2)),
         state,
     )
-    .await
     .expect("implementation should resolve for a class member use site");
 
     let locations = implementation_locations(response);
@@ -228,8 +222,8 @@ async fn implementation_resolves_class_member_use_site() {
     assert_eq!(locations[0].range.start, position_of_nth(&text, "(==)", 1));
 }
 
-#[tokio::test]
-async fn definition_on_class_member_declaration_prefers_implementation_targets() {
+#[test]
+fn definition_on_class_member_declaration_prefers_implementation_targets() {
     let relative = "fixtures/frontend/milestone-2/valid/instance-declarations/main.aivi";
     let (state, uri, text) = open_fixture_document(relative);
 
@@ -237,7 +231,6 @@ async fn definition_on_class_member_declaration_prefers_implementation_targets()
         definition_params(uri.clone(), position_of_nth(&text, "(==)", 0)),
         state,
     )
-    .await
     .expect("definition on a class member declaration should return an implementation target");
 
     let locations = response_locations(response);
@@ -246,8 +239,8 @@ async fn definition_on_class_member_declaration_prefers_implementation_targets()
     assert_eq!(locations[0].range.start, position_of_nth(&text, "(==)", 1));
 }
 
-#[tokio::test]
-async fn definition_resolves_class_member_declaration_site() {
+#[test]
+fn definition_resolves_class_member_declaration_site() {
     // Hover on the `display` member name in the class body should navigate to its declaration.
     let relative = "fixtures/frontend/milestone-2/valid/class-declarations/main.aivi";
     let (state, uri, text) = open_fixture_document(relative);
@@ -256,7 +249,6 @@ async fn definition_resolves_class_member_declaration_site() {
         definition_params(uri.clone(), position_of_nth(&text, "display", 0)),
         state,
     )
-    .await
     .expect("definition on a class member declaration should return a result");
 
     let locations = response_locations(response);
@@ -270,8 +262,8 @@ async fn definition_resolves_class_member_declaration_site() {
     );
 }
 
-#[tokio::test]
-async fn implementation_resolves_class_to_its_instances() {
+#[test]
+fn implementation_resolves_class_to_its_instances() {
     // When the cursor is on the class name `Eq`, go-to-impl should jump to its instance(s).
     let relative = "fixtures/frontend/milestone-2/valid/instance-declarations/main.aivi";
     let (state, uri, text) = open_fixture_document(relative);
@@ -280,7 +272,6 @@ async fn implementation_resolves_class_to_its_instances() {
         implementation_params(uri.clone(), position_of_nth(&text, "Eq", 0)),
         state,
     )
-    .await
     .expect("implementation on a class name should resolve to its instances");
 
     let locations = implementation_locations(response);
@@ -290,8 +281,8 @@ async fn implementation_resolves_class_to_its_instances() {
     );
 }
 
-#[tokio::test]
-async fn definition_resolves_from_fanout_signal_use_site() {
+#[test]
+fn definition_resolves_from_fanout_signal_use_site() {
     let relative = "demos/reversi.aivi";
     let (state, uri, text) = open_fixture_document(relative);
 
@@ -299,7 +290,6 @@ async fn definition_resolves_from_fanout_signal_use_site() {
         definition_params(uri.clone(), position_of_nth(&text, "gameOver", 1)),
         state,
     )
-    .await
     .expect("definition should resolve for a from-fanout signal use site");
 
     let locations = response_locations(response);

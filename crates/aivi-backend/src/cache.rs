@@ -20,6 +20,7 @@ use std::{
 
 use cranelift_codegen::binemit::Reloc;
 use rustc_hash::FxHasher;
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::{
     BackendRuntimeMeta, CodegenErrors, CompiledKernel, CompiledKernelArtifact, CompiledProgram,
@@ -36,6 +37,8 @@ use crate::{
     program::Program,
 };
 
+const MAX_BINARY_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;
+
 pub fn encode_program_json(program: &Program) -> Result<Vec<u8>, serde_json::Error> {
     serde_json::to_vec(program)
 }
@@ -44,12 +47,30 @@ pub fn decode_program_json(bytes: &[u8]) -> Result<Program, serde_json::Error> {
     serde_json::from_slice(bytes)
 }
 
-pub fn encode_program_binary(program: &Program) -> Result<Vec<u8>, bincode::Error> {
-    bincode::serialize(program)
+pub(crate) fn encode_binary<T: Serialize + ?Sized>(value: &T) -> Result<Vec<u8>, postcard::Error> {
+    if postcard::experimental::serialized_size(value)? > MAX_BINARY_ARTIFACT_BYTES {
+        return Err(postcard::Error::SerializeBufferFull);
+    }
+    postcard::to_stdvec(value)
 }
 
-pub fn decode_program_binary(bytes: &[u8]) -> Result<Program, bincode::Error> {
-    bincode::deserialize(bytes)
+pub(crate) fn decode_binary<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, postcard::Error> {
+    if bytes.len() > MAX_BINARY_ARTIFACT_BYTES {
+        return Err(postcard::Error::DeserializeBadEncoding);
+    }
+    let (value, remaining) = postcard::take_from_bytes(bytes)?;
+    if !remaining.is_empty() {
+        return Err(postcard::Error::DeserializeBadEncoding);
+    }
+    Ok(value)
+}
+
+pub fn encode_program_binary(program: &Program) -> Result<Vec<u8>, postcard::Error> {
+    encode_binary(program)
+}
+
+pub fn decode_program_binary(bytes: &[u8]) -> Result<Program, postcard::Error> {
+    decode_binary(bytes)
 }
 
 pub fn encode_compiled_program_binary(compiled: &CompiledProgram) -> Vec<u8> {
@@ -330,7 +351,7 @@ fn program_kernel_cache_key(
 /// Compute a stable content fingerprint for one backend program.
 pub fn compute_program_fingerprint(program: &Program) -> u64 {
     let mut hasher = FxHasher::default();
-    format!("{program:?}").hash(&mut hasher);
+    crate::fingerprint::hash_debug(program, &mut hasher);
     hasher.finish()
 }
 
@@ -1123,7 +1144,7 @@ mod tests {
     use aivi_base::SourceDatabase;
     use aivi_core::{lower_module as lower_core_module, validate_module as validate_core_module};
     use aivi_ffi_call::{
-        AbiValue, AllocationArena, FunctionCaller, decode_len_prefixed_bytes, decode_marshaled_map,
+        AbiValue, AllocationArena, ReadableMemory, decode_len_prefixed_bytes, decode_marshaled_map,
         decode_marshaled_sequence, read_bigint_constant_bytes, read_decimal_constant_bytes,
         with_active_arena,
     };
@@ -1134,8 +1155,27 @@ mod tests {
 
     use super::*;
     use crate::{
-        RuntimeBigInt, RuntimeDecimal, lower_module as lower_backend_module, validate_program,
+        RuntimeBigInt, RuntimeDecimal, codegen::CompiledJitKernel,
+        lower_module as lower_backend_module, validate_program,
     };
+
+    #[test]
+    fn binary_decoder_rejects_unbounded_collection_length() {
+        let hostile_length_prefix = u64::MAX.to_le_bytes();
+
+        let error = decode_binary::<Vec<u8>>(&hostile_length_prefix)
+            .expect_err("an artifact collection must respect the binary size limit");
+
+        assert!(
+            matches!(
+                error,
+                postcard::Error::DeserializeUnexpectedEnd
+                    | postcard::Error::DeserializeBadVarint
+                    | postcard::Error::DeserializeBadEncoding
+            ),
+            "unexpected decode error: {error:?}"
+        );
+    }
 
     fn lower_text(path: &str, text: &str) -> Program {
         let mut sources = SourceDatabase::new();
@@ -1216,7 +1256,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "domain rewrite pending: ambient Duration constructor layout mismatch"]
     fn compile_program_cached_recovers_from_corrupt_disk_entry() {
         let backend = lower_text("cache-program-corrupt.aivi", "value total:Int = 21 + 21\n");
 
@@ -1309,18 +1348,12 @@ mod tests {
         with_temp_cache_dir(|cache_root| {
             let compiled_first = compile_kernel_jit_cached_in_dir(cache_root, &first, first_kernel)
                 .expect("first helper-backed kernel should compile");
-            assert_eq!(
-                call_i64_value(&compiled_first.caller, compiled_first.function, &[]),
-                AbiValue::I64(1)
-            );
+            assert_eq!(call_i64_value(&compiled_first, &[]), AbiValue::I64(1));
 
             let compiled_second =
                 compile_kernel_jit_cached_in_dir(cache_root, &second, second_kernel)
                     .expect("changed helper-backed kernel should miss the stale cache entry");
-            assert_eq!(
-                call_i64_value(&compiled_second.caller, compiled_second.function, &[]),
-                AbiValue::I64(2)
-            );
+            assert_eq!(call_i64_value(&compiled_second, &[]), AbiValue::I64(2));
         });
     }
 
@@ -1341,17 +1374,11 @@ mod tests {
                 .expect("serialized JIT artifact should replay into a live kernel");
 
             assert_eq!(
-                compiled
-                    .caller
-                    .call(compiled.function, &[])
-                    .expect("compiled kernel should execute"),
+                compiled.call(&[]).expect("compiled kernel should execute"),
                 AbiValue::I64(42)
             );
             assert_eq!(
-                replayed
-                    .caller
-                    .call(replayed.function, &[])
-                    .expect("replayed kernel should execute"),
+                replayed.call(&[]).expect("replayed kernel should execute"),
                 AbiValue::I64(42)
             );
         });
@@ -1395,11 +1422,11 @@ fun makeBlob:Bytes = seed:Int=>
                 vec!["aivi_bytes_append", "aivi_bytes_repeat", "aivi_bytes_slice"]
             );
             assert_eq!(
-                call_pointer_bytes(&compiled.caller, compiled.function, &[AbiValue::I64(65)]),
+                call_pointer_bytes(&compiled, &[AbiValue::I64(65)]),
                 b"ABB".to_vec().into_boxed_slice()
             );
             assert_eq!(
-                call_pointer_bytes(&replayed.caller, replayed.function, &[AbiValue::I64(65)]),
+                call_pointer_bytes(&replayed, &[AbiValue::I64(65)]),
                 b"ABB".to_vec().into_boxed_slice()
             );
         });
@@ -1441,23 +1468,11 @@ fun underAssets:Text = segment:Text=> join "/tmp/assets" segment
                 vec!["aivi_path_join"]
             );
             assert_eq!(
-                call_pointer_text(
-                    &compiled.caller,
-                    compiled.function,
-                    &[AbiValue::Pointer(
-                        text_abi_bytes("icon.svg").as_ptr().cast()
-                    )],
-                ),
+                call_pointer_text_with_text_arg(&compiled, "icon.svg"),
                 "/tmp/assets/icon.svg"
             );
             assert_eq!(
-                call_pointer_text(
-                    &replayed.caller,
-                    replayed.function,
-                    &[AbiValue::Pointer(
-                        text_abi_bytes("icon.svg").as_ptr().cast()
-                    )],
-                ),
+                call_pointer_text_with_text_arg(&replayed, "icon.svg"),
                 "/tmp/assets/icon.svg"
             );
         });
@@ -1491,14 +1506,8 @@ value rendered:Text = applyText fixedLabel 41
             let replayed = instantiate_cached_jit_kernel(&backend, rendered, &artifact)
                 .expect("serialized callable env text artifact should replay into a live kernel");
 
-            assert_eq!(
-                call_pointer_text(&compiled.caller, compiled.function, &[]),
-                "done"
-            );
-            assert_eq!(
-                call_pointer_text(&replayed.caller, replayed.function, &[]),
-                "done"
-            );
+            assert_eq!(call_pointer_text(&compiled, &[]), "done");
+            assert_eq!(call_pointer_text(&replayed, &[]), "done");
         });
     }
 
@@ -1530,14 +1539,8 @@ value rendered:List Int = applyList makePair 41
             let replayed = instantiate_cached_jit_kernel(&backend, rendered, &artifact)
                 .expect("serialized callable env list artifact should replay into a live kernel");
 
-            assert_eq!(
-                call_i64_sequence(&compiled.caller, compiled.function, &[]),
-                vec![41, 42]
-            );
-            assert_eq!(
-                call_i64_sequence(&replayed.caller, replayed.function, &[]),
-                vec![41, 42]
-            );
+            assert_eq!(call_i64_sequence(&compiled, &[]), vec![41, 42]);
+            assert_eq!(call_i64_sequence(&replayed, &[]), vec![41, 42]);
         });
     }
 
@@ -1562,14 +1565,8 @@ value rendered:List Int = __aivi_list_range 3
             let replayed = instantiate_cached_jit_kernel(&backend, rendered, &artifact)
                 .expect("serialized list range artifact should replay into a live kernel");
 
-            assert_eq!(
-                call_i64_sequence(&compiled.caller, compiled.function, &[]),
-                vec![0, 1, 2]
-            );
-            assert_eq!(
-                call_i64_sequence(&replayed.caller, replayed.function, &[]),
-                vec![0, 1, 2]
-            );
+            assert_eq!(call_i64_sequence(&compiled, &[]), vec![0, 1, 2]);
+            assert_eq!(call_i64_sequence(&replayed, &[]), vec![0, 1, 2]);
         });
     }
 
@@ -1599,11 +1596,11 @@ value rendered:List Text = __aivi_list_flatMap labels (__aivi_list_range 3)
                 .expect("serialized list flatMap text artifact should replay into a live kernel");
 
             assert_eq!(
-                call_text_sequence(&compiled.caller, compiled.function, &[]),
+                call_text_sequence(&compiled, &[]),
                 vec!["L", "R", "L", "R", "L", "R"]
             );
             assert_eq!(
-                call_text_sequence(&replayed.caller, replayed.function, &[]),
+                call_text_sequence(&replayed, &[]),
                 vec!["L", "R", "L", "R", "L", "R"]
             );
         });
@@ -1635,14 +1632,8 @@ value rendered:List Text = __aivi_list_flatMap (makeRow "X") (__aivi_list_range 
                 "serialized list flatMap partial text artifact should replay into a live kernel",
             );
 
-            assert_eq!(
-                call_text_sequence(&compiled.caller, compiled.function, &[]),
-                vec!["X", "X", "X", "X"]
-            );
-            assert_eq!(
-                call_text_sequence(&replayed.caller, replayed.function, &[]),
-                vec!["X", "X", "X", "X"]
-            );
+            assert_eq!(call_text_sequence(&compiled, &[]), vec!["X", "X", "X", "X"]);
+            assert_eq!(call_text_sequence(&replayed, &[]), vec!["X", "X", "X", "X"]);
         });
     }
 
@@ -1679,16 +1670,8 @@ value rendered:List Tile = __aivi_list_flatMap (makeRow "X") (__aivi_list_range 
                 "serialized list flatMap partial record artifact should replay into a live kernel",
             );
 
-            assert!(call_list_pointer_is_non_null(
-                &compiled.caller,
-                compiled.function,
-                &[]
-            ));
-            assert!(call_list_pointer_is_non_null(
-                &replayed.caller,
-                replayed.function,
-                &[]
-            ));
+            assert!(call_list_pointer_is_non_null(&compiled, &[]));
+            assert!(call_list_pointer_is_non_null(&replayed, &[]));
         });
     }
 
@@ -1724,16 +1707,8 @@ value rendered:List Tile = __aivi_list_map (makeTile "L" "M" "R") (__aivi_list_r
                 "serialized list map partial record artifact should replay into a live kernel",
             );
 
-            assert!(call_list_pointer_is_non_null(
-                &compiled.caller,
-                compiled.function,
-                &[]
-            ));
-            assert!(call_list_pointer_is_non_null(
-                &replayed.caller,
-                replayed.function,
-                &[]
-            ));
+            assert!(call_list_pointer_is_non_null(&compiled, &[]));
+            assert!(call_list_pointer_is_non_null(&replayed, &[]));
         });
     }
 
@@ -1776,14 +1751,8 @@ value rendered:Text = findEntry 2 [
                 "serialized list find option pipe artifact should replay into a live kernel",
             );
 
-            assert_eq!(
-                call_pointer_text(&compiled.caller, compiled.function, &[]),
-                "b"
-            );
-            assert_eq!(
-                call_pointer_text(&replayed.caller, replayed.function, &[]),
-                "b"
-            );
+            assert_eq!(call_pointer_text(&compiled, &[]), "b");
+            assert_eq!(call_pointer_text(&replayed, &[]), "b");
         });
     }
 
@@ -1914,20 +1883,14 @@ value rendered:List RenderTile =
                 .expect("tileAt00 should lower into a body kernel");
             let compiled_tile = compile_kernel_jit_cached_in_dir(cache_root, &backend, tile)
                 .expect("tileAt00 should compile and persist a replayable artifact");
-            assert_eq!(
-                call_pointer_text(&compiled_tile.caller, compiled_tile.function, &[]),
-                "head.png"
-            );
+            assert_eq!(call_pointer_text(&compiled_tile, &[]), "head.png");
 
             let tile = backend.items()[find_item(&backend, "tileAt10")]
                 .body
                 .expect("tileAt10 should lower into a body kernel");
             let compiled_tile = compile_kernel_jit_cached_in_dir(cache_root, &backend, tile)
                 .expect("tileAt10 should compile and persist a replayable artifact");
-            assert_eq!(
-                call_pointer_text(&compiled_tile.caller, compiled_tile.function, &[]),
-                "body.png"
-            );
+            assert_eq!(call_pointer_text(&compiled_tile, &[]), "body.png");
 
             let tile = backend.items()[find_item(&backend, "tileAt20")]
                 .body
@@ -1939,80 +1902,52 @@ value rendered:List RenderTile =
                 .expect("unequalCells should lower into a body kernel");
             let compiled_equal = compile_kernel_jit_cached_in_dir(cache_root, &backend, equal)
                 .expect("unequalCells should compile and persist a replayable artifact");
-            assert_eq!(
-                call_i64_value(&compiled_equal.caller, compiled_equal.function, &[]),
-                AbiValue::I8(0)
-            );
+            assert_eq!(call_i64_value(&compiled_equal, &[]), AbiValue::I8(0));
             let equal = backend.items()[find_item(&backend, "equalCells")]
                 .body
                 .expect("equalCells should lower into a body kernel");
             let compiled_equal = compile_kernel_jit_cached_in_dir(cache_root, &backend, equal)
                 .expect("equalCells should compile and persist a replayable artifact");
-            assert_eq!(
-                call_i64_value(&compiled_equal.caller, compiled_equal.function, &[]),
-                AbiValue::I8(1)
-            );
+            assert_eq!(call_i64_value(&compiled_equal, &[]), AbiValue::I8(1));
             let equal = backend.items()[find_item(&backend, "unequalCellsViaCall")]
                 .body
                 .expect("unequalCellsViaCall should lower into a body kernel");
             let compiled_equal = compile_kernel_jit_cached_in_dir(cache_root, &backend, equal)
                 .expect("unequalCellsViaCall should compile and persist a replayable artifact");
-            assert_eq!(
-                call_i64_value(&compiled_equal.caller, compiled_equal.function, &[]),
-                AbiValue::I8(0)
-            );
+            assert_eq!(call_i64_value(&compiled_equal, &[]), AbiValue::I8(0));
             let direct = backend.items()[find_item(&backend, "directFalsePipe")]
                 .body
                 .expect("directFalsePipe should lower into a body kernel");
             let compiled_direct = compile_kernel_jit_cached_in_dir(cache_root, &backend, direct)
                 .expect("directFalsePipe should compile and persist a replayable artifact");
-            assert_eq!(
-                call_pointer_text(&compiled_direct.caller, compiled_direct.function, &[]),
-                "no"
-            );
+            assert_eq!(call_pointer_text(&compiled_direct, &[]), "no");
             let direct = backend.items()[find_item(&backend, "emptyAssetDirect")]
                 .body
                 .expect("emptyAssetDirect should lower into a body kernel");
             let compiled_direct = compile_kernel_jit_cached_in_dir(cache_root, &backend, direct)
                 .expect("emptyAssetDirect should compile and persist a replayable artifact");
-            assert_eq!(
-                call_pointer_text(&compiled_direct.caller, compiled_direct.function, &[]),
-                "empty.png"
-            );
+            assert_eq!(call_pointer_text(&compiled_direct, &[]), "empty.png");
             let direct = backend.items()[find_item(&backend, "foodAssetDirect")]
                 .body
                 .expect("foodAssetDirect should lower into a body kernel");
             let compiled_direct = compile_kernel_jit_cached_in_dir(cache_root, &backend, direct)
                 .expect("foodAssetDirect should compile and persist a replayable artifact");
-            assert_eq!(
-                call_pointer_text(&compiled_direct.caller, compiled_direct.function, &[]),
-                "mouse.png"
-            );
-            assert_eq!(
-                call_pointer_text(&compiled_tile.caller, compiled_tile.function, &[]),
-                "empty.png"
-            );
+            assert_eq!(call_pointer_text(&compiled_direct, &[]), "mouse.png");
+            assert_eq!(call_pointer_text(&compiled_tile, &[]), "empty.png");
 
             let tile = backend.items()[find_item(&backend, "tileAt11")]
                 .body
                 .expect("tileAt11 should lower into a body kernel");
             let compiled_tile = compile_kernel_jit_cached_in_dir(cache_root, &backend, tile)
                 .expect("tileAt11 should compile and persist a replayable artifact");
-            assert_eq!(
-                call_pointer_text(&compiled_tile.caller, compiled_tile.function, &[]),
-                "mouse.png"
-            );
+            assert_eq!(call_pointer_text(&compiled_tile, &[]), "mouse.png");
 
             let row = backend.items()[find_item(&backend, "row0")]
                 .body
                 .expect("row0 should lower into a body kernel");
             let compiled_row = compile_kernel_jit_cached_in_dir(cache_root, &backend, row)
                 .expect("row0 should compile and persist a replayable artifact");
-            assert!(call_list_pointer_is_non_null(
-                &compiled_row.caller,
-                compiled_row.function,
-                &[]
-            ));
+            assert!(call_list_pointer_is_non_null(&compiled_row, &[]));
 
             let rendered = backend.items()[find_item(&backend, "rendered")]
                 .body
@@ -2027,16 +1962,8 @@ value rendered:List RenderTile =
                 "serialized literal snake-cells board renderer should replay into a live kernel",
             );
 
-            assert!(call_list_pointer_is_non_null(
-                &compiled.caller,
-                compiled.function,
-                &[]
-            ));
-            assert!(call_list_pointer_is_non_null(
-                &replayed.caller,
-                replayed.function,
-                &[]
-            ));
+            assert!(call_list_pointer_is_non_null(&compiled, &[]));
+            assert!(call_list_pointer_is_non_null(&replayed, &[]));
         });
     }
 
@@ -2139,14 +2066,8 @@ value middleFromWindow:Text =
                 let replayed = instantiate_cached_jit_kernel(&backend, kernel, &artifact)
                     .unwrap_or_else(|_| panic!("{name} serialized artifact should replay"));
 
-                assert_eq!(
-                    call_pointer_text(&compiled.caller, compiled.function, &[]),
-                    expected
-                );
-                assert_eq!(
-                    call_pointer_text(&replayed.caller, replayed.function, &[]),
-                    expected
-                );
+                assert_eq!(call_pointer_text(&compiled, &[]), expected);
+                assert_eq!(call_pointer_text(&replayed, &[]), expected);
             }
         });
     }
@@ -2334,11 +2255,11 @@ value snakeAssetsFromDomain:List Text =
                     .unwrap_or_else(|_| panic!("{name} serialized artifact should replay"));
 
                 assert_eq!(
-                    call_text_sequence(&compiled.caller, compiled.function, &[]),
+                    call_text_sequence(&compiled, &[]),
                     vec!["west", "body_horizontal.png", "east"]
                 );
                 assert_eq!(
-                    call_text_sequence(&replayed.caller, replayed.function, &[]),
+                    call_text_sequence(&replayed, &[]),
                     vec!["west", "body_horizontal.png", "east"]
                 );
             }
@@ -2427,16 +2348,8 @@ value rendered:List RenderTile =
             let replayed = instantiate_cached_jit_kernel(&backend, rendered, &artifact)
                 .expect("serialized large board renderer should replay into a live kernel");
 
-            assert!(call_list_pointer_is_non_null(
-                &compiled.caller,
-                compiled.function,
-                &[]
-            ));
-            assert!(call_list_pointer_is_non_null(
-                &replayed.caller,
-                replayed.function,
-                &[]
-            ));
+            assert!(call_list_pointer_is_non_null(&compiled, &[]));
+            assert!(call_list_pointer_is_non_null(&replayed, &[]));
         });
     }
 
@@ -2480,14 +2393,8 @@ value lookup:Text =
             let replayed = instantiate_cached_jit_kernel(&backend, lookup, &artifact)
                 .expect("serialized TCell append/find artifact should replay into a live kernel");
 
-            assert_eq!(
-                call_pointer_text(&compiled.caller, compiled.function, &[]),
-                "tail.png"
-            );
-            assert_eq!(
-                call_pointer_text(&replayed.caller, replayed.function, &[]),
-                "tail.png"
-            );
+            assert_eq!(call_pointer_text(&compiled, &[]), "tail.png");
+            assert_eq!(call_pointer_text(&replayed, &[]), "tail.png");
         });
     }
 
@@ -2669,14 +2576,8 @@ value lookup:Text =
                 "serialized snake TCell pipeline artifact should replay into a live kernel",
             );
 
-            assert_eq!(
-                call_pointer_text(&compiled.caller, compiled.function, &[]),
-                "tail_west.png"
-            );
-            assert_eq!(
-                call_pointer_text(&replayed.caller, replayed.function, &[]),
-                "tail_west.png"
-            );
+            assert_eq!(call_pointer_text(&compiled, &[]), "tail_west.png");
+            assert_eq!(call_pointer_text(&replayed, &[]), "tail_west.png");
         });
     }
 
@@ -2731,35 +2632,29 @@ value headers:Map Text Text =
                 );
                 match name {
                     "ids" => {
-                        assert_eq!(
-                            call_i64_sequence(&compiled.caller, compiled.function, &[]),
-                            vec![1, 2, 3]
-                        );
-                        assert_eq!(
-                            call_i64_sequence(&replayed.caller, replayed.function, &[]),
-                            vec![1, 2, 3]
-                        );
+                        assert_eq!(call_i64_sequence(&compiled, &[]), vec![1, 2, 3]);
+                        assert_eq!(call_i64_sequence(&replayed, &[]), vec![1, 2, 3]);
                     }
                     "tags" => {
                         assert_eq!(
-                            call_text_sequence(&compiled.caller, compiled.function, &[]),
+                            call_text_sequence(&compiled, &[]),
                             vec!["news".to_owned(), "featured".to_owned()]
                         );
                         assert_eq!(
-                            call_text_sequence(&replayed.caller, replayed.function, &[]),
+                            call_text_sequence(&replayed, &[]),
                             vec!["news".to_owned(), "featured".to_owned()]
                         );
                     }
                     "headers" => {
                         assert_eq!(
-                            call_text_map(&compiled.caller, compiled.function, &[]),
+                            call_text_map(&compiled, &[]),
                             vec![
                                 ("Authorization".to_owned(), "Bearer demo".to_owned()),
                                 ("Accept".to_owned(), "application/json".to_owned()),
                             ]
                         );
                         assert_eq!(
-                            call_text_map(&replayed.caller, replayed.function, &[]),
+                            call_text_map(&replayed, &[]),
                             vec![
                                 ("Authorization".to_owned(), "Bearer demo".to_owned()),
                                 ("Accept".to_owned(), "application/json".to_owned()),
@@ -2811,14 +2706,8 @@ value matrixWidth:Int =
                     .any(|symbol| symbol.as_ref() == "aivi_arena_alloc"),
                 "Matrix artifact should retain arena allocation helper linkage"
             );
-            assert_eq!(
-                call_i64_value(&compiled.caller, compiled.function, &[]),
-                AbiValue::I64(2)
-            );
-            assert_eq!(
-                call_i64_value(&replayed.caller, replayed.function, &[]),
-                AbiValue::I64(2)
-            );
+            assert_eq!(call_i64_value(&compiled, &[]), AbiValue::I64(2));
+            assert_eq!(call_i64_value(&replayed, &[]), AbiValue::I64(2));
         });
     }
 
@@ -2861,27 +2750,15 @@ value bigintTotal:BigInt = 123456789012345678901234567890n + 10n
                     "decimalTotal" => {
                         let expected =
                             RuntimeDecimal::parse_literal("20.00d").expect("decimal should parse");
-                        assert_eq!(
-                            call_decimal_value(&compiled.caller, compiled.function, &[]),
-                            expected
-                        );
-                        assert_eq!(
-                            call_decimal_value(&replayed.caller, replayed.function, &[]),
-                            expected
-                        );
+                        assert_eq!(call_decimal_value(&compiled, &[]), expected);
+                        assert_eq!(call_decimal_value(&replayed, &[]), expected);
                     }
                     "bigintTotal" => {
                         let expected =
                             RuntimeBigInt::parse_literal("123456789012345678901234567900n")
                                 .expect("bigint should parse");
-                        assert_eq!(
-                            call_bigint_value(&compiled.caller, compiled.function, &[]),
-                            expected
-                        );
-                        assert_eq!(
-                            call_bigint_value(&replayed.caller, replayed.function, &[]),
-                            expected
-                        );
+                        assert_eq!(call_bigint_value(&compiled, &[]), expected);
+                        assert_eq!(call_bigint_value(&replayed, &[]), expected);
                     }
                     _ => unreachable!(),
                 }
@@ -2936,15 +2813,13 @@ fun passMaybeBool:(Option Bool) = value:(Option Bool)=>    value
 
                 assert_eq!(
                     compiled
-                        .caller
-                        .call(compiled.function, &[argument])
+                        .call(std::slice::from_ref(&argument))
                         .expect("compiled inline scalar option kernel should execute"),
                     expected
                 );
                 assert_eq!(
                     replayed
-                        .caller
-                        .call(replayed.function, &[argument])
+                        .call(std::slice::from_ref(&argument))
                         .expect("replayed inline scalar option kernel should execute"),
                     expected
                 );
@@ -2982,16 +2857,12 @@ fun passMaybeBool:(Option Bool) = value:(Option Bool)=>    value
 
             assert_eq!(
                 compiled
-                    .caller
-                    .call(compiled.function, &[])
+                    .call(&[])
                     .expect("recompiled kernel should execute"),
                 AbiValue::I64(42)
             );
             assert_eq!(
-                replayed
-                    .caller
-                    .call(replayed.function, &[])
-                    .expect("replayed kernel should execute"),
+                replayed.call(&[]).expect("replayed kernel should execute"),
                 AbiValue::I64(42)
             );
             assert_ne!(
@@ -3001,41 +2872,48 @@ fun passMaybeBool:(Option Bool) = value:(Option Bool)=>    value
         });
     }
 
-    fn decode_pointer_bytes(value: AbiValue) -> Box<[u8]> {
+    fn decode_pointer_bytes(memory: &ReadableMemory<'_>, value: AbiValue) -> Box<[u8]> {
         let AbiValue::Pointer(pointer) = value else {
             panic!("expected pointer ABI value from helper-backed bytes kernel, found {value:?}");
         };
-        decode_len_prefixed_bytes(pointer)
+        decode_len_prefixed_bytes(memory, pointer.as_ptr())
             .expect("helper-backed bytes kernel should return len-prefixed bytes")
     }
 
-    fn call_pointer_bytes(
-        caller: &FunctionCaller,
-        function: *const u8,
-        args: &[AbiValue],
-    ) -> Box<[u8]> {
+    fn call_pointer_bytes(kernel: &CompiledJitKernel, args: &[AbiValue]) -> Box<[u8]> {
         let arena = Rc::new(RefCell::new(AllocationArena::new()));
-        let value = with_active_arena(Rc::clone(&arena), || caller.call(function, args))
+        let value = with_active_arena(Rc::clone(&arena), || kernel.call(args))
             .expect("helper-backed kernel should execute inside an active arena");
-        decode_pointer_bytes(value)
+        let arena_ref = arena.borrow();
+        let memory = kernel
+            .readable_memory(&arena_ref)
+            .expect("helper-backed kernel memory should be readable");
+        decode_pointer_bytes(&memory, value)
     }
 
-    fn call_pointer_text(
-        caller: &FunctionCaller,
-        function: *const u8,
-        args: &[AbiValue],
-    ) -> String {
-        String::from_utf8(call_pointer_bytes(caller, function, args).into_vec())
+    fn call_pointer_text(kernel: &CompiledJitKernel, args: &[AbiValue]) -> String {
+        String::from_utf8(call_pointer_bytes(kernel, args).into_vec())
             .expect("helper-backed text kernel should return utf-8")
     }
 
-    fn call_list_pointer_is_non_null(
-        caller: &FunctionCaller,
-        function: *const u8,
-        args: &[AbiValue],
-    ) -> bool {
+    fn call_pointer_text_with_text_arg(kernel: &CompiledJitKernel, text: &str) -> String {
         let arena = Rc::new(RefCell::new(AllocationArena::new()));
-        let value = with_active_arena(Rc::clone(&arena), || caller.call(function, args))
+        let pointer = arena.borrow_mut().store_len_prefixed_bytes(text.as_bytes());
+        let argument = AbiValue::pointer_from_arena(pointer, Rc::clone(&arena))
+            .expect("text argument should belong to its arena");
+        let value = with_active_arena(Rc::clone(&arena), || kernel.call(&[argument]))
+            .expect("text kernel should execute inside an active arena");
+        let arena_ref = arena.borrow();
+        let memory = kernel
+            .readable_memory(&arena_ref)
+            .expect("text kernel memory should be readable");
+        String::from_utf8(decode_pointer_bytes(&memory, value).into_vec())
+            .expect("helper-backed text kernel should return utf-8")
+    }
+
+    fn call_list_pointer_is_non_null(kernel: &CompiledJitKernel, args: &[AbiValue]) -> bool {
+        let arena = Rc::new(RefCell::new(AllocationArena::new()));
+        let value = with_active_arena(Rc::clone(&arena), || kernel.call(args))
             .expect("list kernel should execute inside an active arena");
         let AbiValue::Pointer(list_ptr) = value else {
             panic!("expected pointer ABI value from list kernel, found {value:?}");
@@ -3043,80 +2921,73 @@ fun passMaybeBool:(Option Bool) = value:(Option Bool)=>    value
         !list_ptr.is_null()
     }
 
-    fn text_abi_bytes(text: &str) -> Box<[u8]> {
-        let mut bytes = Vec::with_capacity(8 + text.len());
-        bytes.extend_from_slice(&(text.len() as u64).to_le_bytes());
-        bytes.extend_from_slice(text.as_bytes());
-        bytes.into_boxed_slice()
-    }
-
-    fn call_i64_value(caller: &FunctionCaller, function: *const u8, args: &[AbiValue]) -> AbiValue {
+    fn call_i64_value(kernel: &CompiledJitKernel, args: &[AbiValue]) -> AbiValue {
         let arena = Rc::new(RefCell::new(AllocationArena::new()));
-        with_active_arena(Rc::clone(&arena), || caller.call(function, args))
+        with_active_arena(Rc::clone(&arena), || kernel.call(args))
             .expect("scalar kernel should execute inside an active arena")
     }
 
-    fn call_i64_sequence(
-        caller: &FunctionCaller,
-        function: *const u8,
-        args: &[AbiValue],
-    ) -> Vec<i64> {
+    fn call_i64_sequence(kernel: &CompiledJitKernel, args: &[AbiValue]) -> Vec<i64> {
         let arena = Rc::new(RefCell::new(AllocationArena::new()));
-        let value = with_active_arena(Rc::clone(&arena), || caller.call(function, args))
+        let value = with_active_arena(Rc::clone(&arena), || kernel.call(args))
             .expect("collection kernel should execute inside an active arena");
-        decode_i64_sequence(value)
+        let arena_ref = arena.borrow();
+        let memory = kernel
+            .readable_memory(&arena_ref)
+            .expect("collection kernel memory should be readable");
+        decode_i64_sequence(&memory, value)
     }
 
-    fn call_text_sequence(
-        caller: &FunctionCaller,
-        function: *const u8,
-        args: &[AbiValue],
-    ) -> Vec<String> {
+    fn call_text_sequence(kernel: &CompiledJitKernel, args: &[AbiValue]) -> Vec<String> {
         let arena = Rc::new(RefCell::new(AllocationArena::new()));
-        let value = with_active_arena(Rc::clone(&arena), || caller.call(function, args))
+        let value = with_active_arena(Rc::clone(&arena), || kernel.call(args))
             .expect("collection kernel should execute inside an active arena");
-        decode_text_sequence(value)
+        let arena_ref = arena.borrow();
+        let memory = kernel
+            .readable_memory(&arena_ref)
+            .expect("collection kernel memory should be readable");
+        decode_text_sequence(&memory, value)
     }
 
-    fn call_text_map(
-        caller: &FunctionCaller,
-        function: *const u8,
-        args: &[AbiValue],
-    ) -> Vec<(String, String)> {
+    fn call_text_map(kernel: &CompiledJitKernel, args: &[AbiValue]) -> Vec<(String, String)> {
         let arena = Rc::new(RefCell::new(AllocationArena::new()));
-        let value = with_active_arena(Rc::clone(&arena), || caller.call(function, args))
+        let value = with_active_arena(Rc::clone(&arena), || kernel.call(args))
             .expect("map kernel should execute inside an active arena");
-        decode_text_map(value)
+        let arena_ref = arena.borrow();
+        let memory = kernel
+            .readable_memory(&arena_ref)
+            .expect("map kernel memory should be readable");
+        decode_text_map(&memory, value)
     }
 
-    fn call_decimal_value(
-        caller: &FunctionCaller,
-        function: *const u8,
-        args: &[AbiValue],
-    ) -> RuntimeDecimal {
+    fn call_decimal_value(kernel: &CompiledJitKernel, args: &[AbiValue]) -> RuntimeDecimal {
         let arena = Rc::new(RefCell::new(AllocationArena::new()));
-        let value = with_active_arena(Rc::clone(&arena), || caller.call(function, args))
+        let value = with_active_arena(Rc::clone(&arena), || kernel.call(args))
             .expect("decimal kernel should execute inside an active arena");
-        decode_decimal_value(value)
+        let arena_ref = arena.borrow();
+        let memory = kernel
+            .readable_memory(&arena_ref)
+            .expect("decimal kernel memory should be readable");
+        decode_decimal_value(&memory, value)
     }
 
-    fn call_bigint_value(
-        caller: &FunctionCaller,
-        function: *const u8,
-        args: &[AbiValue],
-    ) -> RuntimeBigInt {
+    fn call_bigint_value(kernel: &CompiledJitKernel, args: &[AbiValue]) -> RuntimeBigInt {
         let arena = Rc::new(RefCell::new(AllocationArena::new()));
-        let value = with_active_arena(Rc::clone(&arena), || caller.call(function, args))
+        let value = with_active_arena(Rc::clone(&arena), || kernel.call(args))
             .expect("bigint kernel should execute inside an active arena");
-        decode_bigint_value(value)
+        let arena_ref = arena.borrow();
+        let memory = kernel
+            .readable_memory(&arena_ref)
+            .expect("bigint kernel memory should be readable");
+        decode_bigint_value(&memory, value)
     }
 
-    fn decode_i64_sequence(value: AbiValue) -> Vec<i64> {
+    fn decode_i64_sequence(memory: &ReadableMemory<'_>, value: AbiValue) -> Vec<i64> {
         let AbiValue::Pointer(pointer) = value else {
             panic!("expected pointer ABI value from list kernel, found {value:?}");
         };
-        let decoded =
-            decode_marshaled_sequence(pointer).expect("list kernel should return a sequence");
+        let decoded = decode_marshaled_sequence(memory, pointer.as_ptr())
+            .expect("list kernel should return a sequence");
         assert_eq!(decoded.element_size, 8);
         decoded
             .bytes
@@ -3125,12 +2996,12 @@ fun passMaybeBool:(Option Bool) = value:(Option Bool)=>    value
             .collect()
     }
 
-    fn decode_text_sequence(value: AbiValue) -> Vec<String> {
+    fn decode_text_sequence(memory: &ReadableMemory<'_>, value: AbiValue) -> Vec<String> {
         let AbiValue::Pointer(pointer) = value else {
             panic!("expected pointer ABI value from set kernel, found {value:?}");
         };
-        let decoded =
-            decode_marshaled_sequence(pointer).expect("set kernel should return a sequence");
+        let decoded = decode_marshaled_sequence(memory, pointer.as_ptr())
+            .expect("set kernel should return a sequence");
         assert_eq!(decoded.element_size, std::mem::size_of::<usize>());
         decoded
             .bytes
@@ -3139,18 +3010,19 @@ fun passMaybeBool:(Option Bool) = value:(Option Bool)=>    value
                 let raw: [u8; std::mem::size_of::<usize>()] =
                     chunk.try_into().expect("text cell should store a pointer");
                 let pointer = usize::from_ne_bytes(raw) as *const std::ffi::c_void;
-                let bytes = decode_len_prefixed_bytes(pointer)
+                let bytes = decode_len_prefixed_bytes(memory, pointer)
                     .expect("text cell pointer should decode to len-prefixed bytes");
                 String::from_utf8(bytes.into_vec()).expect("text cell bytes should be valid UTF-8")
             })
             .collect()
     }
 
-    fn decode_text_map(value: AbiValue) -> Vec<(String, String)> {
+    fn decode_text_map(memory: &ReadableMemory<'_>, value: AbiValue) -> Vec<(String, String)> {
         let AbiValue::Pointer(pointer) = value else {
             panic!("expected pointer ABI value from map kernel, found {value:?}");
         };
-        let decoded = decode_marshaled_map(pointer).expect("map kernel should return a map blob");
+        let decoded = decode_marshaled_map(memory, pointer.as_ptr())
+            .expect("map kernel should return a map blob");
         let cell_size = std::mem::size_of::<usize>();
         assert_eq!(decoded.key_size, cell_size);
         assert_eq!(decoded.value_size, cell_size);
@@ -3168,13 +3040,13 @@ fun passMaybeBool:(Option Bool) = value:(Option Bool)=>    value
                 let key_pointer = usize::from_ne_bytes(key_raw) as *const std::ffi::c_void;
                 let value_pointer = usize::from_ne_bytes(value_raw) as *const std::ffi::c_void;
                 let key = String::from_utf8(
-                    decode_len_prefixed_bytes(key_pointer)
+                    decode_len_prefixed_bytes(memory, key_pointer)
                         .expect("map key pointer should decode to len-prefixed bytes")
                         .into_vec(),
                 )
                 .expect("map key bytes should be valid UTF-8");
                 let value = String::from_utf8(
-                    decode_len_prefixed_bytes(value_pointer)
+                    decode_len_prefixed_bytes(memory, value_pointer)
                         .expect("map value pointer should decode to len-prefixed bytes")
                         .into_vec(),
                 )
@@ -3184,24 +3056,24 @@ fun passMaybeBool:(Option Bool) = value:(Option Bool)=>    value
             .collect()
     }
 
-    fn decode_decimal_value(value: AbiValue) -> RuntimeDecimal {
+    fn decode_decimal_value(memory: &ReadableMemory<'_>, value: AbiValue) -> RuntimeDecimal {
         let AbiValue::Pointer(pointer) = value else {
             panic!("expected pointer ABI value from decimal kernel, found {value:?}");
         };
         RuntimeDecimal::from_constant_bytes(
-            read_decimal_constant_bytes(pointer)
+            read_decimal_constant_bytes(memory, pointer.as_ptr())
                 .expect("decimal kernel should return decimal bytes")
                 .as_ref(),
         )
         .expect("decimal bytes should decode")
     }
 
-    fn decode_bigint_value(value: AbiValue) -> RuntimeBigInt {
+    fn decode_bigint_value(memory: &ReadableMemory<'_>, value: AbiValue) -> RuntimeBigInt {
         let AbiValue::Pointer(pointer) = value else {
             panic!("expected pointer ABI value from bigint kernel, found {value:?}");
         };
         RuntimeBigInt::from_constant_bytes(
-            read_bigint_constant_bytes(pointer)
+            read_bigint_constant_bytes(memory, pointer.as_ptr())
                 .expect("bigint kernel should return bigint bytes")
                 .as_ref(),
         )

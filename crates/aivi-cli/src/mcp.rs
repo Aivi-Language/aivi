@@ -10,6 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use adw::prelude::*;
 use aivi_backend::{RuntimeFloat, RuntimeRecordField, RuntimeSumValue, RuntimeValue};
 use aivi_runtime::{
     GlibLinkedSourceMode, SourceProviderContext, SourceProviderManager, decode_external,
@@ -17,8 +18,6 @@ use aivi_runtime::{
 };
 use gtk::gdk::prelude::{PaintableExt, TextureExt};
 use gtk::gsk::prelude::GskRendererExt;
-use gtk::prelude::*;
-use adw::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value as JsonValue, json};
 use webkit6::WebView;
@@ -842,17 +841,16 @@ fn prepare_launch_request(
         build_source_context(source_context)?.with_entry_path(entry_path),
     ));
     let cache_home = launch_config.cache_home().ok();
-    if let Some(cache_home) = cache_home.as_deref() {
-        if let Some(artifact) =
+    if let Some(cache_home) = cache_home.as_deref()
+        && let Some(artifact) =
             load_cached_source_run_artifact(cache_home, entry_path, requested_view_name)
-        {
-            return Ok(PreparedLaunch {
-                entry_path: entry_path.to_path_buf(),
-                artifact,
-                launch_config,
-                sources_paused,
-            });
-        }
+    {
+        return Ok(PreparedLaunch {
+            entry_path: entry_path.to_path_buf(),
+            artifact,
+            launch_config,
+            sources_paused,
+        });
     }
     let snapshot = WorkspaceHirSnapshot::load(entry_path)?;
     if let Some(diagnostics) = rendered_workspace_errors(&snapshot) {
@@ -877,16 +875,16 @@ fn prepare_launch_request(
         },
         |_| {},
     )?;
-    if let Some(cache_home) = cache_home.as_deref() {
-        if let Ok(frozen) = freeze_run_artifact(&prepared.artifact) {
-            let _ = store_cached_frozen_run_image(
-                cache_home,
-                entry_path,
-                requested_view_name,
-                &snapshot,
-                &frozen.bytes,
-            );
-        }
+    if let Some(cache_home) = cache_home.as_deref()
+        && let Ok(frozen) = freeze_run_artifact(&prepared.artifact)
+    {
+        let _ = store_cached_frozen_run_image(
+            cache_home,
+            entry_path,
+            requested_view_name,
+            &snapshot,
+            &frozen.bytes,
+        );
     }
     Ok(PreparedLaunch {
         entry_path: entry_path.to_path_buf(),
@@ -2476,7 +2474,11 @@ fn widget_text(widget: &gtk::Widget) -> Option<String> {
         return Some(
             text_view
                 .buffer()
-                .text(&text_view.buffer().start_iter(), &text_view.buffer().end_iter(), false)
+                .text(
+                    &text_view.buffer().start_iter(),
+                    &text_view.buffer().end_iter(),
+                    false,
+                )
                 .to_string(),
         );
     }
@@ -2913,9 +2915,10 @@ fn collect_widget_matches(
         .kind
         .as_ref()
         .is_none_or(|kind| &snapshot.kind == kind);
-    let kind_contains_matches = query.kind_contains.as_ref().is_none_or(|needle| {
-        snapshot.kind.contains(needle)
-    });
+    let kind_contains_matches = query
+        .kind_contains
+        .as_ref()
+        .is_none_or(|needle| snapshot.kind.contains(needle));
     let surface_matches = query
         .surface_id
         .as_ref()
@@ -2926,15 +2929,12 @@ fn collect_widget_matches(
             .as_ref()
             .is_some_and(|v| v.to_string().contains(needle))
     });
-    let visible_matches = query
-        .visible
-        .is_none_or(|v| snapshot.visible == v);
-    let sensitive_matches = query
-        .sensitive
-        .is_none_or(|s| snapshot.sensitive == s);
-    let path_contains_matches = query.path_contains.as_ref().is_none_or(|needle| {
-        snapshot.path.iter().any(|seg| seg.contains(needle))
-    });
+    let visible_matches = query.visible.is_none_or(|v| snapshot.visible == v);
+    let sensitive_matches = query.sensitive.is_none_or(|s| snapshot.sensitive == s);
+    let path_contains_matches = query
+        .path_contains
+        .as_ref()
+        .is_none_or(|needle| snapshot.path.iter().any(|seg| seg.contains(needle)));
     if text_matches
         && role_matches
         && focus_matches
@@ -3197,11 +3197,13 @@ fn emit_scroll_event(widget: &gtk::Widget, delta_x: f64, delta_y: f64) -> Result
     if let Ok(scrolled) = widget.clone().downcast::<gtk::ScrolledWindow>() {
         let vadj = scrolled.vadjustment();
         let page = vadj.page_size();
-        let new_v = (vadj.value() + delta_y).clamp(vadj.lower(), (vadj.upper() - page).max(vadj.lower()));
+        let new_v =
+            (vadj.value() + delta_y).clamp(vadj.lower(), (vadj.upper() - page).max(vadj.lower()));
         vadj.set_value(new_v);
         let hadj = scrolled.hadjustment();
         let hpage = hadj.page_size();
-        let new_h = (hadj.value() + delta_x).clamp(hadj.lower(), (hadj.upper() - hpage).max(hadj.lower()));
+        let new_h =
+            (hadj.value() + delta_x).clamp(hadj.lower(), (hadj.upper() - hpage).max(hadj.lower()));
         hadj.set_value(new_h);
         return Ok(());
     }

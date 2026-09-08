@@ -7038,7 +7038,7 @@ impl<'a> Lowerer<'a> {
         for (parameter, annotation) in function
             .parameters
             .iter_mut()
-            .zip(parameter_annotations.into_iter())
+            .zip(parameter_annotations)
         {
             parameter.annotation = Some(annotation);
         }
@@ -7969,10 +7969,10 @@ impl<'a> Lowerer<'a> {
                     None
                 };
                 for member in &mut item.members {
-                    if member.annotation.is_none() {
-                        if let Some(class_annotations) = &class_annotations {
-                            member.annotation = class_annotations.get(member.name.text()).copied();
-                        }
+                    if member.annotation.is_none()
+                        && let Some(class_annotations) = &class_annotations
+                    {
+                        member.annotation = class_annotations.get(member.name.text()).copied();
                     }
                     if let Some(annotation) = member.annotation {
                         self.resolve_type(annotation, namespaces, &mut env);

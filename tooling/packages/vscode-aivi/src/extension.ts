@@ -1,20 +1,31 @@
 import * as vscode from "vscode";
-import type { LanguageClient } from "vscode-languageclient/node";
-import { createClient } from "./client";
-import { StatusBarItem } from "./status";
-import { registerCommands } from "./commands";
-import { getConfig } from "./config";
+import { State, type LanguageClient } from "vscode-languageclient/node";
 
-let client: LanguageClient | undefined;
+import { createClient } from "./client";
+import { registerCommands } from "./commands";
+import { SERVER_RESTART_SETTING_IDS } from "./contract";
+import { getConfig } from "./config";
+import { AsyncSerialQueue, errorText, withTimeout } from "./lifecycle";
+import { StatusBarItem } from "./status";
+
+interface ClientHandle {
+  client: LanguageClient;
+  stateSubscription: vscode.Disposable;
+  expectedStop: boolean;
+}
+
+let clientHandle: ClientHandle | undefined;
 let statusBar: StatusBarItem | undefined;
-let outputChannel: vscode.OutputChannel | undefined;
+let outputChannel: vscode.LogOutputChannel | undefined;
+let traceOutputChannel: vscode.LogOutputChannel | undefined;
+let fileWatcher: vscode.FileSystemWatcher | undefined;
+const lifecycle = new AsyncSerialQueue();
 
 const THEME_NAME = "AIVI Dark";
 const THEME_PROMPTED_KEY = "aivi.themePrompted";
-const LSP_START_TIMEOUT_MS = 15_000;
 
-function log(msg: string): void {
-  outputChannel?.appendLine(`[aivi] ${msg}`);
+function log(message: string): void {
+  outputChannel?.info(message);
 }
 
 async function promptThemeOnFirstInstall(
@@ -40,130 +51,189 @@ async function promptThemeOnFirstInstall(
   }
 }
 
-async function startWithTimeout(lc: LanguageClient): Promise<void> {
-  await Promise.race([
-    lc.start(),
-    new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error("Language server failed to start within timeout")),
-        LSP_START_TIMEOUT_MS
-      )
+function configurationScope(): vscode.Uri | undefined {
+  const active = vscode.window.activeTextEditor?.document;
+  if (active?.languageId === "aivi") return active.uri;
+  return vscode.workspace.textDocuments.find(
+    (document) => document.languageId === "aivi"
+  )?.uri;
+}
+
+async function stopClient(): Promise<void> {
+  const handle = clientHandle;
+  clientHandle = undefined;
+  if (!handle) return;
+
+  handle.expectedStop = true;
+  handle.stateSubscription.dispose();
+  log("Stopping language server");
+  await handle.client.stop();
+}
+
+async function reportStartupFailure(error: unknown): Promise<void> {
+  const message = errorText(error);
+  outputChannel?.error(`Language server failed to start:\n${message}`);
+  statusBar?.setStatus("crashed");
+  const action = await vscode.window.showErrorMessage(
+    "AIVI language server could not start. Check aivi.compiler.path and the AIVI output log.",
+    "Open Settings",
+    "Show Output"
+  );
+  if (action === "Open Settings") {
+    await vscode.commands.executeCommand(
+      "workbench.action.openSettings",
+      "aivi.compiler.path"
+    );
+  } else if (action === "Show Output") {
+    outputChannel?.show();
+  }
+}
+
+async function restartOnce(): Promise<void> {
+  await stopClient();
+  const config = getConfig(configurationScope());
+  log(`Compiler: ${config.compilerPath}`);
+  statusBar?.setStatus("starting");
+  statusBar?.show();
+
+  if (!outputChannel || !traceOutputChannel || !fileWatcher) {
+    throw new Error("extension resources were disposed before server startup");
+  }
+
+  const client = createClient(
+    config,
+    outputChannel,
+    traceOutputChannel,
+    fileWatcher
+  );
+  const handle: ClientHandle = {
+    client,
+    expectedStop: false,
+    stateSubscription: client.onDidChangeState((event) => {
+      log(`Client state: ${State[event.oldState]} -> ${State[event.newState]}`);
+      if (event.newState === State.Starting) {
+        statusBar?.setStatus("starting");
+      } else if (event.newState === State.Running) {
+        statusBar?.setStatus("running");
+      } else if (
+        !handle.expectedStop &&
+        (event.newState === State.StartFailed || event.newState === State.Stopped)
+      ) {
+        statusBar?.setStatus("crashed");
+      }
+    }),
+  };
+  clientHandle = handle;
+
+  try {
+    await withTimeout(
+      client.start(),
+      config.compilerTimeout,
+      `language server did not start within ${config.compilerTimeout} ms`
+    );
+    log("Language server started");
+    statusBar?.setStatus("running");
+  } catch (error) {
+    await stopClient().catch((stopError) => {
+      outputChannel?.warn(
+        `Cleanup after failed startup also failed: ${errorText(stopError)}`
+      );
+    });
+    await reportStartupFailure(error);
+  }
+}
+
+function restart(): Promise<void> {
+  return lifecycle.run(async () => {
+    try {
+      await restartOnce();
+    } catch (error) {
+      await reportStartupFailure(error);
+    }
+  });
+}
+
+function updateDiagnosticCount(): void {
+  const aiviDocuments = new Set(
+    vscode.workspace.textDocuments
+      .filter((document) => document.languageId === "aivi")
+      .map((document) => document.uri.toString())
+  );
+  const errorCount = vscode.languages.getDiagnostics().reduce(
+    (count, [uri, diagnostics]) => count + (
+      aiviDocuments.has(uri.toString())
+        ? diagnostics.filter(
+          (diagnostic) => diagnostic.severity === vscode.DiagnosticSeverity.Error
+        ).length
+        : 0
     ),
-  ]);
+    0
+  );
+  statusBar?.setErrorCount(errorCount);
 }
 
 export async function activate(
   context: vscode.ExtensionContext
 ): Promise<void> {
-  outputChannel = vscode.window.createOutputChannel("AIVI");
-  const traceOutputChannel = vscode.window.createOutputChannel("AIVI Trace");
+  outputChannel = vscode.window.createOutputChannel("AIVI", { log: true });
+  traceOutputChannel = vscode.window.createOutputChannel("AIVI Trace", { log: true });
+  fileWatcher = vscode.workspace.createFileSystemWatcher("**/*.aivi");
+  statusBar = new StatusBarItem();
+  context.subscriptions.push(
+    outputChannel,
+    traceOutputChannel,
+    fileWatcher,
+    statusBar
+  );
 
   log("Extension activating");
+  void promptThemeOnFirstInstall(context).catch((error) => {
+    outputChannel?.warn(`Theme prompt failed: ${errorText(error)}`);
+  });
 
-  void promptThemeOnFirstInstall(context);
-
-  statusBar = new StatusBarItem();
-  context.subscriptions.push({ dispose: () => statusBar?.dispose() });
-
-  const config = getConfig();
-  log(`Compiler path: ${config.compilerPath}`);
-  log(`Compiler args: [${config.compilerArgs.join(", ")}]`);
-
-  const restart = async (): Promise<void> => {
-    try {
-      if (client) {
-        log("Stopping previous language server");
-        await client.stop();
-        client = undefined;
-      }
-      statusBar?.setStatus("starting");
-      statusBar?.show();
-      log("Creating language client");
-      client = createClient(context, outputChannel!, traceOutputChannel);
-      log("Registering state handler");
-      client.onDidChangeState((event) => {
-        log(`Client state: ${event.oldState} -> ${event.newState}`);
-        if (event.newState === 2) {
-          statusBar?.setStatus("running");
-        } else if (event.newState === 3) {
-          statusBar?.setStatus("crashed");
-        }
-      });
-      log("Starting language server...");
-      await startWithTimeout(client);
-      log("Language server started");
-      statusBar?.setStatus("running");
-    } catch (err) {
-      const msg = err instanceof Error
-        ? `${err.message}\n${err.stack ?? ""}`
-        : String(err);
-      log(`Failed to start language server: ${msg}`);
-      statusBar?.setStatus("crashed");
-      if (client) {
-        try { await client.stop(); } catch { /* ignore */ }
-        client = undefined;
-      }
-    }
-  };
-
-  registerCommands(context, () => client, restart, outputChannel);
+  registerCommands(context, restart, outputChannel);
 
   context.subscriptions.push(
     vscode.workspace.onWillSaveTextDocument((event) => {
       if (event.document.languageId !== "aivi") return;
-      const cfg = vscode.workspace.getConfiguration("aivi");
-      if (!cfg.get<boolean>("format.onSave")) return;
+      if (!getConfig(event.document.uri).formatOnSave) return;
       event.waitUntil(
         vscode.commands.executeCommand<vscode.TextEdit[]>(
           "vscode.executeFormatDocumentProvider",
           event.document.uri
-        ).then(edits => edits ?? [])
+        ).then((edits) => edits ?? [])
       );
-    })
-  );
-
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration((e) => {
-      if (
-        e.affectsConfiguration("aivi.compiler.path") ||
-        e.affectsConfiguration("aivi.compiler.args") ||
-        e.affectsConfiguration("aivi.diagnostics.debounceMs") ||
-        e.affectsConfiguration("aivi.inlayHints.enabled") ||
-        e.affectsConfiguration("aivi.inlayHints.maxLength") ||
-        e.affectsConfiguration("aivi.codeLens.enabled")
-      ) {
+    }),
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (SERVER_RESTART_SETTING_IDS.some((id) => event.affectsConfiguration(id))) {
         void restart();
       }
-    })
+    }),
+    vscode.languages.onDidChangeDiagnostics(updateDiagnosticCount)
   );
 
-  // With onLanguage:aivi activation, an AIVI file should already be open.
-  // Start the LSP server immediately; fall back to waiting if the document
-  // hasn't been registered yet.
-  const hasAiviFile = vscode.workspace.textDocuments.some(
-    (d) => d.languageId === "aivi"
+  const hasAiviDocument = vscode.workspace.textDocuments.some(
+    (document) => document.languageId === "aivi"
   );
-
-  if (hasAiviFile) {
-    log("AIVI file already open — starting LSP");
-    restart().catch((err) => log(`Unhandled restart error: ${err}`));
+  if (hasAiviDocument) {
+    await restart();
   } else {
-    log("No AIVI file registered yet — waiting for one");
-    const sub = vscode.workspace.onDidOpenTextDocument((doc) => {
-      if (doc.languageId !== "aivi") return;
-      sub.dispose();
-      log("AIVI file opened — starting LSP");
-      restart().catch((err) => log(`Unhandled restart error: ${err}`));
+    const subscription = vscode.workspace.onDidOpenTextDocument((document) => {
+      if (document.languageId !== "aivi") return;
+      subscription.dispose();
+      void restart();
     });
-    context.subscriptions.push(sub);
+    context.subscriptions.push(subscription);
   }
-
   log("Extension activated");
 }
 
 export async function deactivate(): Promise<void> {
-  if (client) {
-    await client.stop();
-    client = undefined;
-  }
+  await lifecycle.run(stopClient);
+  await lifecycle.drain();
+  clientHandle = undefined;
+  statusBar = undefined;
+  outputChannel = undefined;
+  traceOutputChannel = undefined;
+  fileWatcher = undefined;
 }

@@ -1,71 +1,38 @@
 # aivi-query
 
-## Purpose
+`aivi-query` is the revision-aware analysis database shared by the CLI and LSP. It owns source
+inputs, deterministic workspace/module discovery, parse and HIR caches, reverse-dependency
+invalidation, entrypoint resolution, typed backend-unit queries, and stable semantic
+fingerprints.
 
-Incremental query database for AIVI tooling — workspace discovery, file parsing and HIR queries,
-LSP backing store, and first typed backend-unit queries for runtime lowering. `aivi-query`
-memoises parse/HIR results per file revision so that editor-facing features (diagnostics, symbols,
-completions, formatting) avoid re-parsing unchanged files, and it now provides stable
-whole-program/runtime-fragment backend fingerprints that later JIT/cache layers can key on. It is
-the single source of truth for file-to-module mapping and import resolution in the tooling layer.
-
-## Entry points
+## Main surfaces
 
 ```rust
-// Central incremental database
-RootDatabase::new() -> RootDatabase
-RootDatabase::set_file_text(file: SourceFile, text: Arc<str>)
-RootDatabase::invalidate(file: SourceFile)
+let db = aivi_query::RootDatabase::new();
+let file = db.open_file("main.aivi", "value answer = 42\n");
 
-// File / module queries
-parsed_file(db: &RootDatabase, file: SourceFile) -> ParsedFileResult
-hir_module(db: &RootDatabase, file: SourceFile) -> HirModuleResult
-resolve_module_file(db: &RootDatabase, path: &Path) -> Option<SourceFile>
-exported_names(db: &RootDatabase, file: SourceFile) -> ExportedNames
-reachable_workspace_hir_modules(db: &RootDatabase, file: SourceFile) -> Arc<[WorkspaceHirModule]>
-
-// Diagnostics and symbols
-all_diagnostics(db: &RootDatabase, file: SourceFile) -> Vec<Diagnostic>
-symbol_index(db: &RootDatabase, file: SourceFile) -> Vec<LspSymbol>
-format_file(db: &RootDatabase, file: SourceFile) -> Option<String>
-
-// Typed backend-unit queries
-whole_program_backend_unit(db: &RootDatabase, file: SourceFile) -> Result<Arc<WholeProgramBackendUnit>, BackendUnitError>
-whole_program_backend_unit_with_items(db: &RootDatabase, file: SourceFile, included_items: &IncludedItems) -> Result<Arc<WholeProgramBackendUnit>, BackendUnitError>
-runtime_fragment_backend_unit(db: &RootDatabase, file: SourceFile, fragment: &RuntimeFragmentSpec) -> Result<Arc<RuntimeFragmentBackendUnit>, BackendUnitError>
-whole_program_backend_fingerprint(db: &RootDatabase, file: SourceFile) -> Result<WholeProgramFingerprint, BackendUnitError>
-runtime_fragment_backend_fingerprint(db: &RootDatabase, file: SourceFile, fragment: &RuntimeFragmentSpec) -> Result<RuntimeFragmentFingerprint, BackendUnitError>
-
-// Workspace discovery
-discover_workspace_root(path: &Path) -> Option<PathBuf>
-discover_workspace_root_from_directory(dir: &Path) -> Option<PathBuf>
-
-// Entrypoint resolution
-resolve_v1_entrypoint(db: &RootDatabase, path: &Path) -> Result<ResolvedEntrypoint, EntrypointResolutionError>
+let parsed = aivi_query::parsed_file(&db, file);
+let hir = aivi_query::hir_module(&db, file);
+let diagnostics = aivi_query::all_diagnostics(&db, file);
 ```
+
+Other public queries include `symbol_index`, `exported_names`, `format_file`,
+`reachable_workspace_hir_modules`, `whole_program_backend_unit`,
+`runtime_fragment_backend_unit`, and their stable fingerprint variants.
 
 ## Invariants
 
-- `RootDatabase` is `Send + Sync`; it uses `parking_lot` read-write locks for internal caches.
-- Queries are memoised by file content hash; `set_file_text` invalidates all cached results for that file and any file that transitively imports it.
-- `parsed_file` and `hir_module` never panic; errors are carried inside `ParsedFileResult` / `HirModuleResult`.
-- File-to-module mapping is deterministic: the same path always resolves to the same `SourceFile` within a database lifetime.
-- `all_diagnostics` aggregates parse and HIR diagnostics; it does not itself run backend or runtime passes.
-- Whole-program and runtime-fragment backend queries cache successful and failed lowering results
-  against the current HIR snapshot identity, so transitive import invalidation naturally evicts
-  stale backend units without guessing a global revision counter.
-- Whole-program and runtime-fragment backend fingerprints are content-stable identities for the
-  lowered backend IR. Persistent machine-code cache keys live one layer down in `aivi-backend`,
-  where compiler-version and codegen-target namespace data are combined with those fingerprints
-  before reading or writing disk artifacts. Runtime-fragment fingerprints include fragment
-  parameter environments, so changing a fragment's captured inputs naturally invalidates the live
-  JIT cache instead of reusing a stale execution unit.
+- `RootDatabase` is `Send + Sync`; its state is protected by explicit read/write locks.
+- Every source edit increments the file revision and the monotonic workspace revision.
+- Changing or removing a file invalidates that file and all registered transitive reverse
+  dependents.
+- Cached values are published only if the source revision still matches after computation.
+- File-to-module mapping, dependency traversal, and diagnostic ordering are deterministic.
+- Parse and HIR queries return result objects containing diagnostics rather than panicking.
+- Backend queries cache successful and failed lowering results against the complete semantic
+  snapshot identity.
+- Runtime-fragment fingerprints include captured parameter environments.
+- Persistent machine-code cache namespaces remain owned by `aivi-backend`, not this crate.
 
-## Diagnostic codes
-
-This crate emits no `DiagnosticCode` values of its own. It surfaces diagnostics produced by
-`aivi-syntax` and `aivi-hir`.
-
-## RFC reference
-
-See [`../../AIVI_RFC.md`](../../AIVI_RFC.md) §26 (incremental query database and tooling).
+`aivi-query` forwards syntax/HIR diagnostics but defines no compiler-layer diagnostic code domain
+of its own. See [AIVI_RFC.md §26–27](../../AIVI_RFC.md#26-cli-reference).

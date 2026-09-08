@@ -9,38 +9,22 @@ entry point. It does not implement a virtual DOM; widget identity and mutation a
 
 ## Entry points
 
-```rust
-// Lower a HIR markup expression into a widget plan
-lower_markup_expr(expr: &hir::Expr, module: &hir::Module, db: &SourceDatabase) -> Result<WidgetPlan, LoweringError>
-lower_markup_expr_with_options(expr, module, db, opts: LoweringOptions) -> Result<WidgetPlan, LoweringError>
+- [`lower_markup_expr`](src/lower.rs) takes a HIR module and `ExprId`; `lower_markup_root` takes a module and `MarkupNodeId`.
+- Workspace/options variants carry explicit lowering context.
+- `assemble_widget_runtime` and `WidgetRuntimeAssemblyBuilder` connect widget plans to reactive evaluation.
+- [`GtkConcreteHost`](src/host.rs) creates, updates, and disposes concrete host widgets.
+- [Schema lookups](src/schema.rs), including `lookup_widget_schema`, `lookup_widget_schema_by_name`, and `supported_widget_schemas`, expose the supported properties, events, and child slots.
 
-// Lower a markup root (for top-level window construction)
-lower_markup_root(root: &hir::Expr, module: &hir::Module, db: &SourceDatabase) -> Result<WidgetPlan, LoweringError>
-lower_markup_root_with_options(root, module, db, opts: LoweringOptions) -> Result<WidgetPlan, LoweringError>
-
-// Assemble a runtime adapter from a widget plan
-assemble_widget_runtime(plan: &WidgetPlan, ...) -> Result<WidgetRuntimeAssembly, WidgetRuntimeAdapterErrors>
-WidgetRuntimeAssemblyBuilder::new(plan: &WidgetPlan) -> WidgetRuntimeAssemblyBuilder
-
-// GTK host: create, update, and dispose concrete GTK widgets
-GtkConcreteHost::new() -> GtkConcreteHost
-GtkConcreteHost::mount(assembly: &WidgetRuntimeAssembly, ...) -> Result<GtkConcreteWidget, GtkConcreteHostError>
-
-// Widget schema lookup (static metadata)
-lookup_widget_schema(kind: GtkConcreteWidgetKind) -> &'static GtkWidgetSchema
-lookup_widget_schema_by_name(name: &str) -> Option<&'static GtkWidgetSchema>
-supported_widget_schemas() -> &'static [GtkWidgetSchema]
-```
+Use the source signatures for parameters and ownership; a widget plan is not itself a mounted GTK application.
 
 ## Invariants
 
 - **GTK main thread invariant**: all `GtkConcreteHost` operations and any function that creates,
-  mutates, or destroys a GTK widget **must** run on the GLib main thread. Calling from a worker
-  thread is undefined behaviour at the GLib level.
+  mutates, or destroys a GTK widget **must** run on the GLib main thread. Do not call GTK from worker threads; GLib contexts and GTK thread affinity are different constraints.
 - Widget plans are immutable after construction; runtime updates flow through `WidgetRuntimeAssembly` reactive bindings.
 - `lower_markup_expr` never produces partially-lowered plans; on error the full `LoweringError` is returned.
 - Property setters and event bindings are statically typed via `GtkPropertyDescriptor` / `GtkEventDescriptor`; unknown properties/events are rejected at plan time, not at mount time.
-- `GtkConcreteHost` owns the lifetime of mounted `GtkConcreteWidget` values; dropping the host disposes all managed widgets.
+- Mounted GTK objects and provider subscriptions require explicit unmount/disposal through the host/runtime lifecycle; a host value alone is not a proof that every external reference has been released.
 
 ## Diagnostic codes
 

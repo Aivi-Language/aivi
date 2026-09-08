@@ -237,15 +237,6 @@ fn prepare_run_from_path(
     )
 }
 
-fn find_backend_item(program: &aivi_backend::Program, name: &str) -> aivi_backend::ItemId {
-    program
-        .items()
-        .iter()
-        .find(|(_, item)| item.name.as_ref() == name)
-        .map(|(id, _)| id)
-        .unwrap_or_else(|| panic!("expected backend item `{name}`"))
-}
-
 fn publish_source_value_by_signal_name(
     linked: &mut aivi_runtime::BackendLinkedRuntime,
     snapshot: &WorkspaceHirSnapshot,
@@ -310,100 +301,6 @@ fn publish_input_value_by_signal_name(
         });
 }
 
-fn assert_reactive_clause_body_has_entry_native_kernel(
-    artifact: &super::RunArtifact,
-    snapshot: &WorkspaceHirSnapshot,
-    signal_name: &str,
-    clause_index: usize,
-) {
-    let hir_item = snapshot
-        .entry_hir()
-        .module()
-        .items()
-        .iter()
-        .find_map(|(item_id, item)| match item {
-            aivi_hir::Item::Signal(item) if item.name.text() == signal_name => Some(item_id),
-            _ => None,
-        })
-        .unwrap_or_else(|| panic!("expected signal item `{signal_name}`"));
-    let binding = artifact
-        .runtime_assembly
-        .signal(hir_item)
-        .unwrap_or_else(|| panic!("expected runtime signal binding for `{signal_name}`"));
-    let clause = binding
-        .reactive_updates()
-        .get(clause_index)
-        .unwrap_or_else(|| panic!("expected reactive clause {clause_index} for `{signal_name}`"));
-    let backend = clause.compiled_body.backend.runtime_view();
-    let item = backend
-        .item(clause.compiled_body.entry_item)
-        .unwrap_or_else(|| panic!("expected compiled body entry item for `{signal_name}`"));
-    let kernel = item.body.unwrap_or_else(|| {
-        panic!("expected body kernel for `{signal_name}` clause {clause_index}")
-    });
-    let fingerprint = backend
-        .kernel(kernel)
-        .unwrap_or_else(|| {
-            panic!("expected kernel metadata for `{signal_name}` clause {clause_index}")
-        })
-        .fingerprint;
-    let compiled_plan = match &clause.compiled_body.backend {
-        aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => {
-            let mut native_kernels = clause.compiled_body.native_kernels.as_ref().clone();
-            if native_kernels.get_for_kernel(fingerprint, kernel).is_none() {
-                let native = aivi_backend::compile_native_kernel_artifact(program.as_ref(), kernel)
-                    .expect("program-backed reactive body kernel should compile natively")
-                    .expect("program-backed reactive body kernel should emit a native artifact");
-                native_kernels.insert(fingerprint, native);
-            }
-            aivi_backend::NativeKernelPlan::compile_with_native_artifacts(
-                program.as_ref(),
-                Some(&native_kernels),
-                kernel,
-            )
-        }
-        aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => {
-            assert!(
-                clause
-                    .compiled_body
-                    .native_kernels
-                    .get_for_kernel(fingerprint, kernel)
-                    .is_some(),
-                "expected `{signal_name}` clause {clause_index} body kernel {} fingerprint {:016x} to survive bundle serialization",
-                kernel.as_raw(),
-                fingerprint.as_raw()
-            );
-            aivi_backend::NativeKernelPlan::from_runtime_meta_with_native_artifacts(
-                meta.as_ref(),
-                Some(clause.compiled_body.native_kernels.as_ref()),
-                kernel,
-            )
-        }
-        aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => {
-            assert!(
-                clause
-                    .compiled_body
-                    .native_kernels
-                    .get_for_kernel(fingerprint, kernel)
-                    .is_some(),
-                "expected `{signal_name}` clause {clause_index} body kernel {} fingerprint {:016x} to survive bundle serialization",
-                kernel.as_raw(),
-                fingerprint.as_raw()
-            );
-            aivi_backend::NativeKernelPlan::from_frozen_catalog_with_native_artifacts(
-                catalog.as_ref(),
-                Some(clause.compiled_body.native_kernels.as_ref()),
-                kernel,
-            )
-        }
-    };
-    assert!(
-        compiled_plan.is_some(),
-        "expected `{signal_name}` clause {clause_index} body kernel {} to build a native execution plan from serialized metadata",
-        kernel.as_raw()
-    );
-}
-
 fn with_native_kernel_plans<T>(enabled: bool, f: impl FnOnce() -> T) -> T {
     clear_native_kernel_plan_cache();
     let previous = replace_native_kernel_plans_enabled(enabled);
@@ -414,24 +311,62 @@ fn with_native_kernel_plans<T>(enabled: bool, f: impl FnOnce() -> T) -> T {
 }
 
 fn assert_frozen_image_backends_are_catalog_bytes(image_bytes: &[u8], context: &str) {
-    let image = bincode::deserialize::<super::FrozenRunImage>(image_bytes)
+    let image = super::decode_binary::<super::FrozenRunImage>(image_bytes)
         .unwrap_or_else(|error| panic!("{context} should decode as a frozen run image: {error}"));
     assert!(
         !image.backends.is_empty(),
         "{context} should carry at least one frozen backend payload"
     );
     for (index, payload) in image.backends.iter().enumerate() {
+        let encoded = super::decode_binary::<super::EncodedBackendPayload>(
+            &payload.backend_catalog,
+        )
+        .unwrap_or_else(|error| {
+            panic!("{context} backend payload {index} should use the versioned envelope: {error}")
+        });
         assert!(
-            bincode::deserialize::<super::EncodedFrozenBackendCatalog>(&payload.backend_catalog)
-                .is_ok(),
-            "{context} backend payload {index} should encode an explicit frozen backend catalog wrapper"
+            matches!(
+                encoded.payload,
+                super::EncodedBackendPayloadKind::FrozenCatalog(_)
+            ),
+            "{context} backend payload {index} should encode a frozen catalog in the canonical envelope"
         );
         assert!(
-            bincode::deserialize::<aivi_backend::BackendRuntimeMeta>(&payload.backend_catalog)
+            super::decode_binary::<aivi_backend::BackendRuntimeMeta>(&payload.backend_catalog)
                 .is_err(),
             "{context} backend payload {index} should not encode BackendRuntimeMeta bytes"
         );
     }
+}
+
+#[test]
+fn backend_payload_decoder_rejects_untagged_legacy_metadata() {
+    let legacy_meta = aivi_backend::BackendRuntimeMeta::from(&aivi_backend::Program::new());
+    let legacy_bytes = super::encode_binary(&legacy_meta).expect("legacy metadata should encode");
+
+    let error = super::decode_backend_payload_bytes(&legacy_bytes, "legacy-backend.bin")
+        .expect_err("untagged backend metadata must not be accepted as a current payload");
+
+    assert!(error.contains("versioned AIVI payload"), "{error}");
+    assert!(error.contains("rebuild the artifact"), "{error}");
+}
+
+#[test]
+fn backend_payload_decoder_rejects_old_envelope_versions_actionably() {
+    let encoded = super::EncodedBackendPayload {
+        format: super::BACKEND_PAYLOAD_FORMAT.into(),
+        version: super::BACKEND_PAYLOAD_VERSION - 1,
+        payload: super::EncodedBackendPayloadKind::Meta(aivi_backend::BackendRuntimeMeta::from(
+            &aivi_backend::Program::new(),
+        )),
+    };
+    let bytes = super::encode_binary(&encoded).expect("old envelope should encode");
+
+    let error = super::decode_backend_payload_bytes(&bytes, "old-backend.bin")
+        .expect_err("old backend envelope versions must be rejected");
+
+    assert!(error.contains("uses version"), "{error}");
+    assert!(error.contains("rebuild the artifact"), "{error}");
 }
 
 #[test]
@@ -1333,7 +1268,6 @@ value view =
         .map(|(name, arc)| (name.as_str(), arc.module()))
         .collect();
     let view = super::select_run_view(module, None).expect("view should resolve");
-    let view_owner = super::find_value_owner(module, view).expect("view owner should resolve");
     let plan = super::lower_markup_expr(module, view.body)
         .expect("view markup should lower into a GTK plan");
     let bridge = super::lower_widget_bridge(&plan).expect("GTK plan should lower into a bridge");
@@ -1350,8 +1284,6 @@ value view =
     )
     .expect("runtime assembly should lower")
     .assembly;
-    let runtime_backend_by_hir =
-        super::backend_items_by_hir(&runtime_stack.core, runtime_stack.backend.as_ref());
     let expr = super::collect_run_input_specs_from_bridge(module, &workspace_hirs, &bridge)
         .into_values()
         .find_map(|spec| match spec {
@@ -1360,17 +1292,16 @@ value view =
         })
         .expect("dynamic title should produce one runtime expression input");
 
-    let mut compiler = super::RunFragmentCompiler::new(
-        &snapshot.sources,
+    let compile_context = super::RunFragmentCompileContext {
+        sources: &snapshot.sources,
         module,
-        &[],
-        view_owner,
-        &sites,
-        &runtime_assembly,
-        runtime_stack.backend.as_ref(),
-        &runtime_backend_by_hir,
-        Some(snapshot.backend_query_context()),
-    );
+        workspace_hirs: &[],
+        sites: &sites,
+        runtime_assembly: &runtime_assembly,
+        runtime_backend: runtime_stack.backend.as_ref(),
+        query_context: Some(snapshot.backend_query_context()),
+    };
+    let mut compiler = super::RunFragmentCompiler::new(compile_context);
     let (first, compiled_now) = compiler
         .compile(expr)
         .expect("first compilation should succeed");
@@ -1382,17 +1313,7 @@ value view =
     assert!(!compiled_again);
     assert!(Arc::ptr_eq(&first.execution, &second.execution));
 
-    let mut second_compiler = super::RunFragmentCompiler::new(
-        &snapshot.sources,
-        module,
-        &[],
-        view_owner,
-        &sites,
-        &runtime_assembly,
-        runtime_stack.backend.as_ref(),
-        &runtime_backend_by_hir,
-        Some(snapshot.backend_query_context()),
-    );
+    let mut second_compiler = super::RunFragmentCompiler::new(compile_context);
     let (third, _) = second_compiler
         .compile(expr)
         .expect("second compiler should reuse the query-backed fragment backend");
@@ -1792,15 +1713,15 @@ value view =
 }
 
 #[test]
-fn run_artifact_roundtrip_preserves_hydration_structure() {
+fn frozen_run_image_roundtrip_preserves_hydration_structure() {
     let artifact = prepare_run_from_text("planner-window.aivi", planner_window_source(), None)
         .expect("planner window should compile for live run hydration");
     let temp = TempDir::new("run-artifact-profile-roundtrip");
     let artifact_path =
-        super::write_serialized_run_artifact_bundle_without_native_kernels(temp.path(), &artifact)
-            .expect("run artifact bundle should write");
-    let reloaded = super::load_serialized_run_artifact(&artifact_path, None)
-        .expect("serialized run artifact should reload");
+        super::write_frozen_run_image_bundle_without_native_kernels(temp.path(), &artifact)
+            .expect("frozen run image should write");
+    let reloaded =
+        super::load_frozen_run_image(&artifact_path, None).expect("frozen run image should reload");
 
     assert_eq!(artifact.view_name, reloaded.view_name);
     assert_eq!(artifact.patterns, reloaded.patterns);
@@ -1819,7 +1740,25 @@ fn run_artifact_roundtrip_preserves_hydration_structure() {
 }
 
 #[test]
-fn run_artifact_roundtrip_preserves_headless_task_entries() {
+fn frozen_run_image_rejects_old_versions_actionably() {
+    let artifact = prepare_run_from_text("planner-window.aivi", planner_window_source(), None)
+        .expect("planner window should compile for frozen image validation");
+    let current_bytes = super::encode_frozen_run_image_bytes_with_options(&artifact, false, true)
+        .expect("current frozen image should encode");
+    let mut image = super::decode_binary::<super::FrozenRunImage>(&current_bytes)
+        .expect("current frozen image should decode");
+    image.version -= 1;
+    let old_bytes = super::encode_binary(&image).expect("old-version fixture should encode");
+
+    let error = super::load_frozen_run_image_from_bytes(&old_bytes, None)
+        .expect_err("old frozen image versions must be rejected");
+
+    assert!(error.contains("format version"), "{error}");
+    assert!(error.contains("rebuild the artifact"), "{error}");
+}
+
+#[test]
+fn frozen_run_image_roundtrip_preserves_headless_task_entries() {
     let artifact = prepare_run_from_text(
         "headless-roundtrip.aivi",
         r#"
@@ -1838,10 +1777,10 @@ value main : Task Text Unit =
     .expect("headless run artifact should prepare");
     let temp = TempDir::new("run-artifact-headless-roundtrip");
     let artifact_path =
-        super::write_serialized_run_artifact_bundle_without_native_kernels(temp.path(), &artifact)
-            .expect("headless run artifact bundle should write");
-    let reloaded = super::load_serialized_run_artifact(&artifact_path, None)
-        .expect("serialized headless run artifact should reload");
+        super::write_frozen_run_image_bundle_without_native_kernels(temp.path(), &artifact)
+            .expect("headless frozen run image should write");
+    let reloaded = super::load_frozen_run_image(&artifact_path, None)
+        .expect("frozen headless run image should reload");
 
     assert_eq!(artifact.view_name, reloaded.view_name);
     assert!(matches!(
@@ -2801,15 +2740,15 @@ fn prepare_run_rejects_child_widgets_on_leaf_widgets() {
         r#"
 value view =
     <Window title="Host">
-        <Button label="Save">
-            <Label text="Nested" />
-        </Button>
+        <Label text="Leaf">
+            <Button label="Nested" />
+        </Label>
     </Window>
 "#,
         None,
     )
     .expect_err("leaf widgets should reject child markup from schema validation");
-    assert!(error.contains("does not support child widgets under `Button`"));
+    assert!(error.contains("does not support child widgets under `Label`"));
 }
 
 #[test]

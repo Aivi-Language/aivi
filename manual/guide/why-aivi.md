@@ -53,6 +53,10 @@ value promoted : User = alice <| { score: . + 5 }
 In most frameworks, reactivity means registering callbacks or subscribing to event streams. In AIVI, a **signal** is just a value that participates in a dependency graph:
 
 ```aivi
+type Int -> Int -> Int
+func multiply = factor value =>
+    factor * value
+
 signal count = 0
 
 signal doubled = count
@@ -69,6 +73,8 @@ When `count` changes, `doubled` and `label` recompute automatically. You do not 
 Pure functions cannot talk to the network, read files, or respond to keyboard input. AIVI models all of these as **sources** — typed, declared entry points into the reactive graph:
 
 ```aivi
+type Key = Key Text
+
 @source timer.every 1000ms
 signal tick : Signal Unit
 

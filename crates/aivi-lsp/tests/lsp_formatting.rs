@@ -15,7 +15,7 @@ fn test_uri(name: &str) -> Url {
 fn open_inline(name: &str, text: &str) -> (ServerState, Url) {
     let state = ServerState::new();
     let uri = test_uri(name);
-    open_document(&state, &uri, text.to_owned());
+    open_document(&state, &uri, 1, text.to_owned());
     (state, uri)
 }
 
@@ -23,7 +23,7 @@ fn open_inline(name: &str, text: &str) -> (ServerState, Url) {
 fn formatting_valid_document_returns_result() {
     // Compact form without spaces — formatter must add them
     let (state, uri) = open_inline("format-compact.aivi", "value answer=42\n");
-    let file = *state.files.get(&uri).expect("file should be open");
+    let file = state.file(&uri).expect("file should be open");
 
     let result = format_document(&state.db, file);
     assert!(
@@ -36,7 +36,7 @@ fn formatting_valid_document_returns_result() {
 fn formatting_is_idempotent() {
     let source = "value answer=42\n";
     let (state, uri) = open_inline("format-idempotent.aivi", source);
-    let file = *state.files.get(&uri).expect("file should be open");
+    let file = state.file(&uri).expect("file should be open");
 
     // Obtain the canonical formatted text from the first pass
     let first_edits = format_document(&state.db, file).expect("first format should succeed");
@@ -47,7 +47,17 @@ fn formatting_is_idempotent() {
     };
 
     // Update the document to its formatted state
-    change_document(&state, &uri, formatted);
+    change_document(
+        &state,
+        &uri,
+        2,
+        &[tower_lsp::lsp_types::TextDocumentContentChangeEvent {
+            range: None,
+            range_length: None,
+            text: formatted,
+        }],
+    )
+    .expect("full replacement should apply");
 
     // A second format pass on an already-formatted document should produce no edits
     let second_edits = format_document(&state.db, file).expect("second format should succeed");

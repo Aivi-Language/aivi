@@ -139,11 +139,11 @@ func trimStatus =
  ||> _         -> .
 ```
 
-If the unary input is intentionally ignored, write `_ => ...` explicitly:
+If the unary input is intentionally ignored, give it an explicit descriptive name:
 
 ```aivi
 type Int -> Text
-func constantLabel = _ =>
+func constantLabel = ignored =>
     "ready"
 ```
 
@@ -340,6 +340,11 @@ value promoted : User =
 `patch { ... }` builds a reusable same-shape update function:
 
 ```aivi
+type User = {
+    name: Text,
+    isAdmin: Bool
+}
+
 value promote : (User -> User) =
     patch {
         isAdmin: True,
@@ -396,4 +401,4 @@ func negate = n =>
 | Function | `type Int -> Int -> Int` / `func add = x y => x + y` |
 | Function call | `add 3 4` |
 | Partial application | `value double = multiply 2` |
-| Patch apply | `value promoted = user <| { isAdmin: True }` |
+| Patch apply | `value promoted = user <\| { isAdmin: True }` |

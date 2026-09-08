@@ -13,14 +13,14 @@ fn test_uri(name: &str) -> Url {
 fn open_inline(name: &str, text: &str) -> (ServerState, Url) {
     let state = ServerState::new();
     let uri = test_uri(name);
-    open_document(&state, &uri, text.to_owned());
+    open_document(&state, &uri, 1, text.to_owned());
     (state, uri)
 }
 
 #[test]
 fn document_with_declarations_has_symbols() {
     let (state, uri) = open_inline("symbols-decls.aivi", "value answer = 42\n");
-    let file = *state.files.get(&uri).expect("file should be open");
+    let file = state.file(&uri).expect("file should be open");
     let analysis = FileAnalysis::load(&state.db, file);
     let symbols = convert_symbols(&analysis.symbols, &analysis.source);
 
@@ -33,7 +33,7 @@ fn document_with_declarations_has_symbols() {
 #[test]
 fn symbol_list_contains_declared_value_name() {
     let (state, uri) = open_inline("symbols-names.aivi", "value answer = 42\n");
-    let file = *state.files.get(&uri).expect("file should be open");
+    let file = state.file(&uri).expect("file should be open");
     let analysis = FileAnalysis::load(&state.db, file);
     let symbols = convert_symbols(&analysis.symbols, &analysis.source);
 

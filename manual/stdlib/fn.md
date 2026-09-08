@@ -36,8 +36,6 @@ use aivi.core.fn (
 
 Returns its argument unchanged. Useful as a no-op transformer in pipelines.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.fn (identity)
@@ -53,8 +51,6 @@ func keepAsIs = n =>
 
 Returns a function that always returns its first argument, ignoring the second. Useful for discarding an input in a pipeline step.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.fn (const)
@@ -70,8 +66,6 @@ func alwaysForty = ignored =>
 
 Reverses the order of the first two arguments of a two-argument function.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.fn (flip)
@@ -89,8 +83,6 @@ func clampFlipped = high low n =>
 
 Composes two functions, applying `g` first and then `f`. `compose f g x` is equivalent to `f (g x)`.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.fn (compose)
@@ -111,8 +103,6 @@ func negAbs = n =>
 
 Applies `f` first and then `g`. The reverse of `compose`. `andThen f g x` is equivalent to `g (f x)`. Often called "left-to-right composition" or `>>>`.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.fn (andThen)
@@ -131,10 +121,8 @@ func absNeg = n =>
 
 ## always
 
-Returns a function that ignores its argument and always returns the given value. Equivalent to `const` with argument order swapped.
+Returns a function that ignores its argument and always returns the given value. Equivalent to `const`, with the same argument order.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.fn (always)
@@ -150,8 +138,6 @@ func constantZero = ignored =>
 
 Applies a transformation `f` to both arguments before combining them with `combine`. Useful for comparing or combining values after mapping.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.fn (on)
@@ -173,8 +159,6 @@ func absCompare = x y =>
 
 Applies a function to a value. `applyTo x f` is equivalent to `f x`. Useful for making value-first pipelines.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.fn (applyTo)
@@ -190,10 +174,8 @@ func applyAbs = n =>
 
 ## applyTwice
 
-Applies a function to itself twice: `applyTwice f x` is equivalent to `f (f x)`.
+Applies a function twice to a value: `applyTwice f x` is equivalent to `f (f x)`.
 
-```aivi
-```
 
 ```aivi
 use aivi.core.fn (applyTwice)

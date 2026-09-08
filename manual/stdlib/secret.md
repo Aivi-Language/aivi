@@ -29,16 +29,21 @@ use aivi.secret (
 ## Capability handle
 
 ```aivi
-use aivi.secret (SecretSource, SecretTask)
+use aivi.secret (
+    SecretSource
+    SecretTask
+)
 
 @source secret "io.mailfox"
 signal secrets : SecretSource
 
 value savedToken : SecretTask (Option Text) =
-    secrets.lookup (Map {
-        "account": "primary",
-        "kind": "refresh-token"
-    })
+    secrets.lookup (
+        Map {
+            "account": "primary",
+            "kind": "refresh-token"
+        }
+    )
 ```
 
 Current canonical handle members:

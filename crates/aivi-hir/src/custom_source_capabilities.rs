@@ -48,14 +48,12 @@ pub(crate) fn resolve_custom_source_capability_member(
         .find(|member| member.name.text() == member_name)
     {
         (CustomSourceCapabilityKind::Operation, member.clone())
-    } else if let Some(member) = contract
-        .commands
-        .iter()
-        .find(|member| member.name.text() == member_name)
-    {
-        (CustomSourceCapabilityKind::Command, member.clone())
     } else {
-        return None;
+        let member = contract
+            .commands
+            .iter()
+            .find(|member| member.name.text() == member_name)?;
+        (CustomSourceCapabilityKind::Command, member.clone())
     };
     let member_argument_schemas = capability_member_argument_schemas(module, &member);
     Some(ResolvedCustomSourceCapabilityMember {

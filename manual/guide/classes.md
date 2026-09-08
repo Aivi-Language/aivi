@@ -9,7 +9,9 @@ For the semantic contract behind those instances, see [Class Laws & Design Bound
 ## Declaring a class
 
 ```aivi
-class Eq A
+class Equality A = {
+    type equal : A -> A -> Bool
+}
 ```
 
 This says that any type used with `Eq` must support equality.
@@ -17,7 +19,9 @@ This says that any type used with `Eq` must support equality.
 You can declare ordinary named methods too:
 
 ```aivi
-class Display A
+class Display A = {
+    type display : A -> Text
+}
 ```
 
 ## Block body syntax
@@ -38,8 +42,18 @@ class Display A = {
 Instance declarations use the same block form:
 
 ```aivi
-instance Eq Blob = {
-    (==) = left right => blobEquals left right
+class BlobEquality A = {
+    type blobEqual : A -> A -> Bool
+}
+
+type Blob = Blob Bytes
+
+type Blob -> Blob -> Bool
+func blobEquals = left right =>
+    True
+
+instance BlobEquality Blob = {
+    blobEqual = left right => blobEquals left right
 }
 ```
 
@@ -49,9 +63,13 @@ Use `with` inside the class body to declare that your class extends another clas
 Any instance of the derived class must also provide an instance of each superclass.
 
 ```aivi
-class Named A
+class Named A = {
+    type name : A -> Text
+}
 
-class Displayed A
+class Displayed A = {
+    type display : A -> Text
+}
 
 class Logged A = {
     with Named A
@@ -62,6 +80,10 @@ class Logged A = {
 Multiple superclasses are listed as separate `with` lines.
 
 ```aivi
+class Hashable A = {
+    type hash : A -> Int
+}
+
 class CacheKey A = {
     with Eq A
     with Hashable A
@@ -94,12 +116,15 @@ Surface `!=` uses the same `Eq` evidence as `==`, so once equality exists both o
 available at use sites.
 
 `Ord` uses `compare : A -> A -> Ordering` as its primitive member. Surface ordering operators are derived from that member, so `<`, `>`, `<=`, and `>=` all work once an `Ord` instance exists.
+
 ## Declaring an instance
 
 Instances provide the implementation for a concrete type:
 
 ```aivi
-class Eq A
+class BlobEquality A = {
+    type blobEqual : A -> A -> Bool
+}
 
 type Blob = Blob Bytes
 
@@ -107,7 +132,9 @@ type Blob -> Blob -> Bool
 func blobEquals = left right =>
     True
 
-instance Eq Blob
+instance BlobEquality Blob = {
+    blobEqual = left right => blobEquals left right
+}
 ```
 
 ## Named class methods
@@ -115,11 +142,17 @@ instance Eq Blob
 A class can expose named operations instead of operators:
 
 ```aivi
-class Compare A
+class Display A = {
+    type display : A -> Text
+}
 
 type Label = Label Text
 
-instance Compare Label
+instance Display Label = {
+    display = label =>
+        label
+        ||> Label text -> text
+}
 ```
 
 ## Eq constraints on functions

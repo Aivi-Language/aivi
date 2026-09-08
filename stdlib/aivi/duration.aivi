@@ -11,41 +11,56 @@ domain Duration over Int = {
     suffix ms
     type ms : Int
     ms = n => Duration n
+
     suffix sec
     type sec : Int
     sec = n => Duration (mul n 1000)
+
     suffix min
     type min : Int
     min = n => Duration (mul n 60000)
+
     suffix hr
     type hr : Int
     hr = n => Duration (mul n 3600000)
+
     suffix dy
     type dy : Int
     dy = n => Duration (mul n 86400000)
+
     type millis : Int -> Duration
     millis = n => n
+
     type toMillis : Duration -> Int
     toMillis = duration => duration
+
     type toSeconds : Duration -> Int
     toSeconds = duration => div duration 1000
+
     type toMinutes : Duration -> Int
     toMinutes = duration => div duration 60000
+
     type toHours : Duration -> Int
     toHours = duration => div duration 3600000
+
     type toDays : Duration -> Int
     toDays = duration => div duration 86400000
+
     type trySeconds : Int -> Result DurationError Duration
     trySeconds = seconds =>
         seconds < 0
         T|> Err "Duration cannot be negative"
         F|> Ok (mul seconds 1000)
+
     type (+) : Duration -> Duration -> Duration
     (+) = left right => left + right
+
     type (-) : Duration -> Duration -> Duration
     (-) = left right => left - right
+
     type (*) : Duration -> Int -> Duration
     (*) = duration n => mul duration n
+
     type (<) : Duration -> Duration -> Bool
     (<) = left right => left < right
 }

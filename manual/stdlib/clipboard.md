@@ -92,6 +92,8 @@ func clipboardSummary = content => content
 ### ClipboardTask
 
 ```aivi
+use aivi.clipboard (ClipboardError)
+
 type ClipboardTask A = (Task ClipboardError A)
 ```
 
@@ -100,6 +102,8 @@ Convenience name for clipboard operations that may fail with `ClipboardError`.
 ### ClipboardWriteTask
 
 ```aivi
+use aivi.clipboard (ClipboardError)
+
 type ClipboardWriteTask = (Task ClipboardError Unit)
 ```
 
@@ -113,6 +117,11 @@ still useful because it documents the task shape other clipboard APIs are expect
 The stdlib module comments document the following watcher shape:
 
 ```aivi
+use aivi.clipboard (
+    ClipboardContent
+    ClipboardError
+)
+
 @source clipboard.watch
 signal clipboardContent : Signal (Result ClipboardError ClipboardContent)
 ```

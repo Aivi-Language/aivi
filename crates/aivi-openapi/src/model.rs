@@ -252,7 +252,7 @@ pub struct Ref {
 #[serde(untagged)]
 pub enum SecuritySchemeOrRef {
     Ref(Ref),
-    SecurityScheme(SecurityScheme),
+    SecurityScheme(Box<SecurityScheme>),
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -305,4 +305,31 @@ pub struct Tag {
     pub name: String,
     #[serde(default)]
     pub description: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn security_scheme_keeps_its_untagged_openapi_representation() {
+        let input = r#"{
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT"
+        }"#;
+
+        let scheme: SecuritySchemeOrRef = serde_json::from_str(input).unwrap();
+        let SecuritySchemeOrRef::SecurityScheme(scheme) = scheme else {
+            panic!("an inline security scheme should not deserialize as a reference");
+        };
+
+        assert_eq!(scheme.scheme_type, "http");
+        assert_eq!(scheme.scheme.as_deref(), Some("bearer"));
+        assert_eq!(scheme.bearer_format.as_deref(), Some("JWT"));
+        assert_eq!(
+            serde_json::to_string(&SecuritySchemeOrRef::SecurityScheme(scheme)).unwrap(),
+            r#"{"type":"http","description":null,"name":null,"in":null,"scheme":"bearer","bearerFormat":"JWT","flows":null}"#,
+        );
+    }
 }

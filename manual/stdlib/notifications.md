@@ -10,6 +10,8 @@ This module defines the payloads, handle annotation, task alias, and response ty
 built-in desktop notification capability:
 
 ```aivi
+use aivi.gnome.notifications (NotificationSource)
+
 @source notifications "io.mailfox"
 signal notifications : NotificationSource
 ```
@@ -68,6 +70,8 @@ value archiveAction : NotificationAction = {
 ### Notification
 
 ```aivi
+use aivi.gnome.notifications (NotificationAction)
+
 type Notification = {
     summary: Text,
     body: Option Text,
@@ -94,6 +98,8 @@ Nominal handle annotation used with `@source notifications "app.name"`.
 ### NotificationTask
 
 ```aivi
+use aivi.gnome.notifications (NotificationError)
+
 type NotificationTask A = (Task NotificationError A)
 ```
 
@@ -156,6 +162,8 @@ func responseLabel = response => response
 ### NotificationEvent
 
 ```aivi
+use aivi.gnome.notifications (NotificationResponse)
+
 type NotificationEvent = {
     id: Int,
     response: NotificationResponse
@@ -170,6 +178,7 @@ desktop notifications.
 ```aivi
 use aivi.gnome.notifications (
     Notification
+    NotificationError
     NotificationEvent
     NotificationSource
 )
@@ -181,14 +190,13 @@ signal notifications : NotificationSource
 
 signal events : Signal NotificationEvent = notifications.events
 
-value showMail : Task NotificationError Int =
-    notifications.send {
-        summary: "New mail"
-        body: Some "Alex replied about dinner"
-        icon: Some "mail-unread"
-        actions: [{ label: "Open", id: "open" }, { label: "Mark read", id: "read" }]
-    }
+value mailNotification : Notification = {
+    summary: "New mail",
+    body: Some "You have 3 new messages",
+    icon: Some "mail-unread",
+    actions: []
+}
 
-value closeMail : Task NotificationError Unit =
-    notifications.close 42
+value showMail : Task NotificationError Int = notifications.send mailNotification
+value closeMail : Task NotificationError Unit = notifications.close 42
 ```

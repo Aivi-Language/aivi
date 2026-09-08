@@ -296,6 +296,32 @@ value replyTask : Task Text (List DbusValue) =
 }
 
 #[test]
+fn parser_reports_and_recovers_missing_record_field_commas() {
+    let (_, parsed) = load(
+        r#"value config = {
+    path: "/org/aivi/Test"
+    interface: "org.aivi.Test"
+    member: "GetStatus"
+}
+"#,
+    );
+
+    assert!(parsed.has_errors());
+    assert!(
+        parsed
+            .all_diagnostics()
+            .any(|diagnostic| diagnostic.code == Some(MISSING_RECORD_FIELD_SEPARATOR))
+    );
+    let Item::Value(item) = &parsed.module.items[0] else {
+        panic!("expected recovered value item");
+    };
+    let Some(ExprKind::Record(record)) = item.expr_body().map(|expr| &expr.kind) else {
+        panic!("expected recovered record expression");
+    };
+    assert_eq!(record.fields.len(), 3);
+}
+
+#[test]
 fn parser_builds_sum_type_companions_inside_brace_bodies() {
     let (_, parsed) = load(
         r#"type Player = {

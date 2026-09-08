@@ -10,44 +10,23 @@ reactive layer.
 
 ## Entry points
 
-```rust
-// Build a signal graph
-SignalGraphBuilder::new() -> SignalGraphBuilder
-SignalGraphBuilder::add_input(spec: InputSpec) -> InputHandle
-SignalGraphBuilder::add_derived(spec: DerivedSpec) -> DerivedHandle
-SignalGraphBuilder::add_signal(spec: SignalSpec) -> SignalHandle
-SignalGraphBuilder::build() -> Result<SignalGraph, GraphBuildError>
+- [`SignalGraphBuilder`](src/graph.rs) constructs and validates the static graph.
+- [`Scheduler::new`](src/scheduler.rs) takes that graph; `tick` takes a mutable evaluator.
+- `Scheduler::worker_sender` gives workers a `WorkerPublicationSender`; workers publish `Publication` messages through that sender.
+- [`GlibSchedulerDriver::new`](src/glib_adapter.rs) takes a `MainContext`, scheduler, and evaluator. Its worker sender also requests a main-context wakeup.
+- `GlibLinkedRuntimeDriver` coordinates a linked runtime on a GLib context.
+- [Crate exports](src/lib.rs) expose HIR assembly, backend linking, task execution, and external decoding.
 
-// Reactive scheduler
-Scheduler::new() -> Scheduler
-Scheduler::publish(handle: InputHandle, value: RuntimeValue) -> Result<(), SchedulerAccessError>
-Scheduler::tick() -> TickOutcome
-
-// GLib main-context integration
-GlibSchedulerDriver::new(scheduler: Scheduler) -> GlibSchedulerDriver
-GlibSchedulerDriver::attach(ctx: &glib::MainContext)
-GlibLinkedRuntimeDriver::new(...) -> GlibLinkedRuntimeDriver
-
-// HIR runtime assembly (interpreter path)
-assemble_hir_runtime(module: &hir::Module, ...) -> Result<HirRuntimeAssembly, HirRuntimeAdapterErrors>
-assemble_hir_runtime_with_items(module: &hir::Module, items: &IncludedItems, ...) -> Result<HirRuntimeAssembly, HirRuntimeAdapterErrors>
-
-// Backend runtime linking (compiled path)
-link_backend_runtime(program: &backend::Program, ...) -> Result<BackendLinkedRuntime, BackendRuntimeLinkErrors>
-
-// Task execution
-execute_runtime_task_plan(plan: &RuntimeTaskPlan, ctx: &mut dyn ...) -> Result<RuntimeValue, RuntimeTaskExecutionError>
-decode_external(program: &SourceDecodeProgram, value: &ExternalSourceValue) -> Result<RuntimeValue, SourceDecodeError>
-```
+There is no `Scheduler::publish` or `GlibSchedulerDriver::attach` API. Keep the scheduler and its evaluator on their owning execution path.
 
 ## Invariants
 
-- **Scheduler thread**: the `Scheduler` owns its tick loop; `publish` is the only method safe to call from worker threads.
+- **Scheduler thread**: the owner drives `Scheduler::tick`; workers use publication senders, not direct scheduler mutation.
 - **Worker isolation**: workers never hold direct references to scheduler-owned state; they send immutable `Publication` messages via `WorkerPublicationSender`.
 - **Signal propagation**: each `Scheduler::tick` is a single atomic batch — signals are propagated in topological order, glitch-free, with no stale reads within a tick.
-- **GLib main thread**: `GlibSchedulerDriver::attach` must be called on the GLib main thread; the driver then drives ticks from GLib idle callbacks.
+- **GLib main thread**: GLib drivers execute ticks on their owned `MainContext`; worker senders enqueue messages and request wakeups.
 - `SignalGraph` is immutable after `build()`; adding nodes after build is not supported.
-- Source providers run on worker threads; they publish to `SourcePublicationPort` and never call scheduler methods directly.
+- Blocking provider work runs on workers and publishes through `SourcePublicationPort`; GTK/GDK input integration stays on the UI context.
 - `decode_external` is pure and side-effect-free; it may be called from any thread.
 
 ## Diagnostic codes

@@ -29,7 +29,7 @@ value pointLabel = label Point
         .expect("compiled program should retain constructor pattern kernel metadata");
     assert!(artifact.code_size > 0);
     assert!(
-        artifact.clif.contains("icmp_imm eq"),
+        artifact.clif.contains("icmp eq") || artifact.clif.contains("icmp_imm eq"),
         "sum pattern should emit tag comparison; CLIF was:\n{}",
         artifact.clif
     );
@@ -122,10 +122,12 @@ value manyLabel = classify [1, 2, 3]
         .kernel(body)
         .expect("compiled program should retain list pattern kernel metadata");
     assert!(artifact.code_size > 0);
-    // List patterns emit icmp_imm eq for length discrimination (e.g. == 0 for [],
-    // == 1 for [_]). The aivi_list_len calls appear as fn references in CLIF.
+    // List patterns compare the computed length for discrimination (e.g. == 0 for [],
+    // == 1 for [_]). Cranelift may canonicalize immediate comparisons into an iconst
+    // followed by icmp, so verify the semantic operations rather than one print form.
     assert!(
-        artifact.clif.contains("icmp_imm eq") && artifact.clif.contains("call fn"),
+        (artifact.clif.contains("icmp eq") || artifact.clif.contains("icmp_imm eq"))
+            && artifact.clif.contains("call fn"),
         "list pattern should emit length checks via list_len calls; CLIF was:\n{}",
         artifact.clif
     );
@@ -159,8 +161,8 @@ value otherLabel = describeN 42
         .expect("compiled program should retain integer pattern kernel metadata");
     assert!(artifact.code_size > 0);
     assert!(
-        artifact.clif.contains("icmp_imm eq"),
-        "integer pattern should emit icmp_imm eq; CLIF was:\n{}",
+        artifact.clif.contains("icmp eq") || artifact.clif.contains("icmp_imm eq"),
+        "integer pattern should emit an equality comparison; CLIF was:\n{}",
         artifact.clif
     );
     assert!(!compiled.object().is_empty());

@@ -53,16 +53,12 @@ use aivi.time (
 
 ### `nowMs`
 
-```aivi
-```
 
 Use this when you need a real-world timestamp for storage, logging, or comparing with other
 epoch-based values.
 
 ### `monotonicMs`
 
-```aivi
-```
 
 Use this when you want a steady clock for measuring elapsed time inside the running program.
 It is a better fit for timing than `nowMs`, because it is not tied to the wall clock.
@@ -92,12 +88,11 @@ fallback behavior.
 
 - timestamps are raw epoch-millisecond `Int` values, not a dedicated domain
 - `format` and `parse` are still partial runtime stubs
-- there is no richer calendar/date-time domain surface yet
+- this module does not convert epoch values to calendar structures; [aivi.date](date.md)
+  separately supplies date/time data types and pure formatting helpers
 
 ### `format`
 
-```aivi
-```
 
 The surface API takes an epoch millisecond value and a pattern string.
 
@@ -114,8 +109,6 @@ Today this returns `"1735689600000"`, not a human-readable ISO timestamp yet.
 
 ### `parse`
 
-```aivi
-```
 
 The surface API takes text plus a pattern string and returns epoch milliseconds.
 

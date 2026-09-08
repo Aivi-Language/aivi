@@ -39,14 +39,14 @@ pub enum SourceProviderExecutionError {
         provider: BuiltinSourceProvider,
         index: usize,
         expected: Box<str>,
-        value: RuntimeValue,
+        value: Box<RuntimeValue>,
     },
     InvalidOption {
         instance: SourceInstanceId,
         provider: BuiltinSourceProvider,
         option_name: Box<str>,
         expected: Box<str>,
-        value: RuntimeValue,
+        value: Box<RuntimeValue>,
     },
     UnsupportedOption {
         instance: SourceInstanceId,
@@ -575,10 +575,11 @@ impl ErrorPlan {
                         ),
                     });
                 }
-                Err(
-                    format!("the current result error type cannot represent a {:?} portal failure", kind)
-                        .into(),
+                Err(format!(
+                    "the current result error type cannot represent a {:?} portal failure",
+                    kind
                 )
+                .into())
             }
         }
     }
@@ -724,7 +725,7 @@ const PORTAL_DECODE_ERROR_CANDIDATES: [ErrorCandidate; 2] = [
 struct HttpPlan {
     provider: BuiltinSourceProvider,
     url: Box<str>,
-    headers: Box<[(Box<str>, Box<str>)]>,
+    headers: Box<[OwnedTextPair]>,
     body: Option<Box<str>>,
     timeout: Option<Duration>,
     refresh_every: Option<Duration>,
@@ -827,7 +828,7 @@ struct ApiPlan {
     provider: BuiltinSourceProvider,
     /// Fully composed request URL: baseUrl + operation_path.
     url: Box<str>,
-    headers: Box<[(Box<str>, Box<str>)]>,
+    headers: Box<[OwnedTextPair]>,
     body: Option<Box<str>>,
     timeout: Option<Duration>,
     refresh_every: Option<Duration>,
@@ -955,7 +956,7 @@ fn extract_auth_header(
     instance: SourceInstanceId,
     provider: BuiltinSourceProvider,
     value: &DetachedRuntimeValue,
-) -> Result<Option<(Box<str>, Box<str>)>, SourceProviderExecutionError> {
+) -> Result<Option<OwnedTextPair>, SourceProviderExecutionError> {
     match strip_detached_signal(value) {
         RuntimeValue::Sum(sum) => {
             match sum.variant_name.as_ref() {
@@ -971,14 +972,14 @@ fn extract_auth_header(
                     if sum.fields.len() >= 2
                         && let (RuntimeValue::Text(user), RuntimeValue::Text(pass)) =
                             (&sum.fields[0], &sum.fields[1])
-                        {
-                            let credentials = format!("{user}:{pass}");
-                            let encoded = base64_encode(credentials.as_bytes());
-                            return Ok(Some((
-                                "Authorization".into(),
-                                format!("Basic {encoded}").into_boxed_str(),
-                            )));
-                        }
+                    {
+                        let credentials = format!("{user}:{pass}");
+                        let encoded = base64_encode(credentials.as_bytes());
+                        return Ok(Some((
+                            "Authorization".into(),
+                            format!("Basic {encoded}").into_boxed_str(),
+                        )));
+                    }
                 }
                 "ApiKey" => {
                     if let Some(RuntimeValue::Text(key)) = sum.fields.first() {
@@ -1416,7 +1417,7 @@ struct ProcessPlan {
     command: Box<str>,
     args: Box<[Box<str>]>,
     cwd: Option<PathBuf>,
-    env: Box<[(Box<str>, Box<str>)]>,
+    env: Box<[OwnedTextPair]>,
     stdout_mode: ProcessStreamMode,
     stderr_mode: ProcessStreamMode,
     events: ProcessEventPlan,
@@ -1856,7 +1857,7 @@ impl DbusBus {
                 provider,
                 option_name: option_name.into(),
                 expected: "\"session\" or \"system\"".into(),
-                value: RuntimeValue::Text(value),
+                value: Box::new(RuntimeValue::Text(value)),
             }),
         }
     }
@@ -1927,7 +1928,7 @@ impl DbusOwnNamePlan {
                                     expected:
                                         "List BusNameFlag (AllowReplacement | ReplaceExisting | DoNotQueue)"
                                             .into(),
-                                    value: strip_detached_signal(&option.value).clone(),
+                                    value: Box::new(strip_detached_signal(&option.value).clone()),
                                 });
                             }
                         }
@@ -2113,24 +2114,27 @@ impl NotificationEventOutputPlan {
             return Err(SourceProviderExecutionError::UnsupportedProviderShape {
                 instance,
                 provider,
-                detail: "notifications.events currently decodes to a `NotificationEvent`-shaped record"
-                    .into(),
+                detail:
+                    "notifications.events currently decodes to a `NotificationEvent`-shaped record"
+                        .into(),
             });
         };
         if fields.len() != 2 {
             return Err(SourceProviderExecutionError::UnsupportedProviderShape {
                 instance,
                 provider,
-                detail: "notifications.events currently requires record fields [\"id\", \"response\"]"
-                    .into(),
+                detail:
+                    "notifications.events currently requires record fields [\"id\", \"response\"]"
+                        .into(),
             });
         }
         let Some(id_field) = fields.iter().find(|field| field.name.as_str() == "id") else {
             return Err(SourceProviderExecutionError::UnsupportedProviderShape {
                 instance,
                 provider,
-                detail: "notifications.events currently requires record fields [\"id\", \"response\"]"
-                    .into(),
+                detail:
+                    "notifications.events currently requires record fields [\"id\", \"response\"]"
+                        .into(),
             });
         };
         if !matches!(
@@ -2145,20 +2149,24 @@ impl NotificationEventOutputPlan {
                 detail: "notifications.events field `id` must decode as Int".into(),
             });
         }
-        let Some(response_field) = fields.iter().find(|field| field.name.as_str() == "response")
+        let Some(response_field) = fields
+            .iter()
+            .find(|field| field.name.as_str() == "response")
         else {
             return Err(SourceProviderExecutionError::UnsupportedProviderShape {
                 instance,
                 provider,
-                detail: "notifications.events currently requires record fields [\"id\", \"response\"]"
-                    .into(),
+                detail:
+                    "notifications.events currently requires record fields [\"id\", \"response\"]"
+                        .into(),
             });
         };
         let hir::DecodeProgramStep::Sum { variants, .. } = decode.step(response_field.step) else {
             return Err(SourceProviderExecutionError::UnsupportedProviderShape {
                 instance,
                 provider,
-                detail: "notifications.events field `response` must decode as NotificationResponse".into(),
+                detail: "notifications.events field `response` must decode as NotificationResponse"
+                    .into(),
             });
         };
         let mut saw_action = false;
@@ -2260,7 +2268,8 @@ impl PortalOpenFilePlan {
                 }
             }
         }
-        let argument = parse_portal_open_file_argument(instance, provider, 0, &config.arguments[0])?;
+        let argument =
+            parse_portal_open_file_argument(instance, provider, 0, &config.arguments[0])?;
         Ok(Self {
             title: argument.title,
             accept_label: argument.accept_label,
@@ -2349,7 +2358,8 @@ impl PortalScreenshotPlan {
         for option in &config.options {
             match option.option_name.as_ref() {
                 "interactive" => {
-                    interactive = parse_bool(instance, provider, &option.option_name, &option.value)?;
+                    interactive =
+                        parse_bool(instance, provider, &option.option_name, &option.value)?;
                 }
                 "modal" => {
                     modal = parse_bool(instance, provider, &option.option_name, &option.value)?;
@@ -2408,8 +2418,9 @@ impl PortalOpenFileOutputPlan {
             return Err(SourceProviderExecutionError::UnsupportedProviderShape {
                 instance,
                 provider,
-                detail: "portal.openFile requires `Signal (Result PortalError PortalFileSelection)`"
-                    .into(),
+                detail:
+                    "portal.openFile requires `Signal (Result PortalError PortalFileSelection)`"
+                        .into(),
             });
         };
         validate_portal_file_selection_step(instance, provider, &decode, *value)?;
@@ -2421,15 +2432,14 @@ impl PortalOpenFileOutputPlan {
         })
     }
 
-    fn selection_value(
-        &self,
-        uris: &[String],
-    ) -> Result<RuntimeValue, SourceDecodeErrorWithPath> {
+    fn selection_value(&self, uris: &[String]) -> Result<RuntimeValue, SourceDecodeErrorWithPath> {
         let payload = match uris {
             [] => {
-                return Err(SourceDecodeErrorWithPath::new(SourceDecodeError::InvalidJson {
-                    detail: "portal.openFile succeeded without returning any URIs".into(),
-                }))
+                return Err(SourceDecodeErrorWithPath::new(
+                    SourceDecodeError::InvalidJson {
+                        detail: "portal.openFile succeeded without returning any URIs".into(),
+                    },
+                ));
             }
             [single] => ExternalSourceValue::variant_with_payload(
                 "SingleFile",
@@ -2508,7 +2518,8 @@ impl PortalOpenUriOutputPlan {
             return Err(SourceProviderExecutionError::UnsupportedProviderShape {
                 instance,
                 provider,
-                detail: "portal.openUri requires `Signal (Result PortalError PortalUriResult)`".into(),
+                detail: "portal.openUri requires `Signal (Result PortalError PortalUriResult)`"
+                    .into(),
             });
         };
         validate_portal_uri_result_step(instance, provider, &decode, *value)?;
@@ -2691,7 +2702,12 @@ impl DbusMethodPlan {
         }
         let destination = parse_text_argument(instance, provider, 0, &config.arguments[0])?;
         let reply_task = if config.arguments.len() == 2 {
-            Some(parse_task_argument(instance, provider, 1, &config.arguments[1])?)
+            Some(parse_task_argument(
+                instance,
+                provider,
+                1,
+                &config.arguments[1],
+            )?)
         } else {
             None
         };
@@ -3126,7 +3142,7 @@ fn parse_portal_open_file_argument(
             provider,
             index,
             expected: "{ title?: Text, acceptLabel?: Text, modal?: Bool, multiple?: Bool, directory?: Bool, currentFolder?: Text, filters?: List PortalFileFilter }".into(),
-            value: strip_detached_signal(value).clone(),
+            value: Box::new(strip_detached_signal(value).clone()),
         });
     };
     for field in fields {
@@ -3139,7 +3155,7 @@ fn parse_portal_open_file_argument(
                     provider,
                     index,
                     expected: "portal.openFile only supports fields title, acceptLabel, modal, multiple, directory, currentFolder, and filters".into(),
-                    value: strip_detached_signal(value).clone(),
+                    value: Box::new(strip_detached_signal(value).clone()),
                 });
             }
         }
@@ -3152,7 +3168,7 @@ fn parse_portal_open_file_argument(
                 provider,
                 index,
                 expected: "portal.openFile field `title` must be Text".into(),
-                value: other.clone(),
+                value: Box::new(other.clone()),
             });
         }
         None => "Open File".into(),
@@ -3165,7 +3181,7 @@ fn parse_portal_open_file_argument(
                 provider,
                 index,
                 expected: "portal.openFile field `acceptLabel` must be Text".into(),
-                value: other.clone(),
+                value: Box::new(other.clone()),
             });
         }
         None => None,
@@ -3178,7 +3194,7 @@ fn parse_portal_open_file_argument(
                 provider,
                 index,
                 expected: "portal.openFile field `modal` must be Bool".into(),
-                value: other.clone(),
+                value: Box::new(other.clone()),
             });
         }
         None => true,
@@ -3191,7 +3207,7 @@ fn parse_portal_open_file_argument(
                 provider,
                 index,
                 expected: "portal.openFile field `multiple` must be Bool".into(),
-                value: other.clone(),
+                value: Box::new(other.clone()),
             });
         }
         None => false,
@@ -3204,7 +3220,7 @@ fn parse_portal_open_file_argument(
                 provider,
                 index,
                 expected: "portal.openFile field `directory` must be Bool".into(),
-                value: other.clone(),
+                value: Box::new(other.clone()),
             });
         }
         None => false,
@@ -3217,7 +3233,7 @@ fn parse_portal_open_file_argument(
                 provider,
                 index,
                 expected: "portal.openFile field `currentFolder` must be Text".into(),
-                value: other.clone(),
+                value: Box::new(other.clone()),
             });
         }
         None => None,
@@ -3234,7 +3250,7 @@ fn parse_portal_open_file_argument(
                 provider,
                 index,
                 expected: "portal.openFile field `filters` must be List PortalFileFilter".into(),
-                value: other.clone(),
+                value: Box::new(other.clone()),
             });
         }
         None => Vec::new().into_boxed_slice(),
@@ -3261,8 +3277,9 @@ fn parse_portal_file_filter(
             instance,
             provider,
             index,
-            expected: "PortalFileFilter records must have `name: Text` and `patterns: List Text`".into(),
-            value: strip_signal(value).clone(),
+            expected: "PortalFileFilter records must have `name: Text` and `patterns: List Text`"
+                .into(),
+            value: Box::new(strip_signal(value).clone()),
         });
     };
     let Some(RuntimeValue::Text(name)) = runtime_record_field(fields, "name") else {
@@ -3271,7 +3288,7 @@ fn parse_portal_file_filter(
             provider,
             index,
             expected: "PortalFileFilter field `name` must be Text".into(),
-            value: strip_signal(value).clone(),
+            value: Box::new(strip_signal(value).clone()),
         });
     };
     let Some(RuntimeValue::List(patterns)) = runtime_record_field(fields, "patterns") else {
@@ -3280,7 +3297,7 @@ fn parse_portal_file_filter(
             provider,
             index,
             expected: "PortalFileFilter field `patterns` must be List Text".into(),
-            value: strip_signal(value).clone(),
+            value: Box::new(strip_signal(value).clone()),
         });
     };
     let patterns = patterns
@@ -3292,7 +3309,7 @@ fn parse_portal_file_filter(
                 provider,
                 index,
                 expected: "PortalFileFilter field `patterns` must be List Text".into(),
-                value: other.clone(),
+                value: Box::new(other.clone()),
             }),
         })
         .collect::<Result<Vec<_>, _>>()?
@@ -3421,7 +3438,8 @@ fn validate_portal_screenshot_result_step(
         return Err(SourceProviderExecutionError::UnsupportedProviderShape {
             instance,
             provider,
-            detail: "portal.screenshot success payload must decode as PortalScreenshotResult".into(),
+            detail: "portal.screenshot success payload must decode as PortalScreenshotResult"
+                .into(),
         });
     };
     let mut saw_bytes = false;

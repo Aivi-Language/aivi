@@ -1,357 +1,164 @@
-# External Integrations
+# External integrations
 
-AIVI apps stay pure inside and talk to the outside world through a single, uniform boundary: **sources**. Every integration — HTTP, files, timers, databases, D-Bus, custom services — follows the same pattern:
+AIVI keeps ordinary language code pure and crosses into the operating system through typed source
+providers. A source declaration creates either a reactive value or a capability handle. Derived
+signals remain pure: workers perform I/O and publish immutable updates, while the scheduler commits
+those updates without blocking GTK's main thread.
 
-```
-Declare a source  →  Annotate the type  →  Derive signals  →  Present in UI
-```
+This page focuses on the common integration shape. The complete provider and option inventory lives
+in the [source catalog](source-catalog.md).
 
-Because the outside world feeds in through a typed boundary, your application logic stays pure: no callbacks, no promise chains, no manual error plumbing. The runtime handles the decode, the lifecycle, and the threading.
+## Start with a typed boundary
 
-This page shows efficient integration patterns for the most common cases.
-
----
-
-## The integration pattern
-
-Every integration has the same four steps:
+Declare the smallest useful payload type at the source boundary. For an HTTP capability, create one
+base handle and derive endpoint signals from it:
 
 ```aivi
-// 1. Declare the source
-@source http.get "https://api.example.com/users"
-signal usersRaw : Signal (Result HttpError (List User))
+type User = {
+    id: Int,
+    name: Text
+}
 
-signal users : Signal (List User) = usersRaw
-  |> .ok
-  |> withDefault []
+@source http "https://api.example.com"
+signal api : HttpSource
 
-signal userCount : Signal Text = users
-  |> length
-  |> "Users: {.}"
-
-value main =
-    <Window title="Users">
-        <Label text={userCount} />
-    </Window>
-
-export main
+signal users : Signal (HttpResponse (List User)) = api.get "/users"
 ```
 
-Steps 1 and 2 are cleanly separated. The source annotation describes **what** to fetch and **when** to re-fetch. The signals describe **what to do with it** — in pure functions, with no I/O.
+`HttpResponse A` is `Result HttpError A`, so transport and decode failures stay explicit. The source
+runtime decodes successful responses into `List User`; downstream code never handles untyped JSON.
 
----
+## Timers are sources
 
-## Timers
-
-Timers are the simplest source — no external service, no decode.
+Timer values enter the same reactive graph as external I/O:
 
 ```aivi
-// Fire every 500ms, do not fire on start-up
-@source timer.every 500ms with {
+use aivi.timer (TimerTick)
+
+@source timer.every 500 with {
     immediate: False,
     coalesce: True
 }
-signal tick : Signal Unit
-
-signal count : Signal Int
+signal tick : Signal TimerTick
 ```
 
-Use `coalesce: True` when a slow UI should not queue up a backlog of ticks. The runtime discards any un-processed ticks rather than piling them up.
+`immediate` controls whether the timer emits during startup. `coalesce` prevents a slow consumer
+from accumulating an unbounded backlog of timer events.
+
+For a one-shot wakeup, use `timer.after`:
 
 ```aivi
-// Fire once after a 2-second delay
-@source timer.after 2s
-signal startupDone : Signal Unit
+use aivi.timer (TimerReady)
+
+@source timer.after 1000
+signal ready : Signal TimerReady
 ```
 
----
+## Filesystem capabilities
 
-## HTTP
-
-### One-shot fetch on startup
+A filesystem source is a capability rooted at one directory. Its members expose reactive reads and
+one-shot tasks without giving pure code ambient filesystem access:
 
 ```aivi
-@source http.get "https://api.example.com/config"
-signal configResponse : Signal (Result HttpError AppConfig)
+@source fs "."
+signal workspaceFiles : FsSource
 
-signal config : Signal AppConfig = configResponse
-  |> withDefault defaultConfig
+signal cargoToml : Signal (Result FsError Text) = workspaceFiles.read "Cargo.toml"
+
+value outputExists : Task Text Bool = workspaceFiles.exists "target/output.txt"
 ```
 
-The response body is decoded directly into `AppConfig` using the structural decode rules. If your type annotation is a `Result`, decode errors surface as `Err`; if it is a plain type, a decode error produces a runtime diagnostic.
+Keep the root narrow. A second capability should be declared when another directory has a different
+ownership or lifetime boundary.
 
-### Polling with a timer
+## Process and environment context
+
+Process, environment, and platform paths are separate capabilities so their costs and ownership are
+visible:
 
 ```aivi
-@source timer.every 30s with {
-    immediate: True,
-    coalesce: True
-}
-signal refreshTick : Signal Unit
+use aivi.process (ProcessSource)
 
-@source http.get "https://api.example.com/feed" with {
-    refreshOn: refreshTick,
-    timeout: 10s
-}
-signal feedResponse : Signal (Result HttpError (List FeedItem))
+use aivi.env (EnvSource)
+
+use aivi.path (PathSource)
+
+@source process
+signal runtime : ProcessSource
+
+@source env
+signal hostEnv : EnvSource
+
+@source path
+signal systemPaths : PathSource
+
+signal arguments : Signal (List Text) = runtime.args
+signal workingDirectory : Signal Text = runtime.cwd
+signal accessToken : Signal (Option Text) = hostEnv.get "ACCESS_TOKEN"
+signal configDirectory : Signal Text = systemPaths.configHome
 ```
 
-`immediate: True` fires on startup so the first fetch happens immediately, not 30 seconds later. `coalesce: True` on the timer prevents request queuing if a slow response is still in-flight.
+Read secrets only at the boundary that needs them, and keep the resulting signal out of logs and UI
+trees.
 
-### POST with a payload
+## Database connections
 
-```aivi
-signal submitPayload : Signal CreateUserRequest
-
-@source http.post "https://api.example.com/users" with {
-    refreshOn: submitPayload,
-    body: submitPayload
-}
-signal createResult : Signal (Result HttpError User)
-```
-
-The `body` option sends the current value of `submitPayload` as a JSON-encoded request body on each tick.
-
----
-
-## Filesystem
-
-### Read a file once
+Database sources use typed connection values and explicit `Result` payloads:
 
 ```aivi
-value configPath = "/etc/myapp/config.json"
+use aivi.db (
+    Connection
+    DbError
+)
 
-@source fs.read configPath
-signal configText : Signal (Result FsError AppConfig)
-```
-
-### Watch for changes
-
-```aivi
-@source fs.watch "/home/user/notes" with {
-    recursive: False
-}
-signal notesChanged : Signal FsEvent
-
-@source fs.read "/home/user/notes/index.md" with {
-    reloadOn: notesChanged
-}
-signal notesIndex : Signal (Result FsError Text)
-```
-
-`FsEvent` carries information about what changed (file created, modified, deleted). Derive signals from `notesChanged` to filter by event kind before triggering expensive re-reads.
-
-### Efficient partial reads
-
-If a file is large, annotate the signal type with a narrower record and the runtime will decode only what you need:
-
-```aivi
-type AppConfig = {
-    theme: Text,
-    fontSize: Int
+value connection : Connection = {
+    database: "sqlite:///var/lib/example/data.db"
 }
 
-@source fs.read "/etc/myapp/config.json"
-signal config : Signal (Result FsError AppConfig)
+@source db.connect connection
+signal database : Signal (Result DbError Connection)
 ```
 
----
+Use `db.live` for a task whose result should be republished when a trigger changes. Query arguments
+belong in `DbStatement.arguments`; do not build SQL by interpolating untrusted text.
 
-## Database
+## Derive pure presentation state
 
-### Connect and query
-
-```aivi
-@source db.connect "sqlite:///var/lib/myapp/data.db"
-signal db : Signal (Result DbError DbHandle)
-
-@source db.live db "SELECT id, name FROM users ORDER BY name"
-signal users : Signal (Result DbError (List User))
-```
-
-`db.live` re-executes the query whenever the database is written to. The result decodes into `List User` using the structural decode rules (field names match column names).
-
-### Parameterised queries
+Once a source has decoded its payload, ordinary signal transformations handle presentation state:
 
 ```aivi
-signal selectedTag : Signal Text
-
-@source db.live db "SELECT * FROM posts WHERE tag = $1" with {
-    refreshOn: selectedTag
-}
-signal taggedPosts : Signal (Result DbError (List Post))
-```
-
-`refreshOn` re-executes the query whenever the trigger signal fires. Embed query parameters as literals in the SQL string, or construct the query string reactively from a derived signal.
-
----
-
-## D-Bus
-
-### Subscribe to a signal
-
-```aivi
-@source dbus.signal "/org/freedesktop/NetworkManager" with {
-    interface: "org.freedesktop.DBus.Properties",
-    member: "PropertiesChanged"
-}
-signal nmProperties : Signal (Result DbusError DbusMessage)
-```
-
-The object path is the positional argument to `dbus.signal`. `interface` and `member` are named options.
-
-### Call a method
-
-```aivi
-@source dbus.method "org.freedesktop.NetworkManager" with {
-    path: "/org/freedesktop/NetworkManager",
-    interface: "org.freedesktop.NetworkManager",
-    member: "GetDevices"
-}
-signal devices : Signal (Result DbusError (List Text))
-```
-
-The D-Bus destination (bus name) is the positional argument to `dbus.method`. Object path, interface, and member are named options.
-
-D-Bus method sources call the method on startup (or on a trigger) and decode the reply. Use `dbus.signal` for subscriptions to broadcasts; use `dbus.method` for one-shot or triggered queries.
-
-### Decode the reply
-
-Annotate the signal type and the runtime decodes D-Bus variant values into AIVI types:
-
-```aivi
-type NetworkState = {
-    connectivity: Int,
-    state: Int
+type User = {
+    id: Int,
+    name: Text
 }
 
-@source dbus.method with {}
-signal networkState : Signal (Result DbusError NetworkState)
+@source http "https://api.example.com"
+signal api : HttpSource
+
+signal users : Signal (HttpResponse (List User)) = api.get "/users"
+
+signal status : Signal Text = users
+ ||> Ok loaded -> "Loaded {length loaded} users"
+ ||> Err _     -> "Could not load users"
 ```
 
----
+This separation is the central invariant:
 
-## Environment and process context
+- providers own I/O, cancellation, decoding, and worker lifetimes;
+- the scheduler owns deterministic signal publication;
+- pure functions own transformations;
+- GTK creation and mutation stay on the GTK main thread.
 
-```aivi
-// Snapshot env on startup — no reactive re-reads needed
-@source env.get "HOME"
-signal homeDir : Signal (Result EnvError Text)
+## Choosing a provider
 
-@source env.getAll
-signal envMap : Signal (Result EnvError (Dict Text Text))
-```
+Use a built-in capability whenever one matches the external system. Current families include HTTP,
+filesystem, database, D-Bus, environment, process, platform paths, random values, logging, standard
+I/O, desktop portals, notifications, settings, and mail-related services. Provider-specific argument,
+option, payload, and lifecycle rules are documented in the [source catalog](source-catalog.md).
 
----
+For a provider implemented outside the repository, define and review its Rust-side contract first.
+Do not invent an AIVI `@source` spelling in application code: an unknown provider is a compile-time
+error.
 
-## Combining multiple sources
-
-Use signal merge to combine several sources into a single event stream:
-
-```aivi
-signal refreshClick : Signal Unit
-
-@source timer.every 60s with {
-    immediate: True,
-    coalesce: True
-}
-signal autoRefresh : Signal Unit
-
-signal refresh : Signal Unit = refreshClick | autoRefresh
-  ||> _ _ => ()
-
-@source http.get "https://api.example.com/data" with {
-    refreshOn: refresh
-}
-signal data : Signal (Result HttpError (List Item))
-```
-
-This wires a manual refresh button and an automatic 60-second refresh into a single trigger for the HTTP source.
-
----
-
-## Custom source providers
-
-When no built-in source fits, declare a custom provider with a contract:
-
-```aivi
-// <unparseable item>
-@source BluetoothScanner with {
-    scanDurationMs: 5000,
-    nameFilter: Some "MyDevice"
-}
-signal device : Signal (Result ScanError BluetoothDevice)
-```
-
-The contract declares what options the provider accepts, what type it emits, and when it wakes up. The implementation lives in a Rust provider crate. The AIVI side stays declarative.
-
----
-
-## Patterns and tips
-
-### Decode early, derive late
-
-Always annotate source signals with the narrowest useful type. Let the runtime do the decode work at the boundary:
-
-```aivi
-// Good — decode at the source boundary
-@source http.get url
-signal user : Signal (Result HttpError User)
-
-@source http.get url
-signal userJson : Signal (Result HttpError Text)
-
-signal user = userJson
-  |> map parseUser
-```
-
-### Coalesce high-frequency sources
-
-For timers driving network requests or expensive computations, always set `coalesce: True`:
-
-```aivi
-@source timer.every 100ms with {
-    immediate: False,
-    coalesce: True
-}
-signal tick : Signal Unit
-```
-
-Without coalescing, a slow downstream will cause ticks to queue.
-
-### Gate expensive signals with `?|>`
-
-If a derived signal is expensive and only meaningful in certain states, gate it:
-
-```aivi
-signal isLoggedIn : Signal Bool
-
-signal userProfile : Signal Profile = authToken
- ?|> isLoggedIn
-  |> fetchProfile
-```
-
-The `fetchProfile` derivation only runs when `isLoggedIn` is `True`.
-
-### Lift errors to the UI
-
-Every I/O signal should carry a `Result`. Lift errors into the UI explicitly rather than silently defaulting:
-
-```aivi
-signal configResult : Signal (Result FsError AppConfig)
-
-signal configError : Signal (Option Text) = configResult
- ||> Ok _  -> None
- ||> Err e -> Some (renderFsError e)
-
-value main =
-    <Window title="App">
-        <show when={configError |> isSome}>
-            <Label text={configError |> withDefault ""} />
-        </show>
-    </Window>
-```
-
----
-
-*See also: [sources.md](sources.md) for the source mechanism, [source-catalog.md](source-catalog.md) for the full reference, [signals.md](signals.md) for the reactive graph.*
+See also [Sources](sources.md) for source semantics and [Signals](signals.md) for reactive
+composition.

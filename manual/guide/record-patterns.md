@@ -31,7 +31,7 @@ See [Pattern Matching](/guide/pattern-matching) for full pattern syntax includin
 
 When a record contains nested records, dotted paths reach into the structure without writing nested patterns manually:
 
-```aivi
+```aivi group=user-projection
 type City = {
     name: Text,
     population: Int
@@ -47,6 +47,17 @@ type User = {
     address: Address
 }
 
+value user : User = {
+    name: "Ada",
+    address: {
+        city: {
+            name: "London",
+            population: 8982000
+        },
+        street: "St James's Square"
+    }
+}
+
 type User -> Text
 func cityName = arg1 => arg1
  ||> { address.city.name } -> name
@@ -54,12 +65,10 @@ func cityName = arg1 => arg1
 
 `{ address.city.name }` is sugar for nested patterns:
 
-```aivi
-```
 
 The leaf segment (`name`) becomes the bound variable. This works at any depth:
 
-```aivi
+```aivi group=user-projection
 type User -> Text
 func streetName = arg1 => arg1
  ||> { address.street } -> street
@@ -67,7 +76,7 @@ func streetName = arg1 => arg1
 
 You can combine dotted paths with ordinary fields:
 
-```aivi
+```aivi group=user-projection
 type User -> Text
 func userCity = arg1 => arg1
  ||> { name, address.city.name: cityName } -> "{name} lives in {cityName}"
@@ -104,7 +113,7 @@ The key insight: `{ field: . }` is not record construction — it is a **project
 
 Dotted paths combine with the projection form to reach into nested structures:
 
-```aivi
+```aivi group=user-projection
 type User -> Text
 func getCityName = arg1 =>
     arg1.address.city.name
@@ -112,10 +121,10 @@ func getCityName = arg1 =>
 
 This extracts `address.city.name` from the input and makes it available for downstream pipes:
 
-```aivi
+```aivi group=user-projection
 type User -> Text
-func upperCityName = arg1 => arg1.address.city.name
-  |> toUpper
+func upperCityName = arg1 =>
+    toUpper (getCityName arg1)
 ```
 
 The same dotted-path idea is also available in selected-subject function headers:
@@ -143,7 +152,7 @@ projection sugar in the header, not a new general parameter-pattern form.
 
 Projection expressions work naturally as pipe stages:
 
-```aivi
+```aivi group=user-projection
 value uppercasedCity = user
   |> { address.city.name: . }
   |> toUpper
@@ -151,8 +160,8 @@ value uppercasedCity = user
 
 This is equivalent to the `.field` ambient projection form, but for deeper paths:
 
-```aivi
-value uppercasedCity = user
+```aivi group=user-projection
+value uppercasedCityStepwise = user
   |> .address
   |> .city
   |> .name
@@ -172,12 +181,10 @@ type Full = {
 
 type Full -> { name: Text, email: Text }
 func stripDebug = arg1 =>
-    arg1
+    arg1 <| { debug: - }
 ```
 
 Removal can target nested fields using selectors:
 
-```aivi
-```
 
 See [Values & Functions § Structural patches](/guide/values-and-functions#structural-patches) for more on the `<|` operator and patch selectors.

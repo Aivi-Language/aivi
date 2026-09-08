@@ -30,18 +30,18 @@ pub enum EvaluationError {
     KernelInputLayoutMismatch {
         kernel: KernelId,
         expected: LayoutId,
-        found: RuntimeValue,
+        found: Box<RuntimeValue>,
     },
     KernelEnvironmentLayoutMismatch {
         kernel: KernelId,
         slot: EnvSlotId,
         expected: LayoutId,
-        found: RuntimeValue,
+        found: Box<RuntimeValue>,
     },
     KernelResultLayoutMismatch {
         kernel: KernelId,
         expected: LayoutId,
-        found: RuntimeValue,
+        found: Box<RuntimeValue>,
     },
     UnknownEnvironmentSlot {
         kernel: KernelId,
@@ -61,19 +61,19 @@ pub enum EvaluationError {
     InvalidProjectionBase {
         kernel: KernelId,
         expr: KernelExprId,
-        found: RuntimeValue,
+        found: Box<RuntimeValue>,
     },
     InvalidCallee {
         kernel: KernelId,
         expr: KernelExprId,
-        found: RuntimeValue,
+        found: Box<RuntimeValue>,
     },
     InvalidIntrinsicArgument {
         kernel: KernelId,
         expr: KernelExprId,
         value: IntrinsicValue,
         index: usize,
-        found: RuntimeValue,
+        found: Box<RuntimeValue>,
     },
     IntrinsicFailed {
         kernel: KernelId,
@@ -99,7 +99,7 @@ pub enum EvaluationError {
     UnsupportedInlinePipeSignalSubject {
         kernel: KernelId,
         expr: KernelExprId,
-        found: RuntimeValue,
+        found: Box<RuntimeValue>,
     },
     UnsupportedInlinePipePattern {
         kernel: KernelId,
@@ -108,33 +108,33 @@ pub enum EvaluationError {
     InlinePipeCaseNoMatch {
         kernel: KernelId,
         expr: KernelExprId,
-        subject: RuntimeValue,
+        subject: Box<RuntimeValue>,
     },
     UnsupportedUnary {
         kernel: KernelId,
         expr: KernelExprId,
         operator: UnaryOperator,
-        operand: RuntimeValue,
+        operand: Box<RuntimeValue>,
     },
     UnsupportedBinary {
         kernel: KernelId,
         expr: KernelExprId,
         operator: BinaryOperator,
-        left: RuntimeValue,
-        right: RuntimeValue,
+        left: Box<RuntimeValue>,
+        right: Box<RuntimeValue>,
     },
     InvalidBinaryArithmetic {
         kernel: KernelId,
         expr: KernelExprId,
         operator: BinaryOperator,
-        left: RuntimeValue,
-        right: RuntimeValue,
+        left: Box<RuntimeValue>,
+        right: Box<RuntimeValue>,
         reason: &'static str,
     },
     InvalidInterpolationValue {
         kernel: KernelId,
         expr: KernelExprId,
-        found: RuntimeValue,
+        found: Box<RuntimeValue>,
     },
     InvalidIntegerLiteral {
         kernel: KernelId,
@@ -159,8 +159,8 @@ pub enum EvaluationError {
     UnsupportedStructuralEquality {
         kernel: KernelId,
         expr: KernelExprId,
-        left: RuntimeValue,
-        right: RuntimeValue,
+        left: Box<RuntimeValue>,
+        right: Box<RuntimeValue>,
     },
     UnsupportedNativeOnlyRuntimeOperation {
         detail: Box<str>,

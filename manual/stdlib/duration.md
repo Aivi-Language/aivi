@@ -5,7 +5,8 @@ Typed time spans.
 `aivi.duration` gives you a `Duration` domain instead of passing around plain `Int` values.
 That makes time-related code easier to read: `5sec` says more than `5000`.
 
-A `Duration` is a domain over `Int`, so construction is explicit; the carrier is always accessible via `.carrier`.
+A `Duration` is a domain over `Int`. Its hoisted suffix literals are the currently usable public
+construction surface.
 
 ## Import
 
@@ -16,7 +17,11 @@ use aivi.duration (
 )
 ```
 
-Because `aivi.duration` declares `hoist`, the suffix constructors (`ms`, `sec`, `min`, `hr`, `dy`) and constructor helpers (`millis`, `trySeconds`) are available project-wide in every AIVI file without any `use` statement. The type names `Duration` and `DurationError` are also hoisted, so no `use` is needed at all in most files. Import them explicitly only when you want them to appear in your module's own `export` list or if your tooling requires an explicit declaration.
+Because `aivi.duration` declares `hoist`, the suffix constructors (`ms`, `sec`, `min`, `hr`, `dy`)
+and type names are available project-wide without a `use` statement. The domain also declares
+named constructors, conversions, and operators internally, but those members are not currently
+exported through module imports. Treat them as implementation details until that boundary is
+implemented.
 
 ## Overview
 
@@ -49,51 +54,47 @@ value trialPeriod : Duration = 14dy
 These values stay typed as `Duration`, so they are harder to confuse with unrelated `Int`
 values elsewhere in your program.
 
-## Constructors
+## Declared domain members
 
 ### `millis`
 
-```aivi
+```text
+millis : Int -> Duration
 ```
 
 Build a duration from a raw millisecond count.
 
-```aivi
-value shortDelay : Duration = millis 150
-```
+Use the equivalent `ms` suffix in public code: `150ms`.
 
 ### `trySeconds`
 
-```aivi
+```text
+trySeconds : Int -> Result DurationError Duration
 ```
 
 A safe constructor for whole seconds. Use this when you want construction to report a
 `DurationError` instead of assuming the input is valid.
 
-```aivi
-value pollInterval : Result DurationError Duration = trySeconds 10
-```
+`trySeconds` is declared by the domain but is not exported today. For a known non-negative
+literal, use `10sec`; validate dynamic input in application code before applying the suffix.
 
-## `.carrier`
+## Conversion
 
-Access the raw `Int` carrier. In this module the direct constructor is `millis`, so this is
-the millisecond count that backs the duration value.
-
-```aivi
-value totalWait : Duration = 1min + 30sec
-value totalWaitMs : Int = totalWait.carrier
-```
+The implementation declares `toMillis`, `toSeconds`, `toMinutes`, `toHours`, and `toDays`, but
+these domain members are not exported today. Imported domain values intentionally do not expose a
+`.carrier` projection, so public code cannot currently unwrap a `Duration`.
 
 ## Operators
 
-The `Duration` domain includes a small set of arithmetic and comparison operators.
+The `Duration` domain declares arithmetic and comparison operators internally. Imported code does
+not resolve those domain operators yet, so the following signatures describe planned public
+behavior rather than callable APIs:
 
-```aivi
-value total : Duration = 45sec + 15sec
-value remaining : Duration = total - 10sec
-value doubled : Duration = 250ms * 2
-value isShorter : Bool = 30sec < 1min
-value rawMs : Int = doubled.carrier
+```text
+(+) : Duration -> Duration -> Duration
+(-) : Duration -> Duration -> Duration
+(*) : Duration -> Int -> Duration
+(<) : Duration -> Duration -> Bool
 ```
 
 ## Error type
@@ -110,5 +111,4 @@ When a smart constructor fails, the module reports a plain text message.
 value animationFrame : Duration = 16ms
 value autosaveEvery : Duration = 30sec
 value timeout : Duration = 2min
-value timeoutMs : Int = timeout.carrier
 ```

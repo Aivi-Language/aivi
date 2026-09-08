@@ -4,8 +4,9 @@
     "outDir": "./out",
     "rootDir": "./src",
     "lib": ["ES2022"],
-    "module": "commonjs",
-    "moduleResolution": "node"
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "types": ["node", "vscode"]
   },
   "include": ["src/**/*"]
 }

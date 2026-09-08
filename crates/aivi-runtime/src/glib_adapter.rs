@@ -1060,6 +1060,9 @@ mod tests {
         GlibTickDrainMode, TickExecutionGuard,
     };
 
+    type SharedPublishNext = Arc<Mutex<Option<Box<dyn Fn(i32) + Send + 'static>>>>;
+    type SharedReentryHook = Arc<Mutex<Option<Box<dyn Fn() + Send + 'static>>>>;
+
     struct LoweredStack {
         hir: hir::LoweringResult,
         core: core::Module,
@@ -1339,8 +1342,7 @@ mod tests {
                 let mirror = builder.add_derived("mirror", None).unwrap();
                 builder.define_derived(mirror, [input.as_signal()]).unwrap();
 
-                let publish_next: Arc<Mutex<Option<Box<dyn Fn(i32) + Send + 'static>>>> =
-                    Arc::new(Mutex::new(None));
+                let publish_next: SharedPublishNext = Arc::new(Mutex::new(None));
                 let publish_next_in_evaluator = publish_next.clone();
                 let driver = GlibSchedulerDriver::new(
                     context.clone(),
@@ -1402,7 +1404,7 @@ mod tests {
                     "glib-runtime-window-key-source.aivi",
                     r#"
 @source window.keyDown with {
-    repeat: True
+    repeat: True,
     focusOnly: True
 }
 signal keyDown : Signal Text
@@ -2044,8 +2046,7 @@ value failInsert : Task Text Unit =
                 let mirror = builder.add_derived("mirror", None).unwrap();
                 builder.define_derived(mirror, [input.as_signal()]).unwrap();
 
-                let reenter: Arc<Mutex<Option<Box<dyn Fn() + Send + 'static>>>> =
-                    Arc::new(Mutex::new(None));
+                let reenter: SharedReentryHook = Arc::new(Mutex::new(None));
                 let reenter_in_evaluator = reenter.clone();
                 let driver = GlibSchedulerDriver::new(
                     context.clone(),

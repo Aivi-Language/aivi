@@ -57,6 +57,8 @@ use aivi.imap (
 ## `SyncState`
 
 ```aivi
+use aivi.imap (ImapError)
+
 type SyncState = {
     lastSyncedAt: Option Int,
     inProgress: Bool,
@@ -128,6 +130,8 @@ Common message flags used by mail servers.
 ## `ImapEvent`
 
 ```aivi
+use aivi.imap (ImapFlag)
+
 type ImapEvent =
   | NewMessage Int
   | MessageFlagChanged Int ImapFlag
@@ -164,6 +168,8 @@ func describeEvent = event => event
 ## `ImapHeader`
 
 ```aivi
+use aivi.imap (ImapFlag)
+
 type ImapHeader = {
     uid: Int,
     subject: Text,
@@ -181,6 +187,8 @@ Best-effort header slice fetched during mailbox sync.
 ## `ImapSnapshot`
 
 ```aivi
+use aivi.imap (ImapHeader)
+
 type ImapSnapshot = {
     accountId: Text,
     mailbox: Text,
@@ -194,6 +202,8 @@ Mailbox snapshot returned by `imap.connect`.
 ## `ImapLiveEvent`
 
 ```aivi
+use aivi.imap (ImapEvent)
+
 type ImapLiveEvent = {
     accountId: Text,
     mailbox: Text,
@@ -259,6 +269,8 @@ func describeImapError = error => error
 ## `ImapTask`
 
 ```aivi
+use aivi.imap (ImapError)
+
 type ImapTask A =
   Task ImapError A
 ```
@@ -267,7 +279,24 @@ Alias for background IMAP work that either returns `A` or fails with `ImapError`
 
 ## Source providers
 
+Use actual `GoaMailAccount` values from `goa.mailAccounts` in an application. The empty
+list below only illustrates the declarations; it does not connect to a mail account.
+Direct TLS is supported, but STARTTLS-only GOA accounts are currently rejected.
+
 ```aivi
+use aivi.imap (
+    ImapBody
+    ImapError
+    ImapLiveEvent
+    ImapSnapshot
+)
+
+use aivi.gnome.onlineAccounts (GoaMailAccount)
+
+value accounts : List GoaMailAccount = []
+
+signal syncPulse : Signal Unit
+
 @source imap.connect accounts with {
     mailbox: "INBOX",
     limit: 25,
@@ -279,7 +308,8 @@ signal snapshots : Signal (Result ImapError (List ImapSnapshot))
     mailbox: "INBOX"
 }
 signal liveEvent : Signal (Result ImapError ImapLiveEvent)
-
-@source imap.fetchBody request
-signal body : Signal (Result ImapError ImapBody)
 ```
+
+`imap.fetchBody` requires a record with the account's connection and authentication
+fields plus `mailbox: Text` and `uid: Int`. An `accountId` alone is not sufficient.
+See the [source catalog](/guide/source-catalog#imap-fetchbody) for the request contract.

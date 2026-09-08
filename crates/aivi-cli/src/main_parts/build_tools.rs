@@ -642,35 +642,13 @@ fn load_embedded_run_artifact(
     requested_view: Option<&str>,
 ) -> Result<RunArtifact, String> {
     let frozen_image_key = PathBuf::from(FROZEN_RUN_IMAGE_FILE_NAME);
-    if let Some(image_bytes) = entries.get(&frozen_image_key) {
-        return load_frozen_run_image_from_bytes(image_bytes, requested_view);
-    }
-    load_serialized_run_artifact_from_bundle_entries(entries, requested_view)
-}
-
-fn load_serialized_run_artifact_from_bundle_entries(
-    entries: &BTreeMap<PathBuf, Vec<u8>>,
-    requested_view: Option<&str>,
-) -> Result<RunArtifact, String> {
-    let artifact_key = PathBuf::from(RUN_ARTIFACT_FILE_NAME);
-    let artifact_bytes = entries
-        .get(&artifact_key)
-        .ok_or_else(|| format!("embedded bundle is missing {}", artifact_key.display()))?
-        .clone();
-    let entry_bytes = entries.clone();
-    load_serialized_run_artifact_from_bytes(
-        artifact_bytes.as_slice(),
-        requested_view,
-        Box::new(move |relative_path| {
-            let key = validate_embedded_bundle_relative_path(relative_path)?;
-            entry_bytes.get(&key).cloned().ok_or_else(|| {
-                format!(
-                    "embedded bundle is missing generated payload {}",
-                    key.display()
-                )
-            })
-        }),
-    )
+    let image_bytes = entries.get(&frozen_image_key).ok_or_else(|| {
+        format!(
+            "embedded bundle is missing {}; rebuild the executable with this AIVI version",
+            frozen_image_key.display()
+        )
+    })?;
+    load_frozen_run_image_from_bytes(image_bytes, requested_view)
 }
 
 fn copy_workspace_companion_files(
@@ -1019,16 +997,10 @@ fn should_keep_embedded_entry_in_memory(relative: &Path) -> bool {
     if relative == Path::new(FROZEN_RUN_IMAGE_FILE_NAME) {
         return true;
     }
-    if relative == Path::new(RUN_ARTIFACT_FILE_NAME) {
-        return true;
-    }
     if relative == Path::new(EMBEDDED_BUNDLE_LAUNCH_CWD_FILE) {
         return true;
     }
-    matches!(
-        relative.components().next(),
-        Some(std::path::Component::Normal(name)) if name == std::ffi::OsStr::new(RUN_ARTIFACT_PAYLOAD_DIR)
-    )
+    false
 }
 
 fn read_u32_le_from(reader: &mut fs::File, path: &Path) -> Result<u32, String> {
@@ -1235,7 +1207,7 @@ COMMANDS:
     build <path> -o <file> [opts]   Package a runnable source-free GTK executable
     run [path] [opts]               Launch a live GTK app
     execute <path> [-- args...]     Run a headless Task program
-    test <path>                     Run @test declarations in a workspace
+    test <path> [name]              Run all or one exact @test value
     lex <path>                      Dump the lossless token stream
     fmt <path|--stdin|--check>      Format AIVI source code
     openapi-gen <spec> [-o file]    Generate AIVI types from an OpenAPI spec
@@ -1262,13 +1234,16 @@ fn format_subcommand_help(name: &str) -> Option<String> {
 aivi check — type-check a module through HIR
 
 USAGE:
-    aivi check [<path>]
+    aivi check [<path>] [--timings]
 
 ARGS:
     <path>              Path to an .aivi source file, or a directory to check
                         recursively. When omitted, all [[app]] entries in
                         aivi.toml are checked; if only one app (or a [run]
                         entry) is defined, that single entry is checked.
+
+OPTIONS:
+    --timings           Print frontend stage timings to stderr.
 
 DESCRIPTION:
     Lexes, parses, lowers, and validates one or more modules through the full
@@ -1340,7 +1315,7 @@ DESCRIPTION:
 aivi run — launch a live GTK app
 
 USAGE:
-    aivi run [<path>] [--path <path>] [--app <name>] [--view <name>]
+    aivi run [<path>] [--path <path>] [--app <name>] [--view <name>] [--timings]
 
 ARGS:
     [<path>]            Path to an .aivi source file, workspace entry,
@@ -1361,6 +1336,10 @@ OPTIONS:
     --view <name>
             Dot-separated module path to the view entry point
             (e.g. \"app.main\"). When omitted, uses the default view.
+
+    --timings
+            Print startup, lowering, linking, and hydration timings to
+            stderr instead of the interactive progress display.
 
 DESCRIPTION:
     Compiles and immediately launches a GTK/libadwaita application with
@@ -1403,15 +1382,19 @@ aivi test — run @test declarations in a workspace
 
 USAGE:
     aivi test <path>
+    aivi test <path> <name>
+    aivi test --path <path> --name <name>
 
 ARGS:
     <path>              Path to an .aivi source file or workspace entry
+    <name>              Optional exact `@test` value name from <path>
 
 DESCRIPTION:
     Discovers all `@test value ... : Task ...` declarations in the
-    workspace and executes them. Each test runs in isolation. Reports
-    pass/fail status for each test and exits with code 0 if all tests
-    pass, 1 if any test fails.
+    workspace and executes them. When <name> is provided, only that exact
+    test from <path> is executed. Each test runs in isolation. Reports
+    pass/fail status and exits with code 0 if all selected tests pass,
+    1 if any selected test fails or the requested test does not exist.
 "
         }
         "lex" => {
@@ -1491,9 +1474,11 @@ USAGE:
 
 DESCRIPTION:
     Starts the AIVI language server using the Language Server Protocol
-    over stdio. Provides diagnostics, completion, hover, semantic
-    tokens, formatting, go-to-definition, document symbols, and code
-    lens capabilities to connected editors.
+    over stdio. Provides incremental synchronization, diagnostics,
+    completion, hover, signature help, formatting, definitions,
+    implementations, references, rename, document highlights, folding
+    ranges, symbols, inlay hints, code actions, code lenses, and
+    full/range/delta semantic tokens to connected editors.
 
     Typically launched automatically by the VSCode extension or other
     LSP-compatible editors.

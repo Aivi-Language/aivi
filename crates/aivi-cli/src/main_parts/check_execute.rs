@@ -245,7 +245,7 @@ fn run_markup_file_with_launch_config(
     if let Some(view) = requested_view {
         validate_module_name(view)?;
     }
-    if let Some(artifact) = maybe_load_serialized_run_artifact(path, requested_view)? {
+    if let Some(artifact) = maybe_load_frozen_run_image(path, requested_view)? {
         progress_handle.mark_launching();
         return run_session::launch_run_with_config(
             path,
@@ -315,13 +315,15 @@ fn run_markup_file_with_launch_config(
                     if timings {
                         print_run_timing_report(
                             path,
-                            Duration::default(),
-                            Duration::default(),
-                            Duration::default(),
-                            QueryCacheStats::default(),
-                            artifact_metrics,
-                            *startup_metrics,
-                            total_start.elapsed(),
+                            RunTimingReport {
+                                load_duration: Duration::default(),
+                                syntax_duration: Duration::default(),
+                                hir_duration: Duration::default(),
+                                query_cache: QueryCacheStats::default(),
+                                artifact: artifact_metrics,
+                                startup: *startup_metrics,
+                                total_to_first_present: total_start.elapsed(),
+                            },
                         );
                     }
                 }
@@ -444,8 +446,9 @@ fn run_markup_file_with_launch_config(
         result
     };
     let query_cache = snapshot.frontend.db.cache_stats();
-    if let Some(cache_home) = cache_home.as_deref() {
-        if let Some(frozen) = frozen_artifact.as_ref() {
+    if let Some(cache_home) = cache_home.as_deref()
+        && let Some(frozen) = frozen_artifact.as_ref()
+    {
             if debug_startup {
                 run_session::startup_debug_log("startup: cache store begin");
             }
@@ -474,7 +477,6 @@ fn run_markup_file_with_launch_config(
             if debug_startup {
                 run_session::startup_debug_log("startup: cache store done");
             }
-        }
     }
     let launch_artifact = frozen_artifact
         .map(|frozen| frozen.artifact)
@@ -505,13 +507,15 @@ fn run_markup_file_with_launch_config(
                 if timings {
                     print_run_timing_report(
                         path,
-                        load_duration,
-                        syntax_duration,
-                        hir_duration,
-                        query_cache,
-                        artifact_metrics,
-                        *startup_metrics,
-                        total_start.elapsed(),
+                        RunTimingReport {
+                            load_duration,
+                            syntax_duration,
+                            hir_duration,
+                            query_cache,
+                            artifact: artifact_metrics,
+                            startup: *startup_metrics,
+                            total_to_first_present: total_start.elapsed(),
+                        },
                     );
                 }
             }
@@ -540,15 +544,32 @@ fn execute_file(path: &Path, program_args: &[String]) -> Result<ExitCode, String
     execute_file_with_context(path, context, &mut stdout, &mut stderr)
 }
 
-fn test_file(path: &Path) -> Result<ExitCode, String> {
+fn test_file_selected(path: &Path, selected_test: Option<&str>) -> Result<ExitCode, String> {
     let context = current_execute_source_context(path, &[])?;
     let mut stdout = io::stdout().lock();
     let mut stderr = io::stderr().lock();
-    test_file_with_context(path, context, &mut stdout, &mut stderr)
+    test_file_with_context_selected(
+        path,
+        selected_test,
+        context,
+        &mut stdout,
+        &mut stderr,
+    )
 }
 
+#[cfg(test)]
 fn test_file_with_context(
     path: &Path,
+    context: SourceProviderContext,
+    stdout: &mut impl Write,
+    stderr: &mut impl Write,
+) -> Result<ExitCode, String> {
+    test_file_with_context_selected(path, None, context, stdout, stderr)
+}
+
+fn test_file_with_context_selected(
+    path: &Path,
+    selected_test: Option<&str>,
     context: SourceProviderContext,
     stdout: &mut impl Write,
     stderr: &mut impl Write,
@@ -577,7 +598,27 @@ fn test_file_with_context(
     let workspace_root = fs::canonicalize(&workspace_root_raw).unwrap_or(workspace_root_raw);
     let bundled_stdlib_root = discover_bundled_stdlib_root().ok();
 
-    let tests = discover_workspace_tests(&snapshot, &workspace_root, bundled_stdlib_root.as_deref());
+    let mut tests =
+        discover_workspace_tests(&snapshot, &workspace_root, bundled_stdlib_root.as_deref());
+    if let Some(selected_test) = selected_test {
+        tests.retain(|test| {
+            if test.name.as_ref() != selected_test {
+                return false;
+            }
+            let test_path = canonicalize_check_path(&cwd, &test.file.path(&snapshot.frontend.db));
+            test_path == entry_path
+        });
+        if tests.is_empty() {
+            write_output_line(
+                stderr,
+                &format!(
+                    "no `@test` value named `{selected_test}` found in {}",
+                    entry_path.display()
+                ),
+            )?;
+            return Ok(ExitCode::FAILURE);
+        }
+    }
     if tests.is_empty() {
         write_output_line(stderr, "no `@test` values found in the loaded workspace")?;
         return Ok(ExitCode::FAILURE);

@@ -1,3 +1,30 @@
+struct SourceOptionApplyInput<'a> {
+    span: SourceSpan,
+    callee: ExprId,
+    arguments: &'a crate::NonEmpty<ExprId>,
+}
+
+struct SourceOptionNamedApplyInput<'a> {
+    span: SourceSpan,
+    reference: &'a TermReference,
+    arguments: &'a [ExprId],
+}
+
+struct SourceOptionConstructorRootInput<'a> {
+    parameter: SourceTypeParameter,
+    span: SourceSpan,
+    actual: &'a SourceOptionConstructorActual,
+    arguments: &'a [ExprId],
+}
+
+type KindGraph = (KindStore, KindExprId, HashMap<KindExprId, SourceSpan>);
+type KindGraphWithParameterMap = (
+    KindStore,
+    KindExprId,
+    HashMap<KindExprId, SourceSpan>,
+    HashMap<TypeParameterId, TypingKindParameterId>,
+);
+
 impl Validator<'_> {
     fn validate_roots(&mut self) {
         for item in &self.module.root_items {
@@ -362,7 +389,6 @@ impl Validator<'_> {
                             *argument,
                         );
                     }
-                    // TODO: constructor arity validation requires resolved type info — deferred to type checking
                 }
                 PatternKind::UnresolvedName(reference) => {
                     self.check_term_reference(reference);
@@ -2566,9 +2592,11 @@ impl Validator<'_> {
                     return check;
                 }
                 self.check_source_option_apply(
-                    self.module.exprs()[expr_id].span,
-                    *callee,
-                    arguments,
+                    SourceOptionApplyInput {
+                        span: self.module.exprs()[expr_id].span,
+                        callee: *callee,
+                        arguments,
+                    },
                     expected,
                     typing,
                     bindings,
@@ -2776,14 +2804,17 @@ impl Validator<'_> {
 
     fn check_source_option_apply(
         &self,
-        apply_span: SourceSpan,
-        callee: ExprId,
-        arguments: &crate::NonEmpty<ExprId>,
+        input: SourceOptionApplyInput<'_>,
         expected: &SourceOptionExpectedType,
         typing: &mut GateTypeContext<'_>,
         bindings: &mut SourceOptionTypeBindings,
         value_stack: &mut Vec<ItemId>,
     ) -> SourceOptionTypeCheck {
+        let SourceOptionApplyInput {
+            span,
+            callee,
+            arguments,
+        } = input;
         let ExprKind::Name(reference) = &self.module.exprs()[callee].kind else {
             return SourceOptionTypeCheck::Unknown;
         };
@@ -2799,9 +2830,11 @@ impl Validator<'_> {
             return check;
         }
         if let Some(check) = self.check_source_option_named_apply(
-            apply_span,
-            reference,
-            &arguments,
+            SourceOptionNamedApplyInput {
+                span,
+                reference,
+                arguments: &arguments,
+            },
             expected,
             typing,
             bindings,
@@ -2852,14 +2885,17 @@ impl Validator<'_> {
 
     fn check_source_option_named_apply(
         &self,
-        apply_span: SourceSpan,
-        reference: &TermReference,
-        arguments: &[ExprId],
+        input: SourceOptionNamedApplyInput<'_>,
         expected: &SourceOptionExpectedType,
         typing: &mut GateTypeContext<'_>,
         bindings: &mut SourceOptionTypeBindings,
         value_stack: &mut Vec<ItemId>,
     ) -> Option<SourceOptionTypeCheck> {
+        let SourceOptionNamedApplyInput {
+            span,
+            reference,
+            arguments,
+        } = input;
         let mut current = self.source_option_name_apply_gate_type(reference, typing)?;
         let mut saw_unknown = false;
 
@@ -2900,7 +2936,7 @@ impl Validator<'_> {
                 SourceOptionTypeCheck::Match
             } else {
                 SourceOptionTypeCheck::Mismatch(SourceOptionTypeMismatch {
-                    span: apply_span,
+                    span,
                     actual: actual.to_string(),
                 })
             },
@@ -3094,10 +3130,12 @@ impl Validator<'_> {
                     else {
                         return self
                             .check_source_option_unbound_contract_parameter_constructor_root(
-                                *parameter,
-                                reference.path.span(),
-                                &actual,
-                                arguments,
+                                SourceOptionConstructorRootInput {
+                                    parameter: *parameter,
+                                    span: reference.path.span(),
+                                    actual: &actual,
+                                    arguments,
+                                },
                                 typing,
                                 bindings,
                                 value_stack,
@@ -3187,16 +3225,19 @@ impl Validator<'_> {
 
     fn check_source_option_unbound_contract_parameter_constructor_root(
         &self,
-        parameter: SourceTypeParameter,
-        constructor_span: SourceSpan,
-        actual: &SourceOptionConstructorActual,
-        arguments: &[ExprId],
+        input: SourceOptionConstructorRootInput<'_>,
         typing: &mut GateTypeContext<'_>,
         bindings: &mut SourceOptionTypeBindings,
         value_stack: &mut Vec<ItemId>,
     ) -> SourceOptionTypeCheck {
+        let SourceOptionConstructorRootInput {
+            parameter,
+            span,
+            actual,
+            arguments,
+        } = input;
         match self.infer_source_option_generic_constructor_root(
-            constructor_span,
+            span,
             actual,
             arguments,
             typing,
@@ -3206,7 +3247,7 @@ impl Validator<'_> {
             SourceOptionGenericConstructorRootCheck::Match(actual_type) => {
                 if !bindings.bind_or_match_actual(parameter, &actual_type) {
                     return SourceOptionTypeCheck::Mismatch(SourceOptionTypeMismatch {
-                        span: constructor_span,
+                        span,
                         actual: actual_type.to_string(),
                     });
                 }
@@ -5678,17 +5719,17 @@ impl Validator<'_> {
             return;
         }
         match wakeup {
-            Some(RecurrenceWakeupHint::BuiltinSource(context)) => {
+            Some(RecurrenceWakeupHint::Builtin(context)) => {
                 if RecurrenceWakeupPlanner::plan_source(*context).is_err() {
                     self.emit_missing_recurrence_wakeup(start_span, wakeup);
                 }
             }
-            Some(RecurrenceWakeupHint::CustomSource { context, .. }) => {
+            Some(RecurrenceWakeupHint::Custom { context, .. }) => {
                 if RecurrenceWakeupPlanner::plan_custom_source(*context).is_err() {
                     self.emit_missing_recurrence_wakeup(start_span, wakeup);
                 }
             }
-            Some(RecurrenceWakeupHint::NonSource(cause)) => {
+            Some(RecurrenceWakeupHint::Non(cause)) => {
                 if RecurrenceWakeupPlanner::plan_non_source(*cause).is_err() {
                     self.emit_missing_recurrence_wakeup(start_span, wakeup);
                 }
@@ -5950,7 +5991,7 @@ impl Validator<'_> {
             let DecoratorPayload::RecurrenceWakeup(ref wakeup) = decorator.payload else {
                 return None;
             };
-            Some(RecurrenceWakeupHint::NonSource(match wakeup.kind {
+            Some(RecurrenceWakeupHint::Non(match wakeup.kind {
                 RecurrenceWakeupDecoratorKind::Timer => NonSourceWakeupCause::ExplicitTimer,
                 RecurrenceWakeupDecoratorKind::Backoff => NonSourceWakeupCause::ExplicitBackoff,
             }))
@@ -5979,7 +6020,7 @@ impl Validator<'_> {
                 {
                     context = context.with_declared_wakeup(custom_source_wakeup_kind(wakeup));
                 }
-                return Some(RecurrenceWakeupHint::CustomSource {
+                return Some(RecurrenceWakeupHint::Custom {
                     provider_path: provider.clone(),
                     context,
                 });
@@ -6009,7 +6050,7 @@ impl Validator<'_> {
                     };
                 }
             }
-        Some(RecurrenceWakeupHint::BuiltinSource(context))
+        Some(RecurrenceWakeupHint::Builtin(context))
     }
 
     fn signal_source_decorator<'a>(&'a self, item: &SignalItem) -> Option<&'a SourceDecorator> {
@@ -6076,7 +6117,7 @@ impl Validator<'_> {
         )
         .with_code(code("missing-recurrence-wakeup"));
         match hint {
-            Some(RecurrenceWakeupHint::BuiltinSource(context)) => {
+            Some(RecurrenceWakeupHint::Builtin(context)) => {
                 let (label, note) = match context.provider() {
                     BuiltinSourceProvider::HttpGet
                     | BuiltinSourceProvider::HttpPost
@@ -6156,7 +6197,7 @@ impl Validator<'_> {
                 };
                 diagnostic = diagnostic.with_primary_label(span, label).with_note(note);
             }
-            Some(RecurrenceWakeupHint::CustomSource {
+            Some(RecurrenceWakeupHint::Custom {
                 provider_path,
                 context: _,
             }) => {
@@ -6173,7 +6214,7 @@ impl Validator<'_> {
                         "reactive source arguments/options already prove source-event wakeups for any provider; timer/backoff/provider-trigger proof now comes only from a matching same-module `provider qualified.name` declaration such as `provider custom.feed` with `wakeup: ...`",
                     );
             }
-            Some(RecurrenceWakeupHint::NonSource(cause)) => {
+            Some(RecurrenceWakeupHint::Non(cause)) => {
                 let note = match cause {
                     NonSourceWakeupCause::ExplicitTimer => {
                         "this declaration already carries an explicit non-source timer witness; if this diagnostic appears, keep the failing fixture because the recurrence wakeup adapter is inconsistent"
@@ -7639,7 +7680,7 @@ impl Validator<'_> {
         &mut self,
         root: TypeId,
         parameters: &[TypeParameterId],
-    ) -> Option<(KindStore, KindExprId, HashMap<KindExprId, SourceSpan>)> {
+    ) -> Option<KindGraph> {
         self.build_kind_graph_for_type_with_parameter_map(root, parameters)
             .map(|(store, root, spans, _)| (store, root, spans))
     }
@@ -7648,12 +7689,7 @@ impl Validator<'_> {
         &mut self,
         root: TypeId,
         parameters: &[TypeParameterId],
-    ) -> Option<(
-        KindStore,
-        KindExprId,
-        HashMap<KindExprId, SourceSpan>,
-        HashMap<TypeParameterId, TypingKindParameterId>,
-    )> {
+    ) -> Option<KindGraphWithParameterMap> {
         let mut store = KindStore::default();
         let mut spans = HashMap::new();
         let mut parameter_map = self.kind_parameter_map(parameters, &mut store);

@@ -129,6 +129,8 @@ impl FileDeps {
 
 #[derive(Default)]
 struct DbState {
+    /// Monotonic source-set/text generation used by whole-workspace tooling indexes.
+    workspace_revision: u64,
     next_id: u32,
     files: FxHashMap<u32, SourceInput>,
     paths: FxHashMap<PathBuf, SourceFile>,
@@ -139,6 +141,15 @@ struct DbState {
     whole_program_units: FxHashMap<WholeProgramUnitCacheKey, WholeProgramUnitCacheEntry>,
     runtime_fragment_units: FxHashMap<RuntimeFragmentUnitCacheKey, RuntimeFragmentUnitCacheEntry>,
     file_deps: FileDeps,
+}
+
+impl DbState {
+    fn bump_workspace_revision(&mut self) {
+        self.workspace_revision = self
+            .workspace_revision
+            .checked_add(1)
+            .expect("workspace source revision exceeded u64::MAX");
+    }
 }
 
 fn invalidate_file_caches(state: &mut DbState, file_id: u32) {
@@ -181,6 +192,16 @@ impl RootDatabase {
             hir_hits: self.cache_counters.hir_hits.load(Ordering::Relaxed),
             hir_misses: self.cache_counters.hir_misses.load(Ordering::Relaxed),
         }
+    }
+
+    /// Return the current source-set/text generation.
+    ///
+    /// The value advances exactly once for each real file insertion, text
+    /// change, or removal. It intentionally covers the whole database rather
+    /// than one file: changing an imported module can change another file's
+    /// resolved HIR without changing that importer's text revision.
+    pub fn workspace_revision(&self) -> u64 {
+        self.state.read().workspace_revision
     }
 
     pub(crate) fn record_parsed_hit(&self) {
@@ -226,6 +247,7 @@ impl RootDatabase {
                 }
             };
             if changed {
+                state.bump_workspace_revision();
                 invalidate_file_caches(&mut state, file.id);
                 // Transitively invalidate all files that (directly or
                 // indirectly) import this file (M6).
@@ -248,6 +270,7 @@ impl RootDatabase {
             .files
             .insert(id, SourceInput::new(file, path.clone(), text, 0));
         state.paths.insert(path, file);
+        state.bump_workspace_revision();
         // A newly discovered file can satisfy previously missing imports or
         // introduce new competing workspace modules, so all HIR caches for
         // the new file and its transitive reverse dependents must be invalidated.
@@ -315,6 +338,7 @@ impl RootDatabase {
             }
         };
         if changed {
+            state.bump_workspace_revision();
             invalidate_file_caches(&mut state, file.id);
             // Transitively invalidate all files that import this file (M6).
             let rdeps = state.file_deps.transitive_rdeps(file.id);
@@ -434,10 +458,17 @@ impl RootDatabase {
     /// handles refer to the removed id after this call.
     pub fn remove_file(&self, file: SourceFile) {
         let mut state = self.state.write();
-        state.files.remove(&file.id);
+        let affected = state.file_deps.transitive_rdeps(file.id);
+        let removed = state.files.remove(&file.id).is_some();
         state.paths.retain(|_, v| v.id != file.id);
         invalidate_file_caches(&mut state, file.id);
+        for dependent in affected {
+            invalidate_file_caches(&mut state, dependent);
+        }
         state.file_deps.remove_file(file.id);
+        if removed {
+            state.bump_workspace_revision();
+        }
     }
 
     /// Register the set of files that `importer` directly depends on.

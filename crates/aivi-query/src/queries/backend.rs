@@ -504,7 +504,7 @@ fn collect_workspace_hir_modules(
         return cached.value;
     }
     let workspace = Workspace::discover(db, file);
-    let mut module_map = HashMap::<String, WorkspaceHirModule>::new();
+    let mut module_files = HashMap::<String, SourceFile>::new();
     for candidate in db.files() {
         if candidate == file {
             continue;
@@ -515,27 +515,30 @@ fn collect_workspace_hir_modules(
         if module_name.starts_with("aivi.") {
             continue;
         }
-        module_map.insert(
-            module_name.clone(),
-            WorkspaceHirModule {
-                name: module_name.into_boxed_str(),
-                file: candidate,
-                hir: hir_module(db, candidate),
-            },
-        );
+        module_files.insert(module_name, candidate);
     }
 
+    let mut module_map = HashMap::<String, WorkspaceHirModule>::new();
     let mut reachable = HashSet::<String>::new();
     let mut pending = VecDeque::<String>::new();
-    enqueue_workspace_imports(entry_hir.module(), &module_map, &reachable, &mut pending);
+    enqueue_workspace_imports(entry_hir.module(), &module_files, &reachable, &mut pending);
     while let Some(name) = pending.pop_front() {
         if !reachable.insert(name.clone()) {
             continue;
         }
-        let Some(module) = module_map.get(&name) else {
+        let Some(&module_file) = module_files.get(&name) else {
             continue;
         };
-        enqueue_workspace_imports(module.hir.module(), &module_map, &reachable, &mut pending);
+        let hir = hir_module(db, module_file);
+        enqueue_workspace_imports(hir.module(), &module_files, &reachable, &mut pending);
+        module_map.insert(
+            name.clone(),
+            WorkspaceHirModule {
+                name: name.into_boxed_str(),
+                file: module_file,
+                hir,
+            },
+        );
     }
 
     if reachable.is_empty() {
@@ -614,9 +617,9 @@ fn collect_workspace_hir_modules(
     ordered
 }
 
-fn enqueue_workspace_imports(
+fn enqueue_workspace_imports<T>(
     module: &aivi_hir::Module,
-    module_map: &HashMap<String, WorkspaceHirModule>,
+    available_modules: &HashMap<String, T>,
     reachable: &HashSet<String>,
     pending: &mut VecDeque<String>,
 ) {
@@ -624,7 +627,7 @@ fn enqueue_workspace_imports(
         let Some(dep_name) = import.source_module.as_deref() else {
             continue;
         };
-        if module_map.contains_key(dep_name) && !reachable.contains(dep_name) {
+        if available_modules.contains_key(dep_name) && !reachable.contains(dep_name) {
             pending.push_back(dep_name.to_owned());
         }
     }

@@ -72,8 +72,7 @@ use aivi.dbus (
 @source dbus "org.freedesktop.DBus"
 signal bus : DbusSource
 
-value names : DbusTask (List DbusValue) =
-    bus.call "/org/freedesktop/DBus" "org.freedesktop.DBus" "ListNames" []
+value names : DbusTask (List DbusValue) = bus.call "/org/freedesktop/DBus" "org.freedesktop.DBus" "ListNames" []
 ```
 
 Current canonical handle members:
@@ -87,9 +86,6 @@ Handle-level `bus` / `address` options apply to `bus.call`.
 For service-side method handlers, `@source dbus.method destination` now accepts an optional
 second argument:
 
-```aivi
-@source dbus.method destination, replyTask with { ... }
-```
 
 When present, that task is executed on each incoming call and its `List DbusValue` result is
 sent back as the method reply body.
@@ -134,6 +130,8 @@ value loginHint : DbusValue =
 ## `DbusCall`
 
 ```aivi
+use aivi.dbus (DbusValue)
+
 type DbusCall = {
     destination: Text,
     path: Text,
@@ -168,6 +166,8 @@ value pingCall : DbusCall = {
 ## `DbusSignal`
 
 ```aivi
+use aivi.dbus (DbusValue)
+
 type DbusSignal = {
     path: Text,
     interface: Text,
@@ -285,6 +285,11 @@ func describeBusError = error => error
 ## `DbusCallResult` and `DbusTask`
 
 ```aivi
+use aivi.dbus (
+    DbusError
+    DbusValue
+)
+
 type DbusCallResult =
   Result DbusError (List DbusValue)
 

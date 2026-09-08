@@ -126,7 +126,9 @@ fn runtime_dbus_value_to_variant(value: &RuntimeValue, depth: usize) -> Result<V
                 children.iter(),
             ))
         }
-        ("DbusVariant", [payload]) => Ok(runtime_dbus_value_to_variant(payload, depth + 1)?.to_variant()),
+        ("DbusVariant", [payload]) => {
+            Ok(runtime_dbus_value_to_variant(payload, depth + 1)?.to_variant())
+        }
         _ => Err("D-Bus payloads must use `DbusValue` constructors".into()),
     }
 }
@@ -146,7 +148,10 @@ pub(crate) fn runtime_dbus_body_from_variant(
     }
 }
 
-fn runtime_dbus_value_from_variant(value: &Variant, depth: usize) -> Result<RuntimeValue, Box<str>> {
+fn runtime_dbus_value_from_variant(
+    value: &Variant,
+    depth: usize,
+) -> Result<RuntimeValue, Box<str>> {
     if depth >= MAX_DBUS_VALUE_DEPTH {
         return Err("D-Bus payload nesting exceeds the current runtime depth limit".into());
     }
@@ -278,7 +283,11 @@ fn runtime_dbus_int_value(value: i64) -> Result<RuntimeValue, Box<str>> {
     ))
 }
 
-fn runtime_dbus_sum(type_name: &str, variant_name: &str, fields: Vec<RuntimeValue>) -> RuntimeValue {
+fn runtime_dbus_sum(
+    type_name: &str,
+    variant_name: &str,
+    fields: Vec<RuntimeValue>,
+) -> RuntimeValue {
     RuntimeValue::Sum(aivi_backend::RuntimeSumValue {
         item: hir::ItemId::from_raw(0),
         type_name: type_name.into(),
@@ -449,10 +458,10 @@ pub(crate) fn open_dbus_connection_text(
         "session" => DbusBus::Session,
         "system" => DbusBus::System,
         other => {
-            return Err(format!(
-                "unsupported D-Bus bus `{other}`; expected `session` or `system`"
-            )
-            .into_boxed_str())
+            return Err(
+                format!("unsupported D-Bus bus `{other}`; expected `session` or `system`")
+                    .into_boxed_str(),
+            );
         }
     };
     open_dbus_connection(bus, address)
@@ -473,7 +482,10 @@ fn portal_request_identity(connection: &DBusConnection) -> Result<(String, Strin
     ))
 }
 
-fn portal_publish_error(port: &DetachedRuntimePublicationPort, value: Result<RuntimeValue, Box<str>>) {
+fn portal_publish_error(
+    port: &DetachedRuntimePublicationPort,
+    value: Result<RuntimeValue, Box<str>>,
+) {
     if let Ok(value) = value {
         let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(value));
     }
@@ -504,9 +516,9 @@ fn portal_result_strings(results: &Variant, key: &str) -> Result<Vec<String>, Bo
 
 fn portal_screenshot_bytes(uri: &str) -> Result<Box<[u8]>, Box<str>> {
     let url = Url::parse(uri).map_err(|error| error.to_string().into_boxed_str())?;
-    let path = url
-        .to_file_path()
-        .map_err(|_| format!("portal screenshot URI is not a local file: {uri}").into_boxed_str())?;
+    let path = url.to_file_path().map_err(|_| {
+        format!("portal screenshot URI is not a local file: {uri}").into_boxed_str()
+    })?;
     fs::read(path)
         .map(Vec::into_boxed_slice)
         .map_err(|error| error.to_string().into_boxed_str())
@@ -681,8 +693,10 @@ fn spawn_notification_events_worker(
                     let value = match signal_name {
                         "ActionInvoked" => {
                             let id = parameters.child_value(0).get::<u32>();
-                            let action_id =
-                                parameters.child_value(1).get::<String>().map(|text| text.to_string());
+                            let action_id = parameters
+                                .child_value(1)
+                                .get::<String>()
+                                .map(|text| text.to_string());
                             match (id, action_id) {
                                 (Some(id), Some(action_id))
                                     if notification_id_known(app_name.as_ref(), id) =>
@@ -741,7 +755,7 @@ fn spawn_portal_open_file_worker(
         let _ = context.with_thread_default(|| {
             install_dbus_stop_timer(&context, &main_loop, &stop, &port);
             let Ok(connection) = open_dbus_connection(DbusBus::Session, None) else {
-                let _ = portal_publish_error(
+                portal_publish_error(
                     &port,
                     plan.output.error_value(
                         PortalErrorKind::Unavailable,
@@ -751,7 +765,7 @@ fn spawn_portal_open_file_worker(
                 return;
             };
             let Ok((handle_token, expected_handle)) = portal_request_identity(&connection) else {
-                let _ = portal_publish_error(
+                portal_publish_error(
                     &port,
                     plan.output.error_value(
                         PortalErrorKind::Unavailable,
@@ -795,14 +809,16 @@ fn spawn_portal_open_file_worker(
                             loop_quit.quit();
                             return;
                         }
-                        None => Err(SourceDecodeErrorWithPath::new(SourceDecodeError::InvalidJson {
-                            detail: "portal.openFile response missing status".into(),
-                        })),
+                        None => Err(SourceDecodeErrorWithPath::new(
+                            SourceDecodeError::InvalidJson {
+                                detail: "portal.openFile response missing status".into(),
+                            },
+                        )),
                     };
                     match value {
                         Ok(value) => {
-                            let _ =
-                                publish_port.publish(DetachedRuntimeValue::from_runtime_owned(value));
+                            let _ = publish_port
+                                .publish(DetachedRuntimeValue::from_runtime_owned(value));
                         }
                         Err(error) => {
                             portal_publish_error(
@@ -835,7 +851,12 @@ fn spawn_portal_open_file_worker(
                         let patterns = filter
                             .patterns
                             .iter()
-                            .map(|pattern| Variant::tuple_from_iter([0_u32.to_variant(), pattern.as_ref().to_variant()]))
+                            .map(|pattern| {
+                                Variant::tuple_from_iter([
+                                    0_u32.to_variant(),
+                                    pattern.as_ref().to_variant(),
+                                ])
+                            })
                             .collect::<Vec<_>>();
                         let pattern_array = Variant::array_from_iter_with_type(
                             glib::VariantTy::new("(us)")
@@ -870,7 +891,7 @@ fn spawn_portal_open_file_worker(
             let reply = match call {
                 Ok(reply) => reply,
                 Err(error) => {
-                    let _ = portal_publish_error(
+                    portal_publish_error(
                         &port,
                         plan.output
                             .error_value(PortalErrorKind::Unavailable, &error.to_string()),
@@ -963,7 +984,7 @@ fn spawn_portal_open_uri_worker(
         let _ = context.with_thread_default(|| {
             install_dbus_stop_timer(&context, &main_loop, &stop, &port);
             let Ok(connection) = open_dbus_connection(DbusBus::Session, None) else {
-                let _ = portal_publish_error(
+                portal_publish_error(
                     &port,
                     plan.output.error_value(
                         PortalErrorKind::Unavailable,
@@ -973,7 +994,7 @@ fn spawn_portal_open_uri_worker(
                 return;
             };
             let Ok((handle_token, expected_handle)) = portal_request_identity(&connection) else {
-                let _ = portal_publish_error(
+                portal_publish_error(
                     &port,
                     plan.output.error_value(
                         PortalErrorKind::Unavailable,
@@ -1000,14 +1021,16 @@ fn spawn_portal_open_uri_worker(
                         Some(0) => output.opened_value(uri_for_signal.as_ref()),
                         Some(1) => output.cancelled_value(),
                         Some(_) => output.failed_value("desktop rejected URI open request"),
-                        None => Err(SourceDecodeErrorWithPath::new(SourceDecodeError::InvalidJson {
-                            detail: "portal.openUri response missing status".into(),
-                        })),
+                        None => Err(SourceDecodeErrorWithPath::new(
+                            SourceDecodeError::InvalidJson {
+                                detail: "portal.openUri response missing status".into(),
+                            },
+                        )),
                     };
                     match value {
                         Ok(value) => {
-                            let _ =
-                                publish_port.publish(DetachedRuntimeValue::from_runtime_owned(value));
+                            let _ = publish_port
+                                .publish(DetachedRuntimeValue::from_runtime_owned(value));
                         }
                         Err(error) => {
                             portal_publish_error(
@@ -1044,7 +1067,7 @@ fn spawn_portal_open_uri_worker(
             let reply = match call {
                 Ok(reply) => reply,
                 Err(error) => {
-                    let _ = portal_publish_error(
+                    portal_publish_error(
                         &port,
                         plan.output
                             .error_value(PortalErrorKind::Unavailable, &error.to_string()),
@@ -1120,7 +1143,7 @@ fn spawn_portal_screenshot_worker(
         let _ = context.with_thread_default(|| {
             install_dbus_stop_timer(&context, &main_loop, &stop, &port);
             let Ok(connection) = open_dbus_connection(DbusBus::Session, None) else {
-                let _ = portal_publish_error(
+                portal_publish_error(
                     &port,
                     plan.output.error_value(
                         PortalErrorKind::Unavailable,
@@ -1130,7 +1153,7 @@ fn spawn_portal_screenshot_worker(
                 return;
             };
             let Ok((handle_token, expected_handle)) = portal_request_identity(&connection) else {
-                let _ = portal_publish_error(
+                portal_publish_error(
                     &port,
                     plan.output.error_value(
                         PortalErrorKind::Unavailable,
@@ -1176,14 +1199,16 @@ fn spawn_portal_screenshot_worker(
                             loop_quit.quit();
                             return;
                         }
-                        None => Err(SourceDecodeErrorWithPath::new(SourceDecodeError::InvalidJson {
-                            detail: "portal.screenshot response missing status".into(),
-                        })),
+                        None => Err(SourceDecodeErrorWithPath::new(
+                            SourceDecodeError::InvalidJson {
+                                detail: "portal.screenshot response missing status".into(),
+                            },
+                        )),
                     };
                     match value {
                         Ok(value) => {
-                            let _ =
-                                publish_port.publish(DetachedRuntimeValue::from_runtime_owned(value));
+                            let _ = publish_port
+                                .publish(DetachedRuntimeValue::from_runtime_owned(value));
                         }
                         Err(error) => {
                             portal_publish_error(
@@ -1213,7 +1238,7 @@ fn spawn_portal_screenshot_worker(
             let reply = match call {
                 Ok(reply) => reply,
                 Err(error) => {
-                    let _ = portal_publish_error(
+                    portal_publish_error(
                         &port,
                         plan.output
                             .error_value(PortalErrorKind::Unavailable, &error.to_string()),
@@ -1409,7 +1434,9 @@ fn spawn_dbus_method_worker(
     finish_dbus_startup(instance, provider, handle, startup_rx)
 }
 
-fn runtime_dbus_reply_task_result(value: RuntimeValue) -> Result<Option<Variant>, RuntimeTaskExecutionError> {
+fn runtime_dbus_reply_task_result(
+    value: RuntimeValue,
+) -> Result<Option<Variant>, RuntimeTaskExecutionError> {
     let RuntimeValue::List(values) = value else {
         return Err(RuntimeTaskExecutionError::new(
             "dbus.method reply task must return `List DbusValue`",
@@ -1740,19 +1767,20 @@ fn spawn_fs_watch_worker(
                                 return;
                             }
                         }
-                        Some(prev) if prev != sig => {
-                            if emit_fs_event("Changed", &plan, &port).is_err() {
-                                return;
-                            }
+                        Some(prev)
+                            if prev != sig && emit_fs_event("Changed", &plan, &port).is_err() =>
+                        {
+                            return;
                         }
                         _ => {}
                     }
                 }
                 for path in previous.keys() {
                     if !current.contains_key(path)
-                        && emit_fs_event("Deleted", &plan, &port).is_err() {
-                            return;
-                        }
+                        && emit_fs_event("Deleted", &plan, &port).is_err()
+                    {
+                        return;
+                    }
                 }
                 previous = current;
             }
@@ -1873,11 +1901,12 @@ fn spawn_socket_worker(
                                 let line_text = line.trim_end_matches(['\r', '\n']).to_owned();
                                 let value = match plan.result.success_from_text(&line_text) {
                                     Ok(value) => value,
-                                    Err(error) => match plan.result.decode_error_value(&context, &error)
-                                    {
-                                        Ok(value) => value,
-                                        Err(_) => break,
-                                    },
+                                    Err(error) => {
+                                        match plan.result.decode_error_value(&context, &error) {
+                                            Ok(value) => value,
+                                            Err(_) => break,
+                                        }
+                                    }
                                 };
                                 if port
                                     .publish(DetachedRuntimeValue::from_runtime_owned(value))
@@ -1947,12 +1976,13 @@ fn spawn_mailbox_worker(
             }
             // Check if a heartbeat ping is due.
             if let Some(interval) = plan.heartbeat
-                && last_heartbeat.elapsed() >= interval {
-                    last_heartbeat = Instant::now();
-                    if port.publish(DetachedRuntimeValue::unit()).is_err() {
-                        return;
-                    }
+                && last_heartbeat.elapsed() >= interval
+            {
+                last_heartbeat = Instant::now();
+                if port.publish(DetachedRuntimeValue::unit()).is_err() {
+                    return;
                 }
+            }
             match receiver.recv_timeout(Duration::from_millis(100)) {
                 Ok(message) => {
                     let value = match plan.result.success_from_text(&message) {
@@ -2036,11 +2066,11 @@ fn spawn_process_worker(
             && port
                 .publish(DetachedRuntimeValue::from_runtime_owned(value))
                 .is_err()
-            {
-                done.store(true, Ordering::Release);
-                kill_pid(pid);
-                return;
-            }
+        {
+            done.store(true, Ordering::Release);
+            kill_pid(pid);
+            return;
+        }
         let stdout_handle = child.stdout.take().map(|stdout| {
             let port = port.clone();
             let events = plan.events.clone();
@@ -2358,7 +2388,7 @@ fn parse_bool(
             provider,
             option_name: option_name.into(),
             expected: "Bool".into(),
-            value: other.clone(),
+            value: Box::new(other.clone()),
         }),
     }
 }
@@ -2376,7 +2406,7 @@ fn parse_positive_int(
             provider,
             option_name: option_name.into(),
             expected: "positive Int".into(),
-            value: other.clone(),
+            value: Box::new(other.clone()),
         }),
     }
 }
@@ -2394,7 +2424,7 @@ fn parse_nonnegative_int(
             provider,
             option_name: option_name.into(),
             expected: "non-negative Int".into(),
-            value: other.clone(),
+            value: Box::new(other.clone()),
         }),
     }
 }
@@ -2412,7 +2442,7 @@ fn parse_text_argument(
             provider,
             index,
             expected: "Text".into(),
-            value: other.clone(),
+            value: Box::new(other.clone()),
         }),
     }
 }
@@ -2431,7 +2461,7 @@ fn parse_task_argument(
             provider,
             index,
             expected: "Task or DbTask".into(),
-            value: other.clone(),
+            value: Box::new(other.clone()),
         }),
     }
 }
@@ -2455,7 +2485,7 @@ fn parse_db_connect_argument(
                     provider,
                     index,
                     expected: "Text or { database: Text }".into(),
-                    value: strip_detached_signal(value).clone(),
+                    value: Box::new(strip_detached_signal(value).clone()),
                 });
             };
             let RuntimeValue::Text(database) = strip_signal(&field.value) else {
@@ -2464,7 +2494,7 @@ fn parse_db_connect_argument(
                     provider,
                     index,
                     expected: "Text or { database: Text }".into(),
-                    value: strip_detached_signal(value).clone(),
+                    value: Box::new(strip_detached_signal(value).clone()),
                 });
             };
             database.clone()
@@ -2475,7 +2505,7 @@ fn parse_db_connect_argument(
                 provider,
                 index,
                 expected: "Text or { database: Text }".into(),
-                value: other.clone(),
+                value: Box::new(other.clone()),
             });
         }
     };
@@ -2495,7 +2525,7 @@ fn parse_text_option(
             provider,
             option_name: option_name.into(),
             expected: "Text".into(),
-            value: other.clone(),
+            value: Box::new(other.clone()),
         }),
     }
 }
@@ -2512,7 +2542,7 @@ fn parse_dbus_value_list_option(
             provider,
             option_name: option_name.into(),
             expected: "List DbusValue".into(),
-            value: strip_detached_signal(value).clone(),
+            value: Box::new(strip_detached_signal(value).clone()),
         });
     };
     if values
@@ -2526,7 +2556,7 @@ fn parse_dbus_value_list_option(
             provider,
             option_name: option_name.into(),
             expected: "List DbusValue".into(),
-            value: strip_detached_signal(value).clone(),
+            value: Box::new(strip_detached_signal(value).clone()),
         })
     }
 }
@@ -2543,7 +2573,7 @@ fn parse_text_list(
             provider,
             index,
             expected: "List Text".into(),
-            value: strip_detached_signal(value).clone(),
+            value: Box::new(strip_detached_signal(value).clone()),
         });
     };
     values
@@ -2555,7 +2585,7 @@ fn parse_text_list(
                 provider,
                 index,
                 expected: "List Text".into(),
-                value: other.clone(),
+                value: Box::new(other.clone()),
             }),
         })
         .collect()
@@ -2566,14 +2596,14 @@ fn parse_text_map(
     provider: BuiltinSourceProvider,
     option_name: &str,
     value: &DetachedRuntimeValue,
-) -> Result<Vec<(Box<str>, Box<str>)>, SourceProviderExecutionError> {
+) -> Result<Vec<OwnedTextPair>, SourceProviderExecutionError> {
     let RuntimeValue::Map(entries) = strip_detached_signal(value) else {
         return Err(SourceProviderExecutionError::InvalidOption {
             instance,
             provider,
             option_name: option_name.into(),
             expected: "Map Text Text".into(),
-            value: strip_detached_signal(value).clone(),
+            value: Box::new(strip_detached_signal(value).clone()),
         });
     };
     entries
@@ -2585,7 +2615,7 @@ fn parse_text_map(
                     provider,
                     option_name: option_name.into(),
                     expected: "Map Text Text".into(),
-                    value: strip_signal(k).clone(),
+                    value: Box::new(strip_signal(k).clone()),
                 });
             };
             let RuntimeValue::Text(value) = strip_signal(v) else {
@@ -2594,7 +2624,7 @@ fn parse_text_map(
                     provider,
                     option_name: option_name.into(),
                     expected: "Map Text Text".into(),
-                    value: strip_signal(v).clone(),
+                    value: Box::new(strip_signal(v).clone()),
                 });
             };
             Ok((key.clone(), value.clone()))
@@ -2614,7 +2644,7 @@ fn parse_named_variants(
             provider,
             option_name: option_name.into(),
             expected: "List payloadless variants".into(),
-            value: strip_detached_signal(value).clone(),
+            value: Box::new(strip_detached_signal(value).clone()),
         });
     };
     values
@@ -2626,7 +2656,7 @@ fn parse_named_variants(
                     provider,
                     option_name: option_name.into(),
                     expected: "List payloadless variants".into(),
-                    value: strip_signal(value).clone(),
+                    value: Box::new(strip_signal(value).clone()),
                 }
             })
         })
@@ -2649,7 +2679,7 @@ fn parse_duration(
                         provider,
                         index,
                         expected: "Duration".into(),
-                        value: value.to_runtime(),
+                        value: Box::new(value.to_runtime()),
                     })?;
             duration_from_suffix(amount, suffix).ok_or_else(|| {
                 SourceProviderExecutionError::InvalidArgument {
@@ -2657,7 +2687,7 @@ fn parse_duration(
                     provider,
                     index,
                     expected: "Duration".into(),
-                    value: value.to_runtime(),
+                    value: Box::new(value.to_runtime()),
                 }
             })
         }
@@ -2666,7 +2696,7 @@ fn parse_duration(
             provider,
             index,
             expected: "Duration".into(),
-            value: other.clone(),
+            value: Box::new(other.clone()),
         }),
     }
 }
@@ -2730,7 +2760,7 @@ fn parse_option_duration(
                 provider,
                 option_name: option_name.into(),
                 expected: "positive Duration".into(),
-                value: RuntimeValue::Int(*duration_ms),
+                value: Box::new(RuntimeValue::Int(*duration_ms)),
             })
         }
         RuntimeValue::Int(value) if *value >= 0 => Ok(Duration::from_millis(*value as u64)),
@@ -2742,7 +2772,7 @@ fn parse_option_duration(
                         provider,
                         option_name: option_name.into(),
                         expected: "Duration".into(),
-                        value: value.to_runtime(),
+                        value: Box::new(value.to_runtime()),
                     })?;
             duration_from_suffix(amount, suffix).ok_or_else(|| {
                 SourceProviderExecutionError::InvalidOption {
@@ -2750,7 +2780,7 @@ fn parse_option_duration(
                     provider,
                     option_name: option_name.into(),
                     expected: "Duration".into(),
-                    value: value.to_runtime(),
+                    value: Box::new(value.to_runtime()),
                 }
             })
         }
@@ -2759,7 +2789,7 @@ fn parse_option_duration(
             provider,
             option_name: option_name.into(),
             expected: "Duration".into(),
-            value: other.clone(),
+            value: Box::new(other.clone()),
         }),
     }
 }
@@ -2779,14 +2809,14 @@ fn parse_retry(
                 provider,
                 option_name: option_name.into(),
                 expected: "Retry".into(),
-                value: value.to_runtime(),
+                value: Box::new(value.to_runtime()),
             }),
         other => Err(SourceProviderExecutionError::InvalidOption {
             instance,
             provider,
             option_name: option_name.into(),
             expected: "Retry".into(),
-            value: other.clone(),
+            value: Box::new(other.clone()),
         }),
     }
 }
@@ -2804,7 +2834,7 @@ fn parse_stream_mode(
             provider,
             option_name: option_name.into(),
             expected: "StreamMode".into(),
-            value: value.clone(),
+            value: Box::new(value.clone()),
         });
     };
     match name.as_ref() {
@@ -2816,7 +2846,7 @@ fn parse_stream_mode(
             provider,
             option_name: option_name.into(),
             expected: "StreamMode".into(),
-            value: value.clone(),
+            value: Box::new(value.clone()),
         }),
     }
 }

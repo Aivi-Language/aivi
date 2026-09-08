@@ -208,7 +208,7 @@ impl BackendLinkedRuntime {
                 instance: binding.instance,
                 owner: binding.owner,
                 backend_item: binding.backend_item,
-                error,
+                error: Box::new(error),
             })?;
         Ok(DetachedRuntimeValue::from_runtime_owned(value))
     }
@@ -431,7 +431,7 @@ impl BackendLinkedRuntime {
                 .map_err(|error| BackendRuntimeError::EvaluateSourceArgument {
                     instance,
                     index,
-                    error,
+                    error: Box::new(error),
                 })?;
             arguments.push(DetachedRuntimeValue::from_runtime_owned(value));
         }
@@ -449,7 +449,7 @@ impl BackendLinkedRuntime {
                 .map_err(|error| BackendRuntimeError::EvaluateSourceOption {
                     instance,
                     option_name: option.option_name.clone(),
-                    error,
+                    error: Box::new(error),
                 })?;
             options.push(EvaluatedSourceOption {
                 option_name: option.option_name.clone(),

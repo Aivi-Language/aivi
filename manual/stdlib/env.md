@@ -17,6 +17,11 @@ use aivi.env (
 ## Capability handle
 
 ```aivi
+use aivi.env (
+    EnvEntry
+    EnvSource
+)
+
 @source env
 signal environment : EnvSource
 

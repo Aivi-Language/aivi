@@ -1,14 +1,14 @@
 fn map_detached_publication_port_error(
     error: PublicationPortError<RuntimeValue>,
-) -> PublicationPortError<DetachedRuntimeValue> {
+) -> DetachedPublicationPortError {
     match error {
         PublicationPortError::Cancelled { stamp, value } => PublicationPortError::Cancelled {
             stamp,
-            value: DetachedRuntimeValue::from_runtime_owned(value),
+            value: Box::new(DetachedRuntimeValue::from_runtime_owned(value)),
         },
         PublicationPortError::Disconnected { stamp, value } => PublicationPortError::Disconnected {
             stamp,
-            value: DetachedRuntimeValue::from_runtime_owned(value),
+            value: Box::new(DetachedRuntimeValue::from_runtime_owned(value)),
         },
     }
 }
@@ -39,7 +39,7 @@ fn run_temporal_worker(
         let Some(mut schedule) = active.take() else {
             match command_rx.recv() {
                 Ok(TemporalWorkerCommand::Schedule(schedule)) => {
-                    active = Some(schedule);
+                    active = Some(*schedule);
                 }
                 Ok(TemporalWorkerCommand::Stop) | Err(_) => break,
             }
@@ -52,7 +52,7 @@ fn run_temporal_worker(
         };
         match command_rx.recv_timeout(wait) {
             Ok(TemporalWorkerCommand::Schedule(next)) => {
-                active = Some(next);
+                active = Some(*next);
             }
             Ok(TemporalWorkerCommand::Stop) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
             Err(mpsc::RecvTimeoutError::Timeout) => {
@@ -195,7 +195,7 @@ fn execute_task_plan(
             instance,
             owner,
             backend_item,
-            error,
+            error: Box::new(error),
         })?;
     // Use the applier-aware executor so that deferred Task composition plans
     // (Map, Apply, Chain, Join) can call back into the execution engine.
@@ -219,7 +219,7 @@ fn execute_task_plan(
         instance,
         owner,
         backend_item,
-        error,
+        error: Box::new(error),
     })?;
     if let Some(invalidation) = outcome.commit_invalidation
         && let Some(sink) = db_commit_invalidation_sink

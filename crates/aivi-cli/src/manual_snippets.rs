@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     ffi::OsString,
     fs,
     path::{Path, PathBuf},
@@ -23,6 +24,7 @@ struct MarkdownDocument {
 struct FencedBlock {
     index: usize,
     fence_info: String,
+    group: Option<String>,
     body_range: std::ops::Range<usize>,
     start_line: usize,
     end_line: usize,
@@ -35,10 +37,9 @@ struct Replacement {
 }
 
 #[derive(Clone, Debug)]
-struct BlockOutcome {
+struct FormattedBlock {
     formatted_text: String,
     formatting_changed: bool,
-    todo_entry: Option<TodoEntry>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -158,6 +159,8 @@ pub(crate) fn run(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, 
             .unwrap_or(document.path.as_path());
         let mut replacements = Vec::new();
 
+        let mut grouped_blocks = BTreeMap::<&str, Vec<(&FencedBlock, FormattedBlock)>>::new();
+
         for block in &document.blocks {
             scanned_blocks += 1;
             let original = &document.text[block.body_range.clone()];
@@ -166,19 +169,38 @@ pub(crate) fn run(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, 
                 relative_markdown_path,
                 block.index,
             );
-            let outcome = analyze_block(&mut db, original, block, &document.path, synthetic_path);
+            let formatted = format_block(&mut db, original, synthetic_path.clone());
 
-            if outcome.formatting_changed {
+            if formatted.formatting_changed {
                 rewritten_blocks += 1;
                 if write {
                     replacements.push(Replacement {
                         range: block.body_range.clone(),
-                        text: outcome.formatted_text.clone(),
+                        text: formatted.formatted_text.clone(),
                     });
                 }
             }
 
-            if let Some(entry) = outcome.todo_entry {
+            if let Some(group) = block.group.as_deref() {
+                grouped_blocks
+                    .entry(group)
+                    .or_default()
+                    .push((block, formatted));
+            } else if let Some(entry) =
+                analyze_formatted_block(&mut db, formatted, block, &document.path, synthetic_path)
+            {
+                entries.push(entry);
+            }
+        }
+
+        for (group, blocks) in grouped_blocks {
+            if let Some(entry) = analyze_group(
+                &mut db,
+                group,
+                &blocks,
+                &document.path,
+                synthetic_group_path(&synthetic_workspace_root, relative_markdown_path, group),
+            ) {
                 entries.push(entry);
             }
         }
@@ -223,13 +245,7 @@ pub(crate) fn run(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, 
     }
 }
 
-fn analyze_block(
-    db: &mut RootDatabase,
-    original: &str,
-    block: &FencedBlock,
-    markdown_path: &Path,
-    synthetic_path: PathBuf,
-) -> BlockOutcome {
+fn format_block(db: &mut RootDatabase, original: &str, synthetic_path: PathBuf) -> FormattedBlock {
     let normalized_original = normalize_block_body(original);
     let file = QuerySourceFile::new(db, synthetic_path, normalized_original.clone());
     let parsed = query_parsed_file(db, file);
@@ -241,9 +257,22 @@ fn analyze_block(
         file.set_text(db, formatted.clone());
     }
 
-    let analysis = analyze_current_file(db, file);
+    FormattedBlock {
+        formatted_text: formatted,
+        formatting_changed,
+    }
+}
 
-    let todo_entry = if analysis.syntax_problem_count > 0
+fn analyze_formatted_block(
+    db: &mut RootDatabase,
+    formatted: FormattedBlock,
+    block: &FencedBlock,
+    markdown_path: &Path,
+    synthetic_path: PathBuf,
+) -> Option<TodoEntry> {
+    let file = QuerySourceFile::new(db, synthetic_path, formatted.formatted_text.clone());
+    let analysis = analyze_current_file(db, file);
+    if analysis.syntax_problem_count > 0
         || analysis.lsp_problem_count > 0
         || analysis.compiler_problem_count > 0
     {
@@ -253,22 +282,63 @@ fn analyze_block(
             fence_info: block.fence_info.clone(),
             start_line: block.start_line,
             end_line: block.end_line,
-            formatting_changed,
+            formatting_changed: formatted.formatting_changed,
             syntax_problem_count: analysis.syntax_problem_count,
             lsp_problem_count: analysis.lsp_problem_count,
             compiler_problem_count: analysis.compiler_problem_count,
             diagnostics: analysis.diagnostics,
-            suggested_snippet: formatted.clone(),
+            suggested_snippet: formatted.formatted_text,
         })
     } else {
         None
-    };
-
-    BlockOutcome {
-        formatted_text: formatted,
-        formatting_changed,
-        todo_entry,
     }
+}
+
+fn analyze_group(
+    db: &mut RootDatabase,
+    group: &str,
+    blocks: &[(&FencedBlock, FormattedBlock)],
+    markdown_path: &Path,
+    synthetic_path: PathBuf,
+) -> Option<TodoEntry> {
+    let mut combined = String::new();
+    for (_, formatted) in blocks {
+        if !combined.is_empty() && !combined.ends_with("\n\n") {
+            combined.push('\n');
+        }
+        combined.push_str(&formatted.formatted_text);
+    }
+
+    let file = QuerySourceFile::new(db, synthetic_path, combined.clone());
+    let analysis = analyze_current_file(db, file);
+    if analysis.syntax_problem_count == 0
+        && analysis.lsp_problem_count == 0
+        && analysis.compiler_problem_count == 0
+    {
+        return None;
+    }
+
+    let (first, _) = blocks
+        .first()
+        .expect("grouped snippets are built from at least one fenced block");
+    let (last, _) = blocks
+        .last()
+        .expect("grouped snippets are built from at least one fenced block");
+    Some(TodoEntry {
+        markdown_path: markdown_path.display().to_string(),
+        block_index: first.index,
+        fence_info: format!("aivi group={group}"),
+        start_line: first.start_line,
+        end_line: last.end_line,
+        formatting_changed: blocks
+            .iter()
+            .any(|(_, formatted)| formatted.formatting_changed),
+        syntax_problem_count: analysis.syntax_problem_count,
+        lsp_problem_count: analysis.lsp_problem_count,
+        compiler_problem_count: analysis.compiler_problem_count,
+        diagnostics: analysis.diagnostics,
+        suggested_snippet: combined,
+    })
 }
 
 fn analyze_current_file(db: &RootDatabase, file: QuerySourceFile) -> AnalysisResult {
@@ -324,20 +394,20 @@ fn analyze_current_file(db: &RootDatabase, file: QuerySourceFile) -> AnalysisRes
 
 fn extract_aivi_blocks(text: &str) -> Result<Vec<FencedBlock>, String> {
     let mut blocks = Vec::new();
-    let mut open_fence = None::<(usize, usize, String, usize)>;
+    let mut open_fence = None::<(usize, usize, String, usize, Option<String>)>;
     let mut offset = 0usize;
-    let mut line_number = 1usize;
-
-    for line in text.split_inclusive('\n') {
+    for (line_index, line) in text.split_inclusive('\n').enumerate() {
+        let line_number = line_index + 1;
         let line_start = offset;
         let line_end = offset + line.len();
         let trimmed = trim_line_ending(line);
 
-        if let Some((body_start, start_line, fence_info, index)) = &open_fence {
+        if let Some((body_start, start_line, fence_info, index, group)) = &open_fence {
             if trimmed.starts_with("```") {
                 blocks.push(FencedBlock {
                     index: *index,
                     fence_info: fence_info.clone(),
+                    group: group.clone(),
                     body_range: *body_start..line_start,
                     start_line: *start_line,
                     end_line: line_number.saturating_sub(1),
@@ -349,15 +419,21 @@ fn extract_aivi_blocks(text: &str) -> Result<Vec<FencedBlock>, String> {
             let language = info.split_ascii_whitespace().next().unwrap_or_default();
             if language == "aivi" {
                 let next_index = blocks.len() + 1;
-                open_fence = Some((line_end, line_number + 1, info.to_owned(), next_index));
+                let group = parse_aivi_fence_group(info, line_number)?;
+                open_fence = Some((
+                    line_end,
+                    line_number + 1,
+                    info.to_owned(),
+                    next_index,
+                    group,
+                ));
             }
         }
 
         offset = line_end;
-        line_number += 1;
     }
 
-    if let Some((_, start_line, _, index)) = open_fence {
+    if let Some((_, start_line, _, index, _)) = open_fence {
         return Err(format!(
             "unterminated ```aivi block {index} starting at line {start_line}"
         ));
@@ -366,10 +442,38 @@ fn extract_aivi_blocks(text: &str) -> Result<Vec<FencedBlock>, String> {
     Ok(blocks)
 }
 
+fn parse_aivi_fence_group(info: &str, line_number: usize) -> Result<Option<String>, String> {
+    let mut parts = info.split_ascii_whitespace();
+    debug_assert_eq!(parts.next(), Some("aivi"));
+    let Some(attribute) = parts.next() else {
+        return Ok(None);
+    };
+    if parts.next().is_some() {
+        return Err(format!(
+            "line {line_number}: AIVI fences accept at most one `group=<name>` attribute"
+        ));
+    }
+    let Some(group) = attribute.strip_prefix("group=") else {
+        return Err(format!(
+            "line {line_number}: unknown AIVI fence attribute `{attribute}`; expected `group=<name>`"
+        ));
+    };
+    let valid = !group.is_empty()
+        && group
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'));
+    if !valid {
+        return Err(format!(
+            "line {line_number}: invalid AIVI snippet group `{group}`; use ASCII letters, digits, `-`, or `_`"
+        ));
+    }
+    Ok(Some(group.to_owned()))
+}
+
 fn apply_replacements(source: &str, replacements: &[Replacement]) -> String {
     let mut updated = source.to_owned();
     let mut ordered = replacements.to_vec();
-    ordered.sort_by(|left, right| right.range.start.cmp(&left.range.start));
+    ordered.sort_by_key(|replacement| std::cmp::Reverse(replacement.range.start));
     for replacement in ordered {
         updated.replace_range(replacement.range, &replacement.text);
     }
@@ -458,6 +562,20 @@ fn synthetic_snippet_path(
     }
     synthetic.set_extension("");
     synthetic.push(format!("block_{index}.aivi"));
+    synthetic
+}
+
+fn synthetic_group_path(
+    workspace_root: &Path,
+    relative_markdown_path: &Path,
+    group: &str,
+) -> PathBuf {
+    let mut synthetic = workspace_root.join("manual_snippets");
+    for component in relative_markdown_path.components() {
+        synthetic.push(component);
+    }
+    synthetic.set_extension("");
+    synthetic.push(format!("group_{group}.aivi"));
     synthetic
 }
 

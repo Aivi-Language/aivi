@@ -3,15 +3,22 @@ name = "aivi-benches"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
 publish = false
 
 [dependencies]
+aivi-backend = { path = "../crates/aivi-backend" }
 aivi-base.workspace = true
-aivi-syntax.workspace = true
 aivi-hir.workspace = true
+aivi-lsp.workspace = true
+aivi-query.workspace = true
+aivi-runtime = { path = "../crates/aivi-runtime" }
+aivi-syntax.workspace = true
+tokio = { version = "1", features = ["rt"] }
+tower-lsp = "0.20"
 
 [dev-dependencies]
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.8.2", features = ["html_reports"] }
 
 [[bench]]
 name = "parser"
@@ -19,6 +26,18 @@ harness = false
 
 [[bench]]
 name = "typecheck"
+harness = false
+
+[[bench]]
+name = "pipeline"
+harness = false
+
+[[bench]]
+name = "runtime"
+harness = false
+
+[[bench]]
+name = "lsp"
 harness = false
 
 [lints]

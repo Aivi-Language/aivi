@@ -5,8 +5,8 @@ Typed URLs with explicit parsing.
 `aivi.url` gives you a `Url` domain over `Text`. That means you can keep validated URLs as
 their own type instead of passing around raw strings everywhere.
 
-Construction is explicit: you parse text into `Url`, and you access `.carrier` on a `Url`
-when you need the raw value again.
+The current module publishes the nominal type and declares its intended domain members, but it
+does not yet export constructors, parsers, accessors, or raw-carrier conversion to user code.
 
 ## Import
 
@@ -23,11 +23,13 @@ use aivi.url (
 | --- | --- | --- |
 | `Url` | domain over `Text` | A validated URL value |
 | `UrlError` | `Text` | Parse failure message |
-| `.carrier` | `Url -> Text` | The raw URL text |
+| domain members | not exported | Intended parsing and component-access surface |
 
 ## Domain
 
 ```aivi
+use aivi.url (UrlError)
+
 domain Url over Text = {
     type parse : Text -> Result UrlError Url
 
@@ -51,19 +53,19 @@ domain Url over Text = {
 
 The domain members — `parse`, `scheme`, `host`, `port`, `path`, `query`, `fragment`,
 `withPath`, `withQuery` — are part of the domain's internal implementation and are not
-individually importable from user code. Use `Url` as an opaque validated type and access
-`.carrier` when the raw text is required.
+individually importable from user code. Use `Url` as an opaque type supplied by a typed boundary.
 
-## `.carrier`
+## Opaque boundary
 
-Access the raw URL text backing a `Url` value.
+Imported domain values do not expose `.carrier`. Consumers can preserve the nominal value without
+breaking the abstraction:
 
 ```aivi
 use aivi.url (Url)
 
-type Url -> Text
-func rawAddress = url =>
-    url.carrier
+type Url -> Url
+func retainUrl = url =>
+    url
 ```
 
 ## Error type
@@ -82,3 +84,4 @@ When parsing fails, the module reports a plain text error message.
 - no query-parameter merge/split helpers
 - no `withScheme`, `withHost`, `withPort`, or `withFragment`
 - no record-patch style field updates over URL parts
+- no public text parser or raw-text conversion yet

@@ -36,20 +36,14 @@ type Json =
 ```
 
 ```aivi
-use aivi.core.dict (Dict)
-
 use aivi.data.json (
     Json
-    JsonObject
     isObject
 )
 
-value payload : Json =
-    JsonObject {
-        entries: []
-    }
-
-value isEmptyObject : Bool = isObject payload
+type Json -> Bool
+func payloadIsObject = payload =>
+    isObject payload
 ```
 
 The module also exports `JsonError` and `JsonPath`:
