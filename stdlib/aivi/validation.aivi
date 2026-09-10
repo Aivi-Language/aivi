@@ -1,27 +1,6 @@
-use aivi.nonEmpty (
-    NonEmptyList
-    appendNel
-)
+use aivi.nonEmpty (NonEmptyList)
 
 type Errors E = NonEmptyList E
-
-type NonEmptyList E -> (NonEmptyList E) -> (Validation (NonEmptyList E) (A, B))
-func zipBothInvalid = le re =>
-    Invalid (appendNel le re)
-
-type NonEmptyList E -> (Validation (NonEmptyList E) B) -> (Validation (NonEmptyList E) (A, B))
-func zipInvalidLeft = le right => right
- ||> Invalid re -> zipBothInvalid le re
- ||> Valid _    -> Invalid le
-
-type A -> B -> (Validation (NonEmptyList E) (A, B))
-func zipValidRight = a b =>
-    Valid (a, b)
-
-type A -> (Validation (NonEmptyList E) B) -> (Validation (NonEmptyList E) (A, B))
-func zipValidLeft = a right => right
- ||> Invalid re -> Invalid re
- ||> Valid b    -> zipValidRight a b
 
 type Validation E A -> Bool
 func isValid = opt => opt
@@ -55,8 +34,8 @@ func fromResult = opt => opt
 
 type Validation E A -> (Option A)
 func toOption = opt => opt
- T|> Some
- F|> None
+ ||> Valid item -> Some item
+ ||> Invalid _  -> None
 
 type (A -> B) -> (Validation E A) -> (Validation E B)
 func map = transform opt => opt
@@ -68,15 +47,61 @@ func andThen = next opt => opt
  ||> Invalid e  -> Invalid e
  ||> Valid item -> next item
 
-type Validation (NonEmptyList E) A -> (Validation (NonEmptyList E) B) -> (Validation (NonEmptyList E) (A, B))
-func zipValidation = left right => left
- ||> Invalid le -> zipInvalidLeft le right
- ||> Valid a    -> zipValidLeft a right
-
 type (E -> B) -> (A -> B) -> (Validation E A) -> B
 func fold = onInvalid onValid opt => opt
  ||> Invalid e  -> onInvalid e
  ||> Valid item -> onValid item
+
+type Int -> Int
+func incrementForTest = n =>
+    n + 1
+
+type Text -> Text
+func prefixForTest = text =>
+    append "error: " text
+
+type Int -> Validation Text Int
+func incrementValidForTest = n =>
+    Valid (n + 1)
+
+type Text -> Int
+func errorZeroForTest = text =>
+    0
+
+type Option Int -> Bool
+func optionIsTwoForTest = opt => opt
+ ||> Some n -> n == 2
+ ||> None   -> False
+
+@test
+value validation_isValid : Task Text Bool = pure (isValid (Valid 2))
+
+@test
+value validation_isInvalid : Task Text Bool = pure (isInvalid (Invalid "bad"))
+
+@test
+value validation_getOrElse : Task Text Bool = pure (getOrElse 0 (Valid 2) == 2)
+
+@test
+value validation_mapErr : Task Text Bool = pure (mapErr prefixForTest (Invalid "bad") == Invalid "error: bad")
+
+@test
+value validation_toResult : Task Text Bool = pure (toResult (Valid 2) == Ok 2)
+
+@test
+value validation_fromResult : Task Text Bool = pure (fromResult (Ok 2) == Valid 2)
+
+@test
+value validation_toOption : Task Text Bool = pure (optionIsTwoForTest (toOption (Valid 2)))
+
+@test
+value validation_map : Task Text Bool = pure (map incrementForTest (Valid 2) == Valid 3)
+
+@test
+value validation_andThen : Task Text Bool = pure (andThen incrementValidForTest (Valid 2) == Valid 3)
+
+@test
+value validation_fold : Task Text Bool = pure (fold errorZeroForTest incrementForTest (Valid 2) == 3)
 
 export Errors
 export isValid
@@ -88,5 +113,4 @@ export fromResult
 export toOption
 export map
 export andThen
-export zipValidation
 export fold

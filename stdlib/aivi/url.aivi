@@ -24,3 +24,24 @@ export UrlError
 export Url
 export parse
 export toText
+
+value normalizedUrlForTest : Bool = parse "https://example.com/a/../b"
+ ||> Err _    -> False
+ ||> Ok value -> toText value == "https://example.com/b"
+
+@test
+value url_parse : Task Text Bool = pure normalizedUrlForTest
+
+value urlTextForTest : Bool = parse "https://example.com/"
+ ||> Err _    -> False
+ ||> Ok value -> toText value == "https://example.com/"
+
+@test
+value url_toText : Task Text Bool = pure urlTextForTest
+
+value relativeUrlForTest : Bool = parse "relative/path"
+ ||> Err _ -> True
+ ||> Ok _  -> False
+
+@test
+value url_parse_rejects_relative : Task Text Bool = pure relativeUrlForTest

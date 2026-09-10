@@ -169,3 +169,8 @@ signal cliArgs : Signal (List Text) = runtime.args
 signal cwd : Signal Text = runtime.cwd
 signal appDir : Signal Text = runtime.appDir
 ```
+
+## Additional constructors
+
+`SpawnFailed message`, `NonZeroExit code`, and `ProcessProtocolError message` preserve process failure
+details. A `ProcessStatus` is either `Exited code` or `Killed`.

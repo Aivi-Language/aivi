@@ -33,21 +33,31 @@ use aivi.prelude (
     Applicative
     Monad
     Foldable
+    min
+    max
+    minOf
+)
+
+use aivi.option (
     getOrElse
-    isValid
-    validationToResult
-    validationGetOrElse
     mapOr
     isSomeAnd
-    withDefault
+)
+
+use aivi.result (withDefault)
+
+use aivi.validation (
+    isValid
+    toResult as validationToResult
+    getOrElse as validationGetOrElse
+)
+
+use aivi.list (
     length
     head
     indexed
     mapWithIndex
     reduceWithIndex
-    min
-    max
-    minOf
 )
 
 use aivi.text (join as textJoin)

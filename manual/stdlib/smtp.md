@@ -180,3 +180,8 @@ type SmtpTask =
 ```
 
 Alias for a send operation that either completes successfully or fails with `SmtpError`. A successful SMTP task returns `Unit`, so the important outcome is completion rather than a payload.
+
+## Additional error constructors
+
+`SmtpConnectionFailed message`, `RecipientRejected recipient`, and `SmtpProtocolError message`
+preserve SMTP failure details.

@@ -237,4 +237,4 @@ func combineErrors = a b =>
     appendNel a b
 ```
 
-`appendNel` is used internally by `aivi.validation` to merge error lists from both sides of a failed `zipValidation`.
+`NonEmptyList` is the standard error carrier for applicative validation accumulation.

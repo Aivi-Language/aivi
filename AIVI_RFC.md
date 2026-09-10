@@ -960,7 +960,7 @@ Unlike `Result E A`, the applicative validation slice can accumulate independent
 - `Valid f` applied to `Valid x` yields `Valid (f x)`
 - `Invalid e` applied to `Valid _` yields `Invalid e`
 - `Valid _` applied to `Invalid e` yields `Invalid e`
-- in the current accumulation slice, `Invalid e1` applied to `Invalid e2` yields `Invalid (e1 ++ e2)` when the error payload supports the `NonEmpty` / `NonEmptyList` concatenation path used by `zipValidation` and `&|>`
+- in the current accumulation slice, `Invalid e1` applied to `Invalid e2` yields `Invalid (e1 ++ e2)` when the error payload supports the `NonEmpty` / `NonEmptyList` concatenation path used by `&|>`
 
 ### 8.2 Intent
 
@@ -1482,7 +1482,7 @@ Rules:
 - once a pipe is already in `Result E _` or `Validation E _`, later `!|>` stages must stay on the same carrier and error type
 - result type carries the validated output type `B`
 - signal semantics: validation is applied pointwise per upstream emission
-- `Validation` error accumulation belongs to applicative composition (`&|>` / `zipValidation`), not sequential `!|>`
+- `Validation` error accumulation belongs to applicative composition (`&|>`), not sequential `!|>`
 
 ### 11.9 `~|>` previous state
 
@@ -3492,11 +3492,11 @@ The AIVI standard library is organized into two tiers.
 | `aivi.nonEmpty` | Non-empty list type `NonEmptyList A` |
 | `aivi.option` | `Option A` combinators |
 | `aivi.order` | `Ordering` type and comparison helpers |
-| `aivi.pair` | Pair/tuple utilities; prefer `first` / `second` / `mapFirst` / `mapSecond` while compatibility aliases `fst` / `snd` / `mapFst` / `mapSnd` remain available |
+| `aivi.pair` | Pair/tuple utilities with one canonical name per operation: `first`, `second`, `swap`, `mapFirst`, `mapSecond`, `mapBoth`, `toPair`, and `duplicate` |
 | `aivi.result` | `Result E A` combinators |
 | `aivi.text` | Text join and interpolation helpers |
 | `aivi.validation` | `Validation E A` for error accumulation |
-| `aivi.prelude` | Re-exports the most-used symbols from all foundation modules |
+| `aivi.prelude` | Built-in types, higher-kinded classes, and carrier-agnostic ordering helpers; carrier-specific functions stay in their owning modules |
 
 ### 29.2 Core extension modules (`aivi.core`)
 
@@ -3504,14 +3504,14 @@ These modules live under `stdlib/aivi/core/` and are pure AIVI — no runtime in
 
 #### `aivi.core.fn`
 
-Higher-order function combinators. Exports: `identity`, `const`, `flip`, `compose`, `andThen`, `always`, `on`, `applyTo`, `applyTwice`.
+Higher-order function combinators. Exports: `identity`, `const`, `flip`, `compose`, `andThen`, and `on`.
 
 ```aivi
 use aivi.core.fn (
     identity
     compose
     andThen
-    applyTwice
+    on
 )
 ```
 
@@ -3529,7 +3529,7 @@ Exports: `Either`, `Left`, `Right`, `isLeft`, `isRight`, `fromLeft`, `fromRight`
 
 #### `aivi.core.float`
 
-IEEE 754 double-precision helpers. Pure helpers are `negate`, `absHelper`, `max`, `min`, `clamp`, `lerp`, `sign`, `between`, and predicates. Constants: `pi`, `e`, `tau`.
+IEEE 754 double-precision helpers. Pure helpers are `negate`, `max`, `min`, `clamp`, `lerp`, `sign`, `between`, the sign predicates, `square`, degree/radian conversion, and `approxEq`. Constants: `pi`, `e`, `tau`.
 
 Compiler-resolved intrinsics (imported from the same module): `floor`, `ceil`, `round`, `sqrt`, `abs`, `toInt`, `fromInt`, `toText`, `parseText`.
 
@@ -3546,7 +3546,7 @@ use aivi.core.float (
 #### `aivi.core.dict`
 
 Association dictionary for any `Eq` key type: `Dict K V = { entries: List (DictEntry K V) }`.
-Lookup, insertion, and removal scan entries; repeated insertion and merging can take quadratic
+Lookup, insertion, and removal scan entries; repeated insertion can take quadratic
 work. `insert` prepends or moves a key to the front. See the
 [dictionary reference](manual/stdlib/dict.md) for ordering and API details.
 The empty dict is `{ entries: [] }`.
@@ -3563,12 +3563,10 @@ use aivi.core.dict (
     toList
     mapValues
     filterValues
-    mergeWith
-    union
 )
 ```
 
-Exports: `Dict`, `singleton`, `insert`, `insertWith`, `get`, `getWithDefault`, `member`, `remove`, `size`, `keys`, `values`, `toList`, `fromList`, `mapValues`, `filterValues`, `mergeWith`, `union`.
+Exports: `Dict`, `singleton`, `insert`, `insertWith`, `get`, `getWithDefault`, `member`, `remove`, `size`, `keys`, `values`, `toList`, `fromList`, `mapValues`, `filterValues`.
 
 ### 29.3 Float runtime intrinsics
 
@@ -3701,14 +3699,6 @@ Binary buffer intrinsics. All operations are synchronous (no `Task`). Catalog mo
 | `BytesFromText` | `Text -> Bytes` | UTF-8 encode |
 | `BytesToText` | `Bytes -> Option Text` | UTF-8 decode (None on invalid UTF-8) |
 | `BytesRepeat` | `Int -> Int -> Bytes` | `BytesRepeat byte n` — repeat byte `n` times |
-
-The `aivi.core.bytes` module exports `BytesDecodeError`:
-
-```aivi
-type BytesDecodeError =
-  | InvalidUtf8
-  | UnexpectedEnd
-```
 
 ### 29.10 `aivi.api`
 

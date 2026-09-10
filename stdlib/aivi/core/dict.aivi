@@ -138,22 +138,6 @@ func filterValues = predicate d =>
         entries: filteredValueEntries predicate d
     }
 
-type Eq K => (V -> V -> V) -> (Dict K V) -> (DictEntry K V) -> (Dict K V)
-func mergeStep = combine acc entry =>
-    insertWith combine entry.key entry.value acc
-
-type Eq K => (V -> V -> V) -> (Dict K V) -> (Dict K V) -> (Dict K V)
-func mergeWith = combine left right => right.entries
-  |> reduce (mergeStep combine) left
-
-type Eq K => (Dict K V) -> (DictEntry K V) -> (Dict K V)
-func insertEntry = acc entry =>
-    insert entry.key entry.value acc
-
-type Eq K => (Dict K V) -> (Dict K V) -> (Dict K V)
-func union = left right => right.entries
-  |> reduce insertEntry left
-
 export Dict
 export singleton
 export insert
@@ -169,5 +153,60 @@ export toList
 export fromList
 export mapValues
 export filterValues
-export mergeWith
-export union
+
+type Int -> Int
+func doubleForTest = value =>
+    value * 2
+
+type Int -> Bool
+func positiveForTest = value =>
+    value > 0
+
+type Int -> Int -> Int
+func addForTest = left right =>
+    left + right
+
+@test
+value dict_singleton : Task Text Bool = pure (get "a" (singleton "a" 1) == Some 1)
+
+@test
+value dict_insert : Task Text Bool = pure (get "b" (insert "b" 2 (singleton "a" 1)) == Some 2)
+
+@test
+value dict_insert_replaces : Task Text Bool = pure (size (insert "a" 2 (singleton "a" 1)) == 1)
+
+@test
+value dict_insertWith : Task Text Bool = pure (get "a" (insertWith addForTest "a" 2 (singleton "a" 1)) == Some 3)
+
+@test
+value dict_get_missing : Task Text Bool = pure (get "z" (singleton "a" 1) == None)
+
+@test
+value dict_getWithDefault : Task Text Bool = pure (getWithDefault 7 "z" (singleton "a" 1) == 7)
+
+@test
+value dict_member : Task Text Bool = pure (member "a" (singleton "a" 1))
+
+@test
+value dict_remove : Task Text Bool = pure (size (remove "a" (singleton "a" 1)) == 0)
+
+@test
+value dict_size : Task Text Bool = pure (size (insert "b" 2 (singleton "a" 1)) == 2)
+
+@test
+value dict_keys : Task Text Bool = pure (keys (singleton "a" 1) == ["a"])
+
+@test
+value dict_values : Task Text Bool = pure (values (singleton "a" 1) == [1])
+
+@test
+value dict_toList : Task Text Bool = pure (toList (singleton "a" 1) == [("a", 1)])
+
+@test
+value dict_fromList : Task Text Bool = pure (get "b" (fromList [("a", 1), ("b", 2)]) == Some 2)
+
+@test
+value dict_mapValues : Task Text Bool = pure (get "a" (mapValues doubleForTest (singleton "a" 2)) == Some 4)
+
+@test
+value dict_filterValues : Task Text Bool = pure (size (filterValues positiveForTest (fromList [("a", 1), ("b", -1)])) == 1)

@@ -2,6 +2,7 @@ use aivi.arithmetic (
     add
     sub
 )
+
 use aivi.core.float (
     fromInt as floatFromInt
     toInt as floatToInt
@@ -10,40 +11,40 @@ use aivi.core.float (
 domain Px over Int = {
     type mkPx : Int -> Px
     mkPx = n => n
+
     type carry : Px -> Int
     carry = p => p
+
     type geqPx : Px -> Px -> Bool
     geqPx = a b => a >= b
+
     type leqPx : Px -> Px -> Bool
     leqPx = a b => a <= b
 }
 
-/** Construct a Px value from an Int. **/
 type Int -> Px
-func px = n => mkPx n
+func px = n =>
+    mkPx n
 
-/** The zero pixel value. **/
 value zero : Px = mkPx 0
 
-/** Add two Px values. **/
 type Px -> Px -> Px
-func addPx = a b => mkPx (add (carry a) (carry b))
+func addPx = a b =>
+    mkPx (add (carry a) (carry b))
 
-/** Subtract two Px values. **/
 type Px -> Px -> Px
-func subPx = a b => mkPx (sub (carry a) (carry b))
+func subPx = a b =>
+    mkPx (sub (carry a) (carry b))
 
-/** Scale a Px value by a Float factor. **/
 type Px -> Float -> Px
-func scalePx = a f => mkPx (floatToInt (floatFromInt (carry a) * f))
+func scalePx = a f =>
+    mkPx (floatToInt (floatFromInt (carry a) * f))
 
-/** Return the larger of two Px values. **/
 type Px -> Px -> Px
 func maxPx = a b => geqPx a b
  T|> a
  F|> b
 
-/** Return the smaller of two Px values. **/
 type Px -> Px -> Px
 func minPx = a b => leqPx a b
  T|> a
@@ -57,3 +58,21 @@ export subPx
 export scalePx
 export maxPx
 export minPx
+
+@test
+value px_constructs : Task Text Bool = pure (px 8 == px 8)
+
+@test
+value px_addPx : Task Text Bool = pure (addPx (px 8) (px 4) == px 12)
+
+@test
+value px_subPx : Task Text Bool = pure (subPx (px 8) (px 3) == px 5)
+
+@test
+value px_scalePx : Task Text Bool = pure (scalePx (px 8) 0.5 == px 4)
+
+@test
+value px_maxPx : Task Text Bool = pure (maxPx (px 8) (px 12) == px 12)
+
+@test
+value px_minPx : Task Text Bool = pure (minPx (px 8) (px 12) == px 8)

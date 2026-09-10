@@ -293,6 +293,124 @@ fn hir_queries_reject_non_exported_legacy_stdlib_names() {
 }
 
 #[test]
+fn hir_queries_reject_removed_stdlib_surface() {
+    let workspace = TempDir::new("removed-stdlib-aliases");
+    let main_path = workspace.write(
+        "main.aivi",
+        concat!(
+            "use aivi.core.fn (always, applyTo, applyTwice)\n",
+            "use aivi.pair (fst, snd, mapFst, mapSnd, fromPair)\n",
+            "use aivi.text (surroundWith, upper, lower, includesText, stripBlanks)\n",
+            "use aivi.regex (matches, firstIndex, firstMatch, allMatches, replaceFirst, replaceEach, hasMatch, isEmail)\n",
+            "use aivi.arithmetic (intAdd, intSub, intMul, intDiv, intMod, intNeg)\n",
+            "use aivi.bigint (parse, fromInteger, plus, minus, times, dividedBy, remainder, raiseTo, negate, absolute, equals, greaterThan, lessThan, greaterOrEqual, lessOrEqual, factorial)\n",
+            "use aivi.core.float (absHelper, normalizeAngle, percentOf, pow10, roundTo, cubicBezier)\n",
+            "use aivi.math (digits, fromDigits, isPrime)\n",
+            "use aivi.date (pad2, pad4)\n",
+            "use aivi.validation (zipValidation)\n",
+            "use aivi.core.dict (mergeWith, union)\n",
+            "use aivi.core.set (union, intersection, difference, subsetOf)\n",
+            "use aivi.path (parse, toText, hasExtension, isRelative)\n",
+            "use aivi.core.bytes (BytesDecodeError, BytesEncoding, BytesTask, InvalidUtf8, Utf8, Base64, Hex)\n",
+            "use aivi.list (UnzipState)\n",
+        ),
+    );
+
+    let db = RootDatabase::new();
+    let main = SourceFile::new(
+        &db,
+        main_path.clone(),
+        fs::read_to_string(&main_path).expect("main fixture should exist"),
+    );
+    let hir = hir_module(&db, main);
+    let messages = hir
+        .hir_diagnostics()
+        .iter()
+        .map(|diagnostic| diagnostic.message.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    for removed in [
+        "always",
+        "applyTo",
+        "applyTwice",
+        "fst",
+        "snd",
+        "mapFst",
+        "mapSnd",
+        "fromPair",
+        "surroundWith",
+        "upper",
+        "lower",
+        "includesText",
+        "stripBlanks",
+        "matches",
+        "firstIndex",
+        "firstMatch",
+        "allMatches",
+        "replaceFirst",
+        "replaceEach",
+        "hasMatch",
+        "isEmail",
+        "intAdd",
+        "intSub",
+        "intMul",
+        "intDiv",
+        "intMod",
+        "intNeg",
+        "parse",
+        "fromInteger",
+        "plus",
+        "minus",
+        "times",
+        "dividedBy",
+        "remainder",
+        "raiseTo",
+        "negate",
+        "absolute",
+        "equals",
+        "greaterThan",
+        "lessThan",
+        "greaterOrEqual",
+        "lessOrEqual",
+        "factorial",
+        "absHelper",
+        "normalizeAngle",
+        "percentOf",
+        "pow10",
+        "roundTo",
+        "cubicBezier",
+        "digits",
+        "fromDigits",
+        "isPrime",
+        "pad2",
+        "pad4",
+        "zipValidation",
+        "mergeWith",
+        "union",
+        "intersection",
+        "difference",
+        "subsetOf",
+        "toText",
+        "hasExtension",
+        "isRelative",
+        "BytesDecodeError",
+        "BytesEncoding",
+        "BytesTask",
+        "InvalidUtf8",
+        "Utf8",
+        "Base64",
+        "Hex",
+        "UnzipState",
+    ] {
+        assert!(
+            messages.contains(&format!("does not export `{removed}`")),
+            "removed stdlib alias `{removed}` must stay unavailable; diagnostics were: {messages}"
+        );
+    }
+}
+
+#[test]
 fn hir_queries_refresh_workspace_hoists_after_workspace_files_change() {
     let workspace = TempDir::new("workspace-hoist-refresh");
     let main_path = workspace.write("main.aivi", "value answer = plusOne 41\n");
@@ -396,7 +514,7 @@ fn hir_queries_fallback_to_bundled_root_and_prelude_modules() {
     let workspace = TempDir::new("bundled-root-prelude-fallback");
     let main_path = workspace.write(
         "main.aivi",
-        "use aivi (\n    Option\n    Result\n    Validation\n    Signal\n    Task\n    Some\n    None\n    Ok\n    Err\n    Valid\n    Invalid\n)\n\nuse aivi.prelude (\n    Int\n    Bool\n    Text\n    List\n    Eq\n    Default\n    Functor\n    Applicative\n    Monad\n    Foldable\n    getOrElse\n    withDefault\n    isValid\n    validationToResult\n    length\n    head\n    textNonEmpty\n)\n\ntype NameSignal = Signal Text\ntype CountTask = Task Text Int\n\nvalue maybeName:Option Text = Some \"Ada\"\nvalue missingName:Option Text = None\nvalue chosenName:Text = getOrElse \"guest\" missingName\n\nvalue okCount:Result Text Int = Ok 2\nvalue errCount:Result Text Int = Err \"missing\"\nvalue chosenCount:Int = withDefault 0 okCount\n\nvalue checkedName:Validation Text Text = Valid \"Ada\"\nvalue checkedOk:Bool = isValid checkedName\nvalue checkedResult:Result Text Text = validationToResult checkedName\nvalue nameCount:Int = length [\"Ada\", \"Grace\"]\nvalue firstName:Option Text = head [\"Ada\", \"Grace\"]\nvalue hasLabel:Bool = textNonEmpty \"Ada\"\nvalue sameCount:Bool = chosenCount == 2\n",
+        "use aivi (\n    Option\n    Result\n    Validation\n    Signal\n    Task\n    Some\n    None\n    Ok\n    Err\n    Valid\n    Invalid\n)\n\nuse aivi.prelude (\n    Int\n    Bool\n    Text\n    List\n    Eq\n    Default\n    Functor\n    Applicative\n    Monad\n    Foldable\n)\n\nuse aivi.option (getOrElse)\nuse aivi.result (withDefault)\nuse aivi.validation (isValid, toResult as validationToResult)\nuse aivi.list (length, head)\nuse aivi.text (nonEmpty as textNonEmpty)\n\ntype NameSignal = Signal Text\ntype CountTask = Task Text Int\n\nvalue maybeName:Option Text = Some \"Ada\"\nvalue missingName:Option Text = None\nvalue chosenName:Text = getOrElse \"guest\" missingName\n\nvalue okCount:Result Text Int = Ok 2\nvalue errCount:Result Text Int = Err \"missing\"\nvalue chosenCount:Int = withDefault 0 okCount\n\nvalue checkedName:Validation Text Text = Valid \"Ada\"\nvalue checkedOk:Bool = isValid checkedName\nvalue checkedResult:Result Text Text = validationToResult checkedName\nvalue nameCount:Int = length [\"Ada\", \"Grace\"]\nvalue firstName:Option Text = head [\"Ada\", \"Grace\"]\nvalue hasLabel:Bool = textNonEmpty \"Ada\"\nvalue sameCount:Bool = chosenCount == 2\n",
     );
 
     let db = RootDatabase::new();
@@ -427,10 +545,11 @@ fn hir_queries_fallback_to_bundled_root_and_prelude_modules() {
 
     let prelude_exports = exported_names(&db, prelude_module);
     assert!(prelude_exports.find("Int").is_some());
-    assert!(prelude_exports.find("getOrElse").is_some());
-    assert!(prelude_exports.find("validationToResult").is_some());
-    assert!(prelude_exports.find("length").is_some());
-    assert!(prelude_exports.find("textNonEmpty").is_some());
+    assert!(prelude_exports.find("min").is_some());
+    assert!(prelude_exports.find("getOrElse").is_none());
+    assert!(prelude_exports.find("validationToResult").is_none());
+    assert!(prelude_exports.find("length").is_none());
+    assert!(prelude_exports.find("textNonEmpty").is_none());
 }
 
 #[test]
@@ -522,9 +641,7 @@ value level:LogLevel =
     Debug
 
 value context:LogContext =
-    Map {
-        "module": "query"
-    }
+    [("module", "query")]
 
 value entry:LogEntry = {
     level: level,

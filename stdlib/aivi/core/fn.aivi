@@ -18,28 +18,39 @@ type (A -> B) -> (B -> C) -> A -> C
 func andThen = f g x =>
     g (f x)
 
-type A -> B -> A
-func always = x ignored =>
-    x
-
 type (B -> B -> C) -> (A -> B) -> A -> A -> C
 func on = combine transform x y =>
     combine (transform x) (transform y)
-
-type A -> (A -> B) -> B
-func applyTo = arg f =>
-    f arg
-
-type (A -> A) -> A -> A
-func applyTwice = f x =>
-    f (f x)
 
 export identity
 export const
 export flip
 export compose
 export andThen
-export always
 export on
-export applyTo
-export applyTwice
+
+type Int -> Int
+func incrementForTest = n =>
+    n + 1
+
+type Int -> Int -> Int
+func subtractForTest = left right =>
+    left - right
+
+@test
+value identity_returns_input : Task Text Bool = pure (identity 42 == 42)
+
+@test
+value const_ignores_second_argument : Task Text Bool = pure (const 7 "ignored" == 7)
+
+@test
+value flip_reverses_first_two_arguments : Task Text Bool = pure (flip subtractForTest 2 9 == 7)
+
+@test
+value compose_applies_right_to_left : Task Text Bool = pure (compose incrementForTest incrementForTest 1 == 3)
+
+@test
+value andThen_applies_left_to_right : Task Text Bool = pure (andThen incrementForTest incrementForTest 1 == 3)
+
+@test
+value on_projects_both_arguments : Task Text Bool = pure (on subtractForTest incrementForTest 5 2 == 3)

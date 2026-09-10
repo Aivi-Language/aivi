@@ -1008,21 +1008,8 @@ value sums : List Int =
 Separates a list of pairs into two separate lists. The inverse of `zip`.
 
 
-`UnzipState A B` is a record `{ lefts: List A, rights: List B }`.
-
 ```aivi
-use aivi.list (
-    UnzipState
-    unzip
-)
-
-type UnzipState Text Int -> (List Text)
-func takeLefts = state => state
- ||> { lefts, rights } -> lefts
-
-type UnzipState Text Int -> (List Int)
-func takeRights = state => state
- ||> { lefts, rights } -> rights
+use aivi.list (unzip)
 
 value pairs : List (Text, Int) = [
     ("Alice", 95),
@@ -1030,7 +1017,9 @@ value pairs : List (Text, Int) = [
     ("Carol", 92)
 ]
 
-value result : (UnzipState Text Int) = unzip pairs
-value names : (List Text) = takeLefts result
-value scores : (List Int) = takeRights result
+value result : (List Text, List Int) = unzip pairs
 ```
+
+## Public result records
+
+`Partition A` is the result of `partition`; its `matched` and `unmatched` fields preserve input order.

@@ -97,3 +97,11 @@ value prettyPayload : Task Text Text = pretty "\{\"name\":\"Ada\",\"role\":\"adm
 `get` and `at` return raw JSON text fragments today, not decoded `Json` values. That is a
 compatibility surface; newer provider-based decode paths should prefer typed decoding at the source
 boundary.
+
+## Constructors
+
+`InvalidJson message`, `MissingKey key`, `IndexOutOfBounds index`, and `WrongType expected` construct
+`JsonError` values.
+
+The `Json` constructors are `JsonNull`, `JsonBool value`, `JsonNumber value`, `JsonString value`,
+`JsonArray values`, and `JsonObject fields`.

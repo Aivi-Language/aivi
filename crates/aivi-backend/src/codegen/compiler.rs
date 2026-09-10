@@ -5276,6 +5276,18 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 )?;
                 Ok(IntrinsicCallPlan::BytesRepeat)
             }
+            IntrinsicValue::MatrixIndices => {
+                let [count] = arguments else {
+                    unreachable!("saturated `MatrixIndices` call should keep exactly one argument");
+                };
+                self.require_int_expression(
+                    kernel_id,
+                    *count,
+                    kernel.exprs()[*count].layout,
+                    "matrix.indices count",
+                )?;
+                Ok(IntrinsicCallPlan::MatrixIndices)
+            }
             IntrinsicValue::BytesSlice => {
                 let [from, to, bytes] = arguments else {
                     unreachable!("saturated `BytesSlice` call should keep exactly three arguments");
@@ -7395,6 +7407,18 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 };
                 let func_ref = self.declare_bytes_repeat_func(kernel_id, builder)?;
                 let call = builder.ins().call(func_ref, &[*byte_val, *count]);
+                Ok(builder.inst_results(call)[0])
+            }
+            DirectApplyPlan::Intrinsic(IntrinsicCallPlan::MatrixIndices) => {
+                let [count] = arguments else {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "direct matrix.indices lowering expected exactly one materialized argument",
+                    ));
+                };
+                let func_ref = self.declare_matrix_indices_func(kernel_id, builder)?;
+                let call = builder.ins().call(func_ref, &[*count]);
                 Ok(builder.inst_results(call)[0])
             }
             DirectApplyPlan::Intrinsic(IntrinsicCallPlan::BytesSlice) => {
@@ -9634,6 +9658,33 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         } else {
             let mut sig = self.module.make_signature();
             sig.params.push(AbiParam::new(types::I64));
+            sig.params.push(AbiParam::new(types::I64));
+            sig.returns.push(AbiParam::new(self.pointer_type()));
+            let fid = self
+                .module
+                .declare_function(sym, Linkage::Import, &sig)
+                .map_err(|e| CodegenError::CraneliftModule {
+                    kernel: Some(kernel_id),
+                    message: e.to_string().into_boxed_str(),
+                })?;
+            self.declared_external_funcs
+                .insert(sym.to_owned().into_boxed_str(), fid);
+            fid
+        };
+        Ok(self.module.declare_func_in_func(func_id, builder.func))
+    }
+
+    /// `aivi_matrix_indices(count: i64) -> ptr`
+    fn declare_matrix_indices_func(
+        &mut self,
+        kernel_id: KernelId,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<cranelift_codegen::ir::FuncRef, CodegenError> {
+        let sym = "aivi_matrix_indices";
+        let func_id = if let Some(&fid) = self.declared_external_funcs.get(sym) {
+            fid
+        } else {
+            let mut sig = self.module.make_signature();
             sig.params.push(AbiParam::new(types::I64));
             sig.returns.push(AbiParam::new(self.pointer_type()));
             let fid = self

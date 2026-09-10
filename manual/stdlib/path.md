@@ -1,120 +1,20 @@
 # aivi.path
 
-Lexical path manipulation on `Text` strings plus the `PathSource` handle marker for host directory
-snapshots. The functions in this module are **synchronous and pure** — they perform no I/O and
-never touch the filesystem.
+`aivi.path` provides synchronous, pure lexical operations on path text. These functions do not access the filesystem. Use `FsSource` for existence checks and I/O.
 
-```aivi
-use aivi.path (
-    parent
-    filename
-    stem
-    extension
-    join
-    isAbsolute
-    normalize
-)
-```
+The module also exports the nominal `Path` vocabulary type, `PathSource`, and `PathError` with `InvalidPath` and `PathNotFound`. The MVP has no public conversion between `Text` and `Path`; the lexical functions operate on `Text`.
 
----
+## API
 
-## Types
-
-### `Path`
-
-```aivi
-use aivi.path (
-    Path
-    parse
-    toText
-)
-```
-
-`Path` is a nominal domain over `Text`. `parse : Text -> Result PathError Path` rejects NUL characters; it preserves the input and does not check filesystem existence or permissions. `toText : Path -> Text` explicitly unwraps it. The lexical intrinsics below accept and return plain text.
-
-```aivi
-use aivi.path (Path)
-
-type FileRef = {
-    path: Path,
-    label: Text
-}
-```
-
-### `PathError`
-
-```aivi
-type PathError =
-  | InvalidPath Text
-  | PathNotFound Text
-```
-
----
-
-## Intrinsics
-
-### `parent : Text -> Option Text`
-
-Return the directory containing this path. Returns `None` for a root or empty path.
-
-```aivi
-use aivi.path (parent)
-```
-
-### `filename : Text -> Option Text`
-
-Return the final path component, including its extension. Returns `None` for a root path.
-
-```aivi
-use aivi.path (filename)
-```
-
-### `stem : Text -> Option Text`
-
-Return the final path component without its extension.
-
-```aivi
-use aivi.path (stem)
-```
-
-### `extension : Text -> Option Text`
-
-Return the extension (characters after the last dot in the filename).
-
-```aivi
-use aivi.path (extension)
-```
-
-### `join : Text -> Text -> Text`
-
-Append a segment to a base path. If the segment is absolute it replaces the base (POSIX semantics).
-
-```aivi
-use aivi.path (join)
-```
-
-### `isAbsolute : Text -> Bool`
-
-Return `True` when the path begins with `/`.
-
-```aivi
-use aivi.path (isAbsolute)
-```
-
-### `normalize : Text -> Text`
-
-Resolve `.` (current directory) and `..` (parent directory) segments lexically, without touching the filesystem.
-
-```aivi
-use aivi.path (normalize)
-```
-
----
-
-## Real-world example
-
-The module also exports `hasExtension : Text -> Bool` (whether `extension` is present)
-and `isRelative : Text -> Bool` (the negation of `isAbsolute`). Both are pure helpers.
+| Export | Type | Behavior |
+| --- | --- | --- |
+| `parent` | `Text -> Option Text` | Return the containing path, if any |
+| `filename` | `Text -> Option Text` | Return the final component |
+| `stem` | `Text -> Option Text` | Return the filename without its final extension |
+| `extension` | `Text -> Option Text` | Return the final extension without the dot |
+| `join` | `Text -> Text -> Text` | Join a base path and segment |
+| `isAbsolute` | `Text -> Bool` | Test whether a path is absolute |
+| `normalize` | `Text -> Text` | Resolve `.` and `..` lexically |
 
 ```aivi
 use aivi.path (
@@ -122,20 +22,6 @@ use aivi.path (
     normalize
 )
 
-use aivi.fs (FsSource)
-
-value configDir : Text = "/etc/demo"
-
-@source fs configDir
-signal files : FsSource
-
-value configPath : Text = join configDir "app.conf"
-value backupPath : Text = normalize (join configDir "../demo/app.conf.bak")
-value readConfig : Task Text Text = files.read "app.conf"
-value writeBackup : Task Text Unit = files.writeText "app.conf.bak" "..."
+value configPath : Text = join "/etc/demo" "app.conf"
+value backupPath : Text = normalize (join "/etc/demo" "../demo/app.conf.bak")
 ```
-
-::: tip
-Combine `aivi.path` with `FsSource` handles: use the pure path functions to build lexical path text,
-then use `@source fs ...` for the actual read/write/delete boundary.
-:::

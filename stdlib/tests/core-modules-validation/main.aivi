@@ -4,10 +4,7 @@ use aivi.core.fn (
     flip
     compose
     andThen
-    always
     on
-    applyTo
-    applyTwice
 )
 
 use aivi.core.either (
@@ -34,7 +31,6 @@ use aivi.core.float (
     e
     tau
     negate
-    absHelper
     max
     min
     clamp
@@ -65,8 +61,6 @@ use aivi.core.dict (
     fromList
     mapValues
     filterValues
-    mergeWith
-    union
 )
 
 use aivi.math (
@@ -85,9 +79,6 @@ value fnConst : Int = const 7 "ignored"
 value fnFlip : Int = flip chooseNumber 99 "ignored"
 value fnCompose : Int = compose negateInt abs (0 - 5)
 value fnAndThen : Int = andThen abs negateInt (0 - 3)
-value fnAlways : Int = always 100 True
-value fnApplyTo : Int = applyTo 4 abs
-value fnApplyTwice : Int = applyTwice negateInt 10
 value eitherLeft : (Either Text Int) = Left "error"
 value eitherRight : (Either Text Int) = Right 42
 value eitherIsLeft : Bool = isLeft eitherLeft
@@ -129,7 +120,6 @@ value floatPi : Float = pi
 value floatE : Float = e
 value floatTau : Float = tau
 value floatNegate : Float = negate 3.5
-value floatAbsHelper : Float = absHelper (0.0 - 4.2)
 value floatMax : Float = max 2.5 7.1
 value floatMin : Float = min 2.5 7.1
 value floatClampLow : Float = clamp 0.0 1.0 (0.0 - 0.5)
@@ -181,35 +171,15 @@ type Int -> Bool
 func isAboveFive = n =>
     n > 5
 
-type Int -> Int -> Int
-func sumValues = x y =>
-    x + y
-
 value dictMapped : (Dict Text Int) = mapValues doubleVal dictSingle
 value dictFiltered : (Dict Text Int) = filterValues isAboveZero dictSingle
 value dictFiltered0 : (Dict Text Int) = filterValues isAboveFive dictSingle
-
-value dictLeft : (Dict Text Int) =
-    insert "a" 1 {
-        entries: []
-    }
-
-value dictRight : (Dict Text Int) =
-    insert "a" 10 {
-        entries: []
-    }
-
-value dictMerged : (Dict Text Int) = mergeWith sumValues dictLeft dictRight
-value dictUnion : (Dict Text Int) = union dictLeft dictRight
 
 export fnIdentity
 export fnConst
 export fnFlip
 export fnCompose
 export fnAndThen
-export fnAlways
-export fnApplyTo
-export fnApplyTwice
 export eitherIsLeft
 export eitherIsRight
 export eitherNotLeft
@@ -230,7 +200,6 @@ export floatPi
 export floatE
 export floatTau
 export floatNegate
-export floatAbsHelper
 export floatMax
 export floatMin
 export floatClampLow
@@ -262,5 +231,3 @@ export dictToList
 export dictMapped
 export dictFiltered
 export dictFiltered0
-export dictMerged
-export dictUnion

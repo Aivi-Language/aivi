@@ -176,10 +176,9 @@ value decodeError : HttpError = DecodeFailure "bad-json"
 value requestError : HttpError = RequestFailure "offline"
 value level : LogLevel = Debug
 
-value context : LogContext =
-    Map {
-        "module": "stdlib"
-    }
+value context : LogContext = [
+    ("module", "stdlib")
+]
 
 value entry : LogEntry = {
     level: level,

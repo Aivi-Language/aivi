@@ -257,3 +257,9 @@ signal accounts : Signal (Result GoaError (List GoaMailAccount))
 
 `goa.mailAccounts` publishes the current set of GOA mail accounts and republishes when GOA account
 objects change on the session bus.
+
+## Additional constructors
+
+`GoaMailPassword password` and `GoaMailOAuthToken token` select the mail credential representation.
+`AccountActive`, `AccountNeedsAttention`, and `AccountDisabled` describe account state.
+`AccountAdded id`, `AccountRemoved id`, and `AccountChanged id` describe account lifecycle events.

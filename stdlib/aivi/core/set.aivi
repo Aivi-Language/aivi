@@ -58,48 +58,6 @@ type Eq A => (List A) -> (Set A)
 func fromList = items => items
   |> reduce insertItem { items: [] }
 
-type Eq A => (Set A) -> A -> (Set A)
-func unionStep = acc v =>
-    insert v acc
-
-type Eq A => (Set A) -> (Set A) -> (Set A)
-func union = a b => b.items
-  |> reduce unionStep a
-
-type Eq A => (Set A) -> A -> Bool
-func keepIfMember = s v =>
-    member v s
-
-type Eq A => (Set A) -> (Set A) -> (List A)
-func intersectionItems = a b => a.items
-  |> filter (keepIfMember b)
-
-type Eq A => (Set A) -> (Set A) -> (Set A)
-func intersection = a b =>
-    {
-        items: intersectionItems a b
-    }
-
-type Eq A => (Set A) -> A -> Bool
-func keepIfNotMember = s v => member v s
- T|> False
- F|> True
-
-type Eq A => (Set A) -> (Set A) -> (List A)
-func differenceItems = a b => a.items
-  |> filter (keepIfNotMember b)
-
-type Eq A => (Set A) -> (Set A) -> (Set A)
-func difference = a b =>
-    {
-        items: differenceItems a b
-    }
-
-type Eq A => (Set A) -> (Set A) -> Bool
-func subsetOf = a b => a.items
-  |> filter (keepIfMember b)
-  |> length == length a.items
-
 export Set
 export isEmpty
 export singleton
@@ -109,7 +67,30 @@ export remove
 export size
 export toList
 export fromList
-export union
-export intersection
-export difference
-export subsetOf
+
+@test
+value set_singleton : Task Text Bool = pure (size (singleton 1) == 1)
+
+@test
+value set_isEmpty : Task Text Bool = pure (isEmpty (remove 1 (singleton 1)))
+
+@test
+value set_member : Task Text Bool = pure (member 1 (singleton 1))
+
+@test
+value set_insert : Task Text Bool = pure (size (insert 2 (singleton 1)) == 2)
+
+@test
+value set_insert_is_idempotent : Task Text Bool = pure (size (insert 1 (singleton 1)) == 1)
+
+@test
+value set_remove : Task Text Bool = pure (isEmpty (remove 1 (singleton 1)))
+
+@test
+value set_size : Task Text Bool = pure (size (fromList [1, 1, 2]) == 2)
+
+@test
+value set_toList : Task Text Bool = pure (toList (singleton 1) == [1])
+
+@test
+value set_fromList : Task Text Bool = pure (size (fromList [1, 1, 2]) == 2)

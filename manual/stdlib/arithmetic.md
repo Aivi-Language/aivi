@@ -19,8 +19,8 @@ use aivi.arithmetic (
 
 ## Exports
 
-The source module also exports wrapper names `intAdd`, `intSub`, `intMul`, `intDiv`,
-`intMod`, and `intNeg`, with the same signatures as the corresponding catalog intrinsics below.
+The module exports the compiler-backed operations directly. It does not add a second set of
+wrapper names.
 
 | Name | Type |
 | --- | --- |

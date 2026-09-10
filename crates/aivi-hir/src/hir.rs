@@ -321,6 +321,8 @@ pub enum IntrinsicValue {
     PathJoin,
     PathIsAbsolute,
     PathNormalize,
+    // Matrix operations (pure/synchronous)
+    MatrixIndices,
     // Bytes operations (pure/synchronous)
     BytesLength,
     BytesGet,
@@ -423,7 +425,6 @@ pub enum IntrinsicValue {
     HttpPostJson,
     // BigInt intrinsics (pure/synchronous)
     UrlParse,
-    BigIntFactorial,
     BigIntFromInt,
     BigIntFromText,
     BigIntToInt,
@@ -537,6 +538,7 @@ intrinsic_unit_variants!(
     PathJoin,
     PathIsAbsolute,
     PathNormalize,
+    MatrixIndices,
     BytesLength,
     BytesGet,
     BytesSlice,
@@ -624,7 +626,6 @@ intrinsic_unit_variants!(
     HttpHead,
     HttpPostJson,
     UrlParse,
-    BigIntFactorial,
     BigIntFromInt,
     BigIntFromText,
     BigIntToInt,
@@ -722,6 +723,7 @@ impl fmt::Display for IntrinsicValue {
             Self::PathJoin => f.write_str("aivi.path.join"),
             Self::PathIsAbsolute => f.write_str("aivi.path.isAbsolute"),
             Self::PathNormalize => f.write_str("aivi.path.normalize"),
+            Self::MatrixIndices => f.write_str("aivi.matrix.indices"),
             Self::BytesLength => f.write_str("aivi.core.bytes.length"),
             Self::BytesGet => f.write_str("aivi.core.bytes.get"),
             Self::BytesSlice => f.write_str("aivi.core.bytes.slice"),
@@ -809,7 +811,6 @@ impl fmt::Display for IntrinsicValue {
             Self::HttpHead => f.write_str("aivi.http.head"),
             Self::HttpPostJson => f.write_str("aivi.http.postJson"),
             Self::UrlParse => f.write_str("aivi.url.parseText"),
-            Self::BigIntFactorial => f.write_str("aivi.bigint.factorial"),
             Self::BigIntFromInt => f.write_str("aivi.bigint.fromInt"),
             Self::BigIntFromText => f.write_str("aivi.bigint.fromText"),
             Self::BigIntToInt => f.write_str("aivi.bigint.toInt"),

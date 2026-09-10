@@ -110,3 +110,35 @@ func trySeconds = value =>
     trySecondsValue value
 
 export trySeconds
+
+@test
+value duration_millis : Task Text Bool = pure (toMillis (millis 250) == 250)
+
+@test
+value duration_toMillis : Task Text Bool = pure (toMillis (millis 1250) == 1250)
+
+@test
+value duration_toSeconds : Task Text Bool = pure (toSeconds (millis 2500) == 2)
+
+@test
+value duration_toMinutes : Task Text Bool = pure (toMinutes (millis 120000) == 2)
+
+@test
+value duration_toHours : Task Text Bool = pure (toHours (millis 7200000) == 2)
+
+@test
+value duration_toDays : Task Text Bool = pure (toDays (millis 172800000) == 2)
+
+value validSecondsForTest : Bool = trySeconds 3
+ ||> Err _    -> False
+ ||> Ok value -> toMillis value == 3000
+
+@test
+value duration_trySeconds : Task Text Bool = pure validSecondsForTest
+
+value negativeSecondsForTest : Bool = trySeconds (-1)
+ ||> Err _ -> True
+ ||> Ok _  -> False
+
+@test
+value duration_trySeconds_rejects_negative : Task Text Bool = pure negativeSecondsForTest

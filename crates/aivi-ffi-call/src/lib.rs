@@ -620,6 +620,7 @@ pub fn lookup_runtime_symbol(symbol: &str) -> Option<*const u8> {
         "aivi_bytes_append" => Some(aivi_bytes_append as *const () as *const u8),
         "aivi_path_join" => Some(aivi_path_join as *const () as *const u8),
         "aivi_bytes_repeat" => Some(aivi_bytes_repeat as *const () as *const u8),
+        "aivi_matrix_indices" => Some(aivi_matrix_indices as *const () as *const u8),
         "aivi_bytes_slice" => Some(aivi_bytes_slice as *const () as *const u8),
         "aivi_list_new" => Some(aivi_list_new as *const () as *const u8),
         "aivi_set_new" => Some(aivi_set_new as *const () as *const u8),
@@ -846,6 +847,28 @@ extern "C" fn aivi_bytes_repeat(byte: i64, count: i64) -> *const u8 {
         let byte = byte.clamp(0, 255) as u8;
         let count = count.max(0) as usize;
         arena.store_len_prefixed_bytes(&vec![byte; count]).cast()
+    })
+    .unwrap_or(ptr::null())
+}
+
+extern "C" fn aivi_matrix_indices(count: i64) -> *const u8 {
+    with_current_arena(|arena| {
+        let Some(count) = non_negative_usize(count.max(0)) else {
+            return ptr::null();
+        };
+        let Some(byte_len) = count.checked_mul(std::mem::size_of::<i64>()) else {
+            return ptr::null();
+        };
+        let mut bytes = Vec::with_capacity(byte_len);
+        for index in 0..count {
+            let Ok(index) = i64::try_from(index) else {
+                return ptr::null();
+            };
+            bytes.extend_from_slice(&index.to_ne_bytes());
+        }
+        encode_marshaled_sequence(count, std::mem::size_of::<i64>(), &bytes, arena)
+            .map(|pointer| pointer.cast())
+            .unwrap_or(ptr::null())
     })
     .unwrap_or(ptr::null())
 }
@@ -1590,6 +1613,24 @@ mod tests {
         assert_eq!(
             decoded.bytes.as_ref(),
             &[1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0]
+        );
+    }
+
+    #[test]
+    fn matrix_indices_helper_builds_iterative_int_sequence() {
+        let arena = Rc::new(RefCell::new(AllocationArena::new()));
+        let pointer = with_active_arena(Rc::clone(&arena), || aivi_matrix_indices(100_000));
+        let arena_ref = arena.borrow();
+        let memory = ReadableMemory::from_arena(&arena_ref);
+        let decoded = decode_marshaled_sequence(&memory, pointer.cast())
+            .expect("matrix indices should produce a valid list representation");
+
+        assert_eq!(decoded.count, 100_000);
+        assert_eq!(decoded.element_size, std::mem::size_of::<i64>());
+        assert_eq!(&decoded.bytes[..8], &0_i64.to_ne_bytes());
+        assert_eq!(
+            &decoded.bytes[decoded.bytes.len() - 8..],
+            &99_999_i64.to_ne_bytes()
         );
     }
 

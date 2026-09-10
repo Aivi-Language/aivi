@@ -42,3 +42,9 @@ use aivi.desktop.xdg (
 
 Those exports remain as shared type vocabulary for path/XDG-related APIs. Actual directory lookup
 is now exposed through `PathSource`.
+
+## Constructors and task alias
+
+`XdgError` has `XdgHomeUnset` and `XdgRuntimeDirUnavailable`. The `XdgUserDir` constructors are
+`XdgHome`, `XdgDesktop`, `XdgDocuments`, `XdgDownloads`, `XdgMusic`, `XdgPictures`, `XdgVideos`,
+`XdgTemplates`, and `XdgPublicShare`. `XdgTask` is `Task XdgError Text`.

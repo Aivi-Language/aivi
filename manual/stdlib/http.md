@@ -64,3 +64,12 @@ value healthStatus : Task Text Int = api.getStatus "/health"
 Signal-backed request behavior and option support live in the [Built-in Source Catalog](/guide/source-catalog).
 Direct handle-member request values such as `api.get "/health"` return ordinary `Task Text A`
 values on the one-shot path.
+
+## Additional aliases, modes, and constants
+
+`HttpResponse A` is `Result HttpError A`. `Strict` rejects response decoding mismatches, while
+`Permissive` allows provider-defined tolerant decoding.
+
+The content-type constants are `contentTypeJson` (`application/json`), `contentTypeForm`
+(`application/x-www-form-urlencoded`), `contentTypePlain` (`text/plain; charset=utf-8`), and
+`contentTypeHtml` (`text/html; charset=utf-8`).

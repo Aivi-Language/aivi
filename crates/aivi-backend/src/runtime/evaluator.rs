@@ -3245,6 +3245,7 @@ fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
         IntrinsicValue::PathJoin => 2,
         IntrinsicValue::PathIsAbsolute => 1,
         IntrinsicValue::PathNormalize => 1,
+        IntrinsicValue::MatrixIndices => 1,
         IntrinsicValue::BytesLength => 1,
         IntrinsicValue::BytesGet => 2,
         IntrinsicValue::BytesSlice => 3,
@@ -3334,7 +3335,6 @@ fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
         IntrinsicValue::HttpPost | IntrinsicValue::HttpPut => 3,
         // BigInt intrinsics
         IntrinsicValue::UrlParse
-        | IntrinsicValue::BigIntFactorial
         | IntrinsicValue::BigIntFromInt
         | IntrinsicValue::BigIntFromText
         | IntrinsicValue::BigIntToInt

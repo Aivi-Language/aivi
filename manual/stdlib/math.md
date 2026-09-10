@@ -1,6 +1,6 @@
 # aivi.math
 
-Integer arithmetic utilities. Provides common numeric helpers including absolute value, sign detection, parity tests, clamping, and divisibility.
+Pure integer helpers for sign, bounds, divisibility, and small whole-number calculations.
 
 ```aivi
 use aivi.math (
@@ -16,170 +16,34 @@ use aivi.math (
     gcd
     lcm
     pow
-    digits
-    fromDigits
-    isPrime
 )
 ```
 
-## At a glance
-
-| Function | Type | Use it for |
+| Function | Type | Behavior |
 | --- | --- | --- |
 | `abs` | `Int -> Int` | Absolute value |
 | `negate` | `Int -> Int` | Flip the sign |
-| `sign` | `Int -> Int` | Collapse a number to `-1`, `0`, or `1` |
-| `isEven` | `Int -> Bool` | Check parity |
-| `isOdd` | `Int -> Bool` | Check oddness |
-| `square` | `Int -> Int` | Multiply a number by itself |
-| `clamp` | `Int -> Int -> Int -> Int` | Restrict a number to a range |
-| `between` | `Int -> Int -> Int -> Bool` | Check whether a number lies in a range |
-| `divides` | `Int -> Int -> Bool` | Check exact divisibility |
+| `sign` | `Int -> Int` | Return `-1`, `0`, or `1` |
+| `isEven` | `Int -> Bool` | Test divisibility by two |
+| `isOdd` | `Int -> Bool` | Test non-divisibility by two |
+| `square` | `Int -> Int` | Multiply a value by itself |
+| `clamp` | `Int -> Int -> Int -> Int` | Restrict a value to inclusive bounds |
+| `between` | `Int -> Int -> Int -> Bool` | Test inclusive bounds |
+| `divides` | `Int -> Int -> Bool` | Test exact divisibility; zero divides only zero |
 | `gcd` | `Int -> Int -> Int` | Greatest common divisor |
-| `lcm` | `Int -> Int -> Int` | Least common multiple |
-| `pow` | `Int -> Int -> Int` | Integer exponentiation |
-| `digits` | `Int -> List Int` | Break an integer into decimal digits |
-| `fromDigits` | `List Int -> Int` | Rebuild an integer from decimal digits |
-| `isPrime` | `Int -> Bool` | Primality test |
+| `lcm` | `Int -> Int -> Int` | Least common multiple; returns zero when either input is zero |
+| `pow` | `Int -> Int -> Int` | Non-negative integer exponentiation; negative exponents return zero |
 
-The detailed sections below focus on the most common helpers first. The table above is the full
-currently exported surface for `aivi.math`.
-
----
-
-## abs
-
-Returns the absolute value of an integer.
-
+`Int` arithmetic has the same fixed-width overflow behavior as ordinary language arithmetic.
 
 ```aivi
-use aivi.math (abs)
+use aivi.math (
+    between
+    gcd
+    isEven
+)
 
-type Int -> Int -> Int
-func distance = a b =>
-    abs (a - b)
-```
-
----
-
-## negate
-
-Negates an integer: `negate n` is equivalent to `0 - n`.
-
-
-```aivi
-use aivi.math (negate)
-
-type Int -> Int
-func flipSign = n =>
-    negate n
-```
-
----
-
-## sign
-
-Returns the sign of an integer as `-1`, `0`, or `1`.
-
-
-```aivi
-use aivi.math (sign)
-
-type Int -> Int
-func direction = velocity =>
-    sign velocity
-```
-
----
-
-## isEven
-
-Returns `True` if the integer is divisible by 2.
-
-
-```aivi
-use aivi.list (filter)
-
-use aivi.math (isEven)
-
-type List Int -> List Int
-func evensOnly = numbers =>
-    filter isEven numbers
-```
-
----
-
-## isOdd
-
-Returns `True` if the integer is not divisible by 2.
-
-
-```aivi
-use aivi.list (filter)
-
-use aivi.math (isOdd)
-
-type List Int -> List Int
-func oddsOnly = numbers =>
-    filter isOdd numbers
-```
-
----
-
-## square
-
-Multiplies an integer by itself.
-
-
-```aivi
-use aivi.math (square)
-
-type Int -> Int
-func areaOfSquare = side =>
-    square side
-```
-
----
-
-## clamp
-
-Constrains a value to lie within `[low, high]`. If `n < low`, returns `low`; if `n > high`, returns `high`; otherwise returns `n`.
-
-
-```aivi
-use aivi.math (clamp)
-
-type Int -> Int
-func normalizedVolume = raw =>
-    clamp 0 100 raw
-```
-
----
-
-## between
-
-Returns `True` if `n` is within the inclusive range `[low, high]`.
-
-
-```aivi
-use aivi.math (between)
-
-type Int -> Bool
-func isValidAge = age =>
-    between 0 150 age
-```
-
----
-
-## divides
-
-Returns `True` if `divisor` evenly divides `n` (i.e. `n % divisor == 0`).
-
-
-```aivi
-use aivi.math (divides)
-
-type Int -> Bool
-func isMultipleOfThree = n =>
-    divides 3 n
+value aligned : Bool = isEven 42
+value divisor : Int = gcd 84 30
+value validPercent : Bool = between 0 100 75
 ```

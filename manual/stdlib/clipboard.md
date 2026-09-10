@@ -113,3 +113,8 @@ signal clipboardText : Signal Text
 ```
 
 It does not publish `ClipboardContent` or support the richer content variants above.
+
+## Task alias
+
+`ClipboardTask A` is `Task ClipboardError A`, used by clipboard reads and other operations that return a
+value.

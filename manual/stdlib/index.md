@@ -40,18 +40,18 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 
 | Module | Description | Selected exports or capability members |
 | --- | --- | --- |
-| [aivi.prelude](prelude.md) | Convenience re-exports and built-in types | `Validation`, `isValid`, `validationToResult`, `min`, `Functor` |
+| [aivi.prelude](prelude.md) | Built-in types, classes, and generic ordering | `Validation`, `Functor`, `min`, `max`, `clamp` |
 | [aivi.async](async.md) | Async operation lifecycle tracker | `AsyncTracker`, `step`, `isPending`, `isDone`, `isFailed` |
 | [aivi.option](option.md) | Values that may be missing | `getOrElse`, `map`, `flatMap`, `toResult` |
 | [aivi.result](result.md) | Success-or-error values | `withDefault`, `map`, `mapErr`, `flatMap` |
-| [aivi.validation](validation.md) | Accumulating validation for independent inputs | `getOrElse`, `mapErr`, `zipValidation`, `fold` |
+| [aivi.validation](validation.md) | Validation conversions and combinators | `getOrElse`, `mapErr`, `andThen`, `fold` |
 | [aivi.core.either](either.md) | Disjoint union holding one of two alternatives | `Left`, `Right`, `mapLeft`, `mapRight` |
 | [aivi.list](list.md) | Purely functional list operations | `map`, `filter`, `maximum`, `unique`, `sort` |
 | [aivi.nonEmpty](nonEmpty.md) | Non-empty list guaranteed at the type level | `head`, `last`, `singleton`, `cons`, `fromList` |
 | [aivi.pair](pair.md) | Two-element tuples | `first`, `second`, `mapFirst`, `mapSecond` |
 | [aivi.matrix](matrix.md) | Rectangular 2D collections | `init`, `fromRows`, `width`, `height`, `rows` |
-| [aivi.core.dict](dict.md) | Association map keyed by any `Eq` type | `Dict`, `get`, `mergeWith`, `union` |
-| [aivi.core.set](set.md) | Unordered set for any `Eq` type | `singleton`, `member`, `insert`, `union` |
+| [aivi.core.dict](dict.md) | Association map keyed by any `Eq` type | `Dict`, `get`, `insertWith`, `fromList` |
+| [aivi.core.set](set.md) | Unordered set for any `Eq` type | `singleton`, `member`, `insert`, `fromList` |
 | [aivi.core.range](range.md) | Inclusive integer range `[start, end]` | `RangeInt`, `make`, `length`, `contains` |
 | [aivi.core.fn](fn.md) | Higher-order function combinators | `compose`, `const`, `flip`, `on` |
 | [aivi.arithmetic](arithmetic.md) | Compiler-backed integer arithmetic intrinsics | `add`, `sub`, `mul`, `div`, `mod`, `neg` |
@@ -61,9 +61,9 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 | [aivi.defaults](defaults.md) | Default values for common types | `defaultText`, `defaultInt`, `defaultBool` |
 | [aivi.math](math.md) | Integer arithmetic utilities | `abs`, `clamp`, `min`, `max`, `gcd` |
 | [aivi.core.float](float.md) | IEEE 754 double-precision helpers | `floor`, `ceil`, `round`, `sqrt`, `pi` |
-| [aivi.bigint](bigint.md) | Arbitrary-size integers | `parse`, `plus`, `times`, `dividedBy` |
+| [aivi.bigint](bigint.md) | Arbitrary-size integers | `fromText`, `add`, `mul`, `div` |
 | [aivi.text](text.md) | Text manipulation | `length`, `contains`, `trim`, `split`, `toUpper` |
-| [aivi.regex](regex.md) | Regular-expression matching and replacement | `matches`, `hasMatch`, `replaceFirst`, `allMatches` |
+| [aivi.regex](regex.md) | Regular-expression matching and replacement | `isMatch`, `findText`, `replace`, `findAll` |
 | [aivi.core.bytes](bytes.md) | Byte sequence operations | `fromText`, `toText`, `slice`, `append` |
 | [aivi.data.json](json.md) | JSON text helpers plus structural JSON types | `validate`, `get`, `pretty`, `Json` |
 | [aivi.duration](duration.md) | Typed time spans | `ms`, `sec`, `min`, `hr`, `millis` |
@@ -72,7 +72,7 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 | [aivi.timer](timer.md) | Marker types for timer-backed signals | `TimerTick`, `TimerReady`, `TimerMode` |
 | [aivi.random](random.md) | Randomness vocabulary and `RandomSource` | `RandomSource`, `RandomError` |
 | [aivi.fs](fs.md) | Filesystem vocabulary and `FsSource` | `FsSource`, `FsError`, `FsEvent` |
-| [aivi.path](path.md) | Lexical path manipulation | `join`, `filename`, `parent`, `extension` |
+| [aivi.path](path.md) | Pure lexical path operations on `Text` | `join`, `filename`, `parent`, `extension` |
 | [aivi.env](env.md) | Environment vocabulary and `EnvSource` | `EnvSource`, `EnvEntry` |
 | [aivi.stdio](stdio.md) | Standard I/O vocabulary and `StdioSource` | `StdioSource`, `Stream`, `Stdout`, `Stderr` |
 | [aivi.log](log.md) | Logging vocabulary and `LogSource` | `levelToText`, `kv`, `LogSource` |
@@ -158,7 +158,7 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 ### Files, environment, and processes
 
 - [`aivi.fs`](/stdlib/fs) — filesystem vocabulary plus `FsSource`.
-- [`aivi.path`](/stdlib/path) — lexical path helpers and a distinct nominal `Path` domain.
+- [`aivi.path`](/stdlib/path) — lexical path helpers plus the nominal `Path` vocabulary type.
 - [`aivi.env`](/stdlib/env) — environment vocabulary plus `EnvSource`.
 - [`aivi.stdio`](/stdlib/stdio) — stdio vocabulary plus `StdioSource`.
 - [`aivi.log`](/stdlib/log) — logging vocabulary plus `LogSource`.

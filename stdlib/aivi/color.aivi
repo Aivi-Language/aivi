@@ -149,3 +149,9 @@ export gnomeBrown2
 export gnomeBrown3
 export gnomeBrown4
 export gnomeBrown5
+
+@test
+value color_blend_first_endpoint : Task Text Bool = pure (blend black white 0.0 == black)
+
+@test
+value color_blend_second_endpoint : Task Text Bool = pure (blend black white 1.0 == white)

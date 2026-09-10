@@ -86,3 +86,7 @@ type ResourceListTask = (Task ResourceError (List Text))
 ```
 
 Alias for resource-related tasks that return a list of text values.
+
+## Task alias
+
+`ResourceTask A` is `Task ResourceError A`.

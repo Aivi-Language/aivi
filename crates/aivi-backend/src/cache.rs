@@ -1479,6 +1479,47 @@ fun underAssets:Text = segment:Text=> join "/tmp/assets" segment
     }
 
     #[test]
+    fn cached_jit_matrix_indices_is_iterative_and_replays() {
+        let backend = lower_text(
+            "cache-jit-matrix-indices-roundtrip.aivi",
+            r#"
+use aivi.matrix (indices)
+use aivi.list (length)
+
+fun indexCount:Int = count:Int=> length (indices count)
+"#,
+        );
+        let index_count = backend.items()[find_item(&backend, "indexCount")]
+            .body
+            .expect("indexCount should lower into a body kernel");
+
+        with_temp_cache_dir(|cache_root| {
+            let compiled = compile_kernel_jit_cached_in_dir(cache_root, &backend, index_count)
+                .expect("matrix.indices JIT kernel should compile and persist an artifact");
+            let fingerprint = compute_kernel_fingerprint(&backend, index_count);
+            let artifact = load_cached_jit_kernel_artifact_from(cache_root, &backend, fingerprint)
+                .expect("matrix.indices JIT kernel should write a disk artifact");
+            let replayed = instantiate_cached_jit_kernel(&backend, index_count, &artifact)
+                .expect("serialized matrix.indices artifact should replay");
+
+            assert!(
+                artifact
+                    .external_funcs
+                    .iter()
+                    .any(|symbol| symbol.as_ref() == "aivi_matrix_indices")
+            );
+            assert_eq!(
+                call_i64_value(&compiled, &[AbiValue::I64(100_000)]),
+                AbiValue::I64(100_000)
+            );
+            assert_eq!(
+                call_i64_value(&replayed, &[AbiValue::I64(100_000)]),
+                AbiValue::I64(100_000)
+            );
+        });
+    }
+
+    #[test]
     fn cached_jit_callable_env_text_artifact_replays_after_disk_roundtrip() {
         let backend = lower_text(
             "cache-jit-callable-env-text-roundtrip.aivi",

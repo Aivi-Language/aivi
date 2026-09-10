@@ -56,3 +56,8 @@ Current canonical handle members:
 
 The handle root argument scopes every operation. `@source secret "io.mailfox"` automatically adds
 an internal service attribute so different apps can share user keyring safely without collisions.
+
+## Error constructors and task alias
+
+`SecretUnavailable name`, `SecretLocked`, `SecretCancelled`, and `SecretProtocolError message`
+construct `SecretError` values. `SecretTask A` is `Task SecretError A`.

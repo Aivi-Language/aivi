@@ -56,3 +56,53 @@ export maxOfBy
 export clampBy
 export reversed
 export comparing
+
+type Int -> Int -> Bool
+func lessOrderTest = left right =>
+    left < right
+
+type (Int, Text) -> Int
+func firstOrderTest = pair => pair
+ ||> (first, _) -> first
+
+@test
+value order_minBy : Task Text Bool = pure (minBy lessOrderTest 3 2 == 2)
+
+@test
+value order_maxBy : Task Text Bool = pure (maxBy lessOrderTest 3 2 == 3)
+
+@test
+value order_minOfBy : Task Text Bool = pure (minOfBy lessOrderTest 3 [2, 4] == 2)
+
+@test
+value order_maxOfBy : Task Text Bool = pure (maxOfBy lessOrderTest 3 [2, 4] == 4)
+
+@test
+value order_clampBy : Task Text Bool = pure (clampBy lessOrderTest 1 3 5 == 3)
+
+@test
+value order_reversed : Task Text Bool = pure (reversed lessOrderTest 3 2)
+
+@test
+value order_comparing : Task Text Bool =
+    pure (
+        comparing firstOrderTest lessOrderTest (1, "b") (
+            2,
+            "a"
+        )
+    )
+
+@test
+value order_min : Task Text Bool = pure (min 3 2 == 2)
+
+@test
+value order_max : Task Text Bool = pure (max 3 2 == 3)
+
+@test
+value order_minOf : Task Text Bool = pure (minOf 3 [2, 4] == 2)
+
+@test
+value order_maxOf : Task Text Bool = pure (maxOf 3 [2, 4] == 4)
+
+@test
+value order_clamp : Task Text Bool = pure (clamp 1 3 5 == 3)

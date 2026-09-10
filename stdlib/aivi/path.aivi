@@ -1,5 +1,3 @@
-use aivi.text (contains as textContains)
-
 use aivi.path (
     parent
     filename
@@ -24,36 +22,28 @@ domain Path over Text = {
     pathText = path => path
 }
 
-type Text -> Bool
-func pathTextHasNul = text =>
-    textContains "\0" text
-
-// Parsing is lexical. Existence and permissions belong to filesystem tasks.
-type Text -> Result PathError Path
-func parse = text => pathTextHasNul text
- T|> Err (InvalidPath "path contains a NUL character")
- F|> Ok (wrapPath text)
-
-type Path -> Text
-func toText = path =>
-    pathText path
-
-type Text -> Bool
-func hasExtension = path => extension path
- T|> True
- F|> False
-
-type Text -> Bool
-func isRelative = path => isAbsolute path
- T|> False
- F|> True
+@test
+value path_parent : Task Text Bool = pure (parent "/tmp/a.txt" == Some "/tmp")
 
 @test
-value has_extension_for_dotted : Task Text Bool = pure (hasExtension "foo.txt")
+value path_filename : Task Text Bool = pure (filename "/tmp/a.txt" == Some "a.txt")
 
 @test
-value is_relative_for_local : Task Text Bool = pure (isRelative "foo/bar.txt")
+value path_stem : Task Text Bool = pure (stem "/tmp/a.txt" == Some "a")
 
-export (PathSource, Path, PathError, InvalidPath, PathNotFound, parent, filename, stem, extension, join, isAbsolute, normalize, hasExtension, isRelative)
-export parse
-export toText
+@test
+value path_extension : Task Text Bool = pure (extension "/tmp/a.txt" == Some "txt")
+
+@test
+value path_join : Task Text Bool = pure (join "/tmp" "a.txt" == "/tmp/a.txt")
+
+@test
+value path_isAbsolute : Task Text Bool = pure (isAbsolute "/tmp/a.txt")
+
+@test
+value path_normalize : Task Text Bool = pure (normalize "/tmp/../var/./a" == "/var/a")
+
+@test
+value path_normalize_preserves_relative_parent : Task Text Bool = pure (normalize "../a" == "../a")
+
+export (PathSource, Path, PathError, InvalidPath, PathNotFound, parent, filename, stem, extension, join, isAbsolute, normalize)

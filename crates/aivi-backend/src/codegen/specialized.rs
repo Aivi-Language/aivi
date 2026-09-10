@@ -927,6 +927,10 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 sig.params.push(AbiParam::new(types::I64));
                 sig.returns.push(AbiParam::new(self.pointer_type()));
             }
+            "aivi_matrix_indices" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
             "aivi_bytes_slice" => {
                 sig.params.push(AbiParam::new(types::I64));
                 sig.params.push(AbiParam::new(types::I64));

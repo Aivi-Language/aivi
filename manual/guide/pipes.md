@@ -490,7 +490,7 @@ value checked : Result Text Text = "hello"
  !|> notGuest
 ```
 
-`Validation` accumulation does **not** live in `!|>`. Use applicative `&|>` or `zipValidation`
+`Validation` accumulation does **not** live in `!|>`. Use applicative `&|>`
 for independent error accumulation.
 
 ## Accumulation `+|>`

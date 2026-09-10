@@ -200,3 +200,8 @@ value mailNotification : Notification = {
 value showMail : Task NotificationError Int = notifications.send mailNotification
 value closeMail : Task NotificationError Unit = notifications.close 42
 ```
+
+## Additional constructors and task alias
+
+`NotificationTask A` is `Task NotificationError A`. `NotificationFailed message` reports provider
+failure, and `ActionTriggered id` reports the identifier of the action selected by the user.

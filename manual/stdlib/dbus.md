@@ -298,3 +298,9 @@ type DbusTask A =
 ```
 
 `dbus.call` currently returns `DbusTask (List DbusValue)`. `DbusCallResult` remains available for higher-level helpers that want to wrap reply decoding in an explicit `Result`.
+
+## Additional value and error constructors
+
+`DbusString value`, `DbusInt value`, and `DbusBool value` wrap scalar D-Bus values.
+`NameNotOwned name`, `ServiceUnknown name`, `AccessDenied message`, `InvalidArgs message`, and
+`DbusProtocolError message` preserve D-Bus failure details.

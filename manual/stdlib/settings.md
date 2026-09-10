@@ -88,3 +88,9 @@ type SettingsTask A = (Task SettingsError A)
 ```
 
 Generic alias for settings-related tasks.
+
+## Setting constructors and task alias
+
+`SettingBool value`, `SettingInt value`, `SettingFloat value`, `SettingText value`, and
+`SettingList values` construct typed `SettingValue` values. `SettingsTask A` is
+`Task SettingsError A`.

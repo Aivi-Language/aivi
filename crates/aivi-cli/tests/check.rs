@@ -1502,7 +1502,7 @@ fn check_accepts_bundled_root_and_prelude_stdlib_imports() {
     workspace.write("aivi.toml", "");
     let main = workspace.write(
         "main.aivi",
-        "use aivi (\n    Option\n    Result\n    Validation\n    Signal\n    Task\n    Some\n    None\n    Ok\n    Err\n    Valid\n    Invalid\n)\n\nuse aivi.prelude (\n    Int\n    Bool\n    Text\n    List\n    Eq\n    Default\n    Functor\n    Applicative\n    Monad\n    Foldable\n    getOrElse\n    withDefault\n    isValid\n    validationToResult\n    length\n    head\n)\n\nuse aivi.text (\n    join as textJoin\n)\n\ntype NameSignal = Signal Text\ntype CountTask = Task Text Int\n\nvalue maybeName:Option Text = Some \"Ada\"\nvalue missingName:Option Text = None\nvalue chosenName:Text = getOrElse \"guest\" missingName\nvalue nestedMaybeName:Option (Option Text) = Some maybeName\n\nvalue okCount:Result Text Int = Ok 2\nvalue errCount:Result Text Int = Err \"missing\"\nvalue chosenCount:Int = withDefault 0 okCount\n\nvalue checkedName:Validation Text Text = Valid \"Ada\"\nvalue checkedOk:Bool = isValid checkedName\nvalue checkedResult:Result Text Text = validationToResult checkedName\nvalue nameCount:Int = length [\"Ada\", \"Grace\"]\nvalue firstName:Option Text = head [\"Ada\", \"Grace\"]\nvalue labels:Text = textJoin \", \" [\"Ada\", \"Grace\"]\nvalue flattenedName:Option Text = join nestedMaybeName\nvalue sameCount:Bool = chosenCount == 2\n",
+        "use aivi (\n    Option\n    Result\n    Validation\n    Signal\n    Task\n    Some\n    None\n    Ok\n    Err\n    Valid\n    Invalid\n)\n\nuse aivi.prelude (\n    Int\n    Bool\n    Text\n    List\n    Eq\n    Default\n    Functor\n    Applicative\n    Monad\n    Foldable\n)\n\nuse aivi.option (getOrElse)\nuse aivi.result (withDefault)\nuse aivi.validation (isValid, toResult as validationToResult)\nuse aivi.list (length, head)\nuse aivi.text (join as textJoin)\n\ntype NameSignal = Signal Text\ntype CountTask = Task Text Int\n\nvalue maybeName:Option Text = Some \"Ada\"\nvalue missingName:Option Text = None\nvalue chosenName:Text = getOrElse \"guest\" missingName\nvalue nestedMaybeName:Option (Option Text) = Some maybeName\n\nvalue okCount:Result Text Int = Ok 2\nvalue errCount:Result Text Int = Err \"missing\"\nvalue chosenCount:Int = withDefault 0 okCount\n\nvalue checkedName:Validation Text Text = Valid \"Ada\"\nvalue checkedOk:Bool = isValid checkedName\nvalue checkedResult:Result Text Text = validationToResult checkedName\nvalue nameCount:Int = length [\"Ada\", \"Grace\"]\nvalue firstName:Option Text = head [\"Ada\", \"Grace\"]\nvalue labels:Text = textJoin \", \" [\"Ada\", \"Grace\"]\nvalue flattenedName:Option Text = join nestedMaybeName\nvalue sameCount:Bool = chosenCount == 2\n",
     );
     let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
         .arg("check")
@@ -1609,9 +1609,7 @@ value level:LogLevel =
     Debug
 
 value context:LogContext =
-    Map {
-        "module": "cli"
-    }
+    [("module", "cli")]
 
 value entry:LogEntry = {
     level: level,

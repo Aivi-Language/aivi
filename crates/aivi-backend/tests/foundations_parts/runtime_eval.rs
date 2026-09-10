@@ -1202,13 +1202,13 @@ fn bundled_stdlib_imports_execute_real_bodies_and_ordering() {
         r#"
 use aivi.option (isSome, isNone, getOrElse)
 use aivi.core.range (make, contains, overlaps)
-use aivi.math (isPrime, gcd)
+use aivi.math (isEven, isOdd, gcd)
 value absent : Option Int = None
 value result : Bool = isSome (Some 3) and isNone absent and getOrElse 0 (Some 7) == 7
 value outside : Bool = contains (make 1 10) 11
 value emptyOverlap : Bool = overlaps (make 1 10) (make 6 5)
-value prime : Bool = isPrime 7
-value composite : Bool = isPrime 9
+value even : Bool = isEven 8
+value odd : Bool = isOdd 9
 value divisor : Int = gcd 12 8
 "#,
     );
@@ -1217,8 +1217,8 @@ value divisor : Int = gcd 12 8
         ("result", RuntimeValue::Bool(true)),
         ("outside", RuntimeValue::Bool(false)),
         ("emptyOverlap", RuntimeValue::Bool(false)),
-        ("prime", RuntimeValue::Bool(true)),
-        ("composite", RuntimeValue::Bool(false)),
+        ("even", RuntimeValue::Bool(true)),
+        ("odd", RuntimeValue::Bool(true)),
         ("divisor", RuntimeValue::Int(4)),
     ] {
         assert_eq!(
@@ -1270,48 +1270,18 @@ value dateText : Text = dateToIso epoch
 }
 
 #[test]
-fn bigint_factorial_is_stack_safe() {
-    assert_eq!(
-        RuntimeBigInt::factorial(0),
-        RuntimeBigInt::parse_literal("1n").unwrap()
-    );
-    assert_eq!(
-        RuntimeBigInt::factorial(-1),
-        RuntimeBigInt::parse_literal("1n").unwrap()
-    );
-    assert_eq!(
-        RuntimeBigInt::factorial(10),
-        RuntimeBigInt::parse_literal("3628800n").unwrap()
-    );
-    let result = std::thread::Builder::new()
-        .stack_size(64 * 1024)
-        .spawn(|| RuntimeBigInt::factorial(10_000))
-        .unwrap()
-        .join()
-        .unwrap();
-    assert!(result > RuntimeBigInt::factorial(100));
-}
-
-#[test]
 fn bundled_stdlib_nominal_boundaries_execute() {
     let backend = lower_workspace_text(
         "stdlib-regression/main.aivi",
         r#"
 use aivi.duration (millis, toMillis, toSeconds, trySeconds)
 use aivi.url (parse as parseUrl, toText as urlText)
-use aivi.path (parse as parsePath, toText as pathText)
 value duration : Int = toMillis (millis 250)
 value seconds : Int = toSeconds (millis 2500)
 value validUrl : Text = parseUrl "https://example.com/a/../b"
  ||> Ok url -> urlText url
  ||> Err _ -> "invalid"
 value invalidUrl : Bool = parseUrl "not a url"
- ||> Ok _ -> False
- ||> Err _ -> True
-value validPath : Text = parsePath "a/b.txt"
- ||> Ok path -> pathText path
- ||> Err _ -> "invalid"
-value invalidPath : Bool = parsePath "a\0b"
  ||> Ok _ -> False
  ||> Err _ -> True
 value overflow : Bool = trySeconds 9223372036854776
@@ -1328,8 +1298,6 @@ value overflow : Bool = trySeconds 9223372036854776
             RuntimeValue::Text("https://example.com/b".into()),
         ),
         ("invalidUrl", RuntimeValue::Bool(true)),
-        ("validPath", RuntimeValue::Text("a/b.txt".into())),
-        ("invalidPath", RuntimeValue::Bool(true)),
         ("overflow", RuntimeValue::Bool(true)),
     ] {
         assert_eq!(

@@ -1463,6 +1463,10 @@ impl<'a> GateTypeContext<'a> {
             IntrinsicValue::PathNormalize => {
                 arrow(primitive(BuiltinType::Text), primitive(BuiltinType::Text))
             }
+            IntrinsicValue::MatrixIndices => arrow(
+                primitive(BuiltinType::Int),
+                GateType::List(Box::new(primitive(BuiltinType::Int))),
+            ),
             IntrinsicValue::BytesLength => {
                 arrow(primitive(BuiltinType::Bytes), primitive(BuiltinType::Int))
             }
@@ -1877,7 +1881,7 @@ impl<'a> GateTypeContext<'a> {
                 primitive(BuiltinType::Text),
                 GateType::Result { error: Box::new(primitive(BuiltinType::Text)), value: Box::new(primitive(BuiltinType::Text)) },
             ),
-            IntrinsicValue::BigIntFactorial | IntrinsicValue::BigIntFromInt => {
+            IntrinsicValue::BigIntFromInt => {
                 arrow(primitive(BuiltinType::Int), primitive(BuiltinType::BigInt))
             }
             IntrinsicValue::BigIntFromText => arrow(

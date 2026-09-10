@@ -87,3 +87,7 @@ signal ready : Signal TimerReady
 
 These examples use the currently exercised integer-millisecond form. See the source guide for
 option details such as `immediate` and for the broader timer source rules.
+
+## Timer modes
+
+`Repeating` emits ticks until cancelled. `OneShot` emits once.

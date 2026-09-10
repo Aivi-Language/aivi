@@ -1,5 +1,7 @@
 hoist
 
+use aivi.matrix (indices)
+
 use aivi.list (
     at as listAt
     flatten as listFlatten
@@ -25,16 +27,6 @@ type RowValidationState = {
     rowIndex: Int,
     error: Option MatrixError
 }
-
-type Int -> (List Int) -> (List Int)
-func descendingIndicesStep = current acc => current < 0
- T|> acc
- F|> descendingIndicesStep (current - 1) (append [current] acc)
-
-type Int -> (List Int)
-func indices = n => n <= 0
- T|> []
- F|> descendingIndicesStep (n - 1) []
 
 type (Int -> Int -> A) -> Int -> Int -> A
 func initCellAt = build y x =>
@@ -157,7 +149,7 @@ func rebuildWithRow = matrix y newRow =>
 
 type Matrix A -> Int -> Option (List A) -> Option (Matrix A)
 func rebuildWithUpdatedRow = matrix y updated => updated
- ||> None -> None
+ ||> None        -> None
  ||> Some newRow -> rebuildWithRow matrix y newRow
 
 type Matrix A -> Int -> Int -> A -> (Option (Matrix A))
@@ -220,13 +212,11 @@ func countCell = predicate total item => predicate item
 
 type (A -> Bool) -> Int -> List A -> Int
 func countCells = predicate total cells => cells
- ||> [] -> total
- ||> [item, ...rest] -> countCells predicate (countCell predicate total item) rest
+  |> reduce (countCell predicate) total
 
 type (A -> Bool) -> Int -> List (List A) -> Int
 func countRows = predicate total inputRows => inputRows
- ||> [] -> total
- ||> [cells, ...rest] -> countRows predicate (countCells predicate total cells) rest
+  |> reduce (countCells predicate) total
 
 type (A -> Bool) -> Matrix A -> Int
 func count = predicate matrix =>
@@ -268,3 +258,6 @@ func filled = w h value =>
     init w h (filledCell value)
 
 export (MatrixError, NegativeWidth, NegativeHeight, RaggedRows, Matrix, MatrixIndex, init, fromRows, filled, width, height, rows, row, at, replaceAt, coord, mapWithIndex, reduceWithIndex, coords, entries, positionsWhere, count, modifyAt, replaceMany, indices)
+
+@test
+value matrix_indices : Task Text Bool = pure (indices 4 == [0, 1, 2, 3])

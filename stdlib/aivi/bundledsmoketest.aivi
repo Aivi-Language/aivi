@@ -61,8 +61,8 @@ use aivi.text (
 )
 
 use aivi.pair (
-    fst
-    snd
+    first
+    second
     swap
 )
 

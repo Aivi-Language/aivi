@@ -42,6 +42,7 @@ use aivi.matrix (
 | `MatrixIndex` | opaque coordinate type | The index token used by `coords`, `entries`, `modifyAt`, and `replaceMany` |
 | `coord` | `Int -> Int -> MatrixIndex` | Construct a `MatrixIndex` from zero-based `x` and `y` |
 | `MatrixError` | sum type | Constructor and validation errors |
+| `indices` | `Int -> List Int` | Produce zero through `n - 1`, or an empty list when `n <= 0` |
 | `init` | `Int -> Int -> (Int -> Int -> A) -> Result MatrixError (Matrix A)` | Build a matrix from coordinates |
 | `filled` | `Int -> Int -> A -> Result MatrixError (Matrix A)` | Build a matrix filled with one repeated value |
 | `fromRows` | `List (List A) -> Result MatrixError (Matrix A)` | Validate an existing nested-list shape |
@@ -50,7 +51,7 @@ use aivi.matrix (
 | `rows` | `Matrix A -> List (List A)` | Expose the row-major carrier |
 | `row` | `Matrix A -> Int -> Option (List A)` | Read one zero-based row |
 | `at` | `Matrix A -> Int -> Int -> Option A` | Read one cell by `x` then `y` |
-| `replaceAt` | `Matrix A -> (Int, Int) -> A -> Option (Matrix A)` | Replace one cell using the tuple-shaped compatibility API |
+| `replaceAt` | `Matrix A -> MatrixIndex -> A -> Option (Matrix A)` | Replace one cell |
 | `mapWithIndex` | `(Int -> Int -> A -> B) -> Matrix A -> Matrix B` | Map with both `x` and `y` |
 | `reduceWithIndex` | `(B -> Int -> Int -> A -> B) -> B -> Matrix A -> B` | Fold with both `x` and `y` |
 | `coords` | `Matrix A -> List MatrixIndex` | Enumerate every coordinate in row-major order |
@@ -105,7 +106,7 @@ value fromExisting : Result MatrixError (Matrix Text) =
 
 ## Dimensions and access
 
-`indices : Int -> List Int` is also exported: it produces `0` through `n - 1`, or
+`indices` produces `0` through `n - 1`, or
 an empty list when `n <= 0`. It is a dimension helper, distinct from `coords` on a matrix.
 
 `width` and `height` report the current shape. `row` and `at` return `None` when the requested
@@ -257,3 +258,8 @@ value patched : Result MatrixError (Option (Matrix Int)) = board
   helper family uses `MatrixIndex` plus `coord`.
 - `init 0 height ...` and `init width 0 ...` are valid and produce empty columns or rows; only
   negative dimensions are rejected.
+
+## Error constructors
+
+`NegativeWidth width` and `NegativeHeight height` reject negative dimensions.
+`RaggedRows rowIndex expected actual` reports the first row whose width differs from the first row.

@@ -66,3 +66,9 @@ For option-level support on `fs.watch` and `fs.read`, see the
 The compiler still accepts compatibility spellings such as `readText`, `write`, and `deleteFile`
 on handle members. The manual uses `read`, `writeText`, and `delete` as the canonical surface.
 :::
+
+## Additional error constructors
+
+`NotFound path`, `PermissionDenied path`, `ReadFailed message`, `WriteFailed message`, and
+`FsProtocolError message` construct `FsError` values while preserving the relevant path or provider
+detail.

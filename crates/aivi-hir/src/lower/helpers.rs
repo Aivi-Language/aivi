@@ -394,37 +394,27 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
         ("aivi.option", "getOrElse") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_option_getOrElse".into(),
         }),
-        ("aivi.pair", "first") | ("aivi.pair", "fst") => {
-            Some(ImportBindingMetadata::AmbientValue {
-                name: "__aivi_pair_first".into(),
-            })
-        }
-        ("aivi.pair", "second") | ("aivi.pair", "snd") => {
-            Some(ImportBindingMetadata::AmbientValue {
-                name: "__aivi_pair_second".into(),
-            })
-        }
+        ("aivi.pair", "first") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_pair_first".into(),
+        }),
+        ("aivi.pair", "second") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_pair_second".into(),
+        }),
         ("aivi.pair", "swap") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_pair_swap".into(),
         }),
-        ("aivi.pair", "mapFirst") | ("aivi.pair", "mapFst") => {
-            Some(ImportBindingMetadata::AmbientValue {
-                name: "__aivi_pair_mapFirst".into(),
-            })
-        }
-        ("aivi.pair", "mapSecond") | ("aivi.pair", "mapSnd") => {
-            Some(ImportBindingMetadata::AmbientValue {
-                name: "__aivi_pair_mapSecond".into(),
-            })
-        }
+        ("aivi.pair", "mapFirst") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_pair_mapFirst".into(),
+        }),
+        ("aivi.pair", "mapSecond") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_pair_mapSecond".into(),
+        }),
         ("aivi.pair", "mapBoth") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_pair_mapBoth".into(),
         }),
-        ("aivi.pair", "fromPair") | ("aivi.pair", "toPair") => {
-            Some(ImportBindingMetadata::AmbientValue {
-                name: "__aivi_pair_fromPair".into(),
-            })
-        }
+        ("aivi.pair", "toPair") => Some(ImportBindingMetadata::AmbientValue {
+            name: "__aivi_pair_toPair".into(),
+        }),
         ("aivi.pair", "duplicate") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_pair_duplicate".into(),
         }),
@@ -769,6 +759,13 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
         ("aivi.core.bytes", "empty") => Some(intrinsic_import_value(
             IntrinsicValue::BytesEmpty,
             primitive_import_type(BuiltinType::Bytes),
+        )),
+        ("aivi.matrix", "indices") => Some(intrinsic_import_value(
+            IntrinsicValue::MatrixIndices,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                list_import_type(primitive_import_type(BuiltinType::Int)),
+            ),
         )),
         // JSON intrinsics — async tasks, executed via serde_json in CLI
         ("aivi.data.json", "validate") => Some(intrinsic_import_value(
@@ -1273,13 +1270,6 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
                 ImportValueType::Result { error: Box::new(primitive_import_type(BuiltinType::Text)), value: Box::new(primitive_import_type(BuiltinType::Text)) },
             ),
         )),
-        ("aivi.bigint", "factorial") => Some(intrinsic_import_value(
-            IntrinsicValue::BigIntFactorial,
-            arrow_import_type(
-                primitive_import_type(BuiltinType::Int),
-                primitive_import_type(BuiltinType::BigInt),
-            ),
-        )),
         ("aivi.bigint", "fromInt") => Some(intrinsic_import_value(
             IntrinsicValue::BigIntFromInt,
             arrow_import_type(
@@ -1613,13 +1603,6 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
         ("aivi.text", "join") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_text_join".into(),
         }),
-        ("aivi.text", "lower") => Some(intrinsic_import_value(
-            IntrinsicValue::TextToLower,
-            arrow_import_type(
-                primitive_import_type(BuiltinType::Text),
-                primitive_import_type(BuiltinType::Text),
-            ),
-        )),
         ("aivi.text", "isEmpty") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_text_isEmpty".into(),
         }),

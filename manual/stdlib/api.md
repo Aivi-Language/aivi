@@ -118,3 +118,13 @@ value userResult : ApiResponse User =
         name: "Ada"
     }
 ```
+
+## Remaining public constructors and aliases
+
+`ApiTimeout` reports a timed-out request. `ApiDecodeFailure message` reports response decoding failure,
+`ApiRequestFailure message` reports transport failure, `ApiUnauthorized` represents an authorization
+failure, `ApiNotFound` represents a missing resource, and `ApiServerError message` represents a server
+failure.
+
+`BasicAuth username password` and `ApiKey key` are authentication values. `ApiResponse A` is an alias
+for `Result ApiError A`.

@@ -15,11 +15,6 @@ type ReduceWithIndexState A B = {
     value: B
 }
 
-type ZipState A B = {
-    remaining: List B,
-    pairs: List (A, B)
-}
-
 type A -> (Option A)
 func keepSome = item =>
     Some item
@@ -99,23 +94,6 @@ func tailOrEmpty = items => tail items
  ||> Some remaining -> remaining
  ||> None           -> []
 
-type ZipState A B -> A -> B -> (ZipState A B)
-func appendZipPair = state left right => state
- ||> { remaining, pairs } -> { remaining: tailOrEmpty remaining, pairs: append pairs [(left, right)] }
-
-type ZipState A B -> A -> (Option B) -> (ZipState A B)
-func zipHead = state left headValue => headValue
- T|> appendZipPair state left
- F|> state
-
-type ZipState A B -> A -> (ZipState A B)
-func zipStep = state left => state
- ||> { remaining, pairs } -> zipHead { remaining, pairs } left (head remaining)
-
-type ZipState A B -> (List (A, B))
-func zippedPairs = state => state
- ||> { remaining, pairs } -> pairs
-
 type List A -> Bool
 func isEmpty = items => head items
  F|> True
@@ -169,9 +147,12 @@ func last = items => items
   |> reduce takeLast None
 
 type List A -> (List B) -> (List (A, B))
-func zip = left right => left
-  |> reduce zipStep { remaining: right, pairs: [] }
-  |> zippedPairs
+func zip = left right =>
+    zipWith pairForZip left right
+
+type A -> B -> (A, B)
+func pairForZip = left right =>
+    (left, right)
 
 type (A -> Bool) -> (List A) -> Bool
 func any = predicate items => items
@@ -470,14 +451,14 @@ type UnzipState A B -> (A, B) -> (UnzipState A B)
 func unzipStep = state pair => pair
  ||> (left, right) -> { lefts: append state.lefts [left], rights: append state.rights [right] }
 
-type List (A, B) -> (UnzipState A B)
+type UnzipState A B -> (List A, List B)
+func finishUnzip = state =>
+    (state.lefts, state.rights)
+
+type List (A, B) -> (List A, List B)
 func unzip = pairs => pairs
   |> reduce unzipStep { lefts: [], rights: [] }
-
-type Eq A => (List A) -> A -> (List A)
-func uniqueStep = acc item => contains item acc
- T|> acc
- F|> append acc [item]
+  |> finishUnzip
 
 type (A -> A -> Bool) -> (List A) -> A -> (List A)
 func uniqueByStep = eq acc item => any (eq item) acc
@@ -535,8 +516,204 @@ type (A -> A -> Bool) -> (List A) -> (List A)
 func sortBy = compare items => items
   |> reduce (sortByStep compare) []
 
+type Int -> Int
+func incrementForTest = n =>
+    n + 1
+
+type Int -> Bool
+func positiveForTest = n =>
+    n > 0
+
+type Int -> Bool
+func belowThreeForTest = n =>
+    n < 3
+
+type Int -> Option Int
+func keepEvenForTest = n => n % 2 == 0
+ T|> Some n
+ F|> None
+
+type Int -> List Int
+func duplicateForTest = n =>
+    [n, n]
+
+type Int -> Int -> Int
+func addForTest = left right =>
+    left + right
+
+type Int -> Int -> Int
+func addIndexForTest = index item =>
+    index + item
+
+type Int -> Int -> Int -> Int
+func addIndexedForTest = total index item =>
+    total + index + item
+
+type Int -> Int -> Bool
+func lessForTest = left right =>
+    left < right
+
+type Int -> Int -> Bool
+func equalForTest = left right =>
+    left == right
+
+@test
+value list_isEmpty : Task Text Bool = pure (isEmpty [])
+
+@test
+value list_nonEmpty : Task Text Bool =
+    pure (
+        nonEmpty [
+            1
+        ]
+    )
+
+@test
+value list_length : Task Text Bool = pure (length [1, 2, 3] == 3)
+
+@test
+value list_head : Task Text Bool = pure (head [1, 2] == Some 1)
+
+@test
+value list_at : Task Text Bool = pure (at 1 [1, 2] == Some 2)
+
+@test
+value list_tail : Task Text Bool = pure (tail [1, 2] == Some [2])
+
+@test
+value list_tailOrEmpty : Task Text Bool = pure (tailOrEmpty [1, 2] == [2])
+
+@test
+value list_last : Task Text Bool = pure (last [1, 2] == Some 2)
+
+@test
+value list_map : Task Text Bool = pure (map incrementForTest [1, 2] == [2, 3])
+
+@test
+value list_mapWithIndex : Task Text Bool = pure (mapWithIndex addIndexForTest [10, 20] == [10, 21])
+
+@test
+value list_reduceWithIndex : Task Text Bool = pure (reduceWithIndex addIndexedForTest 0 [10, 20] == 31)
+
+@test
+value list_indexed : Task Text Bool = pure (indexed [10, 20] == [(0, 10), (1, 20)])
+
+@test
+value list_replaceAt : Task Text Bool = pure (replaceAt 1 9 [1, 2, 3] == [1, 9, 3])
+
+@test
+value list_filter : Task Text Bool = pure (filter positiveForTest [-1, 0, 1] == [1])
+
+@test
+value list_filterMap : Task Text Bool = pure (filterMap keepEvenForTest [1, 2, 3, 4] == [2, 4])
+
+@test
+value list_flatten : Task Text Bool = pure (flatten [[1, 2], [3]] == [1, 2, 3])
+
+@test
+value list_flatMap : Task Text Bool = pure (flatMap duplicateForTest [1, 2] == [1, 1, 2, 2])
+
+@test
+value list_reverse : Task Text Bool = pure (reverse [1, 2, 3] == [3, 2, 1])
+
+@test
+value list_take : Task Text Bool = pure (take 2 [1, 2, 3] == [1, 2])
+
+@test
+value list_drop : Task Text Bool = pure (drop 2 [1, 2, 3] == [3])
+
+@test
+value list_takeWhile : Task Text Bool = pure (takeWhile belowThreeForTest [1, 2, 3] == [1, 2])
+
+@test
+value list_dropWhile : Task Text Bool = pure (dropWhile belowThreeForTest [1, 2, 3] == [3])
+
+@test
+value list_sum : Task Text Bool = pure (sum [1, 2, 3] == 6)
+
+@test
+value list_product : Task Text Bool = pure (product [2, 3, 4] == 24)
+
+@test
+value list_maximumBy : Task Text Bool = pure (maximumBy lessForTest [1, 3, 2] == Some 3)
+
+@test
+value list_minimumBy : Task Text Bool = pure (minimumBy lessForTest [1, 3, 2] == Some 1)
+
+@test
+value list_maximum : Task Text Bool = pure (maximum [1, 3, 2] == Some 3)
+
+@test
+value list_minimum : Task Text Bool = pure (minimum [1, 3, 2] == Some 1)
+
+@test
+value list_contains : Task Text Bool =
+    pure (
+        contains 2 [
+            1,
+            2,
+            3
+        ]
+    )
+
+@test
+value list_indexOf : Task Text Bool = pure (indexOf belowThreeForTest [3, 2, 1] == Some 1)
+
+@test
+value list_intersperse : Task Text Bool = pure (intersperse 0 [1, 2, 3] == [1, 0, 2, 0, 3])
+
+@test
+value list_zip : Task Text Bool = pure (zip [1, 2] [3, 4] == [(1, 3), (2, 4)])
+
+@test
+value list_zipWith : Task Text Bool = pure (zipWith addForTest [1, 2] [3, 4] == [4, 6])
+
+@test
+value list_unzip : Task Text Bool = pure (unzip [(1, 3), (2, 4)] == ([1, 2], [3, 4]))
+
+@test
+value list_uniqueBy : Task Text Bool = pure (uniqueBy equalForTest [1, 2, 1] == [1, 2])
+
+@test
+value list_unique : Task Text Bool = pure (unique [1, 2, 1] == [1, 2])
+
+@test
+value list_sortBy : Task Text Bool = pure (sortBy lessForTest [3, 1, 2] == [1, 2, 3])
+
+@test
+value list_sort : Task Text Bool = pure (sort [3, 1, 2] == [1, 2, 3])
+
+@test
+value list_any : Task Text Bool =
+    pure (
+        any positiveForTest [
+            -1,
+            1
+        ]
+    )
+
+@test
+value list_all : Task Text Bool =
+    pure (
+        all positiveForTest [
+            1,
+            2
+        ]
+    )
+
+@test
+value list_count : Task Text Bool = pure (count positiveForTest [-1, 1, 2] == 2)
+
+@test
+value list_find : Task Text Bool = pure (find positiveForTest [-1, 2, 3] == Some 2)
+
+@test
+value list_findMap : Task Text Bool = pure (findMap keepEvenForTest [1, 3, 4] == Some 4)
+
+@test
+value list_partition : Task Text Bool = pure ((partition positiveForTest [-1, 1, 2]).matched == [1, 2] and (partition positiveForTest [-1, 1, 2]).unmatched == [-1])
+
 export Partition
-export UnzipState
 export isEmpty
 export nonEmpty
 export length

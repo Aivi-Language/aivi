@@ -5,7 +5,12 @@ type LogLevel =
   | Error
   | Fatal
 
-type LogContext = (Map Text Text)
+type LogContext = (
+    List (
+        Text,
+        Text
+    )
+)
 
 type LogEntry = {
     level: LogLevel,
@@ -38,3 +43,9 @@ func kv = k v =>
     (k, v)
 
 export (LogLevel, Debug, Info, Warn, Error, Fatal, LogContext, LogEntry, LogError, LogSource, LogSink, levelDebug, levelInfo, levelWarn, levelError, levelFatal, levelToText, kv)
+
+@test
+value log_levelToText : Task Text Bool = pure (levelToText Warn == "WARN")
+
+@test
+value log_kv : Task Text Bool = pure (kv "request" "42" == ("request", "42"))

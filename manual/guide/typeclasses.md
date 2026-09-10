@@ -93,7 +93,7 @@ This registry-backed table is the canonical documentation source for builtin exe
 - The `Monad` column means builtin executable lowering for `chain` and `join`; `Chain` uses the same registry entries.
 - `—` means the canonical executable-support registry marks that builtin class/carrier pair unsupported.
 - `Signal` is intentionally **not** a `Monad`: executable signals keep a static dependency graph.
-- `Validation E` is intentionally **not** a `Monad`: independent accumulation stays applicative (`&|>` / `zipValidation`), while dependent `!|>` checks are a dedicated pipe primitive rather than class-backed `bind`.
+- `Validation E` is intentionally **not** a `Monad`: independent accumulation uses the applicative `&|>` pipe, while dependent `!|>` checks are a dedicated pipe primitive rather than class-backed `bind`.
 - `Traversable` support and traverse-result applicative support are distinct registry checks: `traverse` itself is builtin-supported for `List`, `Option`, `Result`, and `Validation`, while traverse results may use `List`, `Option`, `Result`, `Validation`, or `Signal` applicatives, but not `Task`.
 <!-- END builtin-executable-support -->
 

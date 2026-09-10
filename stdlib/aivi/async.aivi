@@ -26,3 +26,27 @@ func isFailed = tracker => tracker.error
  ||> Some _ -> True
 
 export (AsyncTracker, step, isPending, isDone, isFailed)
+
+value pendingTrackerForTest : AsyncTracker Text Int = {
+    pending: True,
+    done: None,
+    error: None
+}
+
+value doneTrackerForTest : AsyncTracker Text Int = step (Ok 3) pendingTrackerForTest
+value failedTrackerForTest : AsyncTracker Text Int = step (Err "offline") doneTrackerForTest
+
+@test
+value async_step : Task Text Bool = pure (isDone (step (Ok 3) pendingTrackerForTest))
+
+@test
+value async_isPending : Task Text Bool = pure (isPending pendingTrackerForTest)
+
+@test
+value async_isDone : Task Text Bool = pure (isDone doneTrackerForTest)
+
+@test
+value async_isFailed : Task Text Bool = pure (isFailed failedTrackerForTest)
+
+@test
+value async_preserves_last_success_after_failure : Task Text Bool = pure (failedTrackerForTest.done == Some 3 and failedTrackerForTest.error == Some "offline")

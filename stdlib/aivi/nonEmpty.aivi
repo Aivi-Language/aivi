@@ -27,3 +27,40 @@ export fromList
 export appendNel
 export fromHeadTail
 export init
+
+type Int -> Int
+func doubleNelTest = value =>
+    value * 2
+
+@test
+value nonEmpty_singleton : Task Text Bool = pure (toList (singleton 1) == [1])
+
+@test
+value nonEmpty_cons : Task Text Bool = pure (toList (cons 1 (singleton 2)) == [1, 2])
+
+@test
+value nonEmpty_head : Task Text Bool = pure (head (cons 1 (singleton 2)) == 1)
+
+@test
+value nonEmpty_last : Task Text Bool = pure (last (cons 1 (singleton 2)) == 2)
+
+@test
+value nonEmpty_length : Task Text Bool = pure (length (cons 1 (singleton 2)) == 2)
+
+@test
+value nonEmpty_toList : Task Text Bool = pure (toList (singleton 1) == [1])
+
+@test
+value nonEmpty_mapNel : Task Text Bool = pure (toList (mapNel doubleNelTest (singleton 2)) == [4])
+
+@test
+value nonEmpty_fromList : Task Text Bool = pure (fromList [1, 2] == Some (fromHeadTail 1 [2]))
+
+@test
+value nonEmpty_appendNel : Task Text Bool = pure (toList (appendNel (singleton 1) (singleton 2)) == [1, 2])
+
+@test
+value nonEmpty_fromHeadTail : Task Text Bool = pure (toList (fromHeadTail 1 [2, 3]) == [1, 2, 3])
+
+@test
+value nonEmpty_init : Task Text Bool = pure (init (fromHeadTail 1 [2, 3]) == [1, 2])

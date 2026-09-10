@@ -77,7 +77,6 @@ use aivi.list (
     minimum
     minimumBy
     Partition
-    UnzipState
 )
 
 use aivi.option (

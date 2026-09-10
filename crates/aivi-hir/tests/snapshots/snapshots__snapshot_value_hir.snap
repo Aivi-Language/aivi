@@ -16463,14 +16463,14 @@ Module {
                                         20426,
                                     ),
                                     end: ByteIndex(
-                                        20467,
+                                        20465,
                                     ),
                                 },
                             },
                             decorators: [],
                         },
                         name: Name {
-                            text: "__aivi_pair_fromPair",
+                            text: "__aivi_pair_toPair",
                             span: SourceSpan {
                                 file: FileId(
                                     0,
@@ -16480,7 +16480,7 @@ Module {
                                         20431,
                                     ),
                                     end: ByteIndex(
-                                        20451,
+                                        20449,
                                     ),
                                 },
                             },
@@ -16502,10 +16502,10 @@ Module {
                                     ),
                                     span: Span {
                                         start: ByteIndex(
-                                            20454,
+                                            20452,
                                         ),
                                         end: ByteIndex(
-                                            20455,
+                                            20453,
                                         ),
                                     },
                                 },
@@ -16525,10 +16525,10 @@ Module {
                                     ),
                                     span: Span {
                                         start: ByteIndex(
-                                            20456,
+                                            20454,
                                         ),
                                         end: ByteIndex(
-                                            20457,
+                                            20455,
                                         ),
                                     },
                                 },
@@ -16561,10 +16561,10 @@ Module {
                                 ),
                                 span: Span {
                                     start: ByteIndex(
-                                        20486,
+                                        20484,
                                     ),
                                     end: ByteIndex(
-                                        20535,
+                                        20533,
                                     ),
                                 },
                             },
@@ -16578,10 +16578,10 @@ Module {
                                 ),
                                 span: Span {
                                     start: ByteIndex(
-                                        20491,
+                                        20489,
                                     ),
                                     end: ByteIndex(
-                                        20512,
+                                        20510,
                                     ),
                                 },
                             },
@@ -16600,10 +16600,10 @@ Module {
                                     ),
                                     span: Span {
                                         start: ByteIndex(
-                                            20515,
+                                            20513,
                                         ),
                                         end: ByteIndex(
-                                            20519,
+                                            20517,
                                         ),
                                     },
                                 },
@@ -67451,10 +67451,10 @@ Module {
                         ),
                         span: Span {
                             start: ByteIndex(
-                                20462,
+                                20460,
                             ),
                             end: ByteIndex(
-                                20463,
+                                20461,
                             ),
                         },
                     },
@@ -67470,10 +67470,10 @@ Module {
                                             ),
                                             span: Span {
                                                 start: ByteIndex(
-                                                    20462,
+                                                    20460,
                                                 ),
                                                 end: ByteIndex(
-                                                    20463,
+                                                    20461,
                                                 ),
                                             },
                                         },
@@ -67486,10 +67486,10 @@ Module {
                                     ),
                                     span: Span {
                                         start: ByteIndex(
-                                            20462,
+                                            20460,
                                         ),
                                         end: ByteIndex(
-                                            20463,
+                                            20461,
                                         ),
                                     },
                                 },
@@ -67511,10 +67511,10 @@ Module {
                         ),
                         span: Span {
                             start: ByteIndex(
-                                20465,
+                                20463,
                             ),
                             end: ByteIndex(
-                                20466,
+                                20464,
                             ),
                         },
                     },
@@ -67530,10 +67530,10 @@ Module {
                                             ),
                                             span: Span {
                                                 start: ByteIndex(
-                                                    20465,
+                                                    20463,
                                                 ),
                                                 end: ByteIndex(
-                                                    20466,
+                                                    20464,
                                                 ),
                                             },
                                         },
@@ -67546,10 +67546,10 @@ Module {
                                     ),
                                     span: Span {
                                         start: ByteIndex(
-                                            20465,
+                                            20463,
                                         ),
                                         end: ByteIndex(
-                                            20466,
+                                            20464,
                                         ),
                                     },
                                 },
@@ -67571,10 +67571,10 @@ Module {
                         ),
                         span: Span {
                             start: ByteIndex(
-                                20461,
+                                20459,
                             ),
                             end: ByteIndex(
-                                20467,
+                                20465,
                             ),
                         },
                     },
@@ -67597,11 +67597,71 @@ Module {
                         ),
                         span: Span {
                             start: ByteIndex(
-                                20524,
+                                20522,
                             ),
                             end: ByteIndex(
+                                20526,
+                            ),
+                        },
+                    },
+                    kind: Name(
+                        TermReference {
+                            path: NamePath {
+                                segments: NonEmpty {
+                                    first: Name {
+                                        text: "item",
+                                        span: SourceSpan {
+                                            file: FileId(
+                                                0,
+                                            ),
+                                            span: Span {
+                                                start: ByteIndex(
+                                                    20522,
+                                                ),
+                                                end: ByteIndex(
+                                                    20526,
+                                                ),
+                                            },
+                                        },
+                                    },
+                                    rest: [],
+                                },
+                                span: SourceSpan {
+                                    file: FileId(
+                                        0,
+                                    ),
+                                    span: Span {
+                                        start: ByteIndex(
+                                            20522,
+                                        ),
+                                        end: ByteIndex(
+                                            20526,
+                                        ),
+                                    },
+                                },
+                            },
+                            resolution: Resolved(
+                                Local(
+                                    BindingId(
+                                        332,
+                                    ),
+                                ),
+                            ),
+                        },
+                    ),
+                },
+                Expr {
+                    span: SourceSpan {
+                        file: FileId(
+                            0,
+                        ),
+                        span: Span {
+                            start: ByteIndex(
                                 20528,
                             ),
+                            end: ByteIndex(
+                                20532,
+                            ),
                         },
                     },
                     kind: Name(
@@ -67616,11 +67676,11 @@ Module {
                                             ),
                                             span: Span {
                                                 start: ByteIndex(
-                                                    20524,
-                                                ),
-                                                end: ByteIndex(
                                                     20528,
                                                 ),
+                                                end: ByteIndex(
+                                                    20532,
+                                                ),
                                             },
                                         },
                                     },
@@ -67632,70 +67692,10 @@ Module {
                                     ),
                                     span: Span {
                                         start: ByteIndex(
-                                            20524,
-                                        ),
-                                        end: ByteIndex(
                                             20528,
                                         ),
-                                    },
-                                },
-                            },
-                            resolution: Resolved(
-                                Local(
-                                    BindingId(
-                                        332,
-                                    ),
-                                ),
-                            ),
-                        },
-                    ),
-                },
-                Expr {
-                    span: SourceSpan {
-                        file: FileId(
-                            0,
-                        ),
-                        span: Span {
-                            start: ByteIndex(
-                                20530,
-                            ),
-                            end: ByteIndex(
-                                20534,
-                            ),
-                        },
-                    },
-                    kind: Name(
-                        TermReference {
-                            path: NamePath {
-                                segments: NonEmpty {
-                                    first: Name {
-                                        text: "item",
-                                        span: SourceSpan {
-                                            file: FileId(
-                                                0,
-                                            ),
-                                            span: Span {
-                                                start: ByteIndex(
-                                                    20530,
-                                                ),
-                                                end: ByteIndex(
-                                                    20534,
-                                                ),
-                                            },
-                                        },
-                                    },
-                                    rest: [],
-                                },
-                                span: SourceSpan {
-                                    file: FileId(
-                                        0,
-                                    ),
-                                    span: Span {
-                                        start: ByteIndex(
-                                            20530,
-                                        ),
                                         end: ByteIndex(
-                                            20534,
+                                            20532,
                                         ),
                                     },
                                 },
@@ -67717,10 +67717,10 @@ Module {
                         ),
                         span: Span {
                             start: ByteIndex(
-                                20523,
+                                20521,
                             ),
                             end: ByteIndex(
-                                20535,
+                                20533,
                             ),
                         },
                     },
@@ -145769,10 +145769,10 @@ Module {
                         ),
                         span: Span {
                             start: ByteIndex(
-                                20474,
+                                20472,
                             ),
                             end: ByteIndex(
-                                20475,
+                                20473,
                             ),
                         },
                     },
@@ -145788,10 +145788,10 @@ Module {
                                             ),
                                             span: Span {
                                                 start: ByteIndex(
-                                                    20474,
+                                                    20472,
                                                 ),
                                                 end: ByteIndex(
-                                                    20475,
+                                                    20473,
                                                 ),
                                             },
                                         },
@@ -145804,10 +145804,10 @@ Module {
                                     ),
                                     span: Span {
                                         start: ByteIndex(
-                                            20474,
+                                            20472,
                                         ),
                                         end: ByteIndex(
-                                            20475,
+                                            20473,
                                         ),
                                     },
                                 },
@@ -145829,130 +145829,130 @@ Module {
                         ),
                         span: Span {
                             start: ByteIndex(
-                                20480,
+                                20478,
                             ),
                             end: ByteIndex(
-                                20481,
-                            ),
-                        },
-                    },
-                    kind: Name(
-                        TypeReference {
-                            path: NamePath {
-                                segments: NonEmpty {
-                                    first: Name {
-                                        text: "A",
-                                        span: SourceSpan {
-                                            file: FileId(
-                                                0,
-                                            ),
-                                            span: Span {
-                                                start: ByteIndex(
-                                                    20480,
-                                                ),
-                                                end: ByteIndex(
-                                                    20481,
-                                                ),
-                                            },
-                                        },
-                                    },
-                                    rest: [],
-                                },
-                                span: SourceSpan {
-                                    file: FileId(
-                                        0,
-                                    ),
-                                    span: Span {
-                                        start: ByteIndex(
-                                            20480,
-                                        ),
-                                        end: ByteIndex(
-                                            20481,
-                                        ),
-                                    },
-                                },
-                            },
-                            resolution: Resolved(
-                                TypeParameter(
-                                    TypeParameterId(
-                                        198,
-                                    ),
-                                ),
-                            ),
-                        },
-                    ),
-                },
-                TypeNode {
-                    span: SourceSpan {
-                        file: FileId(
-                            0,
-                        ),
-                        span: Span {
-                            start: ByteIndex(
-                                20483,
-                            ),
-                            end: ByteIndex(
-                                20484,
-                            ),
-                        },
-                    },
-                    kind: Name(
-                        TypeReference {
-                            path: NamePath {
-                                segments: NonEmpty {
-                                    first: Name {
-                                        text: "A",
-                                        span: SourceSpan {
-                                            file: FileId(
-                                                0,
-                                            ),
-                                            span: Span {
-                                                start: ByteIndex(
-                                                    20483,
-                                                ),
-                                                end: ByteIndex(
-                                                    20484,
-                                                ),
-                                            },
-                                        },
-                                    },
-                                    rest: [],
-                                },
-                                span: SourceSpan {
-                                    file: FileId(
-                                        0,
-                                    ),
-                                    span: Span {
-                                        start: ByteIndex(
-                                            20483,
-                                        ),
-                                        end: ByteIndex(
-                                            20484,
-                                        ),
-                                    },
-                                },
-                            },
-                            resolution: Resolved(
-                                TypeParameter(
-                                    TypeParameterId(
-                                        198,
-                                    ),
-                                ),
-                            ),
-                        },
-                    ),
-                },
-                TypeNode {
-                    span: SourceSpan {
-                        file: FileId(
-                            0,
-                        ),
-                        span: Span {
-                            start: ByteIndex(
                                 20479,
                             ),
+                        },
+                    },
+                    kind: Name(
+                        TypeReference {
+                            path: NamePath {
+                                segments: NonEmpty {
+                                    first: Name {
+                                        text: "A",
+                                        span: SourceSpan {
+                                            file: FileId(
+                                                0,
+                                            ),
+                                            span: Span {
+                                                start: ByteIndex(
+                                                    20478,
+                                                ),
+                                                end: ByteIndex(
+                                                    20479,
+                                                ),
+                                            },
+                                        },
+                                    },
+                                    rest: [],
+                                },
+                                span: SourceSpan {
+                                    file: FileId(
+                                        0,
+                                    ),
+                                    span: Span {
+                                        start: ByteIndex(
+                                            20478,
+                                        ),
+                                        end: ByteIndex(
+                                            20479,
+                                        ),
+                                    },
+                                },
+                            },
+                            resolution: Resolved(
+                                TypeParameter(
+                                    TypeParameterId(
+                                        198,
+                                    ),
+                                ),
+                            ),
+                        },
+                    ),
+                },
+                TypeNode {
+                    span: SourceSpan {
+                        file: FileId(
+                            0,
+                        ),
+                        span: Span {
+                            start: ByteIndex(
+                                20481,
+                            ),
                             end: ByteIndex(
-                                20485,
+                                20482,
+                            ),
+                        },
+                    },
+                    kind: Name(
+                        TypeReference {
+                            path: NamePath {
+                                segments: NonEmpty {
+                                    first: Name {
+                                        text: "A",
+                                        span: SourceSpan {
+                                            file: FileId(
+                                                0,
+                                            ),
+                                            span: Span {
+                                                start: ByteIndex(
+                                                    20481,
+                                                ),
+                                                end: ByteIndex(
+                                                    20482,
+                                                ),
+                                            },
+                                        },
+                                    },
+                                    rest: [],
+                                },
+                                span: SourceSpan {
+                                    file: FileId(
+                                        0,
+                                    ),
+                                    span: Span {
+                                        start: ByteIndex(
+                                            20481,
+                                        ),
+                                        end: ByteIndex(
+                                            20482,
+                                        ),
+                                    },
+                                },
+                            },
+                            resolution: Resolved(
+                                TypeParameter(
+                                    TypeParameterId(
+                                        198,
+                                    ),
+                                ),
+                            ),
+                        },
+                    ),
+                },
+                TypeNode {
+                    span: SourceSpan {
+                        file: FileId(
+                            0,
+                        ),
+                        span: Span {
+                            start: ByteIndex(
+                                20477,
+                            ),
+                            end: ByteIndex(
+                                20483,
                             ),
                         },
                     },
@@ -145975,10 +145975,10 @@ Module {
                         ),
                         span: Span {
                             start: ByteIndex(
-                                20474,
+                                20472,
                             ),
                             end: ByteIndex(
-                                20485,
+                                20483,
                             ),
                         },
                     },
@@ -156579,6 +156579,38 @@ Module {
                         ),
                         span: Span {
                             start: ByteIndex(
+                                20452,
+                            ),
+                            end: ByteIndex(
+                                20453,
+                            ),
+                        },
+                    },
+                    name: Name {
+                        text: "a",
+                        span: SourceSpan {
+                            file: FileId(
+                                0,
+                            ),
+                            span: Span {
+                                start: ByteIndex(
+                                    20452,
+                                ),
+                                end: ByteIndex(
+                                    20453,
+                                ),
+                            },
+                        },
+                    },
+                    kind: FunctionParameter,
+                },
+                Binding {
+                    span: SourceSpan {
+                        file: FileId(
+                            0,
+                        ),
+                        span: Span {
+                            start: ByteIndex(
                                 20454,
                             ),
                             end: ByteIndex(
@@ -156587,7 +156619,7 @@ Module {
                         },
                     },
                     name: Name {
-                        text: "a",
+                        text: "b",
                         span: SourceSpan {
                             file: FileId(
                                 0,
@@ -156611,42 +156643,10 @@ Module {
                         ),
                         span: Span {
                             start: ByteIndex(
-                                20456,
+                                20513,
                             ),
                             end: ByteIndex(
-                                20457,
-                            ),
-                        },
-                    },
-                    name: Name {
-                        text: "b",
-                        span: SourceSpan {
-                            file: FileId(
-                                0,
-                            ),
-                            span: Span {
-                                start: ByteIndex(
-                                    20456,
-                                ),
-                                end: ByteIndex(
-                                    20457,
-                                ),
-                            },
-                        },
-                    },
-                    kind: FunctionParameter,
-                },
-                Binding {
-                    span: SourceSpan {
-                        file: FileId(
-                            0,
-                        ),
-                        span: Span {
-                            start: ByteIndex(
-                                20515,
-                            ),
-                            end: ByteIndex(
-                                20519,
+                                20517,
                             ),
                         },
                     },
@@ -156658,10 +156658,10 @@ Module {
                             ),
                             span: Span {
                                 start: ByteIndex(
-                                    20515,
+                                    20513,
                                 ),
                                 end: ByteIndex(
-                                    20519,
+                                    20517,
                                 ),
                             },
                         },
@@ -162818,10 +162818,10 @@ Module {
                         ),
                         span: Span {
                             start: ByteIndex(
-                                20474,
+                                20472,
                             ),
                             end: ByteIndex(
-                                20475,
+                                20473,
                             ),
                         },
                     },
@@ -162833,10 +162833,10 @@ Module {
                             ),
                             span: Span {
                                 start: ByteIndex(
-                                    20474,
+                                    20472,
                                 ),
                                 end: ByteIndex(
-                                    20475,
+                                    20473,
                                 ),
                             },
                         },

@@ -1,12 +1,7 @@
 # aivi.bigint
 
-Arbitrary-size integer helpers for numbers that may grow past the normal `Int` range.
-
-All functions in this module are synchronous and pure — they return values directly and do not
-perform I/O. Operations that may not produce a value, such as parsing invalid text, converting a
-very large number back to `Int`, or dividing by zero, return `Option`.
-
-## Import
+Pure arbitrary-precision integer operations. The MVP exposes one canonical name per operation.
+Parsing, narrowing to `Int`, division, and remainder return `Option` when no value can be produced.
 
 ```aivi
 use aivi.bigint (
@@ -18,255 +13,74 @@ use aivi.bigint (
     sub
     mul
     div
-    bigMod
+    mod
     pow
     neg
-    bigAbs
+    abs
     cmp
-    bigEq
+    eq
     gt
     lt
     zero
     one
-    factorial
+    negOne
+    isZero
+    isPositive
+    isNegative
 )
 ```
 
-Friendly alias names such as `parse`, `plus`, `minus`, `times`, `dividedBy`, `remainder`,
-`raiseTo`, `negate`, `absolute`, `equals`, `greaterThan`, and `lessThan` are also exported.
+## Conversion
 
-## Overview
+| Function | Type | Behavior |
+| --- | --- | --- |
+| `fromInt` | `Int -> BigInt` | Widen an `Int` without loss |
+| `fromText` | `Text -> Option BigInt` | Parse a signed decimal integer |
+| `toInt` | `BigInt -> Option Int` | Narrow when the value fits in `Int` |
+| `toText` | `BigInt -> Text` | Render signed decimal text |
 
-### Parsing and conversion
+## Arithmetic
 
-| Name | Type | Description |
-|------|------|-------------|
-| `fromInt` / `fromInteger` | `Int -> BigInt` | Convert a normal `Int` to `BigInt` |
-| `fromText` / `parse` | `Text -> Option BigInt` | Parse decimal text into `BigInt` |
-| `toInt` | `BigInt -> Option Int` | Convert back to `Int` when the value fits |
-| `toText` | `BigInt -> Text` | Render a decimal string |
+| Function | Type | Behavior |
+| --- | --- | --- |
+| `add` | `BigInt -> BigInt -> BigInt` | Addition |
+| `sub` | `BigInt -> BigInt -> BigInt` | Subtraction |
+| `mul` | `BigInt -> BigInt -> BigInt` | Multiplication |
+| `div` | `BigInt -> BigInt -> Option BigInt` | Truncating division; `None` for a zero divisor |
+| `mod` | `BigInt -> BigInt -> Option BigInt` | Remainder; `None` for a zero divisor |
+| `pow` | `BigInt -> Int -> BigInt` | Integer power; negative exponents currently act as zero |
+| `neg` | `BigInt -> BigInt` | Negation |
+| `abs` | `BigInt -> BigInt` | Absolute value |
 
-### Arithmetic
+## Comparison
 
-| Name | Type | Description |
-|------|------|-------------|
-| `add` / `plus` | `BigInt -> BigInt -> BigInt` | Add two big integers |
-| `sub` / `minus` | `BigInt -> BigInt -> BigInt` | Subtract the right value from the left |
-| `mul` / `times` | `BigInt -> BigInt -> BigInt` | Multiply two big integers |
-| `div` / `dividedBy` | `BigInt -> BigInt -> Option BigInt` | Integer division, or `None` for zero divisors |
-| `bigMod` / `remainder` | `BigInt -> BigInt -> Option BigInt` | Remainder, or `None` for zero divisors |
-| `pow` / `raiseTo` | `BigInt -> Int -> BigInt` | Raise a value to a whole-number power |
-| `neg` / `negate` | `BigInt -> BigInt` | Change the sign |
-| `bigAbs` / `absolute` | `BigInt -> BigInt` | Absolute value |
-| `factorial` | `Int -> BigInt` | Factorial as a `BigInt` result |
+| Function | Type | Behavior |
+| --- | --- | --- |
+| `cmp` | `BigInt -> BigInt -> Int` | Return `-1`, `0`, or `1` |
+| `eq` | `BigInt -> BigInt -> Bool` | Equality |
+| `gt` | `BigInt -> BigInt -> Bool` | Strict greater-than |
+| `lt` | `BigInt -> BigInt -> Bool` | Strict less-than |
+| `isZero` | `BigInt -> Bool` | Compare with `zero` |
+| `isPositive` | `BigInt -> Bool` | Compare above `zero` |
+| `isNegative` | `BigInt -> Bool` | Compare below `zero` |
 
-### Comparison and checks
+## Constants
 
-| Name | Type | Description |
-|------|------|-------------|
-| `cmp` | `BigInt -> BigInt -> Int` | Compare two values and return `-1`, `0`, or `1` |
-| `bigEq` / `equals` | `BigInt -> BigInt -> Bool` | Exact equality |
-| `gt` / `greaterThan` | `BigInt -> BigInt -> Bool` | Greater-than check |
-| `lt` / `lessThan` | `BigInt -> BigInt -> Bool` | Less-than check |
-| `greaterOrEqual` | `BigInt -> BigInt -> Bool` | Greater-than-or-equal check |
-| `lessOrEqual` | `BigInt -> BigInt -> Bool` | Less-than-or-equal check |
-| `isZero` | `BigInt -> Bool` | Check for zero |
-| `isPositive` | `BigInt -> Bool` | Check for values above zero |
-| `isNegative` | `BigInt -> Bool` | Check for values below zero |
-
-### Constants
-
-| Name | Type | Description |
-|------|------|-------------|
-| `zero` | `BigInt` | `0` as a `BigInt` |
-| `one` | `BigInt` | `1` as a `BigInt` |
-| `negOne` | `BigInt` | `-1` as a `BigInt` |
-
-## Functions
-
-### fromInt / fromInteger
-
-
-Convert a normal machine-sized `Int` into `BigInt`. Use this when you want to move into
-big-integer arithmetic before the value grows large.
-
-```aivi
-use aivi.bigint (fromInt)
-
-value startCount = fromInt 42
-```
-
-### fromText / parse
-
-
-Parse decimal text into `BigInt`. Surrounding whitespace is ignored. Returns `None` when the text
-is not a valid integer.
-
-```aivi
-use aivi.bigint (fromText)
-
-value customerId = fromText "90071992547409931234567890"
-```
-
-### toInt
-
-
-Try to convert a `BigInt` back to plain `Int`. Returns `Some n` when the value fits in `Int`, or
-`None` when it is too large or too small.
+| Value | Meaning |
+| --- | --- |
+| `zero` | `0` |
+| `one` | `1` |
+| `negOne` | `-1` |
 
 ```aivi
 use aivi.bigint (
-    fromText
-    toInt
-)
-
-type Text -> Option Int
-func toMachineInt = raw => fromText raw
- ||> None       -> None
- ||> Some value -> toInt value
-```
-
-### toText
-
-
-Render a `BigInt` as decimal text. This is the easiest way to show a large number in the UI or
-store it in text-based formats.
-
-```aivi
-use aivi.bigint (
-    factorial
-    toText
-)
-
-value rendered = toText (factorial 30)
-```
-
-### add / plus
-
-
-Add two `BigInt` values.
-
-### sub / minus
-
-
-Subtract the right value from the left.
-
-### mul / times
-
-
-Multiply two `BigInt` values.
-
-### div / dividedBy
-
-
-Integer division. Any remainder is discarded. Returns `None` when the divisor is zero.
-
-```aivi
-use aivi.bigint (
-    div
-    fromInt
-)
-
-value maybePages = div (fromInt 120) (fromInt 10)
-```
-
-### bigMod / remainder
-
-
-Return the remainder after integer division. Returns `None` when the divisor is zero.
-
-### pow / raiseTo
-
-
-Raise a `BigInt` to a whole-number power. The exponent is a normal `Int`. Negative exponents are
-currently treated as `0`, so the result is `1`.
-
-### neg / negate
-
-
-Flip the sign of a `BigInt`.
-
-### bigAbs / absolute
-
-
-Return the absolute value of a `BigInt`.
-
-### cmp
-
-
-Compare two `BigInt` values. The result is `-1` when the left value is smaller, `0` when both
-values are equal, and `1` when the left value is larger.
-
-### bigEq / equals
-
-
-Check whether two `BigInt` values are exactly equal.
-
-### gt / greaterThan
-
-
-Return `True` when the left value is greater than the right value.
-
-### lt / lessThan
-
-
-Return `True` when the left value is less than the right value.
-
-### greaterOrEqual / lessOrEqual
-
-
-Inclusive comparison helpers built from the basic comparison functions.
-
-### zero / one / negOne
-
-
-Ready-made `BigInt` constants for common starting values.
-
-### isZero / isPositive / isNegative
-
-
-Small sign-check helpers for common conditions.
-
-### factorial
-
-
-Compute `n!` as a `BigInt`. `factorial 0` returns `one`, and negative input currently also returns
-`one`. Factorial uses constant host stack space.
-
-```aivi
-use aivi.bigint (
-    factorial
-    toText
-)
-
-value reportSize = toText (factorial 50)
-```
-
-## Example — parse, add, and render a large total
-
-```aivi
-use aivi.bigint (
-    fromText
     add
+    fromText
     toText
 )
 
 type Text -> Text -> Option Text
 func combineTotals = left right => (fromText left, fromText right)
- ||> (Some leftValue, Some rightValue) -> Some (toText (add leftValue rightValue))
- ||> _                                 -> None
-```
-
-## Example — compare large identifiers safely
-
-```aivi
-use aivi.bigint (
-    cmp
-    fromText
-)
-
-type Text -> Text -> Option Bool
-func newerId = left right => (fromText left, fromText right)
- ||> (Some leftValue, Some rightValue) -> Some (cmp leftValue rightValue > 0)
- ||> _                                 -> None
+ ||> (Some a, Some b) -> Some (toText (add a b))
+ ||> _                -> None
 ```

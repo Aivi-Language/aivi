@@ -46,7 +46,7 @@ not modelled as class-backed `bind`.
 `Monad`.
 
 Independent checks belong in applicative composition because all failures should be reported together.
-In AIVI that is the role of `&|>` and helpers like `zipValidation`. Dependent checks are a different
+In AIVI that is the role of `&|>`. Dependent checks are a different
 story: use the dedicated `!|>` pipe surface or explicit helpers such as `aivi.validation.andThen` when
 later work depends on earlier success. Keeping that split explicit prevents “accumulating monad”
 confusion and preserves the mathematical story of `Validation`.

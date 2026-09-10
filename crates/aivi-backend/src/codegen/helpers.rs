@@ -10,7 +10,8 @@ fn static_intrinsic_arity(intrinsic: IntrinsicValue) -> Option<usize> {
     match intrinsic {
         IntrinsicValue::BytesLength
         | IntrinsicValue::BytesFromText
-        | IntrinsicValue::BytesToText => Some(1),
+        | IntrinsicValue::BytesToText
+        | IntrinsicValue::MatrixIndices => Some(1),
         IntrinsicValue::BytesGet
         | IntrinsicValue::BytesAppend
         | IntrinsicValue::BytesRepeat
@@ -114,6 +115,9 @@ fn static_evaluate_intrinsic_call(
             let count = (*count).max(0) as usize;
             Some(RuntimeValue::Bytes(vec![byte; count].into()))
         }
+        (IntrinsicValue::MatrixIndices, [RuntimeValue::Int(count)]) => Some(RuntimeValue::List(
+            (0..(*count).max(0)).map(RuntimeValue::Int).collect(),
+        )),
         (IntrinsicValue::PathJoin, [RuntimeValue::Text(base), RuntimeValue::Text(segment)]) => {
             let joined = std::path::Path::new(base.as_ref()).join(segment.as_ref());
             Some(RuntimeValue::Text(

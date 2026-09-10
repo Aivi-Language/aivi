@@ -1,206 +1,44 @@
 # aivi.core.range
 
-Integer range utilities with an inclusive `[start, end]` interval type. All operations are pure AIVI — no I/O, no intrinsics.
+`aivi.core.range` provides closed numeric intervals. Bounds are inclusive. An integer or floating-point range is empty when `start > end`; constructors preserve the supplied bounds rather than reordering them.
 
-```aivi
-use aivi.core.range (
-    RangeInt
-    make
-    isEmpty
-    contains
-    length
-    overlaps
-    clampTo
-    startOf
-    endOf
-    shift
-    intersect
-)
-```
+## Integer ranges
 
----
-
-## Type
-
-### `RangeInt`
-
-```aivi
-type RangeInt = {
-    start: Int,
-    end: Int
-}
-```
-
-An inclusive integer range. A range where `start > end` is considered **empty**.
-
----
-
-## Construction
-
-### `make : Int -> Int -> RangeInt`
-
-Create a range from `start` to `end` (inclusive).
-
-```aivi
-use aivi.core.range (make)
-
-value r = make 1 10
-```
-
----
-
-## Querying
-
-### `isEmpty : RangeInt -> Bool`
-
-Returns `True` when `start > end`.
-
-```aivi
-use aivi.core.range (
-    isEmpty
-    make
-)
-
-value none : Bool = isEmpty (make 3 1)
-```
-
-### `contains : RangeInt -> Int -> Bool`
-
-Returns `True` when `n` is within the range (inclusive on both ends).
-
-```aivi
-use aivi.core.range (
-    contains
-    make
-)
-
-value hasFive : Bool = contains (make 1 10) 5
-```
-
-### `length : RangeInt -> Int`
-
-Returns the number of integers in the range. Empty ranges have length `0`.
-
-```aivi
-use aivi.core.range (
-    length
-    make
-)
-
-value count : Int = length (make 4 7)
-```
-
-### `startOf : RangeInt -> Int` / `endOf : RangeInt -> Int`
-
-Extract the start or end bound.
-
-```aivi
-use aivi.core.range (
-    startOf
-    endOf
-    make
-)
-
-value start : Int = startOf (make 4 7)
-value finish : Int = endOf (make 4 7)
-```
-
----
-
-## Operations
-
-### `clampTo : RangeInt -> Int -> Int`
-
-Clamp a value to the range boundaries.
-
-```aivi
-use aivi.core.range (
-    clampTo
-    make
-)
-
-value clamped : Int = clampTo (make 1 10) 15
-```
-
-### `shift : Int -> RangeInt -> RangeInt`
-
-Translate the entire range by a delta.
-
-```aivi
-use aivi.core.range (
-    RangeInt
-    shift
-    make
-)
-
-value shifted : RangeInt = shift 3 (make 1 5)
-```
-
-### `overlaps : RangeInt -> RangeInt -> Bool`
-
-Returns `True` when the ranges share at least one integer. Returns `False` if either range is empty.
-
-```aivi
-use aivi.core.range (
-    make
-    overlaps
-)
-
-value sharesValues : Bool = overlaps (make 1 5) (make 4 8)
-```
-
-### `intersect : RangeInt -> RangeInt -> RangeInt`
-
-Returns the intersection of two ranges. If the ranges do not overlap the result is an empty range (`start > end`).
-
-```aivi
-use aivi.core.range (
-    RangeInt
-    intersect
-    make
-)
-
-value shared : RangeInt = intersect (make 1 5) (make 4 8)
-```
-
----
+| Export | Type | Behavior |
+| --- | --- | --- |
+| `RangeInt` | `{ start: Int, end: Int }` | Inclusive integer range |
+| `make` | `Int -> Int -> RangeInt` | Construct a range |
+| `isEmpty` | `RangeInt -> Bool` | Test whether `start > end` |
+| `contains` | `RangeInt -> Int -> Bool` | Test inclusive membership |
+| `length` | `RangeInt -> Int` | Count integers; return zero for an empty range |
+| `overlaps` | `RangeInt -> RangeInt -> Bool` | Test whether two nonempty ranges share a value |
+| `clampTo` | `RangeInt -> Int -> Int` | Restrict a value to the two bounds |
+| `startOf` | `RangeInt -> Int` | Read the start bound |
+| `endOf` | `RangeInt -> Int` | Read the end bound |
+| `shift` | `Int -> RangeInt -> RangeInt` | Add a delta to both bounds |
+| `intersect` | `RangeInt -> RangeInt -> RangeInt` | Return the shared interval, possibly empty |
 
 ## Floating-point ranges
 
-`RangeFloat` is a record `{ start: Float, end: Float }`. Its helpers are:
-
-| Function | Type | Behavior |
+| Export | Type | Behavior |
 | --- | --- | --- |
-| `makeFloat` | `Float -> Float -> RangeFloat` | Construct bounds |
-| `isEmptyFloat` | `RangeFloat -> Bool` | Test `start > end` |
-| `containsFloat` | `RangeFloat -> Float -> Bool` | Inclusive membership |
-| `clampToFloat` | `RangeFloat -> Float -> Float` | Clamp against the bounds; use nonempty ranges |
+| `RangeFloat` | `{ start: Float, end: Float }` | Inclusive floating-point range |
+| `makeFloat` | `Float -> Float -> RangeFloat` | Construct a range |
+| `isEmptyFloat` | `RangeFloat -> Bool` | Test whether `start > end` |
+| `containsFloat` | `RangeFloat -> Float -> Bool` | Test inclusive membership |
+| `clampToFloat` | `RangeFloat -> Float -> Float` | Restrict a value to the two bounds |
 | `shiftFloat` | `Float -> RangeFloat -> RangeFloat` | Add a delta to both bounds |
-| `lerpFloat` | `RangeFloat -> Float -> Float` | Interpolate at `t`; values outside `0..1` extrapolate |
-
-## Real-world example
+| `lerpFloat` | `RangeFloat -> Float -> Float` | Interpolate by `t`; values outside zero through one extrapolate |
 
 ```aivi
 use aivi.core.range (
     RangeInt
-    clampTo
+    contains
     length
+    make
 )
 
-type Viewport = {
-    visible: RangeInt,
-    total: Int
-}
-
-type Viewport -> RangeInt
-func visibleRange = viewport => viewport
- ||> { visible, total } -> visible
-
-type Viewport -> Int
-func visibleCount = viewport =>
-    length (visibleRange viewport)
-
-type Viewport -> Int -> Int
-func clampSelection = viewport row =>
-    clampTo (visibleRange viewport) row
+value pageWindow : RangeInt = make 10 19
+value includesLast : Bool = contains pageWindow 19
+value pageSize : Int = length pageWindow
 ```

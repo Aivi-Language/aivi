@@ -1,6 +1,5 @@
 use aivi.bigint (
     fromInt
-    factorial
     fromText
     toInt
     toText
@@ -8,92 +7,23 @@ use aivi.bigint (
     sub
     mul
     div
-    mod as bigMod
+    mod
     pow
     neg
-    abs as bigAbs
+    abs
     cmp
-    eq as bigEq
+    eq
     gt
     lt
 )
 
-// Safe parse from a decimal text string
-type Text -> Option BigInt
-func parse = t =>
-    fromText t
-
-// Convert from Int
-type Int -> BigInt
-func fromInteger = n =>
-    fromInt n
-
-// Arithmetic
-type BigInt -> BigInt -> BigInt
-func plus = a b =>
-    add a b
-
-type BigInt -> BigInt -> BigInt
-func minus = a b =>
-    sub a b
-
-type BigInt -> BigInt -> BigInt
-func times = a b =>
-    mul a b
-
-type BigInt -> BigInt -> Option BigInt
-func dividedBy = a b =>
-    div a b
-
-type BigInt -> BigInt -> Option BigInt
-func remainder = a b =>
-    bigMod a b
-
-type BigInt -> Int -> BigInt
-func raiseTo = base exp =>
-    pow base exp
-
-type BigInt -> BigInt
-func negate = n =>
-    neg n
-
-type BigInt -> BigInt
-func absolute = n =>
-    bigAbs n
-
-// Comparison
-type BigInt -> BigInt -> Bool
-func equals = a b =>
-    bigEq a b
-
-type BigInt -> BigInt -> Bool
-func greaterThan = a b =>
-    gt a b
-
-type BigInt -> BigInt -> Bool
-func lessThan = a b =>
-    lt a b
-
-type BigInt -> BigInt -> Bool
-func greaterOrEqual = a b => gt a b
- T|> True
- F|> bigEq a b
-
-type BigInt -> BigInt -> Bool
-func lessOrEqual = a b => lt a b
- T|> True
- F|> bigEq a b
-
-// Constants
 value zero : BigInt = fromInt 0
-
 value one : BigInt = fromInt 1
-value negOne : BigInt = neg (fromInt 1)
+value negOne : BigInt = neg one
 
-// Sign checks
 type BigInt -> Bool
 func isZero = n =>
-    bigEq n zero
+    eq n zero
 
 type BigInt -> Bool
 func isPositive = n =>
@@ -103,25 +33,83 @@ type BigInt -> Bool
 func isNegative = n =>
     lt n zero
 
-@test
-value bigint_fromInt_basic : Task Text Bool = pure (bigEq (fromInt 42) (fromInt 42))
+type BigInt -> Option BigInt -> Bool
+func optionEqualsForTest = expected actual => actual
+ ||> Some n -> eq n expected
+ ||> None   -> False
+
+type Option BigInt -> Bool
+func optionIsNoneForTest = actual => actual
+ ||> Some _ -> False
+ ||> None   -> True
 
 @test
-value bigint_add_basic : Task Text Bool = pure (bigEq (add (fromInt 100) (fromInt 200)) (fromInt 300))
+value bigint_fromInt : Task Text Bool = pure (eq (fromInt 42) (fromInt 42))
 
 @test
-value bigint_mul_basic : Task Text Bool = pure (bigEq (mul (fromInt 3) (fromInt 4)) (fromInt 12))
+value bigint_fromText : Task Text Bool = pure (optionEqualsForTest (fromInt 123) (fromText "123"))
 
 @test
-value bigint_gt_basic : Task Text Bool = pure (gt (fromInt 10) (fromInt 5))
+value bigint_fromText_rejects_invalid : Task Text Bool = pure (optionIsNoneForTest (fromText "twelve"))
 
 @test
-value bigint_zero_check : Task Text Bool = pure (isZero zero)
+value bigint_toInt : Task Text Bool = pure (toInt (fromInt 42) == Some 42)
 
 @test
-value bigint_neg_check : Task Text Bool = pure (isNegative (neg (fromInt 1)))
+value bigint_toText : Task Text Bool = pure (toText (fromInt 42) == "42")
 
 @test
-value bigint_toText_basic : Task Text Bool = pure (toText (fromInt 42) == "42")
+value bigint_add : Task Text Bool = pure (eq (add (fromInt 20) (fromInt 22)) (fromInt 42))
 
-export (fromInt, fromText, toInt, toText, add, sub, mul, div, bigMod, pow, neg, bigAbs, cmp, bigEq, gt, lt, parse, fromInteger, plus, minus, times, dividedBy, remainder, raiseTo, negate, absolute, equals, greaterThan, lessThan, greaterOrEqual, lessOrEqual, zero, one, negOne, isZero, isPositive, isNegative, factorial)
+@test
+value bigint_sub : Task Text Bool = pure (eq (sub (fromInt 50) (fromInt 8)) (fromInt 42))
+
+@test
+value bigint_mul : Task Text Bool = pure (eq (mul (fromInt 6) (fromInt 7)) (fromInt 42))
+
+@test
+value bigint_div : Task Text Bool = pure (optionEqualsForTest (fromInt 42) (div (fromInt 84) (fromInt 2)))
+
+@test
+value bigint_div_rejects_zero : Task Text Bool = pure (optionIsNoneForTest (div one zero))
+
+@test
+value bigint_mod : Task Text Bool = pure (optionEqualsForTest (fromInt 4) (mod (fromInt 44) (fromInt 5)))
+
+@test
+value bigint_pow : Task Text Bool = pure (eq (pow (fromInt 2) 10) (fromInt 1024))
+
+@test
+value bigint_neg : Task Text Bool = pure (eq (neg (fromInt 42)) (fromInt (-42)))
+
+@test
+value bigint_abs : Task Text Bool = pure (eq (abs (fromInt (-42))) (fromInt 42))
+
+@test
+value bigint_cmp : Task Text Bool = pure (cmp (fromInt 2) (fromInt 3) == -1)
+
+@test
+value bigint_eq : Task Text Bool = pure (eq (fromInt 5) (fromInt 5))
+
+@test
+value bigint_gt : Task Text Bool = pure (gt (fromInt 10) (fromInt 5))
+
+@test
+value bigint_lt : Task Text Bool = pure (lt (fromInt 5) (fromInt 10))
+
+@test
+value bigint_zero : Task Text Bool = pure (isZero zero)
+
+@test
+value bigint_one : Task Text Bool = pure (eq one (fromInt 1))
+
+@test
+value bigint_negOne : Task Text Bool = pure (eq negOne (fromInt (-1)))
+
+@test
+value bigint_isPositive : Task Text Bool = pure (isPositive one)
+
+@test
+value bigint_isNegative : Task Text Bool = pure (isNegative negOne)
+
+export (fromInt, fromText, toInt, toText, add, sub, mul, div, mod, pow, neg, abs, cmp, eq, gt, lt, zero, one, negOne, isZero, isPositive, isNegative)

@@ -75,8 +75,8 @@ use aivi.order (
 )
 
 use aivi.pair (
-    fst
-    snd
+    first
+    second
 )
 
 use aivi.validation (

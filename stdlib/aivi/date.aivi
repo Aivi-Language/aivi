@@ -42,17 +42,23 @@ domain DateDelta over Int = {
     suffix dy
     type dy : Int
     dy = n => DateDelta n
+
     suffix wk
     type wk : Int
     wk = n => DateDelta (n * 7)
+
     type days : Int -> DateDelta
     days = n => n
+
     type (+) : DateDelta -> DateDelta -> DateDelta
     (+) = left right => left + right
+
     type (-) : DateDelta -> DateDelta -> DateDelta
     (-) = left right => left - right
+
     type (*) : DateDelta -> Int -> DateDelta
     (*) = delta n => delta * n
+
     type (<) : DateDelta -> DateDelta -> Bool
     (<) = left right => left < right
 }
@@ -141,28 +147,28 @@ func zonedToIso = zdt => zdt
  ||> ZonedDateTime dt zone -> "{dateTimeToIso dt}{zone}"
 
 type Date -> Date -> Ordering
-func compareDateSameYear = left right =>
-    compare (getMonth left) (getMonth right)
-     ||> Equal   -> compare (getDay left) (getDay right)
-     ||> Less    -> Less
-     ||> Greater -> Greater
+func compareDateSameYear = left right => compare (getMonth left) (getMonth right)
+ ||> Equal   -> compare (getDay left) (getDay right)
+ ||> Less    -> Less
+ ||> Greater -> Greater
 
 type Date -> Date -> Ordering
-func compareDate = left right =>
-    compare (getYear left) (getYear right)
-     ||> Equal   -> compareDateSameYear left right
-     ||> Less    -> Less
-     ||> Greater -> Greater
+func compareDate = left right => compare (getYear left) (getYear right)
+ ||> Equal   -> compareDateSameYear left right
+ ||> Less    -> Less
+ ||> Greater -> Greater
 
 instance Eq Date = {
-    (==) = left right => compareDate left right
-     ||> Equal   -> True
-     ||> Less    -> False
-     ||> Greater -> False
-    (!=) = left right => compareDate left right
-     ||> Equal   -> False
-     ||> Less    -> True
-     ||> Greater -> True
+    (==) = left right =>
+        compareDate left right
+        ||> Equal   -> True
+        ||> Less    -> False
+        ||> Greater -> False
+    (!=) = left right =>
+        compareDate left right
+        ||> Equal   -> False
+        ||> Less    -> True
+        ||> Greater -> True
 }
 
 instance Ord Date = {
@@ -226,6 +232,9 @@ value date_isNotLeapYear_1900 : Task Text Bool = pure (not (isLeapYear 1900))
 value date_daysInMonth_feb_leap : Task Text Bool = pure (daysInMonth 2 2024 == 29)
 
 @test
+value date_daysInFeb : Task Text Bool = pure (daysInFeb 2024 == 29)
+
+@test
 value date_daysInMonth_feb_normal : Task Text Bool = pure (daysInMonth 2 2023 == 28)
 
 @test
@@ -253,10 +262,49 @@ value date_getMonth : Task Text Bool = pure (getMonth (Date 2024 6 15) == 6)
 value date_getDay : Task Text Bool = pure (getDay (Date 2024 6 15) == 15)
 
 @test
+value date_getHour : Task Text Bool = pure (getHour (TimeOfDay 14 30 5) == 14)
+
+@test
+value date_getMinute : Task Text Bool = pure (getMinute (TimeOfDay 14 30 5) == 30)
+
+@test
+value date_getSecond : Task Text Bool = pure (getSecond (TimeOfDay 14 30 5) == 5)
+
+@test
+value date_getDate : Task Text Bool = pure (getDate (DateTime epoch midnight) == epoch)
+
+@test
+value date_getTime : Task Text Bool = pure (getHour (getTime (DateTime epoch (TimeOfDay 12 0 0))) == 12)
+
+@test
+value date_getDateTime : Task Text Bool = pure (getDate (getDateTime (ZonedDateTime (DateTime epoch midnight) "Z")) == epoch)
+
+@test
+value date_getZone : Task Text Bool = pure (getZone (ZonedDateTime (DateTime epoch midnight) "Z") == "Z")
+
+@test
 value date_dayOfWeekName : Task Text Bool = pure (dayOfWeekName Monday == "Monday")
 
 @test
+value date_dayOfWeekShort : Task Text Bool = pure (dayOfWeekShort Wednesday == "Wed")
+
+@test
 value date_dayOfWeekIndex : Task Text Bool = pure (dayOfWeekIndex Friday == 5)
+
+@test
+value date_zonedToIso : Task Text Bool = pure (zonedToIso (ZonedDateTime (DateTime (Date 2024 6 15) midnight) "Z") == "2024-06-15T00:00:00Z")
+
+@test
+value date_toDateTime : Task Text Bool = pure (getDate (toDateTime epoch midnight) == epoch)
+
+@test
+value date_toZoned : Task Text Bool = pure (getZone (toZoned (DateTime epoch midnight) "Z") == "Z")
+
+@test
+value date_midnight : Task Text Bool = pure (getHour midnight == 0)
+
+@test
+value date_epoch : Task Text Bool = pure (dateToIso epoch == "1970-01-01")
 
 @test
 value date_eq_operator : Task Text Bool = pure ((Date 2024 6 15) == (Date 2024 6 15))
@@ -267,4 +315,4 @@ value date_lt_operator : Task Text Bool = pure ((Date 2024 6 15) < (Date 2024 6 
 @test
 value date_gte_operator : Task Text Bool = pure ((Date 2024 6 15) >= (Date 2024 6 15))
 
-export (Year, Month, Day, Hour, Minute, Second, Date, TimeOfDay, DateTime, ZonedDateTime, DayOfWeek, DateDelta, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday, getYear, getMonth, getDay, getHour, getMinute, getSecond, getDate, getTime, getDateTime, getZone, isLeapYear, daysInFeb, daysInMonth, pad2, pad4, dateToIso, timeToIso, dateTimeToIso, zonedToIso, dayOfWeekName, dayOfWeekShort, dayOfWeekIndex, toDateTime, toZoned, midnight, epoch)
+export (Year, Month, Day, Hour, Minute, Second, Date, TimeOfDay, DateTime, ZonedDateTime, DayOfWeek, DateDelta, Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday, getYear, getMonth, getDay, getHour, getMinute, getSecond, getDate, getTime, getDateTime, getZone, isLeapYear, daysInFeb, daysInMonth, dateToIso, timeToIso, dateTimeToIso, zonedToIso, dayOfWeekName, dayOfWeekShort, dayOfWeekIndex, toDateTime, toZoned, midnight, epoch)

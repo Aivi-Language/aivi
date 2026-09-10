@@ -1,3 +1,4 @@
+// @covers aivi.matrix init fromRows filled width height rows row at replaceAt coord mapWithIndex reduceWithIndex coords entries positionsWhere count modifyAt replaceMany
 use aivi.matrix (
     Matrix
     MatrixIndex
@@ -7,6 +8,7 @@ use aivi.matrix (
     RaggedRows
     init
     fromRows
+    filled
     width
     height
     rows
@@ -133,6 +135,10 @@ value raggedRowsRejected : Bool = fromRows [[1, 2], [3]]
  ||> Ok _      -> False
  ||> Err error -> raggedRowsRejectedError error
 
+value matrixFilledOk : Bool = filled 2 2 7
+ ||> Err _     -> False
+ ||> Ok matrix -> rows matrix == [[7, 7], [7, 7]]
+
 @test
 value matrix_init_uses_coordinates : Task Text Bool = pure matrixCoordinatesOk
 
@@ -153,3 +159,6 @@ value matrix_init_rejects_negative_width : Task Text Bool = pure negativeWidthRe
 
 @test
 value matrix_fromRows_rejects_ragged_input : Task Text Bool = pure raggedRowsRejected
+
+@test
+value matrix_filled_repeats_value : Task Text Bool = pure matrixFilledOk

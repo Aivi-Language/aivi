@@ -313,3 +313,9 @@ signal liveEvent : Signal (Result ImapError ImapLiveEvent)
 `imap.fetchBody` requires a record with the account's connection and authentication
 fields plus `mailbox: Text` and `uid: Int`. An `accountId` alone is not sufficient.
 See the [source catalog](/guide/source-catalog#imap-fetchbody) for the request contract.
+
+## Additional error and event constructors
+
+`ImapConnectionFailed message`, `FolderNotFound folder`, and `ImapProtocolError message` preserve IMAP
+failure details. `NewMessage uid`, `MessageFlagChanged uid flag`, and `FolderChanged folder` describe
+incremental mailbox events.

@@ -10,7 +10,9 @@ const root = fileURLToPath(new URL('../../', import.meta.url))
 const manual = path.join(root, 'manual')
 const issues = []
 const external = new Set()
-const files = ['AGENTS.md', 'CONTRIBUTING.md', 'AIVI_RFC.md', 'syntax.md',
+const files = ['AGENTS.md', 'README.md', 'CONTRIBUTING.md', 'AIVI_RFC.md', 'syntax.md',
+  'packages/application-types/API.md',
+  'packages/application-types/README.md',
   'tooling/packages/vscode-aivi/README.md',
   ...fs.readdirSync(path.join(root, 'crates')).filter(p => fs.existsSync(path.join(root, 'crates', p, 'README.md'))).map(p => `crates/${p}/README.md`),
   ...fs.readdirSync(manual, { recursive: true }).filter(p => p.endsWith('.md') && !p.startsWith('node_modules/') && !p.startsWith('.vitepress/')).map(p => `manual/${p}`),

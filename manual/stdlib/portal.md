@@ -228,3 +228,7 @@ Supported options:
 
 `portal.screenshot` reads the portal-provided file URI and returns `Ok (ScreenshotBytes bytes)` or
 `Ok ScreenshotCancelled`.
+
+## Task alias
+
+`PortalTask A` is `Task PortalError A`.

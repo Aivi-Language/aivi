@@ -152,3 +152,8 @@ type ImageData -> Int
 func imageWidth = image =>
     image.size.width
 ```
+
+## Format constructors and task alias
+
+`Png`, `Jpeg`, `Webp`, `Svg`, and `Gif` identify supported formats; `UnknownFormat name`
+preserves an unrecognized format label. `ImageTask A` is `Task ImageError A`.

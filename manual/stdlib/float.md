@@ -1,27 +1,8 @@
 # aivi.core.float
 
-IEEE 754 double-precision floating-point helpers. The built-in `Float` type supports `+`, `-`, `*`, `/`, `<`, `>`, `<=`, `>=`, `==`, and `!=` directly. This module adds commonly needed pure helpers on top.
-
-The runtime representation accepts finite values only; do not assume NaN or infinity
-propagation behaves like an unrestricted host-language `f64`.
-
-The low-level math intrinsics (`floor`, `ceil`, `round`, `sqrt`, `abs`, `toInt`, `fromInt`, `toText`, `parseText`) are available via the compiler catalog:
-
-```aivi
-use aivi.core.float (
-    floor
-    ceil
-    round
-    sqrt
-    abs
-    toInt
-    fromInt
-    toText
-    parseText
-)
-```
-
-Pure helpers are imported the same way:
+Pure helpers and compiler intrinsics for finite IEEE 754 double-precision values. The MVP keeps
+general numeric operations here; presentation rounding, percentages, angle wrapping, and curve
+evaluation belong in application libraries.
 
 ```aivi
 use aivi.core.float (
@@ -29,7 +10,6 @@ use aivi.core.float (
     e
     tau
     negate
-    absHelper
     max
     min
     clamp
@@ -42,237 +22,68 @@ use aivi.core.float (
     square
     toRadians
     toDegrees
+    floor
+    ceil
+    round
+    sqrt
+    abs
+    toInt
+    fromInt
+    toText
+    parseText
+    approxEq
 )
 ```
-
----
 
 ## Constants
 
-| Name  | Value                  | Description                  |
-|-------|------------------------|------------------------------|
-| `pi`  | `3.141592653589793`    | π — ratio of circumference to diameter |
-| `e`   | `2.718281828459045`    | Euler's number               |
-| `tau` | `6.283185307179586`    | τ = 2π — full circle in radians |
-
-```aivi
-use aivi.core.float (
-    pi
-    tau
-)
-
-type Float -> Float
-func circleArea = radius =>
-    pi * radius * radius
-
-type Float -> Float
-func circleCircumference = radius =>
-    tau * radius
-```
-
----
-
-## Intrinsics
-
-These are handled by the compiler directly. Import them from `aivi.core.float`.
-
-| Name        | Signature             | Description                        |
-|-------------|-----------------------|------------------------------------|
-| `floor`     | `Float -> Float`      | Round down to nearest whole number |
-| `ceil`      | `Float -> Float`      | Round up to nearest whole number   |
-| `round`     | `Float -> Float`      | Round to nearest whole number      |
-| `sqrt`      | `Float -> Float`      | Square root                        |
-| `abs`       | `Float -> Float`      | Absolute value                     |
-| `toInt`     | `Float -> Int`        | Truncate to integer                |
-| `fromInt`   | `Int -> Float`        | Convert integer to float           |
-| `toText`    | `Float -> Text`       | Convert to text representation     |
-| `parseText` | `Text -> Option Float`| Parse text as float; `None` if invalid |
-
-```aivi
-use aivi.core.float (
-    sqrt
-    toInt
-    fromInt
-    abs
-)
-
-type Float -> Float -> Float
-func hypotenuse = a b =>
-    sqrt (a * a + b * b)
-
-type Int -> Float
-func roundTrip = n =>
-    fromInt n
-```
-
----
-
-## negate
-
-Negates a float. This is the named, first-class function counterpart of unary `-`.
-
-
-```aivi
-use aivi.core.float (negate)
-
-type Float -> Float
-func flipSign = n =>
-    negate n
-```
-
----
-
-## max / min
-
-Return the larger or smaller of two floats.
-
-
-```aivi
-use aivi.core.float (
-    max
-    min
-)
-
-type Float -> Float
-func boundedProgress = progress =>
-    min 1.0 (max 0.0 progress)
-```
-
----
-
-## clamp
-
-Clamps a value to the inclusive range `[lo, hi]`.
-
-
-```aivi
-use aivi.core.float (clamp)
-
-type Float -> Float
-func normalizedVolume = raw =>
-    clamp 0.0 1.0 raw
-```
-
----
-
-## lerp
-
-Linear interpolation between `a` and `b`. `lerp a b 0.0` returns `a`, `lerp a b 1.0` returns `b`.
-
-
-```aivi
-use aivi.core.float (lerp)
-
-type Float -> Float -> Float -> Float
-func blend = from to t =>
-    lerp from to t
-```
-
----
-
-## sign
-
-Returns `-1.0`, `0.0`, or `1.0` depending on the sign of `n`.
-
-
-```aivi
-use aivi.core.float (sign)
-
-type Float -> Float
-func moveDirection = velocity =>
-    sign velocity
-```
-
----
-
-## between
-
-Returns `True` if `n` is in the closed interval `[lo, hi]`.
-
-
-```aivi
-use aivi.core.float (between)
-
-type Float -> Bool
-func isValidRatio = ratio =>
-    between 0.0 1.0 ratio
-```
-
----
-
-## Predicates
-
-
-```aivi
-use aivi.core.float (
-    isPositive
-    isNegative
-)
-
-type Float -> Text
-func describeNonPositive = n => isNegative n
- T|> "negative"
- F|> "zero"
-
-type Float -> Text
-func signum = n => isPositive n
- T|> "positive"
- F|> describeNonPositive n
-```
-
----
-
-## square
-
-Multiplies a float by itself.
-
-
-```aivi
-use aivi.core.float (square)
-
-type Float -> Float -> Float
-func addFloats = left right =>
-    left + right
-
-type Float -> Float -> Float
-func distanceSquared = dx dy =>
-    addFloats (square dx) (square dy)
-```
-
----
-
-## toRadians / toDegrees
-
-Convert between degrees and radians.
-
-## Additional helpers
-
-`absHelper : Float -> Float` is also exported as a pure stdlib implementation of absolute value.
+| Value | Meaning |
+| --- | --- |
+| `pi` | π |
+| `e` | Euler's number |
+| `tau` | 2π |
+
+## Pure helpers
 
 | Function | Type | Behavior |
 | --- | --- | --- |
-| `normalizeAngle` | `Float -> Float` | Wrap a radian angle using `angle - tau * floor (angle / tau)` |
+| `negate` | `Float -> Float` | Flip the sign |
+| `max` | `Float -> Float -> Float` | Return the greater value |
+| `min` | `Float -> Float -> Float` | Return the lesser value |
+| `clamp` | `Float -> Float -> Float -> Float` | Restrict a value to inclusive bounds |
+| `lerp` | `Float -> Float -> Float -> Float` | Linear interpolation |
+| `sign` | `Float -> Float` | Return `-1.0`, `0.0`, or `1.0` |
+| `between` | `Float -> Float -> Float -> Bool` | Inclusive range test |
+| `isZero` | `Float -> Bool` | Test against `0.0` |
+| `isPositive` | `Float -> Bool` | Test above zero |
+| `isNegative` | `Float -> Bool` | Test below zero |
+| `square` | `Float -> Float` | Multiply a value by itself |
+| `toRadians` | `Float -> Float` | Convert degrees to radians |
+| `toDegrees` | `Float -> Float` | Convert radians to degrees |
 | `approxEq` | `Float -> Float -> Float -> Bool` | `approxEq epsilon a b` tests `abs (a - b) <= epsilon` |
-| `percentOf` | `Float -> Float -> Float` | `percentOf percent total` computes `total * percent / 100` |
-| `pow10` | `Int -> Int` | Integer power of ten; negative exponents return `1` |
-| `roundTo` | `Int -> Float -> Float` | Round to the given decimal-place count using `pow10` |
-| `cubicBezier` | `Float -> Float -> Float -> Float -> Float -> Float` | Evaluate the scalar cubic Bézier polynomial at `t` for four control values |
 
-These helpers do not clamp interpolation parameters. Use non-negative tolerances for
-`approxEq`, and keep `pow10`/`roundTo` place counts within the machine-integer range.
+## Compiler intrinsics
 
+| Function | Type | Behavior |
+| --- | --- | --- |
+| `floor` | `Float -> Float` | Round down |
+| `ceil` | `Float -> Float` | Round up |
+| `round` | `Float -> Float` | Round to the nearest integral value |
+| `sqrt` | `Float -> Float` | Square root |
+| `abs` | `Float -> Float` | Absolute value |
+| `toInt` | `Float -> Int` | Truncate toward zero |
+| `fromInt` | `Int -> Float` | Convert an integer |
+| `toText` | `Float -> Text` | Render decimal text |
+| `parseText` | `Text -> Option Float` | Parse finite decimal text |
 
 ```aivi
 use aivi.core.float (
+    approxEq
+    lerp
+    pi
     toRadians
-    toDegrees
 )
 
-type Unit -> Float
-func halfCircleInRadians = ignored =>
-    toRadians 180.0
-
-type Unit -> Float
-func rightAngleInDegrees = ignored =>
-    toDegrees 1.5707963267948966
+value midpoint : Float = lerp 10.0 20.0 0.5
+value halfTurn : Bool = approxEq 0.000001 (toRadians 180.0) pi
 ```

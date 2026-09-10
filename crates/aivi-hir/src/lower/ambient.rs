@@ -743,7 +743,7 @@ func __aivi_pair_mapBoth = transformFst transformSnd pair => pair
     ||> (a, b) -> (transformFst a, transformSnd b)
 
 type A -> B -> (A, B)
-func __aivi_pair_fromPair = a b => (a, b)
+func __aivi_pair_toPair = a b => (a, b)
 
 type A -> (A, A)
 func __aivi_pair_duplicate = item => (item, item)

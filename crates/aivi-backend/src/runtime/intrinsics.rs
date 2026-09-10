@@ -319,11 +319,19 @@ fn evaluate_intrinsic_value(
             let p = expect_intrinsic_text(kernel, expr, value, 0, path)?;
             // Lexical normalization only — resolves `.` and `..` without I/O.
             let mut components: Vec<&str> = Vec::new();
+            let mut rooted = false;
             for component in std::path::Path::new(&*p).components() {
                 match component {
                     std::path::Component::CurDir => {}
                     std::path::Component::ParentDir => {
-                        components.pop();
+                        if components.last().is_some_and(|part| *part != "..") {
+                            components.pop();
+                        } else if !rooted {
+                            components.push("..");
+                        }
+                    }
+                    std::path::Component::RootDir => {
+                        rooted = true;
                     }
                     other => {
                         if let Some(s) = other.as_os_str().to_str() {
@@ -332,7 +340,13 @@ fn evaluate_intrinsic_value(
                     }
                 }
             }
-            Ok(RuntimeValue::Text(components.join("/").into()))
+            let normalized = components.join("/");
+            let normalized = if rooted {
+                format!("/{normalized}")
+            } else {
+                normalized
+            };
+            Ok(RuntimeValue::Text(normalized.into()))
         }
         (IntrinsicValue::BytesEmpty, []) => Ok(RuntimeValue::Bytes(Box::new([]))),
         (IntrinsicValue::BytesLength, [b]) => {
@@ -381,6 +395,12 @@ fn evaluate_intrinsic_value(
             let byte = (b.clamp(0, 255)) as u8;
             let n = (n.max(0)) as usize;
             Ok(RuntimeValue::Bytes(vec![byte; n].into()))
+        }
+        (IntrinsicValue::MatrixIndices, [count]) => {
+            let count = expect_intrinsic_i64(kernel, expr, value, 0, count)?;
+            Ok(RuntimeValue::List(
+                (0..count.max(0)).map(RuntimeValue::Int).collect(),
+            ))
         }
         (IntrinsicValue::JsonValidate, [json]) => {
             let text = expect_intrinsic_text(kernel, expr, value, 0, json)?;
@@ -1036,10 +1056,6 @@ fn evaluate_intrinsic_value(
                 Ok(url) => RuntimeValue::ResultOk(Box::new(RuntimeValue::Text(url.to_string().into()))),
                 Err(error) => RuntimeValue::ResultErr(Box::new(RuntimeValue::Text(error.to_string().into()))),
             })
-        }
-        (IntrinsicValue::BigIntFactorial, [n]) => {
-            let n = expect_intrinsic_i64(kernel, expr, value, 0, n)?;
-            Ok(RuntimeValue::BigInt(RuntimeBigInt::factorial(n)))
         }
         (IntrinsicValue::BigIntFromInt, [n]) => {
             let n = expect_intrinsic_i64(kernel, expr, value, 0, n)?;

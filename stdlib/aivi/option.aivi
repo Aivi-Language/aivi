@@ -95,6 +95,63 @@ func fromBool = item b => b
  T|> Some item
  F|> None
 
+type Int -> Int
+func incrementForTest = n =>
+    n + 1
+
+type Int -> Bool
+func positiveForTest = n =>
+    n > 0
+
+type Int -> Option Int
+func incrementSomeForTest = n =>
+    Some (n + 1)
+
+@test
+value option_isSome : Task Text Bool = pure (isSome (Some 1))
+
+@test
+value option_isNone : Task Text Bool = pure (isNone None)
+
+@test
+value option_getOrElse : Task Text Bool = pure (getOrElse 0 (Some 2) == 2)
+
+@test
+value option_fold : Task Text Bool = pure (fold 0 incrementForTest (Some 2) == 3)
+
+@test
+value option_mapOr : Task Text Bool = pure (mapOr 0 incrementForTest (Some 2) == 3)
+
+@test
+value option_isSomeAnd : Task Text Bool = pure (isSomeAnd positiveForTest (Some 2))
+
+@test
+value option_orElse : Task Text Bool = pure (orElse (Some 3) None == Some 3)
+
+@test
+value option_flatMap : Task Text Bool = pure (flatMap incrementSomeForTest (Some 2) == Some 3)
+
+@test
+value option_flatten : Task Text Bool = pure (flatten (Some (Some 2)) == Some 2)
+
+@test
+value option_toList : Task Text Bool = pure (toList (Some 2) == [2])
+
+@test
+value option_toResult : Task Text Bool = pure (toResult "missing" (Some 2) == Ok 2)
+
+@test
+value option_map : Task Text Bool = pure (map incrementForTest (Some 2) == Some 3)
+
+@test
+value option_filter : Task Text Bool = pure (filter positiveForTest (Some 2) == Some 2)
+
+@test
+value option_zip : Task Text Bool = pure (zip (Some 2) (Some 3) == Some (2, 3))
+
+@test
+value option_fromBool : Task Text Bool = pure (fromBool 2 True == Some 2)
+
 export isSome
 export isNone
 export getOrElse

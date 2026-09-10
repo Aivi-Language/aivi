@@ -101,3 +101,61 @@ export toOption
 export toResult
 export fromResult
 export partitionEithers
+
+type Int -> Int
+func doubleEitherTest = value =>
+    value * 2
+
+type Text -> Text
+func markEitherTest = value =>
+    "{value}!"
+
+type Text -> Int
+func leftSizeEitherTest = value => value == "abc"
+ T|> 3
+ F|> 0
+
+value eitherItemsForTest : List (Either Text Int) = [
+    fromResult (Err "a"),
+    fromResult (Ok 1),
+    fromResult (Err "b")
+]
+
+@test
+value either_isLeft : Task Text Bool = pure (isLeft (Left "error"))
+
+@test
+value either_isRight : Task Text Bool = pure (isRight (Right 1))
+
+@test
+value either_fromLeft : Task Text Bool = pure (fromLeft (Left "error") == Some "error")
+
+@test
+value either_fromRight : Task Text Bool = pure (fromRight (Right 1) == Some 1)
+
+@test
+value either_mapLeft : Task Text Bool = pure (mapLeft markEitherTest (Left "error") == Left "error!")
+
+@test
+value either_mapRight : Task Text Bool = pure (mapRight doubleEitherTest (Right 2) == Right 4)
+
+@test
+value either_mapBoth : Task Text Bool = pure (mapBoth markEitherTest doubleEitherTest (Right 2) == Right 4)
+
+@test
+value either_fold : Task Text Bool = pure (fold leftSizeEitherTest doubleEitherTest (Left "abc") == 3)
+
+@test
+value either_swap : Task Text Bool = pure (swap (Left "error") == Right "error")
+
+@test
+value either_toOption : Task Text Bool = pure (toOption (Right 1) == Some 1)
+
+@test
+value either_toResult : Task Text Bool = pure (toResult (Right 1) == Ok 1)
+
+@test
+value either_fromResult : Task Text Bool = pure (fromResult (Err "error") == Left "error")
+
+@test
+value either_partitionEithers : Task Text Bool = pure (partitionEithers eitherItemsForTest == (["a", "b"], [1]))

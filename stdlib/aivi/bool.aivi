@@ -37,6 +37,21 @@ value not_flips_false : Task Text Bool = pure (not False)
 @test
 value both_accepts_true_pair : Task Text Bool = pure (both True True)
 
+@test
+value xor_accepts_exactly_one_true : Task Text Bool = pure (xor True False)
+
+@test
+value implies_rejects_true_to_false : Task Text Bool = pure (not (implies True False))
+
+@test
+value either_accepts_one_true : Task Text Bool = pure (either False True)
+
+@test
+value neither_accepts_two_false : Task Text Bool = pure (neither False False)
+
+@test
+value fromInt_treats_zero_as_false : Task Text Bool = pure (not (fromInt 0))
+
 export not
 export xor
 export implies

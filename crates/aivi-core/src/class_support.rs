@@ -507,7 +507,7 @@ pub fn render_higher_kinded_builtin_support_markdown() -> String {
     markdown.push_str("- The `Monad` column means builtin executable lowering for `chain` and `join`; `Chain` uses the same registry entries.\n");
     markdown.push_str("- `—` means the canonical executable-support registry marks that builtin class/carrier pair unsupported.\n");
     markdown.push_str("- `Signal` is intentionally **not** a `Monad`: executable signals keep a static dependency graph.\n");
-    markdown.push_str("- `Validation E` is intentionally **not** a `Monad`: independent accumulation stays applicative (`&|>` / `zipValidation`), while dependent `!|>` checks are a dedicated pipe primitive rather than class-backed `bind`.\n");
+    markdown.push_str("- `Validation E` is intentionally **not** a `Monad`: independent accumulation uses the applicative `&|>` pipe, while dependent `!|>` checks are a dedicated pipe primitive rather than class-backed `bind`.\n");
     markdown.push_str("- `Traversable` support and traverse-result applicative support are distinct registry checks: `traverse` itself is builtin-supported for `List`, `Option`, `Result`, and `Validation`, while traverse results may use `List`, `Option`, `Result`, `Validation`, or `Signal` applicatives, but not `Task`.\n");
     markdown
 }

@@ -1829,6 +1829,7 @@ fn read_os_random_bytes(count: usize) -> Result<Box<[u8]>, RuntimeTaskExecutionE
 
 #[cfg(test)]
 mod tests {
+    // @covers aivi.regex isMatch find findText findAll replace replaceAll
     use std::{
         collections::BTreeSet,
         fs,
@@ -1853,6 +1854,62 @@ mod tests {
     use crate::SourceProviderContext;
 
     static AUTH_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    #[test]
+    fn executes_all_regex_task_plans() {
+        let execute = |plan| {
+            execute_runtime_task_plan(plan, &mut Vec::new(), &mut Vec::new())
+                .expect("valid regex task should execute")
+        };
+
+        assert_eq!(
+            execute(RuntimeTaskPlan::RegexIsMatch {
+                pattern: r"\d+".into(),
+                text: "item 42".into(),
+            }),
+            RuntimeValue::Bool(true)
+        );
+        assert_eq!(
+            execute(RuntimeTaskPlan::RegexFind {
+                pattern: "é".into(),
+                text: "aé".into(),
+            }),
+            RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(1)))
+        );
+        assert_eq!(
+            execute(RuntimeTaskPlan::RegexFindText {
+                pattern: r"\d+".into(),
+                text: "item 42".into(),
+            }),
+            RuntimeValue::OptionSome(Box::new(RuntimeValue::Text("42".into())))
+        );
+        assert_eq!(
+            execute(RuntimeTaskPlan::RegexFindAll {
+                pattern: r"\d".into(),
+                text: "a1b2".into(),
+            }),
+            RuntimeValue::List(vec![
+                RuntimeValue::Text("1".into()),
+                RuntimeValue::Text("2".into()),
+            ])
+        );
+        assert_eq!(
+            execute(RuntimeTaskPlan::RegexReplace {
+                pattern: r"\d".into(),
+                replacement: "x".into(),
+                text: "a1b2".into(),
+            }),
+            RuntimeValue::Text("axb2".into())
+        );
+        assert_eq!(
+            execute(RuntimeTaskPlan::RegexReplaceAll {
+                pattern: r"\d".into(),
+                replacement: "x".into(),
+                text: "a1b2".into(),
+            }),
+            RuntimeValue::Text("axbx".into())
+        );
+    }
 
     #[derive(Default)]
     struct EchoCustomCapabilityCommandExecutor;

@@ -388,7 +388,7 @@ func __aivi_pair_mapSecond:
 func __aivi_pair_mapBoth:
   params = [transformFst: A -> C, transformSnd: B -> D, pair: (A, B)]
   body = #327 ||> (a, b) => (#325 #328, #326 #329)
-func __aivi_pair_fromPair:
+func __aivi_pair_toPair:
   params = [a: A, b: B]
   body = (#330, #331)
 func __aivi_pair_duplicate:

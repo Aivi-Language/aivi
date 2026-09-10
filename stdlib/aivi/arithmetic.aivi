@@ -7,28 +7,24 @@ use aivi.arithmetic (
     neg
 )
 
-type Int -> Int -> Int
-func intAdd = a b =>
-    add a b
+// These compiler intrinsics are the complete public surface. Keeping their
+// canonical names avoids a second wrapper vocabulary for ordinary arithmetic.
+@test
+value add_combines_integers : Task Text Bool = pure (add 20 22 == 42)
 
-type Int -> Int -> Int
-func intSub = a b =>
-    sub a b
+@test
+value sub_subtracts_integers : Task Text Bool = pure (sub 50 8 == 42)
 
-type Int -> Int -> Int
-func intMul = a b =>
-    mul a b
+@test
+value mul_multiplies_integers : Task Text Bool = pure (mul 6 7 == 42)
 
-type Int -> Int -> Int
-func intDiv = a b =>
-    div a b
+@test
+value div_divides_integers : Task Text Bool = pure (div 84 2 == 42)
 
-type Int -> Int -> Int
-func intMod = a b =>
-    mod a b
+@test
+value mod_returns_remainder : Task Text Bool = pure (mod 44 2 == 0)
 
-type Int -> Int
-func intNeg = a =>
-    neg a
+@test
+value neg_negates_integer : Task Text Bool = pure (neg 42 == -42)
 
-export (intAdd, intSub, intMul, intDiv, intMod, intNeg)
+export (add, sub, mul, div, mod, neg)

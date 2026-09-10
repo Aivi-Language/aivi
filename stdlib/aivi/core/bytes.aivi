@@ -1,13 +1,3 @@
-type BytesDecodeError =
-  | InvalidUtf8
-
-type BytesEncoding =
-  | Utf8
-  | Base64
-  | Hex
-
-type BytesTask = (Task BytesDecodeError Bytes)
-
 use aivi.core.bytes (
     empty
     length
@@ -44,4 +34,28 @@ value nonEmpty_rejects_empty : Task Text Bool = pure (nonEmpty empty == False)
 @test
 value concat_empty_list : Task Text Bool = pure (isEmpty (concat []))
 
-export (BytesDecodeError, InvalidUtf8, BytesEncoding, Utf8, Base64, Hex, BytesTask, empty, length, get, slice, append, fromText, toText, repeat, isEmpty, nonEmpty, concat)
+@test
+value bytes_empty : Task Text Bool = pure (length empty == 0)
+
+@test
+value bytes_length : Task Text Bool = pure (length (fromText "abc") == 3)
+
+@test
+value bytes_get : Task Text Bool = pure (get 1 (fromText "ABC") == Some 66)
+
+@test
+value bytes_slice : Task Text Bool = pure (toText (slice 1 3 (fromText "abcd")) == Some "bc")
+
+@test
+value bytes_append : Task Text Bool = pure (toText (append (fromText "ab") (fromText "cd")) == Some "abcd")
+
+@test
+value bytes_fromText : Task Text Bool = pure (length (fromText "é") == 2)
+
+@test
+value bytes_toText : Task Text Bool = pure (toText (fromText "hello") == Some "hello")
+
+@test
+value bytes_repeat : Task Text Bool = pure (toText (repeat 65 3) == Some "AAA")
+
+export (empty, length, get, slice, append, fromText, toText, repeat, isEmpty, nonEmpty, concat)

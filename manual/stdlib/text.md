@@ -57,15 +57,10 @@ use aivi.text (
 | `nonEmpty` | `Text -> Bool` | `True` when text is not empty |
 | `join` | `Text -> List Text -> Text` | Join text values with a separator |
 | `surround` | `Text -> Text -> Text -> Text` | Wrap text with prefix/suffix |
-| `surroundWith` | `Text -> Text -> Text -> Text` | Alias of `surround` |
 | `withDefault` | `Text -> Text -> Text` | Replace `""` with a fallback |
-| `upper` | `Text -> Text` | Wrapper around `toUpper` |
-| `lower` | `Text -> Text` | Wrapper around `toLower` |
 | `capitalize` | `Text -> Text` | Uppercase the first character and lowercase the rest |
 | `hasMinLength` | `Text -> Int -> Bool` | Check a minimum length |
 | `hasMaxLength` | `Text -> Int -> Bool` | Check a maximum length |
-| `includesText` | `Text -> Text -> Bool` | Helper over `contains` |
-| `stripBlanks` | `Text -> Text` | Wrapper around `trim` |
 | `padStart` | `Int -> Text -> Text -> Text` | Left-pad text to a target length |
 | `padEnd` | `Int -> Text -> Text -> Text` | Right-pad text to a target length |
 | `parseIntOrElse` | `Int -> Text -> Int` | Parse an int or use a fallback |

@@ -484,3 +484,9 @@ db.live     →  todoRows signal (auto-refreshes after commits)
                     ↓
                 <Label> updates automatically
 ```
+
+## Additional constructors and records
+
+`SchemaMismatch message`, `QueryFailed message`, `ConstraintViolation message`, and
+`ConnectionFailed message` preserve database failure details. `Asc` and `Desc` select ascending and
+descending order. `TableRef A` identifies a typed table by its name, connection, and change signal.

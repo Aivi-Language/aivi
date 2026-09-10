@@ -85,6 +85,61 @@ func fromOption = error opt => opt
  ||> Some item -> Ok item
  ||> None      -> Err error
 
+type Int -> Int
+func incrementForTest = n =>
+    n + 1
+
+type Text -> Text
+func prefixForTest = text =>
+    append "error: " text
+
+type Int -> Result Text Int
+func incrementOkForTest = n =>
+    Ok (n + 1)
+
+type Text -> Text
+func keepErrorForTest = text =>
+    text
+
+@test
+value result_isOk : Task Text Bool = pure (isOk (Ok 2))
+
+@test
+value result_isErr : Task Text Bool = pure (isErr (Err "bad"))
+
+@test
+value result_mapErr : Task Text Bool = pure (mapErr prefixForTest (Err "bad") == Err "error: bad")
+
+@test
+value result_withDefault : Task Text Bool = pure (withDefault 0 (Ok 2) == 2)
+
+@test
+value result_orElse : Task Text Bool = pure (orElse (Ok 3) (Err "bad") == Ok 3)
+
+@test
+value result_flatMap : Task Text Bool = pure (flatMap incrementOkForTest (Ok 2) == Ok 3)
+
+@test
+value result_flatten : Task Text Bool = pure (flatten (Ok (Ok 2)) == Ok 2)
+
+@test
+value result_toOption : Task Text Bool = pure (toOption (Ok 2) == Some 2)
+
+@test
+value result_toList : Task Text Bool = pure (toList (Ok 2) == [2])
+
+@test
+value result_map : Task Text Bool = pure (map incrementForTest (Ok 2) == Ok 3)
+
+@test
+value result_mapBoth : Task Text Bool = pure (mapBoth prefixForTest incrementForTest (Ok 2) == Ok 3)
+
+@test
+value result_fold : Task Text Bool = pure (fold keepErrorForTest incrementForTest (Ok 2) == 3)
+
+@test
+value result_fromOption : Task Text Bool = pure (fromOption "bad" (Some 2) == Ok 2)
+
 export isOk
 export isErr
 export mapErr

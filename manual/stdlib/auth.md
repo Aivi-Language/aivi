@@ -58,11 +58,8 @@ Current canonical handle members:
 `auth.pkce` launches the external browser with `xdg-open` and listens on
 `http://127.0.0.1:{redirectPort}/callback`.
 
-The current `aivi.url` module does not export a text-to-`Url` constructor, and the capability
-projection currently accepts its structural configuration directly rather than the imported
-nominal `PkceConfig`. Consequently the handle can be declared, but a fully type-safe public
-`auth.pkce` call cannot yet be written using only exported stdlib values. The member signatures
-above describe the intended boundary and are retained here as an explicit implementation gap.
+Construct `Url` fields with `aivi.url.parse`, handle its `Err` branch, then pass the completed
+`PkceConfig` to `auth.pkce` or `auth.refresh`.
 
 ---
 
@@ -194,3 +191,9 @@ func signedIn = state => state
  ||> PkceComplete _ -> True
  ||> _              -> False
 ```
+
+## Remaining public constructors and aliases
+
+`AuthTask A` is `Task PkceError A`. `NetworkError message` and `InvalidResponse message` preserve
+provider failure details. `PkceComplete token` and `PkceFailed error` are the terminal `PkceState`
+constructors.

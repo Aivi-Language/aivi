@@ -8,13 +8,8 @@ use aivi.pair (
     second
     mapFirst
     mapSecond
-    fst
-    snd
     swap
-    mapFst
-    mapSnd
     mapBoth
-    fromPair
     toPair
     duplicate
 )
@@ -32,18 +27,8 @@ use aivi.pair (
 | `mapFirst` | `(A -> C) -> (A, B) -> (C, B)` | Transform only the left item |
 | `mapSecond` | `(B -> C) -> (A, B) -> (A, C)` | Transform only the right item |
 | `mapBoth` | `(A -> C) -> (B -> D) -> (A, B) -> (C, D)` | Transform both sides with separate functions |
-| `fromPair` | `A -> B -> (A, B)` | Build a pair from two values |
 | `toPair` | `A -> B -> (A, B)` | Named pairing combinator |
 | `duplicate` | `A -> (A, A)` | Put the same value on both sides |
-
-### Compatibility aliases
-
-| Function | Type | Status |
-| --- | --- | --- |
-| `fst` | `(A, B) -> A` | Compatibility alias for `first` |
-| `snd` | `(A, B) -> B` | Compatibility alias for `second` |
-| `mapFst` | `(A -> C) -> (A, B) -> (C, B)` | Compatibility alias for `mapFirst` |
-| `mapSnd` | `(B -> C) -> (A, B) -> (A, C)` | Compatibility alias for `mapSecond` |
 
 ---
 
@@ -132,20 +117,6 @@ func normalizePair = pair =>
 
 ---
 
-## fromPair
-
-Constructs a pair from two separate values.
-
-```aivi
-use aivi.pair (fromPair)
-
-type Text -> Int -> (Text, Int)
-func makeEntry = label score =>
-    fromPair label score
-```
-
----
-
 ## toPair
 
 Constructs a pair from two separate values. Useful as a named combinator when pairing results in a pipeline.
@@ -171,10 +142,3 @@ type Int -> (Int, Int)
 func mirror = n =>
     duplicate n
 ```
-
----
-
-## Compatibility aliases
-
-`fst`, `snd`, `mapFst`, and `mapSnd` remain available for compatibility, but new code should
-prefer `first`, `second`, `mapFirst`, and `mapSecond`.

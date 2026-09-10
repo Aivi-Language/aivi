@@ -6,3 +6,4 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 cd "${REPO_ROOT}"
 cargo run --quiet -p aivi-cli --bin aivi -- manual-snippets --root manual --todo manual/aivi-snippet-todo.json "$@"
+node tooling/check-stdlib-api.mjs

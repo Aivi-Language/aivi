@@ -55,22 +55,10 @@ type Text -> Text -> Text -> Text
 func surround = prefix suffix t =>
     "{prefix}{t}{suffix}"
 
-type Text -> Text -> Text -> Text
-func surroundWith = prefix suffix t =>
-    "{prefix}{t}{suffix}"
-
 type Text -> Text -> Text
 func withDefault = fallback t => t == ""
  T|> fallback
  F|> t
-
-type Text -> Text
-func upper = t =>
-    toUpper t
-
-type Text -> Text
-func lower = t =>
-    toLower t
 
 type Text -> Text
 func capitalizeNonEmpty = t =>
@@ -91,14 +79,6 @@ func hasMinLength = t n =>
 type Text -> Int -> Bool
 func hasMaxLength = t n =>
     length t <= n
-
-type Text -> Text -> Bool
-func includesText = haystack needle =>
-    contains needle haystack
-
-type Text -> Text
-func stripBlanks = t =>
-    trim t
 
 type Int -> Text -> Text -> Text
 func padStartHelper = targetLen padChar t =>
@@ -192,12 +172,69 @@ value text_parseInt_invalid : Task Text Bool = pure (parseInt "abc" == None)
 value text_capitalize : Task Text Bool = pure (capitalize "hello" == "Hello")
 
 @test
-value text_surroundWith : Task Text Bool = pure (surroundWith "[" "]" "x" == "[x]")
-
-@test
 value text_padStart : Task Text Bool = pure (padStart 5 "0" "42" == "00042")
 
 @test
 value text_lines : Task Text Bool = pure (lines "a\nb\nc" == ["a", "b", "c"])
 
-export (length, byteLen, slice, find, contains, startsWith, endsWith, toUpper, toLower, trim, trimStart, trimEnd, replace, replaceAll, split, repeat, fromInt, parseInt, fromBool, parseBool, concat, isEmpty, nonEmpty, join, surround, surroundWith, withDefault, upper, lower, capitalize, hasMinLength, hasMaxLength, includesText, stripBlanks, padStart, padEnd, parseIntOrElse, lines, words, unlines)
+@test
+value text_byteLen_counts_utf8_bytes : Task Text Bool = pure (byteLen "é" == 2)
+
+@test
+value text_slice_uses_character_indexes : Task Text Bool = pure (slice 1 3 "aéz" == "éz")
+
+@test
+value text_find_returns_character_index : Task Text Bool = pure (find "é" "aéz" == Some 1)
+
+@test
+value text_startsWith_basic : Task Text Bool = pure (startsWith "hel" "hello")
+
+@test
+value text_endsWith_basic : Task Text Bool = pure (endsWith "llo" "hello")
+
+@test
+value text_trimStart_preserves_trailing_space : Task Text Bool = pure (trimStart "  hi  " == "hi  ")
+
+@test
+value text_trimEnd_preserves_leading_space : Task Text Bool = pure (trimEnd "  hi  " == "  hi")
+
+@test
+value text_replace_changes_first_match : Task Text Bool = pure (replace "a" "x" "aba" == "xba")
+
+@test
+value text_replaceAll_changes_every_match : Task Text Bool = pure (replaceAll "a" "x" "aba" == "xbx")
+
+@test
+value text_repeat_basic : Task Text Bool = pure (repeat 3 "ab" == "ababab")
+
+@test
+value text_fromInt_basic : Task Text Bool = pure (fromInt -42 == "-42")
+
+@test
+value text_fromBool_basic : Task Text Bool = pure (fromBool True == "True")
+
+@test
+value text_parseBool_basic : Task Text Bool = pure (parseBool "False" == Some False)
+
+@test
+value text_withDefault_replaces_empty_text : Task Text Bool = pure (withDefault "fallback" "" == "fallback")
+
+@test
+value text_hasMinLength_includes_boundary : Task Text Bool = pure (hasMinLength "abc" 3)
+
+@test
+value text_hasMaxLength_includes_boundary : Task Text Bool = pure (hasMaxLength "abc" 3)
+
+@test
+value text_padEnd : Task Text Bool = pure (padEnd 5 "0" "42" == "42000")
+
+@test
+value text_parseIntOrElse_uses_fallback : Task Text Bool = pure (parseIntOrElse 7 "nope" == 7)
+
+@test
+value text_words_splits_spaces : Task Text Bool = pure (words "a b c" == ["a", "b", "c"])
+
+@test
+value text_unlines_joins_without_trailing_newline : Task Text Bool = pure (unlines ["a", "b"] == "a\nb")
+
+export (length, byteLen, slice, find, contains, startsWith, endsWith, toUpper, toLower, trim, trimStart, trimEnd, replace, replaceAll, split, repeat, fromInt, parseInt, fromBool, parseBool, concat, isEmpty, nonEmpty, join, surround, withDefault, capitalize, hasMinLength, hasMaxLength, padStart, padEnd, parseIntOrElse, lines, words, unlines)

@@ -100,3 +100,15 @@ Current limits:
 - no lightness / hue / saturation algebra
 - no alternate color-space helpers such as HSL or OKLCH
 - no `fromHex` text parser such as `#RRGGBB`
+
+## Complete palette constants
+
+Each Adwaita palette family provides five shades, ordered from lightest to darkest:
+
+- blue: `gnomeBlue1`, `gnomeBlue2`, `gnomeBlue3`, `gnomeBlue4`, `gnomeBlue5`
+- green: `gnomeGreen1`, `gnomeGreen2`, `gnomeGreen3`, `gnomeGreen4`, `gnomeGreen5`
+- yellow: `gnomeYellow1`, `gnomeYellow2`, `gnomeYellow3`, `gnomeYellow4`, `gnomeYellow5`
+- orange: `gnomeOrange1`, `gnomeOrange2`, `gnomeOrange3`, `gnomeOrange4`, `gnomeOrange5`
+- red: `gnomeRed1`, `gnomeRed2`, `gnomeRed3`, `gnomeRed4`, `gnomeRed5`
+- purple: `gnomePurple1`, `gnomePurple2`, `gnomePurple3`, `gnomePurple4`, `gnomePurple5`
+- brown: `gnomeBrown1`, `gnomeBrown2`, `gnomeBrown3`, `gnomeBrown4`, `gnomeBrown5`

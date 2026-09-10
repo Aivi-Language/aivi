@@ -9,10 +9,7 @@ use aivi.core.fn (
     flip
     compose
     andThen
-    always
     on
-    applyTo
-    applyTwice
 )
 ```
 
@@ -25,10 +22,7 @@ use aivi.core.fn (
 | `flip` | `(A -> B -> C) -> B -> A -> C` | Reverse the first two arguments of a function |
 | `compose` | `(B -> C) -> (A -> B) -> A -> C` | Right-to-left composition |
 | `andThen` | `(A -> B) -> (B -> C) -> A -> C` | Left-to-right composition |
-| `always` | `A -> B -> A` | Constant function with a more intention-revealing name |
 | `on` | `(B -> B -> C) -> (A -> B) -> A -> A -> C` | Compare or combine after projecting both sides |
-| `applyTo` | `A -> (A -> B) -> B` | Value-first application |
-| `applyTwice` | `(A -> A) -> A -> A` | Apply the same transform two times |
 
 ---
 
@@ -119,21 +113,6 @@ func absNeg = n =>
 
 ---
 
-## always
-
-Returns a function that ignores its argument and always returns the given value. Equivalent to `const`, with the same argument order.
-
-
-```aivi
-use aivi.core.fn (always)
-
-type Text -> Int
-func constantZero = ignored =>
-    always 0 ignored
-```
-
----
-
 ## on
 
 Applies a transformation `f` to both arguments before combining them with `combine`. Useful for comparing or combining values after mapping.
@@ -151,38 +130,4 @@ func byInt = left right =>
 type Int -> Int -> Bool
 func absCompare = x y =>
     on byInt abs x y
-```
-
----
-
-## applyTo
-
-Applies a function to a value. `applyTo x f` is equivalent to `f x`. Useful for making value-first pipelines.
-
-
-```aivi
-use aivi.core.fn (applyTo)
-
-use aivi.math (abs)
-
-type Int -> Int
-func applyAbs = n =>
-    applyTo n abs
-```
-
----
-
-## applyTwice
-
-Applies a function twice to a value: `applyTwice f x` is equivalent to `f (f x)`.
-
-
-```aivi
-use aivi.core.fn (applyTwice)
-
-use aivi.math (square)
-
-type Int -> Int
-func fourthPower = n =>
-    applyTwice square n
 ```

@@ -56,8 +56,14 @@ value slowQuery : Task LogError Unit =
 
 - `LogSource` - nominal handle annotation for `@source log`.
 - `LogLevel` - typed severity values.
-- `LogContext` - `Map Text Text`.
+- `LogContext` - `List (Text, Text)`, matching the context accepted by `logger.emitContext`.
 - `LogEntry` - `{ level, message, context }`.
 - `LogError` - current log command failure surface.
 - `LogSink` - `LogEntry -> Task LogError Unit`.
 - `level*`, `levelToText`, and `kv` - pure helper values.
+
+## Levels and constants
+
+The `LogLevel` constructors are `Debug`, `Info`, `Warn`, `Error`, and `Fatal`.
+The corresponding uppercase text constants are `levelDebug`, `levelInfo`, `levelWarn`,
+`levelError`, and `levelFatal`.

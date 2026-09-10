@@ -163,10 +163,8 @@ domain DateDelta over Int
 
 ## Formatting
 
-`pad2 : Int -> Text` and `pad4 : Int -> Text` are also exported. They left-pad decimal
-text with zeroes to a minimum width; they do not validate calendar values or truncate
-longer input. Formatting likewise assumes valid date/time components and uses the supplied
-zone text without timezone conversion.
+Formatting assumes valid date/time components and uses the supplied zone text without timezone
+conversion.
 
 | Function | Type | Description |
 | --- | --- | --- |
@@ -242,3 +240,9 @@ value utcMeeting = toZoned meeting "+00:00"
   following the same pattern as `aivi.duration.Duration`.
 - Month and day values are not range-checked at the type level. `Date 2024 13 32` is syntactically
   valid but semantically meaningless.
+
+## Additional constructors
+
+`DateTime date time` combines a `Date` and `TimeOfDay`. `ZonedDateTime dateTime zone` attaches a textual
+zone to a date-time. The `DayOfWeek` constructors are `Monday`, `Tuesday`, `Wednesday`, `Thursday`,
+`Friday`, `Saturday`, and `Sunday`.

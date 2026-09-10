@@ -498,6 +498,7 @@ enum IntrinsicCallPlan {
     BytesAppend,
     BytesRepeat,
     BytesSlice,
+    MatrixIndices,
     PathJoin,
     BitBinary(BitBinaryOp),
     BitNot,
