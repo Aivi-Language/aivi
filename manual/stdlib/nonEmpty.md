@@ -19,11 +19,22 @@ use aivi.nonEmpty (
 )
 ```
 
+## Type class operations
+
+`NonEmptyList` implements `Functor`, `Apply`, `Applicative`, `Chain`, `Monad`, and `Foldable`.
+Use ambient `map` and `reduce` for generic code; `mapNel` remains the explicitly named mapping
+helper. `pure` creates a singleton. `apply` applies each function to every input, in function-major
+order. `chain` concatenates non-empty results in input order, and `join` flattens one layer.
+`Semigroup (NonEmptyList A)` supplies `append`, equivalent to `appendNel`.
+
+There is no `Monoid`, `Default`, or `Filterable` instance: none can promise to retain at least one
+item for every input allowed by its class signature.
+
 ## At a glance
 
 | Export | Type | Use it for |
 | --- | --- | --- |
-| `NonEmptyList A` | `MkNEL A (List A)` | The non-empty list type itself |
+| `NonEmptyList A` | Domain over `List A` | The non-empty list type itself |
 | `singleton` | `A -> NonEmptyList A` | Create a one-item non-empty list |
 | `cons` | `A -> NonEmptyList A -> NonEmptyList A` | Add an item at the front |
 | `head` | `NonEmptyList A -> A` | Read the first item safely |
@@ -46,12 +57,9 @@ table above also lists the extra public helpers that are useful in real code, su
 
 The primary non-empty list type used throughout the standard library, including as the error carrier in `aivi.validation`.
 
-```aivi
-type NonEmptyList A =
-  MkNEL A (List A)
-```
-
-Construct values using `singleton`, `cons`, or `fromList`.
+`NonEmptyList A` is a domain over `List A`; its representation is not a public `MkNEL`
+constructor. Construct values using `singleton`, `cons`, `fromHeadTail`, or `fromList`, and
+read them through the exported accessors.
 
 ---
 

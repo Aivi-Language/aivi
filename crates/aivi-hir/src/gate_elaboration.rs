@@ -11,9 +11,9 @@ use crate::{
     TermReference, TermResolution, TextFragment, TextSegment, UnaryOperator,
     domain_operator_elaboration::select_domain_binary_operator,
     general_expr_elaboration::{
-        EqualityEvidenceCatalog, OrderingRuntimeExprInput, build_equality_runtime_expr,
-        build_ordering_runtime_expr, extend_gate_env_with_equality_evidence,
-        lower_class_member_callee_with_evidence, lower_name_expr_with_equality_evidence,
+        ClassEvidenceCatalog, OrderingRuntimeExprInput, build_equality_runtime_expr,
+        build_ordering_runtime_expr, extend_gate_env_with_class_evidence,
+        lower_class_member_callee_with_evidence, lower_name_expr_with_class_evidence,
     },
     typecheck::resolve_class_member_dispatch,
     validate::{
@@ -412,7 +412,7 @@ impl GateRuntimeExpr {
 pub fn elaborate_gates(module: &Module) -> GateElaborationReport {
     let module = crate::typecheck::elaborate_default_record_fields(module);
     let module = &module;
-    let equality_evidence = EqualityEvidenceCatalog::new(module);
+    let class_evidence = ClassEvidenceCatalog::new(module);
     let items = module
         .items()
         .iter()
@@ -433,7 +433,7 @@ pub fn elaborate_gates(module: &Module) -> GateElaborationReport {
             ),
             Item::Function(item) => {
                 let mut env = gate_env_for_function(&item, &mut typing);
-                extend_gate_env_with_equality_evidence(&mut env, owner, &equality_evidence);
+                extend_gate_env_with_class_evidence(&mut env, owner, &class_evidence);
                 collect_gate_stages(module, owner, item.body, &env, &mut typing, &mut stages);
             }
             Item::Signal(item) => {
@@ -450,7 +450,7 @@ pub fn elaborate_gates(module: &Module) -> GateElaborationReport {
             }
             Item::Instance(item) => {
                 let mut env = GateExprEnv::default();
-                extend_gate_env_with_equality_evidence(&mut env, owner, &equality_evidence);
+                extend_gate_env_with_class_evidence(&mut env, owner, &class_evidence);
                 for member in item.members {
                     collect_gate_stages(module, owner, member.body, &env, &mut typing, &mut stages);
                 }
@@ -775,7 +775,7 @@ fn lower_function_pipe_body_runtime_expr(
     let plan = typing
         .match_pipe_function_signature(expr_id, env, ambient, None)
         .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span: expr.span })?;
-    let equality_evidence = EqualityEvidenceCatalog::new(module);
+    let class_evidence = ClassEvidenceCatalog::new(module);
     let context = PipeFunctionLoweringContext {
         env,
         ambient,
@@ -785,7 +785,7 @@ fn lower_function_pipe_body_runtime_expr(
         module,
         expr.span,
         plan,
-        &equality_evidence,
+        &class_evidence,
         typing,
         &context,
     )
@@ -813,7 +813,7 @@ pub(crate) fn lower_gate_pipe_function_apply_runtime_expr_allow_signal_reads(
             expected_result,
         )
         .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
-    let equality_evidence = EqualityEvidenceCatalog::new(module);
+    let class_evidence = ClassEvidenceCatalog::new(module);
     let context = PipeFunctionLoweringContext {
         env,
         ambient,
@@ -823,7 +823,7 @@ pub(crate) fn lower_gate_pipe_function_apply_runtime_expr_allow_signal_reads(
         module,
         span,
         plan,
-        &equality_evidence,
+        &class_evidence,
         typing,
         &context,
     )
@@ -833,7 +833,7 @@ fn lower_pipe_function_runtime_expr_from_plan(
     module: &Module,
     span: SourceSpan,
     plan: PipeFunctionSignatureMatch,
-    equality_evidence: &EqualityEvidenceCatalog,
+    class_evidence: &ClassEvidenceCatalog,
     typing: &mut GateTypeContext<'_>,
     context: &PipeFunctionLoweringContext<'_>,
 ) -> Result<GateRuntimeExpr, GateElaborationBlocker> {
@@ -914,7 +914,7 @@ fn lower_pipe_function_runtime_expr_from_plan(
         arguments.push(lower_pipe_argument_runtime_expr(
             module,
             *argument,
-            equality_evidence,
+            class_evidence,
             expected_parameter,
             *reads_signal_payload,
             typing,
@@ -933,7 +933,7 @@ fn lower_pipe_function_runtime_expr_from_plan(
 fn lower_pipe_argument_runtime_expr(
     module: &Module,
     expr_id: ExprId,
-    equality_evidence: &EqualityEvidenceCatalog,
+    class_evidence: &ClassEvidenceCatalog,
     expected: &GateType,
     reads_signal_payload: bool,
     typing: &mut GateTypeContext<'_>,
@@ -961,10 +961,10 @@ fn lower_pipe_argument_runtime_expr(
         }
     }
     if let ExprKind::Name(reference) = &module.exprs()[expr_id].kind
-        && let Some(lowered) = lower_name_expr_with_equality_evidence(
+        && let Some(lowered) = lower_name_expr_with_class_evidence(
             module,
             typing,
-            equality_evidence,
+            class_evidence,
             module.exprs()[expr_id].span,
             reference,
             env,
@@ -1120,7 +1120,7 @@ fn visible_callable_item_type(
 fn visible_callee_type_for_apply(
     module: &Module,
     typing: &mut GateTypeContext<'_>,
-    equality_evidence: &EqualityEvidenceCatalog,
+    class_evidence: &ClassEvidenceCatalog,
     callee: ExprId,
     env: &GateExprEnv,
     ambient: Option<&GateType>,
@@ -1147,7 +1147,7 @@ fn visible_callee_type_for_apply(
     if let ExprKind::Name(reference) = &module.exprs()[callee].kind
         && let crate::ResolutionState::Resolved(TermResolution::Item(item_id)) =
             reference.resolution.as_ref()
-        && equality_evidence.has_requirements_for(*item_id)
+        && class_evidence.has_requirements_for(*item_id)
     {
         return visible_callable_item_type(module, typing, *item_id);
     }
@@ -1157,14 +1157,14 @@ fn visible_callee_type_for_apply(
 fn apply_argument_expectations(
     module: &Module,
     typing: &mut GateTypeContext<'_>,
-    equality_evidence: &EqualityEvidenceCatalog,
+    class_evidence: &ClassEvidenceCatalog,
     callee: ExprId,
     arity: usize,
     env: &GateExprEnv,
     ambient: Option<&GateType>,
 ) -> (Option<GateType>, Vec<Option<GateType>>) {
     let Some(callee_ty) =
-        visible_callee_type_for_apply(module, typing, equality_evidence, callee, env, ambient)
+        visible_callee_type_for_apply(module, typing, class_evidence, callee, env, ambient)
     else {
         return (None, vec![None; arity]);
     };
@@ -1211,7 +1211,7 @@ fn lower_gate_runtime_expr_with_purity(
     typing: &mut GateTypeContext<'_>,
     purity: GateRuntimePurity,
 ) -> Result<GateRuntimeExpr, GateElaborationBlocker> {
-    let equality_evidence = EqualityEvidenceCatalog::new(module);
+    let class_evidence = ClassEvidenceCatalog::new(module);
     let mut work: Vec<LowerTask> = vec![LowerTask::Eval {
         expr_id,
         expected: None,
@@ -1244,10 +1244,10 @@ fn lower_gate_runtime_expr_with_purity(
                     // --- Leaf nodes: push result directly ---
                     ExprKind::Name(reference) => {
                         let evidence_ty = expected.as_ref().unwrap_or(&ty);
-                        if let Some(lowered) = lower_name_expr_with_equality_evidence(
+                        if let Some(lowered) = lower_name_expr_with_class_evidence(
                             module,
                             typing,
-                            &equality_evidence,
+                            &class_evidence,
                             expr.span,
                             &reference,
                             env,
@@ -1526,7 +1526,7 @@ fn lower_gate_runtime_expr_with_purity(
                         let (callee_expected, argument_expected) = apply_argument_expectations(
                             module,
                             typing,
-                            &equality_evidence,
+                            &class_evidence,
                             callee,
                             n_args,
                             env,

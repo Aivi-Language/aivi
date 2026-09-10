@@ -18,6 +18,11 @@ pub enum Type {
         parameter: HirTypeParameterId,
         name: Box<str>,
     },
+    TypeApplication {
+        parameter: HirTypeParameterId,
+        name: Box<str>,
+        arguments: Vec<Type>,
+    },
     Tuple(Vec<Type>),
     Record(Vec<RecordField>),
     Arrow {
@@ -77,6 +82,11 @@ impl Type {
         #[allow(clippy::enum_variant_names)]
         enum Task {
             Visit(HirGateType),
+            BuildTypeApplication {
+                parameter: HirTypeParameterId,
+                name: Box<str>,
+                arguments: usize,
+            },
             BuildTuple(usize),
             BuildRecord(Vec<Box<str>>),
             BuildArrow,
@@ -118,6 +128,20 @@ impl Type {
         while let Some(task) = tasks.pop() {
             match task {
                 Task::Visit(ty) => match ty {
+                    HirGateType::TypeApplication {
+                        parameter,
+                        name,
+                        arguments,
+                    } => {
+                        tasks.push(Task::BuildTypeApplication {
+                            parameter,
+                            name: name.into(),
+                            arguments: arguments.len(),
+                        });
+                        for argument in arguments.into_iter().rev() {
+                            tasks.push(Task::Visit(argument));
+                        }
+                    }
                     HirGateType::Primitive(builtin) => values.push(Self::Primitive(builtin)),
                     HirGateType::TypeParameter { parameter, name } => {
                         values.push(Self::TypeParameter {
@@ -265,6 +289,18 @@ impl Type {
                         }
                     },
                 },
+                Task::BuildTypeApplication {
+                    parameter,
+                    name,
+                    arguments,
+                } => {
+                    let arguments = drain_tail(&mut values, arguments);
+                    values.push(Self::TypeApplication {
+                        parameter,
+                        name,
+                        arguments,
+                    });
+                }
                 Task::BuildTuple(len) => {
                     let tuple = Self::Tuple(drain_tail(&mut values, len));
                     values.push(tuple);
@@ -417,6 +453,11 @@ impl Type {
         #[allow(clippy::enum_variant_names)]
         enum Task<'a> {
             Visit(&'a ImportValueType, Rc<[Type]>),
+            BuildTypeApplication {
+                parameter: HirTypeParameterId,
+                name: Box<str>,
+                arguments: usize,
+            },
             BuildTuple(usize),
             BuildRecord(Vec<Box<str>>),
             BuildArrow,
@@ -510,15 +551,27 @@ impl Type {
                         tasks.push(Task::Visit(value, substitutions.clone()));
                         tasks.push(Task::Visit(error, substitutions.clone()));
                     }
-                    ImportValueType::TypeVariable { index, .. } => {
+                    ImportValueType::TypeApplication {
+                        index,
+                        name,
+                        arguments,
+                    } => {
+                        tasks.push(Task::BuildTypeApplication {
+                            parameter: HirTypeParameterId::from_raw(u32::MAX - *index as u32),
+                            name: name.clone().into(),
+                            arguments: arguments.len(),
+                        });
+                        for argument in arguments.iter().rev() {
+                            tasks.push(Task::Visit(argument, substitutions.clone()));
+                        }
+                    }
+                    ImportValueType::TypeVariable { index, name } => {
                         if let Some(ty) = substitutions.get(*index).cloned() {
                             values.push(ty);
                         } else {
-                            values.push(Self::OpaqueImport {
-                                import: aivi_hir::ImportId::from_raw(u32::MAX),
-                                name: "".into(),
-                                arguments: Vec::new(),
-                                definition: None,
+                            values.push(Self::TypeParameter {
+                                parameter: HirTypeParameterId::from_raw(u32::MAX - *index as u32),
+                                name: name.clone().into(),
                             });
                         }
                     }
@@ -558,6 +611,18 @@ impl Type {
                         }
                     },
                 },
+                Task::BuildTypeApplication {
+                    parameter,
+                    name,
+                    arguments,
+                } => {
+                    let arguments = drain_tail(&mut values, arguments);
+                    values.push(Self::TypeApplication {
+                        parameter,
+                        name,
+                        arguments,
+                    });
+                }
                 Task::BuildTuple(len) => {
                     let tuple = Self::Tuple(drain_tail(&mut values, len));
                     values.push(tuple);
@@ -714,6 +779,15 @@ impl fmt::Display for Type {
         match self {
             Type::Primitive(builtin) => write!(f, "{}", builtin_type_name(*builtin)),
             Type::TypeParameter { name, .. } => write!(f, "{name}"),
+            Type::TypeApplication {
+                name, arguments, ..
+            } => {
+                write!(f, "{name}")?;
+                for argument in arguments {
+                    write!(f, " ({argument})")?;
+                }
+                Ok(())
+            }
             Type::Tuple(elements) => {
                 write!(f, "(")?;
                 for (index, element) in elements.iter().enumerate() {

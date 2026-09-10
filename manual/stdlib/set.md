@@ -4,6 +4,14 @@
 
 The public representation is `{ items: List A }`, but direct record construction can contain duplicates. `singleton`, `insert`, and `fromList` preserve uniqueness and insertion order.
 
+## Type class operations
+
+This module's `Set` implements `Foldable`: ambient `reduce` visits each member once in insertion
+order. `Default (Set A)` creates an empty set. These operations need no equality comparisons.
+
+An unrestricted `Functor Set` would need equality evidence for the mapped element type and could
+merge distinct members. Use operations that make that change of membership explicit.
+
 ## API
 
 | Export | Type | Behavior |

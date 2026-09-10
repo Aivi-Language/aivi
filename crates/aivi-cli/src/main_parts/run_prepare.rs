@@ -1834,6 +1834,18 @@ fn import_value_type_to_gate_type(ty: &ImportValueType) -> Option<GateType> {
             error: Box::new(import_value_type_to_gate_type(error)?),
             value: Box::new(import_value_type_to_gate_type(value)?),
         },
+        ImportValueType::TypeApplication {
+            index,
+            name,
+            arguments,
+        } => GateType::TypeApplication {
+            parameter: aivi_hir::TypeParameterId::from_raw(u32::MAX - *index as u32),
+            name: name.clone(),
+            arguments: arguments
+                .iter()
+                .map(import_value_type_to_gate_type)
+                .collect::<Option<Vec<_>>>()?,
+        },
         ImportValueType::TypeVariable { index, name } => GateType::TypeParameter {
             parameter: aivi_hir::TypeParameterId::from_raw(u32::MAX - *index as u32),
             name: name.clone(),

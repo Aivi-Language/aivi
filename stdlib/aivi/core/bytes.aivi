@@ -59,3 +59,15 @@ value bytes_toText : Task Text Bool = pure (toText (fromText "hello") == Some "h
 value bytes_repeat : Task Text Bool = pure (toText (repeat 65 3) == Some "AAA")
 
 export (empty, length, get, slice, append, fromText, toText, repeat, isEmpty, nonEmpty, concat)
+
+instance Semigroup Bytes = {
+    append = append
+}
+
+instance Monoid Bytes = {
+    empty = empty
+}
+
+instance Default Bytes = {
+    default = empty
+}

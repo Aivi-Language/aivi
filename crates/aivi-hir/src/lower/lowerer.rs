@@ -8868,47 +8868,6 @@ impl<'a> Lowerer<'a> {
             }
             LookupResult::Missing => {}
         }
-        // Hoisted names (from `hoist` declarations) are consulted after explicit
-        // `use` imports. Unique hoisted names keep their concrete meaning, but
-        // ambiguous hoisted names defer to class-member lookup first so the
-        // generic algebraic surface remains available when several concrete
-        // helpers share the same spelling.
-        let mut ambiguous_hoisted = None;
-        match lookup_item(&namespaces.hoisted_term_imports, name) {
-            LookupResult::Unique(import) => {
-                let import_binding = &self.module.imports()[import];
-                reference.resolution = match &import_binding.metadata {
-                    ImportBindingMetadata::BuiltinTerm(builtin) => {
-                        ResolutionState::Resolved(TermResolution::Builtin(*builtin))
-                    }
-                    ImportBindingMetadata::IntrinsicValue { value, .. } => {
-                        ResolutionState::Resolved(TermResolution::IntrinsicValue(*value))
-                    }
-                    ImportBindingMetadata::AmbientValue { name } => {
-                        match lookup_item(&namespaces.ambient_term_items, name) {
-                            LookupResult::Unique(item) => {
-                                ResolutionState::Resolved(TermResolution::Item(item))
-                            }
-                            _ => ResolutionState::Resolved(TermResolution::Import(import)),
-                        }
-                    }
-                    _ => ResolutionState::Resolved(TermResolution::Import(import)),
-                };
-                return;
-            }
-            LookupResult::Ambiguous => {
-                ambiguous_hoisted = namespaces.hoisted_term_imports.get(name).and_then(|candidates| {
-                    crate::NonEmpty::from_vec(
-                        candidates
-                            .iter()
-                            .map(|site| site.value)
-                            .collect::<Vec<ImportId>>(),
-                    )
-                    .ok()
-                });
-            }
-            LookupResult::Missing => {}
-        }
         match lookup_item(&namespaces.class_terms, name) {
             LookupResult::Unique(resolution) => {
                 reference.resolution =
@@ -8952,6 +8911,48 @@ impl<'a> Lowerer<'a> {
                     );
                     return;
                 }
+            }
+            LookupResult::Missing => {}
+        }
+        // A hoisted carrier helper must not hide a class operation. Explicit
+        // imports above still select a concrete implementation intentionally.
+        let mut ambiguous_hoisted = None;
+        match lookup_item(&namespaces.hoisted_term_imports, name) {
+            LookupResult::Unique(import) => {
+                let import_binding = &self.module.imports()[import];
+                reference.resolution = match &import_binding.metadata {
+                    ImportBindingMetadata::BuiltinTerm(builtin) => {
+                        ResolutionState::Resolved(TermResolution::Builtin(*builtin))
+                    }
+                    ImportBindingMetadata::IntrinsicValue { value, .. } => {
+                        ResolutionState::Resolved(TermResolution::IntrinsicValue(*value))
+                    }
+                    ImportBindingMetadata::AmbientValue { name } => {
+                        match lookup_item(&namespaces.ambient_term_items, name) {
+                            LookupResult::Unique(item) => {
+                                ResolutionState::Resolved(TermResolution::Item(item))
+                            }
+                            _ => ResolutionState::Resolved(TermResolution::Import(import)),
+                        }
+                    }
+                    _ => ResolutionState::Resolved(TermResolution::Import(import)),
+                };
+                return;
+            }
+            LookupResult::Ambiguous => {
+                ambiguous_hoisted =
+                    namespaces
+                        .hoisted_term_imports
+                        .get(name)
+                        .and_then(|candidates| {
+                            crate::NonEmpty::from_vec(
+                                candidates
+                                    .iter()
+                                    .map(|site| site.value)
+                                    .collect::<Vec<ImportId>>(),
+                            )
+                            .ok()
+                        });
             }
             LookupResult::Missing => {}
         }

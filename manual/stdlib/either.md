@@ -2,6 +2,16 @@
 
 `Either L R` is a disjoint union with `Left L` and `Right R` branches. Use it when both branches are meaningful alternatives. For ordinary success and failure, prefer `Result E A`.
 
+## Type class operations
+
+`Either E` implements `Functor`, `Apply`, `Applicative`, `Chain`, `Monad`, and `Foldable`. Ambient
+`map` is equivalent to `mapRight`; `pure` constructs `Right`; `chain` and `join` short-circuit on
+`Left`. `apply` checks the function's `Either` first, preserving its `Left` when both inputs fail.
+`reduce` returns the seed for `Left` and visits the payload once for `Right`.
+
+`Bifunctor Either` supplies `bimap`, equivalent to `mapBoth`. Import this module's type or helpers
+to make its instances available.
+
 ## API
 
 | Export | Type | Behavior |

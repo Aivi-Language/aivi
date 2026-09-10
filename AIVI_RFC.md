@@ -723,7 +723,7 @@ Set [1, 2, 4]
 
 ## 7. Core abstraction model
 
-Core typeclasses are compiler-owned ambient prelude items injected into every checked module; local declarations may shadow them.
+Core typeclasses are compiler-owned ambient prelude items injected into every checked module; local declarations may shadow them. Explicit imports also take precedence over ambient class members. Class members take precedence over hoisted carrier-specific helpers, so hoisting a collection module does not specialize a generic operation such as `map` or `filterMap`.
 
 Parser-level surface syntax includes the following forms. Low-kinded examples such as `Container`, `same`, and same-module `Eq` instances are checker-backed today, and same-module user-authored higher-kinded class declarations and instance heads such as `instance Applicative Option` are now checked through the current HIR/typechecking/core-lowering slice:
 

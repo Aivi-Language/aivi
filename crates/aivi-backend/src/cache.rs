@@ -254,7 +254,7 @@ const JIT_KERNEL_CACHE_MAGIC_V2: &[u8; 5] = b"AIVJ\x02";
 
 const COMPILER_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Bump when backend machine-code semantics change without a Cargo package-version change.
-const CODEGEN_NAMESPACE_REVISION: &str = "6";
+const CODEGEN_NAMESPACE_REVISION: &str = "7";
 const SHARED_CODEGEN_SETTINGS: &[(&str, &str)] =
     &[("enable_llvm_abi_extensions", "1"), ("opt_level", "speed")];
 

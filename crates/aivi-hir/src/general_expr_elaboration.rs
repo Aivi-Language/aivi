@@ -24,9 +24,9 @@ use crate::{
         resolve_ordering_dispatch, signal_payload_type,
     },
     validate::{
-        GateEqualityEvidence, GateExprEnv, GateIssue, GateProjectionStep, GateRecordField,
-        GateType, GateTypeContext, PolyTypeBindings, ValidateStageSubject,
-        extend_pipe_env_with_stage_memos, pipe_stage_expr_env,
+        GateClassEvidence, GateExprEnv, GateIssue, GateProjectionStep, GateRecordField, GateType,
+        GateTypeContext, PolyTypeBindings, ValidateStageSubject, extend_pipe_env_with_stage_memos,
+        pipe_stage_expr_env,
     },
 };
 
@@ -137,7 +137,7 @@ pub struct GeneralExprParameter {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GeneralExprParameterKind {
     Ordinary,
-    EqualityEvidence {
+    ClassEvidence {
         subject: GateType,
         member: ClassMemberResolution,
         priority: u8,
@@ -549,6 +549,7 @@ fn substitute_gate_type(
     substitutions: &HashMap<TypeParameterId, GateType>,
 ) -> GateType {
     match ty {
+        GateType::TypeApplication { .. } => ty.substitute_type_parameters(substitutions),
         GateType::Primitive(_) => ty.clone(),
         GateType::TypeParameter { parameter, .. } => substitutions
             .get(parameter)
@@ -648,6 +649,59 @@ fn collect_type_param_subs_inner(
     subs: &mut HashMap<TypeParameterId, GateType>,
 ) {
     match (template, actual) {
+        (
+            GateType::TypeApplication {
+                parameter,
+                arguments,
+                ..
+            },
+            _,
+        ) => {
+            if let Some((_, actual_arguments)) = actual.constructor_view()
+                && actual_arguments.len() >= arguments.len()
+            {
+                subs.entry(*parameter).or_insert_with(|| actual.clone());
+                for (t, a) in arguments
+                    .iter()
+                    .zip(&actual_arguments[actual_arguments.len() - arguments.len()..])
+                {
+                    collect_type_param_subs_inner(t, a, subs);
+                }
+            }
+        }
+        (
+            GateType::Result {
+                error: te,
+                value: tv,
+            },
+            GateType::Result {
+                error: ae,
+                value: av,
+            },
+        )
+        | (
+            GateType::Validation {
+                error: te,
+                value: tv,
+            },
+            GateType::Validation {
+                error: ae,
+                value: av,
+            },
+        )
+        | (
+            GateType::Task {
+                error: te,
+                value: tv,
+            },
+            GateType::Task {
+                error: ae,
+                value: av,
+            },
+        ) => {
+            collect_type_param_subs_inner(te, ae, subs);
+            collect_type_param_subs_inner(tv, av, subs);
+        }
         (GateType::TypeParameter { parameter, .. }, _) => {
             subs.entry(*parameter).or_insert_with(|| actual.clone());
         }
@@ -674,6 +728,40 @@ fn collect_type_param_subs_inner(
             collect_type_param_subs_inner(tk, ak, subs);
             collect_type_param_subs_inner(tv, av, subs);
         }
+        (GateType::Record(template), GateType::Record(actual)) => {
+            for field in template {
+                if let Some(actual) = actual.iter().find(|candidate| candidate.name == field.name) {
+                    collect_type_param_subs_inner(&field.ty, &actual.ty, subs);
+                }
+            }
+        }
+        (
+            GateType::OpaqueItem {
+                arguments: template,
+                ..
+            }
+            | GateType::OpaqueImport {
+                arguments: template,
+                ..
+            }
+            | GateType::Domain {
+                arguments: template,
+                ..
+            },
+            GateType::OpaqueItem {
+                arguments: actual, ..
+            }
+            | GateType::OpaqueImport {
+                arguments: actual, ..
+            }
+            | GateType::Domain {
+                arguments: actual, ..
+            },
+        ) => {
+            for (template, actual) in template.iter().zip(actual) {
+                collect_type_param_subs_inner(template, actual, subs);
+            }
+        }
         (GateType::Tuple(te), GateType::Tuple(ae)) => {
             for (t, a) in te.iter().zip(ae.iter()) {
                 collect_type_param_subs_inner(t, a, subs);
@@ -684,7 +772,7 @@ fn collect_type_param_subs_inner(
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct EqualityEvidenceRequirement {
+struct ClassEvidenceRequirement {
     binding: BindingId,
     span: SourceSpan,
     name: Box<str>,
@@ -695,11 +783,11 @@ struct EqualityEvidenceRequirement {
 }
 
 #[derive(Clone, Debug, Default)]
-pub(crate) struct EqualityEvidenceCatalog {
-    requirements: BTreeMap<ItemId, Vec<EqualityEvidenceRequirement>>,
+pub(crate) struct ClassEvidenceCatalog {
+    requirements: BTreeMap<ItemId, Vec<ClassEvidenceRequirement>>,
 }
 
-impl EqualityEvidenceCatalog {
+impl ClassEvidenceCatalog {
     pub(crate) fn new(module: &Module) -> Self {
         let mut typing = GateTypeContext::new(module);
         let mut next_binding_raw = module
@@ -719,7 +807,7 @@ impl EqualityEvidenceCatalog {
                 }
                 _ => continue,
             };
-            let owner_requirements = collect_owner_equality_requirements(
+            let owner_requirements = collect_owner_class_requirements(
                 module,
                 &mut typing,
                 constraints,
@@ -733,7 +821,7 @@ impl EqualityEvidenceCatalog {
         Self { requirements }
     }
 
-    fn requirements_for(&self, owner: ItemId) -> &[EqualityEvidenceRequirement] {
+    fn requirements_for(&self, owner: ItemId) -> &[ClassEvidenceRequirement] {
         self.requirements
             .get(&owner)
             .map(Vec::as_slice)
@@ -756,7 +844,7 @@ pub(crate) fn export_function_evidence(
         .enumerate()
         .map(|(index, parameter)| (*parameter, index))
         .collect();
-    collect_owner_equality_requirements(
+    collect_owner_class_requirements(
         module,
         &mut typing,
         &function.context,
@@ -783,17 +871,32 @@ pub(crate) fn export_function_evidence(
     .collect()
 }
 
-fn collect_owner_equality_requirements(
+fn collect_owner_class_requirements(
     module: &Module,
     typing: &mut GateTypeContext<'_>,
     constraints: &[crate::TypeId],
     span: SourceSpan,
     next_binding_raw: &mut u32,
-) -> Vec<EqualityEvidenceRequirement> {
-    let mut requirements: Vec<EqualityEvidenceRequirement> = Vec::new();
+) -> Vec<ClassEvidenceRequirement> {
+    let mut requirements: Vec<ClassEvidenceRequirement> = Vec::new();
     for binding in expanded_class_constraint_bindings(module, typing, constraints) {
-        let crate::validate::TypeBinding::Type(subject) = binding.subject.clone() else {
-            continue;
+        let subject = match binding.subject.clone() {
+            crate::validate::TypeBinding::Type(subject) => subject,
+            crate::validate::TypeBinding::Constructor(constructor) => {
+                let crate::validate::TypeConstructorHead::Parameter { parameter, .. } =
+                    constructor.head()
+                else {
+                    continue;
+                };
+                GateType::TypeParameter {
+                    parameter,
+                    name: module
+                        .type_parameters()
+                        .get(parameter)
+                        .map(|p| p.name.text().to_owned())
+                        .unwrap_or_else(|| format!("F{}", parameter.as_raw())),
+                }
+            }
         };
         for (member, priority) in supported_evidence_members(module, binding.class_item) {
             if requirements
@@ -809,10 +912,13 @@ fn collect_owner_equality_requirements(
             *next_binding_raw = (*next_binding_raw).saturating_add(1);
             let prefix = if is_ordering_member(module, member) {
                 "__aivi_ord_evidence"
-            } else {
+            } else if matches!(&module.items()[member.class], Item::Class(class) if matches!(class.name.text(), "Eq" | "Setoid"))
+            {
                 "__aivi_eq_evidence"
+            } else {
+                "__aivi_class_evidence"
             };
-            requirements.push(EqualityEvidenceRequirement {
+            requirements.push(ClassEvidenceRequirement {
                 binding: binding_id,
                 span,
                 name: format!("{prefix}{}", binding_id.as_raw()).into_boxed_str(),
@@ -875,7 +981,22 @@ fn supported_evidence_members(
         "Eq" => &[("==", 0)],
         "Setoid" => &[("equals", 1)],
         "Ord" => &[("compare", 0)],
-        _ => return Vec::new(),
+        _ => {
+            return class_item
+                .members
+                .iter()
+                .enumerate()
+                .map(|(member_index, _)| {
+                    (
+                        ClassMemberResolution {
+                            class: class_item_id,
+                            member_index,
+                        },
+                        0,
+                    )
+                })
+                .collect();
+        }
     };
     members
         .iter()
@@ -934,13 +1055,14 @@ fn instantiate_class_member_type(
     let Item::Class(class_item) = &module.items()[member.class] else {
         return None;
     };
+    let resolution = member;
     let member = class_item.members.get(member.member_index)?;
     let mut substitutions = HashMap::new();
     substitutions.insert(
         *class_item.parameters.first(),
-        crate::validate::TypeBinding::Type(subject.clone()),
+        typing.class_member_subject_binding(resolution, subject)?,
     );
-    typing.instantiate_poly_hir_type(member.annotation, &substitutions)
+    typing.instantiate_poly_hir_type_partially(member.annotation, &substitutions)
 }
 
 fn arrow_type(parameters: Vec<GateType>, result: GateType) -> GateType {
@@ -1018,8 +1140,8 @@ fn in_scope_equality_evidence<'a>(
     env: &'a GateExprEnv,
     module: &Module,
     subject: &GateType,
-) -> Option<&'a GateEqualityEvidence> {
-    env.equality_evidence
+) -> Option<&'a GateClassEvidence> {
+    env.class_evidence
         .iter()
         .filter(|candidate| {
             candidate.subject == *subject && is_equality_member(module, candidate.member)
@@ -1031,8 +1153,8 @@ fn in_scope_ordering_evidence<'a>(
     env: &'a GateExprEnv,
     module: &Module,
     subject: &GateType,
-) -> Option<&'a GateEqualityEvidence> {
-    env.equality_evidence
+) -> Option<&'a GateClassEvidence> {
+    env.class_evidence
         .iter()
         .filter(|candidate| {
             candidate.subject == *subject && is_ordering_member(module, candidate.member)
@@ -1044,33 +1166,44 @@ fn in_scope_class_evidence_by_member<'a>(
     env: &'a GateExprEnv,
     member: ClassMemberResolution,
     subject: &GateType,
-) -> Option<&'a GateEqualityEvidence> {
+) -> Option<&'a GateClassEvidence> {
     if let Some(exact) = env
-        .equality_evidence
+        .class_evidence
         .iter()
         .find(|candidate| candidate.member == member && candidate.subject == *subject)
     {
         return Some(exact);
     }
     let mut matches = env
-        .equality_evidence
+        .class_evidence
         .iter()
         .filter(|candidate| candidate.member == member && candidate.subject.same_shape(subject));
     let first = matches.next()?;
     matches.next().is_none().then_some(first)
 }
 
-fn lower_equality_evidence_arguments(
+fn lower_class_evidence_arguments(
     module: &Module,
     env: &GateExprEnv,
-    requirements: &[EqualityEvidenceRequirement],
+    requirements: &[ClassEvidenceRequirement],
     substitutions: &HashMap<TypeParameterId, GateType>,
     span: SourceSpan,
 ) -> Option<Vec<GateRuntimeExpr>> {
     let mut arguments = Vec::with_capacity(requirements.len());
     for requirement in requirements {
         let subject = substitute_gate_type(&requirement.subject, substitutions);
-        if let Some(local) = in_scope_class_evidence_by_member(env, requirement.member, &subject) {
+        let scope_subject = match &subject {
+            GateType::TypeApplication {
+                parameter, name, ..
+            } => GateType::TypeParameter {
+                parameter: *parameter,
+                name: name.clone(),
+            },
+            other => other.clone(),
+        };
+        if let Some(local) =
+            in_scope_class_evidence_by_member(env, requirement.member, &scope_subject)
+        {
             arguments.push(GateRuntimeExpr {
                 span,
                 ty: local.ty.clone(),
@@ -1090,15 +1223,15 @@ fn lower_equality_evidence_arguments(
     Some(arguments)
 }
 
-pub(crate) fn extend_gate_env_with_equality_evidence(
+pub(crate) fn extend_gate_env_with_class_evidence(
     env: &mut GateExprEnv,
     owner: ItemId,
-    evidence: &EqualityEvidenceCatalog,
+    evidence: &ClassEvidenceCatalog,
 ) {
     for requirement in evidence.requirements_for(owner) {
         env.locals
             .insert(requirement.binding, requirement.ty.clone());
-        env.equality_evidence.push(GateEqualityEvidence {
+        env.class_evidence.push(GateClassEvidence {
             binding: requirement.binding,
             span: requirement.span,
             name: requirement.name.clone(),
@@ -1110,15 +1243,20 @@ pub(crate) fn extend_gate_env_with_equality_evidence(
     }
 }
 
-pub(crate) fn lower_name_expr_with_equality_evidence(
+pub(crate) fn lower_name_expr_with_class_evidence(
     module: &Module,
     typing: &mut GateTypeContext<'_>,
-    evidence: &EqualityEvidenceCatalog,
+    evidence: &ClassEvidenceCatalog,
     span: SourceSpan,
     reference: &TermReference,
     env: &GateExprEnv,
     visible_ty: &GateType,
 ) -> Option<GateRuntimeExpr> {
+    if let Some(local) =
+        lower_class_member_callee_with_evidence(env, reference, visible_ty, visible_ty.clone())
+    {
+        return Some(local);
+    }
     let imported = match reference.resolution.as_ref() {
         ResolutionState::Resolved(TermResolution::Import(id)) => Some(*id),
         ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(_)) => {
@@ -1154,7 +1292,7 @@ pub(crate) fn lower_name_expr_with_equality_evidence(
                     member_index,
                 };
                 let subject = typing.lower_import_value_type(&required.subject);
-                Some(EqualityEvidenceRequirement {
+                Some(ClassEvidenceRequirement {
                     binding: BindingId::from_raw(0),
                     span,
                     name: required.member_name.clone(),
@@ -1166,7 +1304,7 @@ pub(crate) fn lower_name_expr_with_equality_evidence(
             })
             .collect::<Option<Vec<_>>>()?;
         let arguments =
-            lower_equality_evidence_arguments(module, env, &requirements, &substitutions, span)?;
+            lower_class_evidence_arguments(module, env, &requirements, &substitutions, span)?;
         let callee = GateRuntimeExpr {
             span,
             ty: prepend_callable_parameters(
@@ -1221,7 +1359,7 @@ pub(crate) fn lower_name_expr_with_equality_evidence(
         std::slice::from_ref(visible_ty),
     );
     let evidence_arguments =
-        lower_equality_evidence_arguments(module, env, requirements, &substitutions, span)?;
+        lower_class_evidence_arguments(module, env, requirements, &substitutions, span)?;
     if evidence_arguments.is_empty() {
         return None;
     }
@@ -1416,17 +1554,24 @@ pub(crate) fn lower_class_member_callee_with_evidence(
     env: &GateExprEnv,
     reference: &TermReference,
     subject: &GateType,
-    _callee_ty: GateType,
+    callee_ty: GateType,
 ) -> Option<GateRuntimeExpr> {
     let ResolutionState::Resolved(TermResolution::ClassMember(member)) =
         reference.resolution.as_ref()
     else {
         return None;
     };
-    let evidence = in_scope_class_evidence_by_member(env, *member, subject)?;
+    let evidence = in_scope_class_evidence_by_member(env, *member, subject).or_else(|| {
+        let mut candidates = env
+            .class_evidence
+            .iter()
+            .filter(|e| e.member == *member && callee_ty.fits_template(&e.ty));
+        let first = candidates.next()?;
+        candidates.next().is_none().then_some(first)
+    })?;
     Some(GateRuntimeExpr {
         span: reference.span(),
-        ty: evidence.ty.clone(),
+        ty: callee_ty,
         kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Local(evidence.binding)),
     })
 }
@@ -1434,7 +1579,7 @@ pub(crate) fn lower_class_member_callee_with_evidence(
 struct GeneralExprElaborator<'a> {
     module: &'a Module,
     typing: GateTypeContext<'a>,
-    equality_evidence: EqualityEvidenceCatalog,
+    class_evidence: ClassEvidenceCatalog,
 }
 
 impl<'a> GeneralExprElaborator<'a> {
@@ -1442,7 +1587,7 @@ impl<'a> GeneralExprElaborator<'a> {
         Self {
             module,
             typing: GateTypeContext::new(module),
-            equality_evidence: EqualityEvidenceCatalog::new(module),
+            class_evidence: ClassEvidenceCatalog::new(module),
         }
     }
 
@@ -1752,7 +1897,7 @@ impl<'a> GeneralExprElaborator<'a> {
                     };
                 }
             };
-        self.prepend_owner_equality_parameters(owner, &mut parameters, &mut env);
+        self.prepend_owner_class_parameters(owner, &mut parameters, &mut env);
         let expected = function
             .annotation
             .and_then(|annotation| self.typing.lower_open_annotation(annotation))
@@ -2041,7 +2186,7 @@ impl<'a> GeneralExprElaborator<'a> {
                     };
                 }
             };
-        self.prepend_owner_equality_parameters(owner, &mut parameters, &mut env);
+        self.prepend_owner_class_parameters(owner, &mut parameters, &mut env);
         let outcome = match self.lower_expr_with_signal_result_fallback(
             member.body,
             &env,
@@ -2060,17 +2205,17 @@ impl<'a> GeneralExprElaborator<'a> {
         }
     }
 
-    fn prepend_owner_equality_parameters(
+    fn prepend_owner_class_parameters(
         &self,
         owner: ItemId,
         parameters: &mut Vec<GeneralExprParameter>,
         env: &mut GateExprEnv,
     ) {
-        let requirements = self.equality_evidence.requirements_for(owner);
+        let requirements = self.class_evidence.requirements_for(owner);
         if requirements.is_empty() {
             return;
         }
-        extend_gate_env_with_equality_evidence(env, owner, &self.equality_evidence);
+        extend_gate_env_with_class_evidence(env, owner, &self.class_evidence);
         let mut evidence_parameters = requirements
             .iter()
             .map(|requirement| GeneralExprParameter {
@@ -2078,7 +2223,7 @@ impl<'a> GeneralExprElaborator<'a> {
                 span: requirement.span,
                 name: requirement.name.clone(),
                 ty: requirement.ty.clone(),
-                kind: GeneralExprParameterKind::EqualityEvidence {
+                kind: GeneralExprParameterKind::ClassEvidence {
                     subject: requirement.subject.clone(),
                     member: requirement.member,
                     priority: requirement.priority,
@@ -2261,7 +2406,10 @@ impl<'a> GeneralExprElaborator<'a> {
         }
         let mut arguments = Vec::with_capacity(item.arguments.len());
         for argument in item.arguments.iter() {
-            arguments.push(self.typing.poly_type_binding(*argument)?);
+            arguments.push(
+                self.typing
+                    .open_poly_type_binding(*argument, &HashMap::new())?,
+            );
         }
         Some(
             class_item
@@ -2298,7 +2446,7 @@ impl<'a> GeneralExprElaborator<'a> {
         if let ExprKind::Name(reference) = &self.module.exprs()[callee].kind {
             if let ResolutionState::Resolved(TermResolution::Item(item_id)) =
                 reference.resolution.as_ref()
-                && !self.equality_evidence.requirements_for(*item_id).is_empty()
+                && !self.class_evidence.requirements_for(*item_id).is_empty()
             {
                 return self.visible_callable_item_type(*item_id);
             }
@@ -2346,6 +2494,21 @@ impl<'a> GeneralExprElaborator<'a> {
     ) -> Result<GateRuntimeExpr, Vec<GeneralExprBlocker>> {
         let expr = self.module.exprs()[expr_id].clone();
         if let ExprKind::Name(reference) = &expr.kind
+            && let ResolutionState::Resolved(TermResolution::Local(binding)) =
+                reference.resolution.as_ref()
+            && let Some(ty) = env.locals.get(binding)
+        {
+            // A reference uses its binding's representation. Context may
+            // instantiate a callable at a use site, but cannot change the
+            // layout of a captured value or function parameter.
+            return Ok(GateRuntimeExpr {
+                span: expr.span,
+                ty: ty.clone(),
+                kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Local(*binding)),
+            });
+        }
+
+        if let ExprKind::Name(reference) = &expr.kind
             && let Some(expected) = expected
             && let Some(reference) = self.constructor_reference_with_expected(reference, expr.span)
         {
@@ -2357,10 +2520,10 @@ impl<'a> GeneralExprElaborator<'a> {
         }
         if let ExprKind::Name(reference) = &expr.kind
             && let Some(expected) = expected
-            && let Some(lowered) = lower_name_expr_with_equality_evidence(
+            && let Some(lowered) = lower_name_expr_with_class_evidence(
                 self.module,
                 &mut self.typing,
-                &self.equality_evidence,
+                &self.class_evidence,
                 expr.span,
                 reference,
                 env,
@@ -2420,10 +2583,10 @@ impl<'a> GeneralExprElaborator<'a> {
         };
         let kind = match expr.kind {
             ExprKind::Name(reference) => {
-                if let Some(lowered) = lower_name_expr_with_equality_evidence(
+                if let Some(lowered) = lower_name_expr_with_class_evidence(
                     self.module,
                     &mut self.typing,
-                    &self.equality_evidence,
+                    &self.class_evidence,
                     expr.span,
                     &reference,
                     env,
@@ -3086,8 +3249,13 @@ impl<'a> GeneralExprElaborator<'a> {
             });
             let lowered = self.lower_expr(*argument, env, ambient, expected.as_ref())?;
             let inferred_argument = self.typing.infer_expr(*argument, env, ambient);
+            // Retain nominal carrier identity for class dispatch. The structural
+            // actual view of a record alias loses the instance-owning type.
             let observed_ty = inferred_argument
-                .actual_gate_type()
+                .ty
+                .clone()
+                .filter(|ty| !ty.has_type_params())
+                .or_else(|| inferred_argument.actual_gate_type())
                 .or_else(|| inferred_argument.ty.clone())
                 .unwrap_or_else(|| lowered.ty.clone());
             // After lowering each argument, collect type-parameter bindings from the observed
@@ -3104,17 +3272,19 @@ impl<'a> GeneralExprElaborator<'a> {
         // Build a concrete callee expected type by substituting any open type parameters with
         // the concrete argument types observed. This prevents open TypeParameter values from
         // leaking into the lambda IR, which requires fully-closed specialized types.
-        let callee_expected = if let (Some(param_types), Some(callee_ty)) =
-            (&inferred_parameter_types, &inferred_callee_ty)
+        let callee_expected = if let Some((parameters, inferred_result)) = inferred_callee_ty
+            .as_ref()
+            .and_then(|ty| self.function_signature(ty, arguments.len()))
         {
-            let subs = collect_type_param_subs(param_types, &argument_types);
-            if subs.is_empty() {
-                self.arrow_type(param_types.clone(), result_ty.clone())
-            } else {
-                substitute_gate_type(callee_ty, &subs)
-            }
-        } else if let Some(parameters) = inferred_parameter_types {
-            self.arrow_type(parameters, result_ty.clone())
+            let mut subs = collect_type_param_subs(&parameters, &argument_types);
+            collect_type_param_subs_inner(&inferred_result, result_ty, &mut subs);
+            self.arrow_type(
+                parameters
+                    .iter()
+                    .map(|parameter| substitute_gate_type(parameter, &subs))
+                    .collect(),
+                result_ty.clone(),
+            )
         } else {
             self.arrow_type(argument_types.clone(), result_ty.clone())
         };
@@ -3991,22 +4161,24 @@ impl<'a> GeneralExprElaborator<'a> {
                     .collect();
                 arg_types.push(ambient.clone());
                 let callee_span = self.module.exprs()[plan.callee_expr].span;
-                let Some(dispatch) = resolve_class_member_dispatch(
+                if let Some(dispatch) = resolve_class_member_dispatch(
                     self.module,
                     reference,
                     &arg_types,
                     Some(&plan.result_type),
-                ) else {
-                    return Err(vec![GeneralExprBlocker::UnknownExprType {
+                ) {
+                    GateRuntimeExpr {
                         span: callee_span,
-                    }]);
-                };
-                GateRuntimeExpr {
-                    span: callee_span,
-                    ty: callee_ty,
-                    kind: GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(
-                        dispatch,
-                    )),
+                        ty: callee_ty,
+                        kind: GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(
+                            dispatch,
+                        )),
+                    }
+                } else {
+                    lower_class_member_callee_with_evidence(env, reference, ambient, callee_ty)
+                        .ok_or_else(|| {
+                            vec![GeneralExprBlocker::UnknownExprType { span: callee_span }]
+                        })?
                 }
             } else {
                 self.lower_expr(plan.callee_expr, env, Some(ambient), Some(&callee_ty))?
@@ -5040,13 +5212,13 @@ fn gate_env_from_parameters(parameters: &[GeneralExprParameter]) -> GateExprEnv 
     let mut env = GateExprEnv::default();
     for parameter in parameters {
         env.locals.insert(parameter.binding, parameter.ty.clone());
-        if let GeneralExprParameterKind::EqualityEvidence {
+        if let GeneralExprParameterKind::ClassEvidence {
             subject,
             member,
             priority,
         } = &parameter.kind
         {
-            env.equality_evidence.push(GateEqualityEvidence {
+            env.class_evidence.push(GateClassEvidence {
                 binding: parameter.binding,
                 span: parameter.span,
                 name: parameter.name.clone(),
@@ -5062,7 +5234,7 @@ fn gate_env_from_parameters(parameters: &[GeneralExprParameter]) -> GateExprEnv 
 
 fn env_parameters(module: &Module, env: &GateExprEnv) -> Vec<GeneralExprParameter> {
     let evidence_bindings = env
-        .equality_evidence
+        .class_evidence
         .iter()
         .map(|evidence| evidence.binding)
         .collect::<HashSet<_>>();
@@ -5082,14 +5254,14 @@ fn env_parameters(module: &Module, env: &GateExprEnv) -> Vec<GeneralExprParamete
         })
         .collect::<Vec<_>>();
     parameters.extend(
-        env.equality_evidence
+        env.class_evidence
             .iter()
             .map(|evidence| GeneralExprParameter {
                 binding: evidence.binding,
                 span: evidence.span,
                 name: evidence.name.clone(),
                 ty: evidence.ty.clone(),
-                kind: GeneralExprParameterKind::EqualityEvidence {
+                kind: GeneralExprParameterKind::ClassEvidence {
                     subject: evidence.subject.clone(),
                     member: evidence.member,
                     priority: evidence.priority,

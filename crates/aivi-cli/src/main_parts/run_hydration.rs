@@ -1108,6 +1108,7 @@ fn default_runtime_value_for_import_type(ty: &ImportValueType) -> Option<Runtime
         ImportValueType::Arrow { .. }
         | ImportValueType::Task { .. }
         | ImportValueType::TypeVariable { .. }
+        | ImportValueType::TypeApplication { .. }
         | ImportValueType::Named { .. } => None,
     }
 }

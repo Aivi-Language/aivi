@@ -1111,6 +1111,11 @@ impl<'a> DecodeTypeLowerer<'a> {
                 span,
                 SourceDecodeUnsupportedTypeKind::Task,
             )),
+            ImportValueType::TypeApplication { name, .. } => {
+                // An abstract constructor cannot provide a closed external schema.
+                let parameter = self.types.define_parameter(name.clone());
+                Ok(self.types.parameter(parameter))
+            }
             ImportValueType::TypeVariable { index, name } => Ok(arguments
                 .get(*index)
                 .copied()

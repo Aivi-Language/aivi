@@ -3593,7 +3593,7 @@ impl<'a> ProgramLowerer<'a> {
                             ty.clone(),
                             TypeBuildTask::Primitive(PrimitiveType::from_builtin(*builtin)),
                         )),
-                        core::Type::TypeParameter { name, .. } => {
+                        core::Type::TypeParameter { .. } | core::Type::TypeApplication { .. } => {
                             // Polymorphic functions (e.g. ambient prelude helpers) carry open
                             // type parameters that the runtime interprets dynamically.  Map each
                             // type parameter to an erased Domain layout so the kernel can be
@@ -3603,7 +3603,7 @@ impl<'a> ProgramLowerer<'a> {
                             tasks.push(Task::Build(
                                 ty.clone(),
                                 TypeBuildTask::Domain {
-                                    name: name.clone(),
+                                    name: "$polymorphic".into(),
                                     arguments: 0,
                                 },
                             ));
@@ -3881,6 +3881,15 @@ fn hir_gate_type_for_core_type(ty: &core::Type) -> HirGateType {
         core::Type::TypeParameter { parameter, name } => HirGateType::TypeParameter {
             parameter: *parameter,
             name: name.to_string(),
+        },
+        core::Type::TypeApplication {
+            parameter,
+            name,
+            arguments,
+        } => HirGateType::TypeApplication {
+            parameter: *parameter,
+            name: name.to_string(),
+            arguments: arguments.iter().map(hir_gate_type_for_core_type).collect(),
         },
         core::Type::Tuple(elements) => {
             HirGateType::Tuple(elements.iter().map(hir_gate_type_for_core_type).collect())

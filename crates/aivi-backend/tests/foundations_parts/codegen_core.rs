@@ -874,3 +874,110 @@ value missingGreeting : Option Text = "hello"
     );
     assert!(!compiled.object().is_empty());
 }
+
+#[test]
+fn runtime_passes_functor_evidence_to_generic_functions() {
+    let backend = lower_text(
+        "generic-functor.aivi",
+        r#"
+type Functor F => (A -> B) -> F A -> F B
+func transform = f xs => xs |> map f
+
+type Int -> Int
+func increment = n => n + 1
+type Functor F => (A -> B) -> F A -> F B
+func nested = f xs => transform f xs
+value mapped : Option Int = nested increment (Some 2)
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "mapped"), &BTreeMap::new())
+            .unwrap(),
+        RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(3)))
+    );
+}
+
+#[test]
+fn runtime_folds_authored_carriers_with_polymorphic_accumulators() {
+    let backend = lower_text(
+        "generic-foldable.aivi",
+        r#"
+type Box A = { values: List A }
+instance Foldable Box = {
+    reduce = step seed box => reduce step seed box.values
+}
+type Int -> Int -> Int
+func accumulate = total n => total * 10 + n
+value box : Box Int = { values: [1, 2, 3] }
+value folded : Int = reduce accumulate 0 box
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "folded"), &BTreeMap::new())
+            .unwrap(),
+        RuntimeValue::Int(123)
+    );
+}
+
+#[test]
+fn runtime_maps_imported_either_instance() {
+    let backend = lower_workspace_text(
+        "stdlib-either-instance.aivi",
+        r#"
+use aivi.core.either (Either Left Right)
+type Int -> Int
+func increment = n => n + 1
+value right : Either Text Int = Right 2
+value mapped : Either Text Int = map increment right
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    let result = evaluator.evaluate_item(find_item(&backend, "mapped"), &BTreeMap::new());
+    assert!(result.is_ok(), "{result:?}");
+}
+
+#[test]
+fn runtime_folds_imported_dictionary_instance() {
+    let backend = lower_workspace_text(
+        "stdlib-dict-instance.aivi",
+        r#"
+use aivi.core.dict (Dict fromList)
+type Int -> Int -> Int
+func accumulate = total n => total * 10 + n
+value dictionary : Dict Text Int = fromList [("b", 2), ("a", 1)]
+value folded : Int = reduce accumulate 0 dictionary
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "folded"), &BTreeMap::new())
+            .unwrap(),
+        RuntimeValue::Int(12)
+    );
+}
+
+#[test]
+fn runtime_folds_imported_non_empty_instance() {
+    let backend = lower_workspace_text(
+        "stdlib-non-empty-instance.aivi",
+        r#"
+use aivi.nonEmpty (NonEmptyList fromHeadTail)
+type Int -> Int -> Int
+func accumulate = total n => total * 10 + n
+value items : NonEmptyList Int = fromHeadTail 1 [2, 3]
+value folded : Int = reduce accumulate 0 items
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "folded"), &BTreeMap::new())
+            .unwrap(),
+        RuntimeValue::Int(123)
+    );
+}

@@ -254,7 +254,9 @@ pub(crate) fn resolve_class_member_dispatch_for_subject(
     subject: &GateType,
 ) -> Option<ResolvedClassMemberDispatch> {
     let mut checker = TypeChecker::new(module);
-    let subject = TypeBinding::Type(subject.clone());
+    let subject = checker
+        .typing
+        .class_member_subject_binding(member, subject)?;
     let implementation = checker.class_member_implementation(member, &subject)?;
     Some(ResolvedClassMemberDispatch {
         member,

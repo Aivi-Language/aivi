@@ -2,6 +2,12 @@
 
 `aivi.core.bytes` provides immutable byte sequences. Its operations are synchronous and pure. Indexes and lengths count bytes rather than Unicode characters.
 
+## Type class operations
+
+`Bytes` implements `Semigroup`, `Monoid`, and `Default` through this module. Ambient `append`
+concatenates bytes; `empty` and `default` produce empty bytes. The module's explicitly imported
+`append` and `empty` helpers have the same behavior.
+
 ## API
 
 | Export | Type | Behavior |

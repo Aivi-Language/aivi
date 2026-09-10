@@ -1018,6 +1018,12 @@ pub enum ImportValueType {
         index: usize,
         name: String,
     },
+    /// An application of a quantified higher-kinded parameter.
+    TypeApplication {
+        index: usize,
+        name: String,
+        arguments: Vec<Self>,
+    },
     /// A user-defined (non-builtin) type constructor applied to arguments.
     /// The `type_name` is the name in the source module.
     Named {

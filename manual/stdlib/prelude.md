@@ -2,8 +2,8 @@
 
 `aivi.prelude` is the carrier-agnostic foundation of AIVI programs. It names the built-in value
 types, higher-kinded classes, and the generic ordering helpers that work for every `Ord` type.
-Collection, option, result, validation, text, boolean, and pair operations live in their owning
-modules and should be imported from there.
+Use ambient class operations such as `map`, `reduce`, `apply`, and `chain` across supported
+carriers. Carrier-specific constructors and helpers live in their owning modules.
 
 The compiler also makes the same core types and class members available ambiently. Explicit
 prelude imports remain useful when a file wants to show those dependencies.
@@ -40,12 +40,37 @@ prelude imports remain useful when a file wants to show those dependencies.
 | `Bifunctor F` | `bimap` |
 | `Traversable F` | `traverse` |
 | `Filterable F` | `filterMap` |
-| `Applicative F` | `pure` and `apply` |
-| `Monad F` | `chain` and `join` |
+| `Apply F` | `apply` |
+| `Applicative F` | `pure` |
+| `Chain F` | `chain` |
+| `Monad F` | `join` |
 | `Foldable F` | `reduce` |
 
 The complete hierarchy and current executable carrier support are documented in
 [Typeclasses & Higher-Kinded Support](/guide/typeclasses).
+
+Class members are ordinary callable values. Prefer them when an operation has the same meaning
+across carriers; use names such as `mapRight`, `mapValues`, and `mapNel` when the carrier-specific
+name makes the code clearer. Importing a carrier's module also brings its exported instances into
+scope. Explicit imports of a same-named helper still take precedence over ambient class methods.
+
+```aivi
+use aivi.core.either (
+    Either
+    Right
+)
+
+type Int -> Int
+func increment = n =>
+    n + 1
+
+value optional : Option Int = map increment (Some 2)
+value right : Either Text Int = Right 2
+value mapped : Either Text Int = map increment right
+```
+
+See [stdlib instances](/guide/typeclasses#standard-library-instances) for carrier behavior and
+intentional exclusions.
 
 ## Generic ordering helpers
 

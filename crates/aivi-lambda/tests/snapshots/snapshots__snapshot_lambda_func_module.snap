@@ -389,7 +389,7 @@ func __aivi_pair_mapSecond:
 func __aivi_pair_mapBoth:
   params = [transformFst: A -> C, transformSnd: B -> D, pair: (A, B)]
   body = closure128
-func __aivi_pair_fromPair:
+func __aivi_pair_toPair:
   params = [a: A, b: B]
   body = closure129
 func __aivi_pair_duplicate:
@@ -828,7 +828,7 @@ closures:
     params = [transform:#323:B -> C, pair:#324:(A, B)]
   closure128 __aivi_pair_mapBoth owner=128 root=expr1403 kind=item-body
     params = [transformFst:#327:A -> C, transformSnd:#328:B -> D, pair:#329:(A, B)]
-  closure129 __aivi_pair_fromPair owner=129 root=expr1406 kind=item-body
+  closure129 __aivi_pair_toPair owner=129 root=expr1406 kind=item-body
     params = [a:#332:A, b:#333:B]
   closure130 __aivi_pair_duplicate owner=130 root=expr1409 kind=item-body
     params = [item:#334:A]

@@ -300,7 +300,7 @@ impl SourceOptionExpectedType {
     ) -> Option<Self> {
         match ty {
             GateType::Primitive(builtin) => Some(Self::Primitive(*builtin)),
-            GateType::TypeParameter { .. } => None,
+            GateType::TypeParameter { .. } | GateType::TypeApplication { .. } => None,
             GateType::Tuple(elements) => Some(Self::Tuple(
                 elements
                     .iter()
@@ -399,7 +399,7 @@ impl SourceOptionActualType {
     pub(crate) fn from_gate_type(ty: &GateType) -> Self {
         match ty {
             GateType::Primitive(builtin) => Self::Primitive(*builtin),
-            GateType::TypeParameter { .. } => Self::Hole,
+            GateType::TypeParameter { .. } | GateType::TypeApplication { .. } => Self::Hole,
             GateType::Tuple(elements) => {
                 Self::Tuple(elements.iter().map(Self::from_gate_type).collect())
             }

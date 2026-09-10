@@ -210,3 +210,31 @@ value dict_mapValues : Task Text Bool = pure (get "a" (mapValues doubleForTest (
 
 @test
 value dict_filterValues : Task Text Bool = pure (size (filterValues positiveForTest (fromList [("a", 1), ("b", -1)])) == 1)
+
+// Class operations preserve keys and entry order; only values are transformed.
+instance Functor (Dict K) = {
+    map = mapValues
+}
+
+instance Foldable (Dict K) = {
+    reduce = step seed dictionary => reduce step seed (values dictionary)
+}
+
+type (A -> Option B) -> DictEntry K A -> Option (DictEntry K B)
+func filterMapEntry = transform entry => transform entry.value
+ ||> None       -> None
+ ||> Some value -> Some { key: entry.key, value }
+
+type (A -> Option B) -> Dict K A -> Dict K B
+func filterMapValues = transform dictionary =>
+    {
+        entries: filterMap (filterMapEntry transform) dictionary.entries
+    }
+
+instance Filterable (Dict K) = {
+    filterMap = filterMapValues
+}
+
+instance Default (Dict K V) = {
+    default = { entries: [] }
+}

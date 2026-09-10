@@ -206,11 +206,11 @@ fn lowering_maps_open_type_parameters_to_erased_domain_layouts() {
         .expect("open type parameters should lower via erased Domain layouts");
     // The open type parameter `a` maps to a Domain layout so the kernel can be compiled;
     // call sites are monomorphic by the time they reach the runtime.
-    let has_domain_a = backend.layouts().iter().any(|(_, layout)| {
-        matches!(&layout.kind, LayoutKind::Domain { name, .. } if name.as_ref() == "a")
+    let has_erased_domain = backend.layouts().iter().any(|(_, layout)| {
+        matches!(&layout.kind, LayoutKind::Domain { name, .. } if name.as_ref() == "$polymorphic")
     });
     assert!(
-        has_domain_a,
+        has_erased_domain,
         "open type parameter should be lowered to an erased Domain layout"
     );
 }

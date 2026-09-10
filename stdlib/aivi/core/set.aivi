@@ -94,3 +94,12 @@ value set_toList : Task Text Bool = pure (toList (singleton 1) == [1])
 
 @test
 value set_fromList : Task Text Bool = pure (size (fromList [1, 1, 2]) == 2)
+
+// A fold observes deterministic insertion order without changing membership.
+instance Foldable Set = {
+    reduce = step seed set => reduce step seed set.items
+}
+
+instance Default (Set A) = {
+    default = { items: [] }
+}

@@ -1,6 +1,6 @@
-value defaultText : Text = ""
-value defaultInt : Int = 0
-value defaultBool : Bool = False
+value defaultText : Text = default
+value defaultInt : Int = default
+value defaultBool : Bool = default
 
 @test
 value default_text_is_empty : Task Text Bool = pure (defaultText == "")
@@ -12,3 +12,15 @@ value default_int_is_zero : Task Text Bool = pure (defaultInt == 0)
 value default_bool_is_false : Task Text Bool = pure (not defaultBool)
 
 export (Option, defaultText, defaultInt, defaultBool)
+
+instance Default Text = {
+    default = ""
+}
+
+instance Default Int = {
+    default = 0
+}
+
+instance Default Bool = {
+    default = False
+}

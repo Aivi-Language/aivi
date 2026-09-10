@@ -64,3 +64,50 @@ value nonEmpty_fromHeadTail : Task Text Bool = pure (toList (fromHeadTail 1 [2, 
 
 @test
 value nonEmpty_init : Task Text Bool = pure (init (fromHeadTail 1 [2, 3]) == [1, 2])
+
+instance Functor NonEmptyList = {
+    map = mapNel
+}
+
+instance Foldable NonEmptyList = {
+    reduce = step seed items =>
+        items
+         |> toList
+         |> reduce step seed
+}
+
+instance Semigroup (NonEmptyList A) = {
+    append = appendNel
+}
+
+instance Applicative NonEmptyList = {
+    pure = singleton
+}
+
+type (A -> NonEmptyList B) -> NonEmptyList A -> NonEmptyList B
+func chainNel = next items => toList items
+ ||> [first, ...rest] -> reduce (appendNextNel next) (next first) rest
+
+type (A -> NonEmptyList B) -> NonEmptyList B -> A -> NonEmptyList B
+func appendNextNel = next acc item =>
+    appendNel acc (next item)
+
+type NonEmptyList A -> (A -> B) -> NonEmptyList B
+func applyNelFunction = values transform =>
+    mapNel transform values
+
+instance Apply NonEmptyList = {
+    apply = functions values => chainNel (applyNelFunction values) functions
+}
+
+instance Chain NonEmptyList = {
+    chain = chainNel
+}
+
+type NonEmptyList A -> NonEmptyList A
+func identityNel = items =>
+    items
+
+instance Monad NonEmptyList = {
+    join = items => chainNel identityNel items
+}

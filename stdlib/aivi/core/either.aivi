@@ -159,3 +159,44 @@ value either_fromResult : Task Text Bool = pure (fromResult (Err "error") == Lef
 
 @test
 value either_partitionEithers : Task Text Bool = pure (partitionEithers eitherItemsForTest == (["a", "b"], [1]))
+
+// Right is the success position; Left short-circuits dependent operations.
+instance Functor (Either E) = {
+    map = mapRight
+}
+
+instance Bifunctor Either = {
+    bimap = mapBoth
+}
+
+instance Foldable (Either E) = {
+    reduce = step seed either =>
+        either
+        ||> Left _     -> seed
+        ||> Right item -> step seed item
+}
+
+instance Apply (Either E) = {
+    apply = functions values =>
+        functions
+        ||> Left error      -> Left error
+        ||> Right transform -> mapRight transform values
+}
+
+instance Applicative (Either E) = {
+    pure = item => Right item
+}
+
+instance Chain (Either E) = {
+    chain = next either =>
+        either
+        ||> Left error -> Left error
+        ||> Right item -> next item
+}
+
+instance Monad (Either E) = {
+    join = either =>
+        either
+        ||> Left error   -> Left error
+        ||> Right nested -> nested
+}

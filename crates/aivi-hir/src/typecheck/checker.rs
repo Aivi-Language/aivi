@@ -3592,6 +3592,9 @@ impl<'a> TypeChecker<'a> {
         item_stack: &mut Vec<ItemId>,
     ) -> Result<(), String> {
         match ty {
+            GateType::TypeApplication { .. } => Err(format!(
+                "open constructor application `{ty}` requires explicit equality evidence"
+            )),
             GateType::Primitive(BuiltinType::Bytes) => {
                 Err("`Bytes` does not have a compiler-derived `Eq` instance in v1".to_owned())
             }
@@ -3759,6 +3762,12 @@ impl<'a> TypeChecker<'a> {
         match binding {
             TypeBinding::Type(ty) => ty.to_string(),
             TypeBinding::Constructor(binding) => match binding.head() {
+                crate::validate::TypeConstructorHead::Parameter { parameter, .. } => self
+                    .module
+                    .type_parameters()
+                    .get(parameter)
+                    .map(|p| p.name.text().to_owned())
+                    .unwrap_or_else(|| format!("F{}", parameter.as_raw())),
                 crate::validate::TypeConstructorHead::Builtin(builtin) => {
                     format!("{builtin:?}")
                 }
@@ -3770,11 +3779,12 @@ impl<'a> TypeChecker<'a> {
                         _ => "<constructor>".to_owned(),
                     }
                 }
-                crate::validate::TypeConstructorHead::Import(import_id) => self.module.imports()
-                    [import_id]
-                    .local_name
-                    .text()
-                    .to_owned(),
+                crate::validate::TypeConstructorHead::Import(import_id) => self
+                    .module
+                    .imports()
+                    .get(import_id)
+                    .map(|binding| binding.local_name.text().to_owned())
+                    .unwrap_or_else(|| "<unresolved constructor>".to_owned()),
             },
         }
     }
@@ -3798,8 +3808,9 @@ impl<'a> TypeChecker<'a> {
         subject: &TypeBinding,
     ) -> Option<ClassMemberImplementation> {
         let class_name = self.class_name(resolution.class)?.to_owned();
-        if let Ok(Some((instance_id, instance))) =
-            self.resolve_same_module_instance_binding_with_id(resolution.class, subject)
+        if let Some((instance_id, instance)) = self
+            .resolve_same_module_instance_binding_with_id(resolution.class, subject)
+            .ok()?
         {
             let Item::Class(class_item) = &self.module.items()[resolution.class] else {
                 return None;
@@ -3831,61 +3842,103 @@ impl<'a> TypeChecker<'a> {
         None
     }
 
-    /// Search through all import bindings for an `InstanceMember` matching the given
-    /// class, member, and subject type.
+    /// Match the instantiated class signature against portable instance evidence.
+    /// Head labels identify the carrier; the type comparison retains fixed and
+    /// polymorphic arguments instead of conflating every instance of that head.
+    fn imported_instance_member_matches(
+        &self,
+        metadata: &ImportBindingMetadata,
+        resolution: ClassMemberResolution,
+        subject: &TypeBinding,
+    ) -> bool {
+        let Item::Class(class) = &self.module.items()[resolution.class] else {
+            return false;
+        };
+        let Some(member) = class.members.get(resolution.member_index) else {
+            return false;
+        };
+        let ImportBindingMetadata::InstanceMember {
+            class_name,
+            member_name,
+            subject: imported_subject,
+            ty,
+        } = metadata
+        else {
+            return false;
+        };
+        if class_name.as_ref() != class.name.text() || member_name.as_ref() != member.name.text() {
+            return false;
+        }
+        let head = match subject {
+            TypeBinding::Type(
+                GateType::Domain { name, .. } | GateType::OpaqueItem { name, .. },
+            ) => name.clone(),
+            TypeBinding::Type(GateType::OpaqueImport { import, name, .. }) => self
+                .module
+                .imports()
+                .get(*import)
+                .map(|binding| binding.imported_name.text().to_owned())
+                .unwrap_or_else(|| name.clone()),
+            TypeBinding::Constructor(binding) => match binding.head() {
+                crate::validate::TypeConstructorHead::Import(import) => {
+                    let Some(binding) = self.module.imports().get(import) else {
+                        return false;
+                    };
+                    binding.imported_name.text().to_owned()
+                }
+                _ => self.type_binding_label(subject),
+            },
+            _ => self.type_binding_label(subject),
+        };
+        if imported_subject.as_ref() != head {
+            return false;
+        }
+        let mut typing = GateTypeContext::new(self.module);
+        let bindings = HashMap::from([(*class.parameters.first(), subject.clone())]);
+        let Some(expected) =
+            typing.instantiate_poly_hir_type_partially(member.annotation, &bindings)
+        else {
+            return false;
+        };
+        let template = typing.lower_import_value_type(ty);
+        expected.fits_template(&template)
+    }
+
     fn resolve_imported_instance_member(
         &self,
-        class_name: &str,
+        _class_name: &str,
         resolution: ClassMemberResolution,
         subject: &TypeBinding,
     ) -> Option<ImportId> {
-        let Item::Class(class_item) = &self.module.items()[resolution.class] else {
-            return None;
-        };
-        let member_name = class_item.members.get(resolution.member_index)?.name.text();
-        let subject_label = self.type_binding_label(subject);
-        for (import_id, import) in self.module.imports().iter() {
-            if let ImportBindingMetadata::InstanceMember {
-                class_name: ic,
-                member_name: im,
-                subject: is,
-                ..
-            } = &import.metadata
-                && ic.as_ref() == class_name
-                    && im.as_ref() == member_name
-                    && is.as_ref() == subject_label.as_str()
+        let mut selected: Option<(ImportId, &crate::ImportBinding)> = None;
+        for (id, import) in self.module.imports().iter() {
+            if !self.imported_instance_member_matches(&import.metadata, resolution, subject) {
+                continue;
+            }
+            if let Some((_, previous)) = selected {
+                if previous.source_module != import.source_module
+                    || previous.imported_name.text() != import.imported_name.text()
                 {
-                    return Some(import_id);
+                    return None;
                 }
+            } else {
+                selected = Some((id, import));
+            }
         }
-        None
+        selected.map(|(id, _)| id)
     }
 
-    fn has_imported_instance_binding(
-        &self,
-        class_item_id: ItemId,
-        subject: &TypeBinding,
-    ) -> bool {
-        let Some(class_name) = self.class_name(class_item_id) else {
+    fn has_imported_instance_binding(&self, class_item_id: ItemId, subject: &TypeBinding) -> bool {
+        let Item::Class(class) = &self.module.items()[class_item_id] else {
             return false;
         };
-        let Item::Class(class_item) = &self.module.items()[class_item_id] else {
-            return false;
-        };
-        let subject_label = self.type_binding_label(subject);
-        class_item.members.iter().all(|member| {
+        class.members.iter().enumerate().all(|(member_index, _)| {
+            let resolution = ClassMemberResolution {
+                class: class_item_id,
+                member_index,
+            };
             self.module.imports().iter().any(|(_, import)| {
-                matches!(
-                    &import.metadata,
-                    ImportBindingMetadata::InstanceMember {
-                        class_name: imported_class,
-                        member_name,
-                        subject: imported_subject,
-                        ..
-                    } if imported_class.as_ref() == class_name
-                        && member_name.as_ref() == member.name.text()
-                        && imported_subject.as_ref() == subject_label.as_str()
-                )
+                self.imported_instance_member_matches(&import.metadata, resolution, subject)
             })
         })
     }

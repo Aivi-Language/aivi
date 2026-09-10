@@ -148,6 +148,7 @@ impl<'a> GateTypeContext<'a> {
             }),
             GateType::Primitive(_)
             | GateType::TypeParameter { .. }
+            | GateType::TypeApplication { .. }
             | GateType::Tuple(_)
             | GateType::Record(_)
             | GateType::Arrow { .. }
@@ -255,6 +256,7 @@ impl<'a> GateTypeContext<'a> {
             } => self.same_module_case_subject_shape(*item, arguments),
             GateType::Primitive(_)
             | GateType::TypeParameter { .. }
+            | GateType::TypeApplication { .. }
             | GateType::Tuple(_)
             | GateType::Record(_)
             | GateType::Arrow { .. }
@@ -661,8 +663,23 @@ impl<'a> GateTypeContext<'a> {
                 };
                 match reference.resolution.as_ref() {
                     ResolutionState::Resolved(TypeResolution::TypeParameter(parameter)) => {
-                        let TypeBinding::Constructor(binding) = bindings.get(parameter)? else {
-                            return None;
+                        let Some(TypeBinding::Constructor(binding)) = bindings.get(parameter)
+                        else {
+                            if bindings.contains_key(parameter) {
+                                return None;
+                            }
+                            let arguments = arguments
+                                .iter()
+                                .map(|a| self.lower_poly_type_partially(*a, bindings, item_stack))
+                                .collect::<Option<Vec<_>>>()?;
+                            return Some(GateType::TypeApplication {
+                                parameter: *parameter,
+                                name: self.module.type_parameters()[*parameter]
+                                    .name
+                                    .text()
+                                    .to_owned(),
+                                arguments,
+                            });
                         };
                         let mut all_arguments =
                             Vec::with_capacity(binding.arguments.len() + arguments.len());
@@ -1110,6 +1127,18 @@ impl<'a> GateTypeContext<'a> {
 
     pub(crate) fn lower_import_value_type(&self, ty: &ImportValueType) -> GateType {
         match ty {
+            ImportValueType::TypeApplication {
+                index,
+                name,
+                arguments,
+            } => GateType::TypeApplication {
+                parameter: TypeParameterId::from_raw(u32::MAX - *index as u32),
+                name: name.clone(),
+                arguments: arguments
+                    .iter()
+                    .map(|a| self.lower_import_value_type(a))
+                    .collect(),
+            },
             ImportValueType::Primitive(builtin) => GateType::Primitive(*builtin),
             ImportValueType::Tuple(elements) => GateType::Tuple(
                 elements
@@ -2061,6 +2090,7 @@ impl<'a> GateTypeContext<'a> {
             return Self::match_gate_type_template(template, &expanded_actual, substitutions);
         }
         match template {
+            GateType::TypeApplication { .. } => actual.unify_type_params(template, substitutions),
             GateType::TypeParameter { parameter, .. } => match substitutions.entry(*parameter) {
                 Entry::Occupied(existing) => existing.get().same_shape(actual),
                 Entry::Vacant(slot) => {
@@ -2395,6 +2425,107 @@ impl<'a> GateTypeContext<'a> {
         argument_types: &[GateType],
         expected_result: Option<&GateType>,
     ) -> Option<ClassMemberCallMatch> {
+        if let Some(matched) =
+            self.match_class_member_call_direct(resolution, argument_types, expected_result)
+        {
+            return Some(matched);
+        }
+        // Transparent aliases have no constructor tag in their structural value
+        // type. Recover evidence only when one declared instance signature fits.
+        // This also covers the workspace linker's conversion of imported aliases
+        // to local aliases; linking must not change class resolution.
+        let candidates = self.module.items().iter().filter_map(|(_, item)| {
+            let Item::Instance(instance) = item else { return None; };
+            (instance.arguments.len() == 1 && matches!(instance.class.resolution.as_ref(),
+                ResolutionState::Resolved(TypeResolution::Item(class)) if *class == resolution.class))
+                .then_some(*instance.arguments.first())
+        }).collect::<Vec<_>>();
+        let (class_parameter, annotation, context) = self.class_member_signature(resolution)?;
+        let mut matches = Vec::new();
+        for candidate in candidates {
+            let Some(subject) = self.open_poly_type_binding(candidate, &HashMap::new()) else {
+                continue;
+            };
+            let bindings = HashMap::from([(class_parameter, subject.clone())]);
+            let Some(signature) = self.instantiate_poly_hir_type_partially(annotation, &bindings)
+            else {
+                continue;
+            };
+            let Some(parameters) = Self::arrow_parameter_types(&signature, argument_types.len())
+            else {
+                continue;
+            };
+            let Some(result) = Self::arrow_result_type(&signature, argument_types.len()) else {
+                continue;
+            };
+            let mut substitutions = HashMap::new();
+            if !argument_types
+                .iter()
+                .zip(&parameters)
+                .all(|(actual, template)| actual.unify_type_params(template, &mut substitutions))
+                || expected_result
+                    .is_some_and(|actual| !actual.unify_type_params(&result, &mut substitutions))
+            {
+                continue;
+            }
+            let subject = match subject {
+                TypeBinding::Type(ty) => {
+                    TypeBinding::Type(ty.substitute_type_parameters(&substitutions))
+                }
+                TypeBinding::Constructor(binding) => {
+                    TypeBinding::Constructor(TypeConstructorBinding {
+                        head: binding.head,
+                        arguments: binding
+                            .arguments
+                            .iter()
+                            .map(|arg| arg.substitute_type_parameters(&substitutions))
+                            .collect(),
+                    })
+                }
+            };
+            let mut bindings = substitutions
+                .into_iter()
+                .map(|(id, ty)| (id, TypeBinding::Type(ty)))
+                .collect::<PolyTypeBindings>();
+            bindings.insert(class_parameter, subject.clone());
+            let Some(constraints) = context
+                .iter()
+                .map(|constraint| self.open_class_constraint_binding(*constraint, &bindings))
+                .collect::<Option<Vec<_>>>()
+            else {
+                continue;
+            };
+            let Some(signature) = self.instantiate_poly_hir_type_partially(annotation, &bindings)
+            else {
+                continue;
+            };
+            let Some(parameters) = Self::arrow_parameter_types(&signature, argument_types.len())
+            else {
+                continue;
+            };
+            let Some(result) = Self::arrow_result_type(&signature, argument_types.len()) else {
+                continue;
+            };
+            matches.push(ClassMemberCallMatch {
+                resolution,
+                parameters,
+                result,
+                evidence: ClassConstraintBinding {
+                    class_item: resolution.class,
+                    subject,
+                },
+                constraints,
+            });
+        }
+        (matches.len() == 1).then(|| matches.remove(0))
+    }
+
+    fn match_class_member_call_direct(
+        &mut self,
+        resolution: ClassMemberResolution,
+        argument_types: &[GateType],
+        expected_result: Option<&GateType>,
+    ) -> Option<ClassMemberCallMatch> {
         let (class_parameter, member_annotation, member_context) =
             self.class_member_signature(resolution)?;
         let mut bindings = PolyTypeBindings::new();
@@ -2463,6 +2594,66 @@ impl<'a> GateTypeContext<'a> {
         Some((*class_item.parameters.first(), member.annotation, context))
     }
 
+    /// Construct a class subject from a value-type witness. Higher-kinded
+    /// subjects retain their fixed prefix (for example the error in Result E).
+    pub(crate) fn class_member_subject_binding(
+        &self,
+        member: ClassMemberResolution,
+        witness: &GateType,
+    ) -> Option<TypeBinding> {
+        let Item::Class(class) = &self.module.items()[member.class] else {
+            return None;
+        };
+        let parameter = *class.parameters.first();
+        let mut arity = 0;
+        let mut work = class
+            .members
+            .iter()
+            .map(|m| m.annotation)
+            .collect::<Vec<_>>();
+        while let Some(id) = work.pop() {
+            match &self.module.types()[id].kind {
+                TypeKind::Apply { callee, arguments } => {
+                    if matches!(&self.module.types()[*callee].kind, TypeKind::Name(r) if matches!(r.resolution.as_ref(), ResolutionState::Resolved(TypeResolution::TypeParameter(p)) if *p == parameter))
+                    {
+                        arity = arity.max(arguments.len());
+                    }
+                    work.push(*callee);
+                    work.extend(arguments.iter().copied());
+                }
+                TypeKind::Arrow { parameter, result } => {
+                    work.push(*parameter);
+                    work.push(*result);
+                }
+                TypeKind::Tuple(items) => work.extend(items.iter().copied()),
+                TypeKind::Record(fields) => work.extend(fields.iter().map(|f| f.ty)),
+                TypeKind::RecordTransform { source, .. } => work.push(*source),
+                TypeKind::Name(_) => {}
+            }
+        }
+        if arity == 0 {
+            return Some(TypeBinding::Type(witness.clone()));
+        }
+        if let GateType::TypeParameter { parameter, .. } = witness {
+            return Some(TypeBinding::Constructor(TypeConstructorBinding {
+                head: TypeConstructorHead::Parameter {
+                    parameter: *parameter,
+                    arity,
+                },
+                arguments: Vec::new(),
+            }));
+        }
+        let (head, mut arguments) = witness.constructor_view()?;
+        if arguments.len() < arity {
+            return None;
+        }
+        arguments.truncate(arguments.len() - arity);
+        Some(TypeBinding::Constructor(TypeConstructorBinding {
+            head,
+            arguments,
+        }))
+    }
+
     pub(crate) fn class_member_label(&self, resolution: ClassMemberResolution) -> Option<String> {
         let Item::Class(class_item) = &self.module.items()[resolution.class] else {
             return None;
@@ -2489,9 +2680,21 @@ impl<'a> GateTypeContext<'a> {
         bindings: &PolyTypeBindings,
     ) -> Option<ClassConstraintBinding> {
         let (class_item, subject) = self.class_constraint_parts(constraint)?;
+        let subject = self.open_poly_type_binding(subject, bindings)?;
+        let subject = match subject {
+            TypeBinding::Type(ref witness @ GateType::TypeParameter { .. }) => self
+                .class_member_subject_binding(
+                    ClassMemberResolution {
+                        class: class_item,
+                        member_index: 0,
+                    },
+                    witness,
+                )?,
+            other => other,
+        };
         Some(ClassConstraintBinding {
             class_item,
-            subject: self.open_poly_type_binding(subject, bindings)?,
+            subject,
         })
     }
 
@@ -2833,6 +3036,18 @@ impl<'a> GateTypeContext<'a> {
     fn rewrite_current_domain_carrier_view(&mut self, owner: ItemId, ty: &GateType) -> GateType {
         match ty {
             GateType::Primitive(_) | GateType::TypeParameter { .. } => ty.clone(),
+            GateType::TypeApplication {
+                parameter,
+                name,
+                arguments,
+            } => GateType::TypeApplication {
+                parameter: *parameter,
+                name: name.clone(),
+                arguments: arguments
+                    .iter()
+                    .map(|arg| self.rewrite_current_domain_carrier_view(owner, arg))
+                    .collect(),
+            },
             GateType::Tuple(elements) => GateType::Tuple(
                 elements
                     .iter()
@@ -3241,7 +3456,17 @@ impl<'a> GateTypeContext<'a> {
                 self.lower_type_item(*item_id, arguments, item_stack, allow_open_type_parameters)
             }
             ResolutionState::Resolved(TypeResolution::TypeParameter(parameter)) => {
-                substitutions.get(parameter).cloned()
+                if let Some(witness) = substitutions.get(parameter) {
+                    return witness.with_applied_arguments(arguments);
+                }
+                allow_open_type_parameters.then(|| GateType::TypeApplication {
+                    parameter: *parameter,
+                    name: self.module.type_parameters()[*parameter]
+                        .name
+                        .text()
+                        .to_owned(),
+                    arguments: arguments.to_vec(),
+                })
             }
             ResolutionState::Resolved(TypeResolution::Import(import_id)) => {
                 let name = self.module.imports()[*import_id]
@@ -3309,11 +3534,13 @@ impl<'a> GateTypeContext<'a> {
                     }
                 }
             }
-            Item::Domain(item) => Some(GateType::Domain {
-                item: item_id,
-                name: item.name.text().to_owned(),
-                arguments: arguments.to_vec(),
-            }),
+            Item::Domain(item) => {
+                (item.parameters.len() == arguments.len()).then(|| GateType::Domain {
+                    item: item_id,
+                    name: item.name.text().to_owned(),
+                    arguments: arguments.to_vec(),
+                })
+            }
             Item::Class(_)
             | Item::Value(_)
             | Item::Function(_)
@@ -3432,6 +3659,11 @@ impl<'a> GateTypeContext<'a> {
                 match bindings.get(parameter)? {
                     TypeBinding::Type(ty) => Some(ty.clone()),
                     TypeBinding::Constructor(binding) => {
+                        if binding.arguments.len()
+                            != type_constructor_arity(binding.head, self.module)
+                        {
+                            return None;
+                        }
                         self.apply_type_constructor(binding.head, &binding.arguments, item_stack)
                     }
                 }
@@ -3560,6 +3792,28 @@ impl<'a> GateTypeContext<'a> {
     ) -> bool {
         if let Some(lowered) = self.lower_poly_type(type_id, bindings, item_stack) {
             return lowered.same_shape(actual);
+        }
+        // Match transparent record aliases structurally even while their type
+        // arguments remain open. A record has no constructor tag to inspect.
+        if matches!(actual, GateType::Record(_))
+            && let Some(template @ GateType::Record(_)) =
+                self.lower_poly_type_partially(type_id, bindings, item_stack)
+        {
+            let mut substitutions = HashMap::new();
+            if !actual.unify_type_params(&template, &mut substitutions) {
+                return false;
+            }
+            for (parameter, ty) in substitutions {
+                let candidate = TypeBinding::Type(ty);
+                match bindings.entry(parameter) {
+                    Entry::Occupied(entry) if !entry.get().matches(&candidate) => return false,
+                    Entry::Occupied(_) => {}
+                    Entry::Vacant(entry) => {
+                        entry.insert(candidate);
+                    }
+                }
+            }
+            return true;
         }
         let ty = self.module.types()[type_id].clone();
         match ty.kind {
@@ -3719,7 +3973,7 @@ impl<'a> GateTypeContext<'a> {
                         *argument,
                         &HashMap::new(),
                         item_stack,
-                        false,
+                        true,
                     )?);
                 }
                 Some(TypeConstructorBinding {
@@ -3765,6 +4019,18 @@ impl<'a> GateTypeContext<'a> {
         item_stack: &mut Vec<ItemId>,
     ) -> Option<GateType> {
         match head {
+            TypeConstructorHead::Parameter { parameter, arity } => {
+                (arguments.len() == arity).then(|| GateType::TypeApplication {
+                    parameter,
+                    name: self
+                        .module
+                        .type_parameters()
+                        .get(parameter)
+                        .map(|p| p.name.text().to_owned())
+                        .unwrap_or_else(|| format!("F{}", parameter.as_raw())),
+                    arguments: arguments.to_vec(),
+                })
+            }
             TypeConstructorHead::Builtin(builtin) => {
                 self.apply_builtin_type_constructor(builtin, arguments)
             }
@@ -3772,7 +4038,7 @@ impl<'a> GateTypeContext<'a> {
                 self.lower_type_item(item_id, arguments, item_stack, false)
             }
             TypeConstructorHead::Import(import_id) => {
-                let name = self.module.imports()[import_id]
+                let name = self.module.imports().get(import_id)?
                     .local_name
                     .text()
                     .to_owned();
@@ -3789,6 +4055,7 @@ impl<'a> GateTypeContext<'a> {
         actual: &GateType,
     ) -> bool {
         let expected_name = match expected {
+            TypeConstructorHead::Parameter { .. } => return false,
             TypeConstructorHead::Item(item_id) => {
                 Some(item_type_name(&self.module.items()[*item_id]))
             }
@@ -5238,6 +5505,34 @@ impl<'a> GateTypeContext<'a> {
     ) -> Option<(Vec<GateType>, GateType)> {
         if function.parameters.len() < argument_types.len() || function.annotation.is_none() {
             return None;
+        }
+        if function
+            .parameters
+            .iter()
+            .any(|parameter| parameter.annotation.is_none())
+        {
+            let signature = self.lower_open_annotation(function.annotation?)?;
+            let (parameters, result) = self.function_signature(&signature, argument_types.len())?;
+            let mut substitutions = HashMap::new();
+            if !argument_types
+                .iter()
+                .zip(&parameters)
+                .all(|(actual, template)| actual.unify_type_params(template, &mut substitutions))
+            {
+                return None;
+            }
+            if let Some(expected) = expected_result
+                && !expected.unify_type_params(&result, &mut substitutions)
+            {
+                return None;
+            }
+            return Some((
+                parameters
+                    .iter()
+                    .map(|ty| ty.substitute_type_parameters(&substitutions))
+                    .collect(),
+                result.substitute_type_parameters(&substitutions),
+            ));
         }
         let mut bindings = PolyTypeBindings::new();
         let mut instantiated_parameters = Vec::with_capacity(argument_types.len());

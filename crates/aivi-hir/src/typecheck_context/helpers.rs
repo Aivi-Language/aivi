@@ -15,6 +15,7 @@ pub(crate) fn builtin_type_arity(builtin: BuiltinType) -> usize {
 
 pub(crate) fn type_constructor_arity(head: TypeConstructorHead, module: &Module) -> usize {
     match head {
+        TypeConstructorHead::Parameter { arity, .. } => arity,
         TypeConstructorHead::Builtin(builtin) => builtin_type_arity(builtin),
         TypeConstructorHead::Item(item_id) => module
             .items()
@@ -25,9 +26,9 @@ pub(crate) fn type_constructor_arity(head: TypeConstructorHead, module: &Module)
                 _ => 0,
             })
             .unwrap_or(0),
-        TypeConstructorHead::Import(import_id) => match &module.imports()[import_id].metadata {
-            ImportBindingMetadata::TypeConstructor { kind, .. }
-            | ImportBindingMetadata::Domain { kind, .. } => kind.arity(),
+        TypeConstructorHead::Import(import_id) => match module.imports().get(import_id).map(|binding| &binding.metadata) {
+            Some(ImportBindingMetadata::TypeConstructor { kind, .. }
+            | ImportBindingMetadata::Domain { kind, .. }) => kind.arity(),
             _ => 0,
         },
     }
@@ -49,11 +50,11 @@ pub(crate) fn item_type_name(item: &Item) -> String {
 pub(crate) struct GateExprEnv {
     pub(crate) locals: HashMap<BindingId, GateType>,
     pub(crate) current_domain: Option<ItemId>,
-    pub(crate) equality_evidence: Vec<GateEqualityEvidence>,
+    pub(crate) class_evidence: Vec<GateClassEvidence>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct GateEqualityEvidence {
+pub(crate) struct GateClassEvidence {
     pub(crate) binding: BindingId,
     pub(crate) span: SourceSpan,
     pub(crate) name: Box<str>,
@@ -791,6 +792,24 @@ pub(crate) fn lower_import_value_type_with_substitutions(
     substitutions: &[GateType],
 ) -> GateType {
     match ty {
+        ImportValueType::TypeApplication {
+            index,
+            name,
+            arguments,
+        } => {
+            let applied = arguments
+                .iter()
+                .map(|a| lower_import_value_type_with_substitutions(module, a, substitutions))
+                .collect::<Vec<_>>();
+            substitutions
+                .get(*index)
+                .and_then(|w| w.with_applied_arguments(&applied))
+                .unwrap_or_else(|| GateType::TypeApplication {
+                    parameter: TypeParameterId::from_raw(u32::MAX - *index as u32),
+                    name: name.clone(),
+                    arguments: applied,
+                })
+        }
         ImportValueType::Primitive(builtin) => GateType::Primitive(*builtin),
         ImportValueType::Tuple(elements) => GateType::Tuple(
             elements

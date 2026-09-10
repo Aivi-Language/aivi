@@ -4,6 +4,17 @@
 
 The empty dictionary is `{ entries: [] }`. `insert` places a new or replaced key first. `fromList` processes pairs from left to right, so the final occurrence of a duplicate key wins and appears first.
 
+## Type class operations
+
+`Dict K` implements `Functor`, `Foldable`, and `Filterable`. Ambient `map` transforms values,
+`reduce` folds them in entry order, and `filterMap` removes entries whose transformed value is
+`None`. Keys and the relative order of retained entries are preserved. `Default (Dict K V)`
+creates an empty dictionary. These operations do not require `Eq K` because they never compare
+or insert keys.
+
+`mapValues` remains the explicitly named equivalent of `map`. There is no implicit class-level
+merge policy for dictionaries.
+
 ## API
 
 | Export | Type | Behavior |

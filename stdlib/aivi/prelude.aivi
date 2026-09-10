@@ -1,6 +1,6 @@
 // Keep the prelude carrier-agnostic. Data-specific helpers live in their
 // owning modules so imports identify the operation's implementation owner.
-export (Int, Float, Decimal, BigInt, Bool, Text, Unit, Ordering, List, Option, Result, Validation, Signal, Task, Eq, Default, Functor, Ord, Semigroup, Monoid, Bifunctor, Traversable, Filterable, Applicative, Monad, Foldable, min, max, minOf, maxOf, clamp)
+export (Int, Float, Decimal, BigInt, Bool, Text, Unit, Ordering, List, Option, Result, Validation, Signal, Task, Eq, Default, Functor, Ord, Semigroup, Monoid, Bifunctor, Traversable, Filterable, Apply, Applicative, Chain, Monad, Foldable, min, max, minOf, maxOf, clamp)
 
 @test
 value prelude_min : Task Text Bool = pure (min 3 2 == 2)

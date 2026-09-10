@@ -3,6 +3,16 @@
 /// binding names for auto-imported instance members.
 fn import_value_type_label(ty: &ImportValueType) -> String {
     match ty {
+        ImportValueType::TypeApplication {
+            index, arguments, ..
+        } => format!(
+            "Apply_{index}_{}",
+            arguments
+                .iter()
+                .map(import_value_type_label)
+                .collect::<Vec<_>>()
+                .join("_")
+        ),
         ImportValueType::Primitive(builtin) => format!("{builtin:?}"),
         ImportValueType::Tuple(elements) => {
             let parts: Vec<_> = elements.iter().map(import_value_type_label).collect();

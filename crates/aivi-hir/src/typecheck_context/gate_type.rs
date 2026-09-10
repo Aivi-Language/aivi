@@ -5,6 +5,13 @@ pub enum GateType {
         parameter: TypeParameterId,
         name: String,
     },
+    /// An application of an abstract higher-kinded parameter, retained until
+    /// class evidence is supplied by a concrete call site.
+    TypeApplication {
+        parameter: TypeParameterId,
+        name: String,
+        arguments: Vec<GateType>,
+    },
     Tuple(Vec<GateType>),
     Record(Vec<GateRecordField>),
     Arrow {
@@ -218,6 +225,26 @@ impl GateType {
             Self::TypeParameter { parameter, .. } => {
                 subs.get(parameter).cloned().unwrap_or_else(|| self.clone())
             }
+            Self::TypeApplication {
+                parameter,
+                name,
+                arguments,
+            } => {
+                let arguments = arguments
+                    .iter()
+                    .map(|a| a.substitute_type_parameters(subs))
+                    .collect::<Vec<_>>();
+                match subs.get(parameter) {
+                    Some(witness) => witness
+                        .with_applied_arguments(&arguments)
+                        .unwrap_or_else(|| self.clone()),
+                    None => Self::TypeApplication {
+                        parameter: *parameter,
+                        name: name.clone(),
+                        arguments,
+                    },
+                }
+            }
             Self::Primitive(_) => self.clone(),
             Self::Arrow { parameter, result } => Self::Arrow {
                 parameter: Box::new(parameter.substitute_type_parameters(subs)),
@@ -307,7 +334,7 @@ impl GateType {
     /// any `TypeParameter` in `template` as an unconstrained wildcard.
     pub(crate) fn has_type_params(&self) -> bool {
         match self {
-            Self::TypeParameter { .. } => true,
+            Self::TypeParameter { .. } | Self::TypeApplication { .. } => true,
             Self::Primitive(_) => false,
             Self::Arrow { parameter, result } => {
                 parameter.has_type_params() || result.has_type_params()
@@ -333,6 +360,30 @@ impl GateType {
             return self.fits_template(&expanded_template);
         }
         match template {
+            Self::TypeApplication {
+                parameter,
+                arguments,
+                ..
+            } => {
+                let Some((_, actual)) = self.constructor_view() else {
+                    return false;
+                };
+                if actual.len() < arguments.len() {
+                    return false;
+                }
+                if let Self::TypeApplication {
+                    parameter: actual_parameter,
+                    ..
+                } = self
+                    && parameter != actual_parameter
+                {
+                    return false;
+                }
+                actual[actual.len() - arguments.len()..]
+                    .iter()
+                    .zip(arguments)
+                    .all(|(a, t)| a.fits_template(t))
+            }
             Self::TypeParameter { .. } => true,
             Self::Primitive(_) => self == template,
             Self::Arrow {
@@ -468,7 +519,46 @@ impl GateType {
         template: &Self,
         bindings: &mut HashMap<TypeParameterId, GateType>,
     ) -> bool {
+        if let Some(expanded) = self.expand_transparent_import_alias() {
+            return expanded.unify_type_params(template, bindings);
+        }
+        if let Some(expanded) = template.expand_transparent_import_alias() {
+            return self.unify_type_params(&expanded, bindings);
+        }
         match template {
+            Self::TypeApplication {
+                parameter,
+                arguments,
+                ..
+            } => {
+                let Some((head, actual)) = self.constructor_view() else {
+                    return false;
+                };
+                if actual.len() < arguments.len() {
+                    return false;
+                }
+                if let Some(previous) = bindings.get(parameter) {
+                    let Some((previous_head, previous_args)) = previous.constructor_view() else {
+                        return false;
+                    };
+                    let fixed = actual.len() - arguments.len();
+                    if previous_head != head
+                        || previous_args.len() != actual.len()
+                        || !previous_args[..fixed]
+                            .iter()
+                            .zip(&actual[..fixed])
+                            .all(|(a, b)| a.same_shape(b))
+                    {
+                        return false;
+                    }
+                } else {
+                    bindings.insert(*parameter, self.clone());
+                }
+                actual[actual.len() - arguments.len()..]
+                    .iter()
+                    .zip(arguments)
+                    .all(|(a, t)| a.unify_type_params(t, bindings))
+            }
             Self::TypeParameter { parameter, .. } => match bindings.get(parameter) {
                 Some(existing) => existing.same_shape(self),
                 None => {
@@ -615,6 +705,17 @@ impl GateType {
         arguments: &[GateType],
     ) -> Option<GateType> {
         match alias {
+            ImportValueType::TypeApplication {
+                index,
+                arguments: applied,
+                ..
+            } => {
+                let applied = applied
+                    .iter()
+                    .map(|a| Self::expand_import_alias_type(a, arguments))
+                    .collect::<Option<Vec<_>>>()?;
+                arguments.get(*index)?.with_applied_arguments(&applied)
+            }
             ImportValueType::Primitive(builtin) => Some(GateType::Primitive(*builtin)),
             ImportValueType::TypeVariable { index, .. } => arguments.get(*index).cloned(),
             ImportValueType::Arrow { parameter, result } => Some(GateType::Arrow {
@@ -717,6 +818,35 @@ impl GateType {
                         }
         }
         match (left, right) {
+            (
+                Self::TypeApplication {
+                    parameter: lp,
+                    name: ln,
+                    arguments: la,
+                },
+                Self::TypeApplication {
+                    parameter: rp,
+                    name: rn,
+                    arguments: ra,
+                },
+            ) => {
+                Self::same_shape_inner(
+                    &Self::TypeParameter {
+                        parameter: *lp,
+                        name: ln.clone(),
+                    },
+                    &Self::TypeParameter {
+                        parameter: *rp,
+                        name: rn.clone(),
+                    },
+                    left_to_right,
+                    right_to_left,
+                ) && la.len() == ra.len()
+                    && la
+                        .iter()
+                        .zip(ra)
+                        .all(|(l, r)| Self::same_shape_inner(l, r, left_to_right, right_to_left))
+            }
             (Self::Primitive(left), Self::Primitive(right)) => left == right,
             (
                 Self::TypeParameter {
@@ -920,6 +1050,66 @@ impl GateType {
         }
     }
 
+    pub(crate) fn with_applied_arguments(&self, applied: &[GateType]) -> Option<Self> {
+        let (_, mut arguments) = self.constructor_view()?;
+        if arguments.len() < applied.len() {
+            return None;
+        }
+        let offset = arguments.len() - applied.len();
+        arguments[offset..].clone_from_slice(applied);
+        Some(match self {
+            Self::TypeApplication {
+                parameter, name, ..
+            } => Self::TypeApplication {
+                parameter: *parameter,
+                name: name.clone(),
+                arguments,
+            },
+            Self::List(_) => Self::List(Box::new(arguments.remove(0))),
+            Self::Option(_) => Self::Option(Box::new(arguments.remove(0))),
+            Self::Set(_) => Self::Set(Box::new(arguments.remove(0))),
+            Self::Signal(_) => Self::Signal(Box::new(arguments.remove(0))),
+            Self::Result { .. } => Self::Result {
+                error: Box::new(arguments.remove(0)),
+                value: Box::new(arguments.remove(0)),
+            },
+            Self::Validation { .. } => Self::Validation {
+                error: Box::new(arguments.remove(0)),
+                value: Box::new(arguments.remove(0)),
+            },
+            Self::Task { .. } => Self::Task {
+                error: Box::new(arguments.remove(0)),
+                value: Box::new(arguments.remove(0)),
+            },
+            Self::Map { .. } => Self::Map {
+                key: Box::new(arguments.remove(0)),
+                value: Box::new(arguments.remove(0)),
+            },
+            Self::Domain { item, name, .. } => Self::Domain {
+                item: *item,
+                name: name.clone(),
+                arguments,
+            },
+            Self::OpaqueItem { item, name, .. } => Self::OpaqueItem {
+                item: *item,
+                name: name.clone(),
+                arguments,
+            },
+            Self::OpaqueImport {
+                import,
+                name,
+                definition,
+                ..
+            } => Self::OpaqueImport {
+                import: *import,
+                name: name.clone(),
+                arguments,
+                definition: definition.clone(),
+            },
+            _ => return None,
+        })
+    }
+
     pub(crate) fn constructor_view(&self) -> Option<(TypeConstructorHead, Vec<GateType>)> {
         if let Some(expanded) = self.expand_transparent_import_alias()
             && let Some(view) = expanded.constructor_view()
@@ -927,6 +1117,17 @@ impl GateType {
             return Some(view);
         }
         match self {
+            Self::TypeApplication {
+                parameter,
+                arguments,
+                ..
+            } => Some((
+                TypeConstructorHead::Parameter {
+                    parameter: *parameter,
+                    arity: arguments.len(),
+                },
+                arguments.clone(),
+            )),
             Self::List(element) => Some((
                 TypeConstructorHead::Builtin(BuiltinType::List),
                 vec![element.as_ref().clone()],
@@ -997,6 +1198,15 @@ impl fmt::Display for GateType {
         match self {
             GateType::Primitive(builtin) => write!(f, "{}", builtin_type_name(*builtin)),
             GateType::TypeParameter { name, .. } => write!(f, "{name}"),
+            GateType::TypeApplication {
+                name, arguments, ..
+            } => {
+                write!(f, "{name}")?;
+                for argument in arguments {
+                    write!(f, " ({argument})")?;
+                }
+                Ok(())
+            }
             GateType::Tuple(elements) => {
                 write!(f, "(")?;
                 for (index, element) in elements.iter().enumerate() {
@@ -1044,5 +1254,71 @@ impl fmt::Display for GateType {
                 Ok(())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod higher_kinded_type_tests {
+    use super::*;
+
+    fn parameter(id: u32, name: &str) -> GateType {
+        GateType::TypeParameter {
+            parameter: TypeParameterId::from_raw(id),
+            name: name.into(),
+        }
+    }
+
+    fn application(argument: GateType) -> GateType {
+        GateType::TypeApplication {
+            parameter: TypeParameterId::from_raw(0),
+            name: "F".into(),
+            arguments: vec![argument],
+        }
+    }
+
+    fn result(error: BuiltinType, value: BuiltinType) -> GateType {
+        GateType::Result {
+            error: Box::new(GateType::Primitive(error)),
+            value: Box::new(GateType::Primitive(value)),
+        }
+    }
+
+    #[test]
+    fn higher_kinded_substitution_preserves_fixed_constructor_arguments() {
+        let template = GateType::Arrow {
+            parameter: Box::new(application(parameter(1, "A"))),
+            result: Box::new(application(parameter(2, "B"))),
+        };
+        let actual = GateType::Arrow {
+            parameter: Box::new(result(BuiltinType::Text, BuiltinType::Int)),
+            result: Box::new(result(BuiltinType::Text, BuiltinType::Bool)),
+        };
+        let mut substitutions = HashMap::new();
+        assert!(actual.unify_type_params(&template, &mut substitutions));
+        assert_eq!(template.substitute_type_parameters(&substitutions), actual);
+    }
+
+    #[test]
+    fn higher_kinded_unification_rejects_changing_fixed_prefixes() {
+        let template = GateType::Arrow {
+            parameter: Box::new(application(parameter(1, "A"))),
+            result: Box::new(application(parameter(2, "B"))),
+        };
+        let actual = GateType::Arrow {
+            parameter: Box::new(result(BuiltinType::Text, BuiltinType::Int)),
+            result: Box::new(result(BuiltinType::Int, BuiltinType::Bool)),
+        };
+        assert!(!actual.unify_type_params(&template, &mut HashMap::new()));
+    }
+
+    #[test]
+    fn higher_kinded_unification_rejects_insufficient_constructor_arity() {
+        let template = GateType::TypeApplication {
+            parameter: TypeParameterId::from_raw(0),
+            name: "F".into(),
+            arguments: vec![parameter(1, "A"), parameter(2, "B")],
+        };
+        let actual = GateType::Option(Box::new(GateType::Primitive(BuiltinType::Int)));
+        assert!(!actual.unify_type_params(&template, &mut HashMap::new()));
     }
 }

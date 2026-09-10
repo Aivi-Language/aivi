@@ -146,6 +146,7 @@ fn workspace_instance_subject_label(
 
 fn import_value_type_label(ty: &aivi_hir::ImportValueType) -> String {
     match ty {
+        aivi_hir::ImportValueType::TypeApplication { index, arguments, .. } => format!("Apply_{index}_{}", arguments.iter().map(import_value_type_label).collect::<Vec<_>>().join("_")),
         aivi_hir::ImportValueType::Primitive(builtin) => format!("{builtin:?}"),
         aivi_hir::ImportValueType::Tuple(elements) => {
             let parts: Vec<_> = elements.iter().map(import_value_type_label).collect();
@@ -658,7 +659,7 @@ impl<'a> ModuleLowerer<'a> {
                     *item = HirItemId::from_raw(item.as_raw() + self.item_origin_offset);
                     work.extend(arguments);
                 }
-                Type::OpaqueImport { arguments, .. } => work.extend(arguments),
+                Type::OpaqueImport { arguments, .. } | Type::TypeApplication { arguments, .. } => work.extend(arguments),
                 Type::Domain { arguments, carrier, .. } => {
                     work.extend(arguments);
                     if let Some(carrier) = carrier { work.push(carrier); }
@@ -2641,6 +2642,7 @@ impl<'a> ModuleLowerer<'a> {
             TypeBinding::Type(ty) => ty.to_string(),
             TypeBinding::Constructor(binding) => {
                 let head = match binding.head() {
+                    TypeConstructorHead::Parameter { parameter, .. } => format!("F{}", parameter.as_raw()),
                     TypeConstructorHead::Builtin(builtin) => format!("{builtin:?}"),
                     TypeConstructorHead::Item(item_id) => match &self.hir.items()[item_id] {
                         aivi_hir::Item::Type(item) => item.name.text().to_owned(),

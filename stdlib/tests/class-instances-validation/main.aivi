@@ -1,0 +1,227 @@
+use aivi.core.either (
+    Either
+    Left
+    Right
+)
+
+use aivi.core.dict (
+    Dict
+    fromList as dictFromList
+    toList as dictToList
+)
+
+use aivi.core.set (
+    Set
+    fromList as setFromList
+)
+
+use aivi.nonEmpty (
+    NonEmptyList
+    fromHeadTail
+    toList as nelToList
+)
+
+type Int -> Int
+func increment = n =>
+    n + 1
+
+type Int -> Int -> Int
+func accumulate = total n =>
+    total * 10 + n
+
+type Int -> Option Int
+func keepPositive = n => n > 0
+ T|> Some (n + 1)
+ F|> None
+
+value right : Either Text Int = Right 2
+value mappedRight : Either Text Int = map increment right
+value expectedRight : Either Text Int = Right 3
+
+value dictionary : Dict Text Int =
+    dictFromList [
+        ("b", 2),
+        ("a", 1)
+    ]
+
+value mappedDictionary : Dict Text Int = map increment dictionary
+value filteredDictionary : Dict Text Int = filterMap keepPositive dictionary
+
+value items : NonEmptyList Int =
+    fromHeadTail 1 [
+        2,
+        3
+    ]
+
+value mappedItems : NonEmptyList Int = map increment items
+
+value set : Set Int =
+    setFromList [
+        3,
+        1,
+        3,
+        2
+    ]
+
+value emptyDictionary : Dict Text Int = default
+value emptySet : Set Int = default
+
+@test
+value eitherFunctor : Task Text Bool = pure (mappedRight == expectedRight)
+
+@test
+value dictFunctor : Task Text Bool = pure (dictToList mappedDictionary == [("a", 2), ("b", 3)])
+
+@test
+value dictFilterable : Task Text Bool = pure (dictToList filteredDictionary == [("a", 2), ("b", 3)])
+
+@test
+value dictFoldable : Task Text Bool = pure (reduce accumulate 0 dictionary == 12)
+
+@test
+value nelFunctor : Task Text Bool = pure (nelToList mappedItems == [2, 3, 4])
+
+@test
+value nelFoldable : Task Text Bool = pure (reduce accumulate 0 items == 123)
+
+@test
+value setFoldable : Task Text Bool = pure (reduce accumulate 0 set == 312)
+
+@test
+value dictDefault : Task Text Bool = pure (dictToList emptyDictionary == [])
+
+@test
+value setDefault : Task Text Bool = pure (reduce accumulate 0 emptySet == 0)
+
+use aivi.core.bytes (
+    fromText
+    toText
+)
+
+type Int -> Int
+func identityInt = n =>
+    n
+
+type Int -> Int
+func double = n =>
+    n * 2
+
+type Int -> Int
+func doubleAfterIncrement = n =>
+    double (increment n)
+
+type Int -> Either Text Int
+func nextRight = n =>
+    Right (n + 1)
+
+type Int -> NonEmptyList Int
+func nextItems = n =>
+    fromHeadTail n [n + 10]
+
+value left : Either Text Int = Left "stop"
+value rightPure : Either Text Int = pure 2
+value rightFunctions : Either Text (Int -> Int) = Right increment
+value leftFunctions : Either Text (Int -> Int) = Left "first"
+value appliedRight : Either Text Int = apply rightFunctions right
+value appliedLeft : Either Text Int = apply leftFunctions left
+value chainedRight : Either Text Int = chain nextRight right
+value chainedLeft : Either Text Int = chain nextRight left
+value nestedRight : Either Text (Either Text Int) = Right right
+value joinedRight : Either Text Int = join nestedRight
+
+value functionItems : NonEmptyList (Int -> Int) =
+    fromHeadTail increment [
+        double
+    ]
+
+value appliedItems : NonEmptyList Int = apply functionItems items
+value chainedItems : NonEmptyList Int = chain nextItems items
+value pureItems : NonEmptyList Int = pure 2
+
+value nestedItems : NonEmptyList (NonEmptyList Int) =
+    fromHeadTail items [
+        pureItems
+    ]
+
+value joinedItems : NonEmptyList Int = join nestedItems
+value appendedItems : NonEmptyList Int = append items pureItems
+value byteA : Bytes = fromText "a"
+value byteB : Bytes = fromText "b"
+value emptyBytes : Bytes = empty
+value defaultBytes : Bytes = default
+value appendedBytes : Bytes = append byteA byteB
+
+value mixedDictionary : Dict Text Int =
+    dictFromList [
+        ("a", 1),
+        ("b", -1),
+        ("c", 2)
+    ]
+
+value selectedDictionary : Dict Text Int = filterMap keepPositive mixedDictionary
+
+@test
+value eitherIdentity : Task Text Bool = pure (map identityInt right == right)
+
+@test
+value eitherComposition : Task Text Bool = pure (map double (map increment right) == map doubleAfterIncrement right)
+
+@test
+value eitherLeftPreserved : Task Text Bool = pure (map increment left == left)
+
+@test
+value eitherApplicative : Task Text Bool = pure ((rightPure, appliedRight, appliedLeft) == (right, expectedRight, Left "first"))
+
+@test
+value eitherMonad : Task Text Bool = pure ((chainedRight, chainedLeft, joinedRight) == (expectedRight, left, right))
+
+@test
+value eitherFoldOrder : Task Text Bool = pure ((reduce accumulate 4 right, reduce accumulate 4 left) == (42, 4))
+
+@test
+value nonEmptyIdentity : Task Text Bool = pure (nelToList (map identityInt items) == nelToList items)
+
+@test
+value nonEmptyComposition : Task Text Bool = pure (nelToList (map double (map increment items)) == nelToList (map doubleAfterIncrement items))
+
+@test
+value nonEmptyApplyOrder : Task Text Bool = pure (nelToList appliedItems == [2, 3, 4, 2, 4, 6])
+
+@test
+value nonEmptyChainOrder : Task Text Bool = pure (nelToList chainedItems == [1, 11, 2, 12, 3, 13])
+
+@test
+value nonEmptyJoin : Task Text Bool = pure (nelToList joinedItems == [1, 2, 3, 2])
+
+@test
+value nonEmptyAppend : Task Text Bool = pure (nelToList appendedItems == [1, 2, 3, 2])
+
+@test
+value dictIdentity : Task Text Bool = pure (dictToList (map identityInt dictionary) == dictToList dictionary)
+
+@test
+value dictFilterPreservesKeys : Task Text Bool = pure (dictToList selectedDictionary == [("c", 3), ("a", 2)])
+
+@test
+value bytesClassOperations : Task Text Bool = pure ((toText appendedBytes, toText emptyBytes, toText defaultBytes) == (Some "ab", Some "", Some ""))
+
+value eitherMapper : (Int -> Int) -> Either Text Int -> Either Text Int = map
+value mappedByValue : Either Text Int = eitherMapper increment right
+
+type Text -> Int
+func constantSeven = text =>
+    7
+
+value bothMapped : Either Int Int = bimap constantSeven increment left
+value eitherBimapExpected : Either Int Int = Left 7
+value appendLeft : NonEmptyList Int = append (append items pureItems) items
+value appendRight : NonEmptyList Int = append items (append pureItems items)
+
+@test
+value classMethodAsValue : Task Text Bool = pure (mappedByValue == expectedRight)
+
+@test
+value eitherBifunctor : Task Text Bool = pure (bothMapped == eitherBimapExpected)
+
+@test
+value nonEmptyAppendAssociative : Task Text Bool = pure (nelToList appendLeft == nelToList appendRight)

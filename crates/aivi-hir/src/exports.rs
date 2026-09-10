@@ -610,6 +610,18 @@ pub(crate) fn poly_gate_type_import_value_type(
     parameters: &HashMap<TypeParameterId, usize>,
 ) -> Option<ImportValueType> {
     match ty {
+        crate::GateType::TypeApplication {
+            parameter,
+            name,
+            arguments,
+        } => Some(ImportValueType::TypeApplication {
+            index: *parameters.get(parameter)?,
+            name: name.clone(),
+            arguments: arguments
+                .iter()
+                .map(|a| poly_gate_type_import_value_type(a, parameters))
+                .collect::<Option<Vec<_>>>()?,
+        }),
         crate::GateType::Primitive(builtin) => primitive_import_value_type_from_builtin(*builtin),
         crate::GateType::TypeParameter { parameter, name } => Some(ImportValueType::TypeVariable {
             index: *parameters.get(parameter)?,
@@ -1688,7 +1700,22 @@ fn poly_import_value_type_with_stack(
                 module, *result, params, item_stack,
             )?),
         }),
-        TypeKind::Apply { .. } => {
+        TypeKind::Apply { callee, arguments } => {
+            if let TypeKind::Name(reference) = &module.types()[*callee].kind
+                && let ResolutionState::Resolved(TypeResolution::TypeParameter(parameter)) =
+                    reference.resolution.as_ref()
+            {
+                return Some(ImportValueType::TypeApplication {
+                    index: *params.get(parameter)?,
+                    name: module.type_parameters()[*parameter].name.text().to_owned(),
+                    arguments: arguments
+                        .iter()
+                        .map(|arg| {
+                            poly_import_value_type_with_stack(module, *arg, params, item_stack)
+                        })
+                        .collect::<Option<Vec<_>>>()?,
+                });
+            }
             poly_applied_import_value_type_with_stack(module, ty, params, item_stack)
         }
     }

@@ -147,6 +147,10 @@ impl TypeConstructorBinding {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TypeConstructorHead {
+    Parameter {
+        parameter: TypeParameterId,
+        arity: usize,
+    },
     Builtin(BuiltinType),
     Item(ItemId),
     Import(ImportId),

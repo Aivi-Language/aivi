@@ -6,6 +6,13 @@ This module is intentionally tiny. Use it when you want a clear starting value f
 or flags without repeating `""`, `0`, or `False` across your code. It also re-exports `Option`, so
 small modules can import the type and these defaults together.
 
+## Type class operations
+
+This module defines `Default Text`, `Default Int`, and `Default Bool`. Their defaults are `""`,
+`0`, and `False`. The named values `defaultText`, `defaultInt`, and `defaultBool` delegate to the
+same class instances. Importing this module's exported values also brings those instances into
+scope.
+
 ## Import
 
 ```aivi

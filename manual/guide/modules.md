@@ -167,7 +167,8 @@ hoist (func) hiding (foldr, foldl)
 
 ### Name disambiguation
 
-When two hoisted modules export the same name (e.g. `map` from both `aivi.list` and `aivi.option`), the compiler picks the right one from type context:
+Ambient class methods such as `map` are resolved through class evidence before hoisted helpers.
+For other names shared by hoisted modules, the compiler uses type context to disambiguate:
 
 ```aivi
 type Int -> Int
@@ -189,8 +190,11 @@ If the type context is insufficient, the compiler reports an error and suggests 
 ### Priority order
 
 ```text
-local definitions > use imports > hoisted globals > ambient prelude
+local definitions > use imports > class methods > hoisted globals > other ambient names
 ```
+
+An explicit `use aivi.list (map)` selects the list helper in that file. Without that import,
+`map` remains class-polymorphic even when list helpers are hoisted.
 
 `use` always wins over `hoist` for the same name, so you can override a hoisted name locally for a specific file.
 

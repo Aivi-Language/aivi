@@ -100,6 +100,59 @@ This registry-backed table is the canonical documentation source for builtin exe
 For the law contract behind this hierarchy and the rationale for why `Signal` and `Validation`
 intentionally stop at `Applicative`, see [Class Laws & Design Boundaries](/guide/class-laws).
 
+## Standard library instances
+
+These instances are implemented in their owning modules. Import that module's type or helpers to
+make its instances available; no carrier-specific spelling of the class operation is required.
+
+| Carrier | Classes | Behavior |
+| --- | --- | --- |
+| `Either E` | `Functor`, `Apply`, `Applicative`, `Chain`, `Monad`, `Foldable` | Operate on `Right`; preserve and short-circuit `Left`. `pure` creates `Right`. |
+| `Either` | `Bifunctor` | `bimap` transforms both alternatives independently. |
+| `Dict K` | `Functor`, `Foldable`, `Filterable` | Transform or visit values, preserving keys and entry order. |
+| `Dict K V` | `Default` | An empty dictionary. |
+| `Set` from `aivi.core.set` | `Foldable` | Visit members once, in insertion order. |
+| `Set A` from `aivi.core.set` | `Default` | An empty set. |
+| `NonEmptyList` | `Functor`, `Apply`, `Applicative`, `Chain`, `Monad`, `Foldable` | Preserve non-emptiness; application uses function-major Cartesian order, and chaining concatenates results in input order. |
+| `NonEmptyList A` | `Semigroup` | Concatenate in order. |
+| `Matrix` | `Functor`, `Foldable` | Preserve dimensions when mapping; fold in row-major order. |
+| `Bytes` from `aivi.core.bytes` | `Semigroup`, `Monoid`, `Default` | Concatenation and empty bytes. |
+| `Text`, `Int`, `Bool` from `aivi.defaults` | `Default` | Empty text, zero, and false, respectively. |
+
+The class laws constrain this table. Sets do not get an unrestricted `Functor`: mapping can merge
+members and would need output equality evidence. Non-empty lists do not get `Monoid`, `Default`,
+or `Filterable`: those operations could produce no elements. Dictionaries do not choose an
+implicit key-collision policy for `append` or `apply`. Matrix filtering would lose its rectangular
+shape. `Signal` and `Validation` retain the applicative boundaries described above.
+
+## Generic class-constrained functions
+
+A class constraint can abstract over a constructor as well as an element type. The compiler passes
+the required method evidence to the function, including through nested and imported calls.
+
+```aivi
+type Functor F => (A -> B) -> F A -> F B
+func transform = f values => values
+  |> map f
+
+type Int -> Int
+func increment = n =>
+    n + 1
+
+value optional : Option Int = transform increment (Some 2)
+
+value numbers : List Int =
+    transform increment [
+        1,
+        2,
+        3
+    ]
+```
+
+Keep constraints explicit. A `Functor` constraint does not imply `Monad`, and a `Foldable` constraint
+does not imply that a collection can be empty. Class resolution must select one instance; it does
+not choose between overlapping instance implementations by import order.
+
 ## Execution boundary: builtin carriers vs authored instances
 
 AIVI has two executable higher-kinded paths today, and they are intentionally different:
@@ -166,7 +219,7 @@ up the same operators.
 - Same-module class declarations, including `with` superclasses and `require` constraints
 - Same-module and imported use of ordinary first-order instances such as `Eq Date` or `Ord Calendar`
 - Unary `instance` blocks for higher-kinded heads such as `instance Applicative Option`
-- Partially applied heads such as `instance Functor (Result Text)`
+- Partially applied heads with fixed or polymorphic prefixes, such as `instance Functor (Either E)`
 - Same-module and imported use of unary higher-kinded members such as `map` and `reduce`, which lower to authored executable evidence when the checker can choose concrete evidence
 - Bundled stdlib carriers can rely on this path; `aivi.matrix` exposes ambient `map` / `reduce` through user-authored `Functor` / `Foldable` instances rather than a new builtin carrier
 

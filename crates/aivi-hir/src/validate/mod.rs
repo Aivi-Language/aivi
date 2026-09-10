@@ -39,7 +39,7 @@ pub(crate) use crate::type_analysis::{
     CaseConstructorShape, CasePatternCoverage, RecurrenceTargetHint, walk_expr_tree,
 };
 pub(crate) use crate::typecheck_context::{
-    ClassConstraintBinding, ClassMemberCallMatch, DomainMemberSelection, GateEqualityEvidence,
+    ClassConstraintBinding, ClassMemberCallMatch, DomainMemberSelection, GateClassEvidence,
     GateExprEnv, GateIssue, GateProjectionStep, GateTypeContext, PipeFunctionSignatureMatch,
     PipeSubjectStepOutcome, PipeSubjectWalker, PolyTypeBindings, TruthyFalsyPairStages,
     ValidateStageSubject, extend_pipe_env_with_stage_memos, extend_pipe_env_with_stage_result_memo,

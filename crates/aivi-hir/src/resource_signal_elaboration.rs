@@ -594,6 +594,33 @@ fn gate_type_to_type_id(
     ty: &GateType,
 ) -> Option<crate::TypeId> {
     match ty {
+        GateType::TypeApplication {
+            parameter,
+            name: parameter_name,
+            arguments,
+        } => {
+            let callee = gate_type_to_type_id(
+                module,
+                span,
+                &GateType::TypeParameter {
+                    parameter: *parameter,
+                    name: parameter_name.clone(),
+                },
+            )?;
+            let arguments = arguments
+                .iter()
+                .map(|arg| gate_type_to_type_id(module, span, arg))
+                .collect::<Option<Vec<_>>>()?;
+            module
+                .alloc_type(TypeNode {
+                    span,
+                    kind: TypeKind::Apply {
+                        callee,
+                        arguments: NonEmpty::from_vec(arguments).ok()?,
+                    },
+                })
+                .ok()
+        }
         GateType::Primitive(builtin) => Some(builtin_type(module, *builtin, span)),
         GateType::TypeParameter {
             parameter,

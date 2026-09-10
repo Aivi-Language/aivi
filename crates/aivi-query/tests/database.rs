@@ -807,3 +807,51 @@ fn changing_an_imported_file_invalidates_transitive_hir_dependents() {
         second.hir_diagnostics()
     );
 }
+
+#[test]
+fn imported_higher_kinded_functions_preserve_and_forward_class_evidence() {
+    let workspace = TempDir::new("generic-class-evidence");
+    workspace.write("aivi.toml", "");
+    workspace.write(
+        "generic.aivi",
+        r#"
+export transform
+export nested
+type Functor F => (A -> B) -> F A -> F B
+func transform = f xs => xs |> map f
+type Functor F => (A -> B) -> F A -> F B
+func nested = f xs => transform f xs
+"#,
+    );
+    let source = r#"
+use generic (nested)
+type Int -> Int
+func increment = n => n + 1
+value mapped : Option Int = nested increment (Some 2)
+"#;
+    let main = workspace.write("main.aivi", source);
+    let db = RootDatabase::new();
+    let file = db.open_file(main, source);
+    let diagnostics = all_diagnostics(&db, file);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|d| d.severity == aivi_base::Severity::Error),
+        "{diagnostics:?}"
+    );
+    let unit = aivi_query::whole_program_backend_unit(&db, file)
+        .expect("generic imported function should lower");
+    let backend = unit.backend();
+    let (item, _) = backend
+        .items()
+        .iter()
+        .find(|(_, item)| item.name.as_ref() == "mapped")
+        .unwrap();
+    let mut evaluator = aivi_backend::KernelEvaluator::new(backend);
+    assert_eq!(
+        evaluator
+            .evaluate_item(item, &std::collections::BTreeMap::new())
+            .unwrap(),
+        aivi_backend::RuntimeValue::OptionSome(Box::new(aivi_backend::RuntimeValue::Int(3)))
+    );
+}
