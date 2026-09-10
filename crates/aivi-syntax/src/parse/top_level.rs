@@ -1324,7 +1324,7 @@ impl<'a> Parser<'a> {
 
         // Consume closing `}` only in brace syntax.
         if brace_syntax {
-            *cursor = inner_end + 1;
+            *cursor = if inner_end < end { inner_end + 1 } else { end };
         }
 
         (!with_decls.is_empty() || !require_decls.is_empty() || !members.is_empty()).then_some(
@@ -1475,7 +1475,7 @@ impl<'a> Parser<'a> {
 
         // Consume closing `}` only in brace syntax.
         if brace_syntax {
-            *cursor = inner_end + 1;
+            *cursor = if inner_end < end { inner_end + 1 } else { end };
         }
 
         (!members.is_empty()).then_some(InstanceBody {
@@ -1687,7 +1687,7 @@ impl<'a> Parser<'a> {
 
         // Consume closing `}` only in brace syntax.
         if brace_syntax {
-            *cursor = inner_end + 1;
+            *cursor = if inner_end < end { inner_end + 1 } else { end };
         }
 
         (!members.is_empty()).then_some(DomainBody {

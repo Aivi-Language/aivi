@@ -92,8 +92,7 @@ type GoaAccount = {
 
 Account record.
 
-Right now it is intentionally small: the only stored field is the account `id`. Account IDs come
-from the GOA provider; the module does not export a constructor for manufacturing one from text.
+The only stored field is the account `id`. `GoaAccountId` is a `Text` alias: applications can construct it from any text. The type does not prove that an account exists or that the ID came from GOA; the provider validates IDs when they are used.
 
 ```aivi
 use aivi.gnome.onlineAccounts (

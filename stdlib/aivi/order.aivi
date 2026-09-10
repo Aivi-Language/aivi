@@ -1,15 +1,5 @@
 hoist
 
-type Ord A => A -> A -> A
-func chooseMin = best candidate => candidate < best
- T|> candidate
- F|> best
-
-type Ord A => A -> A -> A
-func chooseMax = best candidate => best < candidate
- T|> candidate
- F|> best
-
 type (A -> A -> Bool) -> A -> A -> A
 func chooseMinBy = compare best candidate => compare candidate best
  T|> candidate

@@ -51,10 +51,14 @@ impl Backend {
             return;
         };
 
-        let (request_id, cancellation) = self.state.start_diagnostics(&uri);
+        let Some((request_id, cancellation, task_permit)) = self.state.start_diagnostics(&uri)
+        else {
+            return;
+        };
         let state = Arc::clone(&self.state);
         let client = self.client.clone();
         tokio::spawn(async move {
+            let _task_permit = task_permit;
             run_diagnostics_request(
                 Arc::clone(&state),
                 client,
@@ -66,6 +70,31 @@ impl Backend {
             .await;
             state.finish_diagnostics(&uri, request_id);
         });
+    }
+
+    fn schedule_project_diagnostics(&self, debounce: Duration) {
+        for (uri, _) in self.state.open_files() {
+            self.schedule_diagnostics(uri, debounce);
+        }
+    }
+
+    async fn update<T, F>(&self, work: F) -> Result<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&ServerState) -> T + Send + 'static,
+    {
+        let state = Arc::clone(&self.state);
+        self.state
+            .analysis_pool
+            .execute(CancellationToken::default(), move || {
+                let _lease = state.analysis_access.blocking_write();
+                work(&state)
+            })
+            .await
+            .map_err(|error| {
+                tracing::error!(?error, "workspace update failed");
+                Error::internal_error()
+            })
     }
 
     async fn analyze<T, F>(&self, work: F) -> Result<T>
@@ -176,7 +205,10 @@ async fn run_diagnostics_request(
     // an await. The version travels with the notification as a second client-
     // side stale-result defense.
     let _publication = state.diagnostic_publication.lock().await;
-    if cancellation.is_cancelled() || !state.document_is_current(&uri, &snapshot) {
+    if cancellation.is_cancelled()
+        || !state.diagnostics_are_accepting()
+        || !state.document_is_current(&uri, &snapshot)
+    {
         return;
     }
     client
@@ -190,6 +222,13 @@ async fn run_diagnostics_request(
 
 fn server_capabilities(config: ServerConfig) -> ServerCapabilities {
     ServerCapabilities {
+        workspace: Some(tower_lsp::lsp_types::WorkspaceServerCapabilities {
+            workspace_folders: Some(tower_lsp::lsp_types::WorkspaceFoldersServerCapabilities {
+                supported: Some(true),
+                change_notifications: Some(OneOf::Left(true)),
+            }),
+            ..Default::default()
+        }),
         text_document_sync: Some(TextDocumentSyncCapability::Options(
             TextDocumentSyncOptions {
                 open_close: Some(true),
@@ -247,6 +286,24 @@ impl LanguageServer for Backend {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
         let config = ServerConfig::from_initialization_options(params.initialization_options);
         self.state.set_config(config);
+        #[allow(deprecated)]
+        let roots = params
+            .workspace_folders
+            .map(|folders| {
+                folders
+                    .into_iter()
+                    .map(|folder| folder.uri)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_else(|| params.root_uri.into_iter().collect())
+            .into_iter()
+            .filter_map(|uri| uri.to_file_path().ok())
+            .collect();
+        self.update(move |state| {
+            state.set_workspace_roots(roots);
+            state.refresh_workspace_files();
+        })
+        .await?;
 
         Ok(InitializeResult {
             capabilities: server_capabilities(config),
@@ -261,6 +318,7 @@ impl LanguageServer for Backend {
     }
 
     async fn shutdown(&self) -> Result<()> {
+        self.state.shutdown_diagnostics().await;
         Ok(())
     }
 
@@ -269,39 +327,105 @@ impl LanguageServer for Backend {
         let version = params.text_document.version;
         let text = params.text_document.text;
         let _publication = self.state.diagnostic_publication.lock().await;
-        let _analysis = self.state.analysis_access.write().await;
-        crate::documents::open_document(&self.state, &uri, version, text);
+        let result = self
+            .update(move |state| {
+                crate::documents::open_document(state, &uri, version, text);
+                state.refresh_workspace_files();
+            })
+            .await;
+        if result.is_ok() {
+            self.schedule_project_diagnostics(Duration::ZERO);
+        }
         drop(_publication);
-        self.schedule_diagnostics(uri, Duration::ZERO);
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        let uri = params.text_document.uri;
-        let version = params.text_document.version;
         let _publication = self.state.diagnostic_publication.lock().await;
-        let _analysis = self.state.analysis_access.write().await;
-        if let Err(error) =
-            crate::documents::change_document(&self.state, &uri, version, &params.content_changes)
-        {
-            tracing::warn!(?error, %uri, version, "rejected invalid document change");
-            return;
+        let result = self
+            .update(move |state| {
+                crate::documents::change_document(
+                    state,
+                    &params.text_document.uri,
+                    params.text_document.version,
+                    &params.content_changes,
+                )
+            })
+            .await;
+        match result {
+            Ok(Ok(_)) => self.schedule_project_diagnostics(Duration::from_millis(
+                self.state.config().diagnostics_debounce_ms,
+            )),
+            result => tracing::warn!(?result, "rejected document change"),
         }
         drop(_publication);
-
-        let debounce_ms = self.state.config().diagnostics_debounce_ms;
-        self.schedule_diagnostics(uri, Duration::from_millis(debounce_ms));
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         let uri = params.text_document.uri;
         let _publication = self.state.diagnostic_publication.lock().await;
-        let _analysis = self.state.analysis_access.write().await;
-        self.state.cancel_diagnostics(&uri);
-        let version =
-            crate::documents::close_document(&self.state, &uri).map(|document| document.version);
+        let closed_uri = uri.clone();
+        let version = self
+            .update(move |state| {
+                state.cancel_diagnostics(&closed_uri);
+                let version = crate::documents::close_document(state, &closed_uri)
+                    .map(|document| document.version);
+                state.refresh_workspace_files();
+                version
+            })
+            .await
+            .ok()
+            .flatten();
         self.client
             .publish_diagnostics(uri, Vec::new(), version)
             .await;
+        self.schedule_project_diagnostics(Duration::ZERO);
+        drop(_publication);
+    }
+
+    async fn did_change_watched_files(
+        &self,
+        _params: tower_lsp::lsp_types::DidChangeWatchedFilesParams,
+    ) {
+        let _publication = self.state.diagnostic_publication.lock().await;
+        let result = self.update(ServerState::refresh_workspace_files).await;
+        if result.is_ok() {
+            self.schedule_project_diagnostics(Duration::ZERO);
+        }
+        drop(_publication);
+    }
+
+    async fn did_change_workspace_folders(
+        &self,
+        params: tower_lsp::lsp_types::DidChangeWorkspaceFoldersParams,
+    ) {
+        let _publication = self.state.diagnostic_publication.lock().await;
+        let result = self
+            .update(move |state| {
+                let mut roots = state
+                    .workspace_roots
+                    .read()
+                    .expect("workspace roots lock")
+                    .clone();
+                for folder in params.event.removed {
+                    if let Ok(path) = folder.uri.to_file_path() {
+                        roots.retain(|root| root != &path);
+                    }
+                }
+                roots.extend(
+                    params
+                        .event
+                        .added
+                        .into_iter()
+                        .filter_map(|folder| folder.uri.to_file_path().ok()),
+                );
+                state.set_workspace_roots(roots);
+                state.refresh_workspace_files();
+            })
+            .await;
+        if result.is_ok() {
+            self.schedule_project_diagnostics(Duration::ZERO);
+        }
+        drop(_publication);
     }
 
     async fn document_symbol(
@@ -386,8 +510,8 @@ impl LanguageServer for Backend {
     }
 
     async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
-        self.analyze(move |state| crate::rename::rename(params, state))
-            .await
+        self.analyze(move |state| crate::rename::rename(params, state)).await?
+            .map(Some).ok_or_else(|| Error::invalid_params("rename requires one project-owned symbol, an identifier fresh in every affected module, and unaliased references"))
     }
 
     async fn inlay_hint(&self, params: InlayHintParams) -> Result<Option<Vec<InlayHint>>> {
@@ -676,6 +800,84 @@ mod tests {
                 .await
                 .is_err(),
             "superseded version 2 diagnostics must not be published later"
+        );
+    }
+
+    #[tokio::test]
+    async fn shutdown_cancels_debounced_diagnostics_before_returning() {
+        let (mut service, mut client_messages) = LspService::new(Backend::new);
+        let state = Arc::clone(&service.inner().state);
+        let uri = Url::from_file_path(PathBuf::from("/server-tests/shutdown.aivi"))
+            .expect("test URI should be valid");
+
+        service
+            .ready()
+            .await
+            .expect("service should initialize")
+            .call(
+                Request::build("initialize")
+                    .params(json!({
+                        "capabilities": {},
+                        "initializationOptions": { "diagnosticsDebounceMs": 50 }
+                    }))
+                    .id(1)
+                    .finish(),
+            )
+            .await
+            .expect("initialize request should succeed");
+        service
+            .ready()
+            .await
+            .expect("service should accept didOpen")
+            .call(
+                Request::build("textDocument/didOpen")
+                    .params(json!({
+                        "textDocument": {
+                            "uri": uri,
+                            "languageId": "aivi",
+                            "version": 1,
+                            "text": "value answer = 42\n"
+                        }
+                    }))
+                    .finish(),
+            )
+            .await
+            .expect("didOpen notification should succeed");
+        tokio::time::timeout(Duration::from_secs(2), client_messages.next())
+            .await
+            .expect("initial diagnostics should be published")
+            .expect("client channel should stay open");
+
+        service
+            .ready()
+            .await
+            .expect("service should accept didChange")
+            .call(
+                Request::build("textDocument/didChange")
+                    .params(json!({
+                        "textDocument": { "uri": uri, "version": 2 },
+                        "contentChanges": [{ "text": "invalid =" }]
+                    }))
+                    .finish(),
+            )
+            .await
+            .expect("didChange notification should succeed");
+
+        tokio::time::timeout(
+            Duration::from_secs(2),
+            tower_lsp::LanguageServer::shutdown(service.inner()),
+        )
+        .await
+        .expect("shutdown should drain diagnostic ownership")
+        .expect("shutdown should succeed");
+
+        assert!(!state.diagnostics_are_accepting());
+        assert!(state.start_diagnostics(&uri).is_none());
+        assert!(
+            tokio::time::timeout(Duration::from_millis(150), client_messages.next())
+                .await
+                .is_err(),
+            "cancelled version 2 diagnostics must not publish after shutdown"
         );
     }
 }

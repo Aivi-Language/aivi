@@ -43,8 +43,10 @@ pub fn code_actions(
             continue;
         }
 
-        // Build a TextEdit that deletes the entire line containing the symbol.
-        let Some(line_edit) = delete_line_edit(&analysis.source, diag.range) else {
+        // Remove the complete parsed declaration, never just its name line.
+        let Some(line_edit) =
+            delete_declaration_edit(&state.db, file, &analysis.source, diag.range)
+        else {
             continue;
         };
 
@@ -74,67 +76,54 @@ fn ranges_overlap(a: Range, b: Range) -> bool {
     a.start <= b.end && b.start <= a.end
 }
 
-/// Build a `TextEdit` that removes the entire source line (including newline)
-/// that contains the primary range of a diagnostic.
-fn delete_line_edit(source: &aivi_base::SourceFile, range: Range) -> Option<TextEdit> {
-    let text = source.text();
-    let line = range.start.line as usize;
-    let line_start = line_start_byte(text, line)?;
-    let line_end = line_end_byte(text, line_start);
-
+/// Delete the parsed declaration, including its attached annotation/decorators.
+fn delete_declaration_edit(
+    db: &aivi_query::RootDatabase,
+    file: aivi_query::SourceFile,
+    source: &aivi_base::SourceFile,
+    range: Range,
+) -> Option<TextEdit> {
+    let cursor = source.lsp_position_to_offset(aivi_base::LspPosition {
+        line: range.start.line,
+        character: range.start.character,
+    })?;
+    let parsed = aivi_query::parsed_file(db, file);
+    let item = parsed
+        .cst()
+        .items()
+        .iter()
+        .find(|item| item.span().span().contains(cursor))?;
+    let span = item.span().span();
+    let hir = aivi_query::hir_module(db, file);
+    let declarations = crate::type_annotations::collect_typed_declaration_summaries(
+        hir.module(),
+        parsed.cst(),
+        source,
+    );
+    let mut start = span.start();
+    if let Some(annotation) = declarations
+        .iter()
+        .find(|declaration| declaration.header_span == item.span())
+        .and_then(|declaration| declaration.annotation.as_ref())
+    {
+        start = start.min(annotation.full_span.span().start());
+    }
+    for decorator in &item.base().decorators {
+        start = start.min(decorator.span.span().start());
+    }
+    let start = source.offset_to_lsp_position(start);
+    let end = source.offset_to_lsp_position(span.end());
     Some(TextEdit {
         range: Range {
             start: Position {
-                line: range.start.line,
-                character: 0,
+                line: start.line,
+                character: start.character,
             },
-            end: line_end_position(text, line_start, line_end, range.start.line),
+            end: Position {
+                line: end.line,
+                character: end.character,
+            },
         },
         new_text: String::new(),
     })
-}
-
-fn line_start_byte(text: &str, line: usize) -> Option<usize> {
-    if line == 0 {
-        return Some(0);
-    }
-    let mut current_line = 0usize;
-    for (byte_idx, ch) in text.char_indices() {
-        if ch == '\n' {
-            current_line += 1;
-            if current_line == line {
-                return Some(byte_idx + 1);
-            }
-        }
-    }
-    None
-}
-
-fn line_end_byte(text: &str, line_start: usize) -> usize {
-    let rest = &text[line_start..];
-    match rest.find('\n') {
-        Some(rel) => line_start + rel + 1,
-        None => text.len(),
-    }
-}
-
-fn line_end_position(text: &str, line_start: usize, line_end: usize, line: u32) -> Position {
-    // If the line ends with a newline, the deletion covers up to the start of
-    // the next line (so the entire line including the newline is removed).
-    // If it is the last line without a trailing newline, end at the last char.
-    let end_byte = line_end;
-    let suffix = &text[line_start..end_byte];
-    let chars = suffix.encode_utf16().count() as u32;
-    if text[..line_end].ends_with('\n') {
-        // Advance to start of next line
-        Position {
-            line: line + 1,
-            character: 0,
-        }
-    } else {
-        Position {
-            line,
-            character: chars,
-        }
-    }
 }

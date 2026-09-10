@@ -46,6 +46,8 @@ pub struct Module {
     exprs: Arena<ExprId, Expr>,
     sources: Arena<SourceId, SourceNode>,
     decode_programs: Arena<DecodeProgramId, DecodeProgram>,
+    imported_type_origins:
+        std::collections::BTreeMap<(aivi_base::FileId, aivi_hir::ImportId), HirItemId>,
 }
 
 impl Default for Module {
@@ -57,11 +59,30 @@ impl Default for Module {
             exprs: Arena::new(),
             sources: Arena::new(),
             decode_programs: Arena::new(),
+            imported_type_origins: Default::default(),
         }
     }
 }
 
 impl Module {
+    /// Workspace-global type identity, retained even when a fragment uses no constructors.
+    pub fn imported_type_origin(
+        &self,
+        file: aivi_base::FileId,
+        import: aivi_hir::ImportId,
+    ) -> Option<HirItemId> {
+        self.imported_type_origins.get(&(file, import)).copied()
+    }
+
+    pub(crate) fn register_imported_type_origin(
+        &mut self,
+        file: aivi_base::FileId,
+        import: aivi_hir::ImportId,
+        origin: HirItemId,
+    ) {
+        self.imported_type_origins.insert((file, import), origin);
+    }
+
     pub fn new() -> Self {
         Self::default()
     }

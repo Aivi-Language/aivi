@@ -51,9 +51,6 @@ pub enum BuiltinSourceProvider {
     ImapConnect,
     ImapIdle,
     ImapFetchBody,
-    SmtpSend,
-    DbExec,
-    TimeNowMs,
     ApiGet,
     ApiPost,
     ApiPut,
@@ -62,7 +59,7 @@ pub enum BuiltinSourceProvider {
 }
 
 impl BuiltinSourceProvider {
-    pub const ALL: [Self; 46] = [
+    pub const ALL: [Self; 43] = [
         Self::HttpGet,
         Self::HttpPost,
         Self::TimerEvery,
@@ -99,9 +96,6 @@ impl BuiltinSourceProvider {
         Self::ImapConnect,
         Self::ImapIdle,
         Self::ImapFetchBody,
-        Self::SmtpSend,
-        Self::DbExec,
-        Self::TimeNowMs,
         Self::ApiGet,
         Self::ApiPost,
         Self::ApiPut,
@@ -151,9 +145,6 @@ impl BuiltinSourceProvider {
             "imap.connect" => Some(Self::ImapConnect),
             "imap.idle" => Some(Self::ImapIdle),
             "imap.fetchBody" => Some(Self::ImapFetchBody),
-            "smtp.send" => Some(Self::SmtpSend),
-            "db.exec" => Some(Self::DbExec),
-            "time.nowMs" => Some(Self::TimeNowMs),
             "api.get" => Some(Self::ApiGet),
             "api.post" => Some(Self::ApiPost),
             "api.put" => Some(Self::ApiPut),
@@ -203,9 +194,6 @@ impl BuiltinSourceProvider {
             Self::ImapConnect => "imap.connect",
             Self::ImapIdle => "imap.idle",
             Self::ImapFetchBody => "imap.fetchBody",
-            Self::SmtpSend => "smtp.send",
-            Self::DbExec => "db.exec",
-            Self::TimeNowMs => "time.nowMs",
             Self::ApiGet => "api.get",
             Self::ApiPost => "api.post",
             Self::ApiPut => "api.put",
@@ -346,13 +334,6 @@ impl BuiltinSourceProvider {
                 HTTP_RECURRENCE,
                 HTTP_LIFECYCLE,
             ),
-            Self::SmtpSend => {
-                SourceContract::new(self, &NO_OPTIONS, HTTP_RECURRENCE, HTTP_LIFECYCLE)
-            }
-            Self::DbExec => SourceContract::new(self, &NO_OPTIONS, HTTP_RECURRENCE, HTTP_LIFECYCLE),
-            Self::TimeNowMs => {
-                SourceContract::new(self, &NO_OPTIONS, STATIC_RECURRENCE, STATIC_LIFECYCLE)
-            }
             Self::ApiGet | Self::ApiPost | Self::ApiPut | Self::ApiPatch | Self::ApiDelete => {
                 SourceContract::new(self, api_options(), HTTP_RECURRENCE, HTTP_LIFECYCLE)
             }
@@ -1014,11 +995,6 @@ fn db_live_options() -> &'static [SourceOptionContract] {
                 "debounce",
                 SourceContractType::nominal(SourceNominalType::Duration),
             ),
-            SourceOptionContract::new("optimistic", SourceContractType::bool()),
-            SourceOptionContract::new(
-                "onRollback",
-                SourceContractType::signal(SourceTypeAtom::nominal(SourceNominalType::DbError)),
-            ),
             SourceOptionContract::new(
                 "activeWhen",
                 SourceContractType::signal(SourceTypeAtom::primitive(PrimitiveType::Bool)),
@@ -1402,14 +1378,14 @@ mod tests {
             Some(SourceContractType::nominal(SourceNominalType::Duration))
         );
         assert_eq!(
-            live.option("optimistic").map(|option| option.ty()),
-            Some(SourceContractType::bool())
+            live.option("optimistic"),
+            None,
+            "unsupported optimistic behavior must not be advertised by the closed contract"
         );
         assert_eq!(
-            live.option("onRollback").map(|option| option.ty()),
-            Some(SourceContractType::signal(SourceTypeAtom::nominal(
-                SourceNominalType::DbError,
-            )))
+            live.option("onRollback"),
+            None,
+            "unsupported rollback publication must not be advertised by the closed contract"
         );
     }
 

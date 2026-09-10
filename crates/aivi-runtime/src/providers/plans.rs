@@ -14,6 +14,10 @@ pub struct WindowKeyConfig {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SourceProviderExecutionError {
+    UnavailableProvider {
+        instance: SourceInstanceId,
+        provider: RuntimeSourceProvider,
+    },
     MissingDecodeProgram {
         instance: SourceInstanceId,
         provider: BuiltinSourceProvider,
@@ -66,6 +70,9 @@ pub enum SourceProviderExecutionError {
 impl fmt::Display for SourceProviderExecutionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::UnavailableProvider { instance, provider } => write!(
+                f, "source instance {} has no implementation for provider {provider:?}", instance.as_raw()
+            ),
             Self::MissingDecodeProgram { instance, provider } => write!(
                 f,
                 "source instance {} provider {} is missing its decode program",
@@ -391,8 +398,6 @@ impl DbConnectPlan {
 struct DbLivePlan {
     task: RuntimeValue,
     debounce: Duration,
-    #[allow(dead_code)]
-    optimistic: bool,
     result: Option<RequestResultPlan>,
 }
 
@@ -405,7 +410,6 @@ impl DbLivePlan {
         validate_argument_count(instance, provider, config, 1)?;
         let task = parse_task_argument(instance, provider, 0, &config.arguments[0])?;
         let mut debounce = Duration::ZERO;
-        let mut optimistic = false;
         for option in &config.options {
             match option.option_name.as_ref() {
                 "debounce" => {
@@ -417,14 +421,6 @@ impl DbLivePlan {
                     )?;
                 }
                 "refreshOn" | "activeWhen" => {}
-                "optimistic" => {
-                    optimistic =
-                        parse_bool(instance, provider, &option.option_name, &option.value)?;
-                }
-                "onRollback" => {
-                    // The onRollback signal is accepted and stored; the runtime publishes
-                    // the last confirmed value to it when an optimistic update is reverted.
-                }
                 _ => {
                     return Err(SourceProviderExecutionError::UnsupportedOption {
                         instance,
@@ -444,7 +440,6 @@ impl DbLivePlan {
         Ok(Self {
             task,
             debounce,
-            optimistic,
             result,
         })
     }

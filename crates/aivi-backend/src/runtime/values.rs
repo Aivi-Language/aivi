@@ -294,14 +294,6 @@ pub enum RuntimeTaskPlan {
     // Time task plans
     TimeNowMs,
     TimeMonotonicMs,
-    TimeFormat {
-        epoch_ms: i64,
-        pattern: Box<str>,
-    },
-    TimeParse {
-        text: Box<str>,
-        pattern: Box<str>,
-    },
     // Env task plans
     EnvGet {
         name: Box<str>,
@@ -469,10 +461,6 @@ impl fmt::Display for RuntimeTaskPlan {
             Self::JsonMinify { json } => write!(f, "json.minify({json})"),
             Self::TimeNowMs => f.write_str("time.nowMs"),
             Self::TimeMonotonicMs => f.write_str("time.monotonicMs"),
-            Self::TimeFormat { epoch_ms, pattern } => {
-                write!(f, "time.format({epoch_ms}, {pattern})")
-            }
-            Self::TimeParse { text, pattern } => write!(f, "time.parse({text}, {pattern})"),
             Self::EnvGet { name } => write!(f, "env.get({name})"),
             Self::EnvList { prefix } => write!(f, "env.list({prefix})"),
             Self::LogEmit { level, message } => write!(f, "log.emit({level}, {message})"),

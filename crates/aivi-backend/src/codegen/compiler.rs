@@ -3337,6 +3337,10 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let [function, subject] = arguments else {
             unreachable!("checked two direct list-wrapper arguments above");
         };
+        let subject_layout = self.program.kernels()[kernel_id].exprs()[*subject].layout;
+        if !matches!(self.program.layouts()[subject_layout].kind, LayoutKind::List { .. }) {
+            return Ok(None);
+        }
         let result_layout = self.program.kernels()[kernel_id].exprs()[expr_id].layout;
         let plan = match item_decl.name.as_ref() {
             "map" | "__aivi_list_map" => DirectApplyPlan::Builtin(BuiltinCallPlan::ListMap(

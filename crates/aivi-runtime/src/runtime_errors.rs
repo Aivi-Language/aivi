@@ -768,6 +768,12 @@ pub fn render_provider_execution_error(
     source_map: &RuntimeSourceMap,
 ) -> Vec<Diagnostic> {
     let (instance, provider_key, message, help) = match error {
+        SourceProviderExecutionError::UnavailableProvider { instance, provider } => (
+            *instance,
+            provider.key(),
+            format!("source provider `{}` has no runtime implementation", provider.key()),
+            Some("use an implemented provider or supply values through an explicit source mock".to_owned()),
+        ),
         SourceProviderExecutionError::MissingDecodeProgram { instance, provider } => (
             *instance,
             provider.key(),

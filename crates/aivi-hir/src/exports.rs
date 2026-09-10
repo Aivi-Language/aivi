@@ -436,7 +436,18 @@ fn explicit_item_exported_name(
         Item::Function(item) => (item.name.text() == exported_name).then(|| {
             let callable_type = exported_function_type(module, item);
             let metadata = match &callable_type {
-                Some(ty) => ImportBindingMetadata::Value { ty: ty.clone() },
+                Some(ty) => {
+                    match crate::general_expr_elaboration::export_function_evidence(module, item) {
+                        Some(evidence) if !evidence.is_empty() => {
+                            ImportBindingMetadata::ConstrainedValue {
+                                ty: ty.clone(),
+                                evidence,
+                            }
+                        }
+                        Some(_) => ImportBindingMetadata::Value { ty: ty.clone() },
+                        None => ImportBindingMetadata::OpaqueValue,
+                    }
+                }
                 None => ImportBindingMetadata::OpaqueValue,
             };
             ExportedName {
@@ -493,7 +504,18 @@ fn item_to_exported_name(module: &Module, item_id: ItemId, item: &Item) -> Optio
         Item::Function(item) => {
             let callable_type = exported_function_type(module, item);
             let metadata = match &callable_type {
-                Some(ty) => ImportBindingMetadata::Value { ty: ty.clone() },
+                Some(ty) => {
+                    match crate::general_expr_elaboration::export_function_evidence(module, item) {
+                        Some(evidence) if !evidence.is_empty() => {
+                            ImportBindingMetadata::ConstrainedValue {
+                                ty: ty.clone(),
+                                evidence,
+                            }
+                        }
+                        Some(_) => ImportBindingMetadata::Value { ty: ty.clone() },
+                        None => ImportBindingMetadata::OpaqueValue,
+                    }
+                }
                 None => ImportBindingMetadata::OpaqueValue,
             };
             Some(ExportedName {
@@ -580,13 +602,23 @@ fn inferred_item_import_value_type(module: &Module, item_id: ItemId) -> Option<I
 }
 
 fn gate_type_import_value_type(ty: &crate::GateType) -> Option<ImportValueType> {
+    poly_gate_type_import_value_type(ty, &HashMap::new())
+}
+
+pub(crate) fn poly_gate_type_import_value_type(
+    ty: &crate::GateType,
+    parameters: &HashMap<TypeParameterId, usize>,
+) -> Option<ImportValueType> {
     match ty {
         crate::GateType::Primitive(builtin) => primitive_import_value_type_from_builtin(*builtin),
-        crate::GateType::TypeParameter { .. } => None,
+        crate::GateType::TypeParameter { parameter, name } => Some(ImportValueType::TypeVariable {
+            index: *parameters.get(parameter)?,
+            name: name.clone(),
+        }),
         crate::GateType::Tuple(elements) => Some(ImportValueType::Tuple(
             elements
                 .iter()
-                .map(gate_type_import_value_type)
+                .map(|ty| poly_gate_type_import_value_type(ty, parameters))
                 .collect::<Option<Vec<_>>>()?,
         )),
         crate::GateType::Record(fields) => Some(ImportValueType::Record(
@@ -595,42 +627,42 @@ fn gate_type_import_value_type(ty: &crate::GateType) -> Option<ImportValueType> 
                 .map(|field| {
                     Some(ImportRecordField {
                         name: field.name.clone().into_boxed_str(),
-                        ty: gate_type_import_value_type(&field.ty)?,
+                        ty: poly_gate_type_import_value_type(&field.ty, parameters)?,
                     })
                 })
                 .collect::<Option<Vec<_>>>()?,
         )),
         crate::GateType::Arrow { parameter, result } => Some(ImportValueType::Arrow {
-            parameter: Box::new(gate_type_import_value_type(parameter)?),
-            result: Box::new(gate_type_import_value_type(result)?),
+            parameter: Box::new(poly_gate_type_import_value_type(parameter, parameters)?),
+            result: Box::new(poly_gate_type_import_value_type(result, parameters)?),
         }),
         crate::GateType::List(element) => Some(ImportValueType::List(Box::new(
-            gate_type_import_value_type(element)?,
+            poly_gate_type_import_value_type(element, parameters)?,
         ))),
         crate::GateType::Map { key, value } => Some(ImportValueType::Map {
-            key: Box::new(gate_type_import_value_type(key)?),
-            value: Box::new(gate_type_import_value_type(value)?),
+            key: Box::new(poly_gate_type_import_value_type(key, parameters)?),
+            value: Box::new(poly_gate_type_import_value_type(value, parameters)?),
         }),
         crate::GateType::Set(element) => Some(ImportValueType::Set(Box::new(
-            gate_type_import_value_type(element)?,
+            poly_gate_type_import_value_type(element, parameters)?,
         ))),
         crate::GateType::Option(element) => Some(ImportValueType::Option(Box::new(
-            gate_type_import_value_type(element)?,
+            poly_gate_type_import_value_type(element, parameters)?,
         ))),
         crate::GateType::Result { error, value } => Some(ImportValueType::Result {
-            error: Box::new(gate_type_import_value_type(error)?),
-            value: Box::new(gate_type_import_value_type(value)?),
+            error: Box::new(poly_gate_type_import_value_type(error, parameters)?),
+            value: Box::new(poly_gate_type_import_value_type(value, parameters)?),
         }),
         crate::GateType::Validation { error, value } => Some(ImportValueType::Validation {
-            error: Box::new(gate_type_import_value_type(error)?),
-            value: Box::new(gate_type_import_value_type(value)?),
+            error: Box::new(poly_gate_type_import_value_type(error, parameters)?),
+            value: Box::new(poly_gate_type_import_value_type(value, parameters)?),
         }),
         crate::GateType::Signal(payload) => Some(ImportValueType::Signal(Box::new(
-            gate_type_import_value_type(payload)?,
+            poly_gate_type_import_value_type(payload, parameters)?,
         ))),
         crate::GateType::Task { error, value } => Some(ImportValueType::Task {
-            error: Box::new(gate_type_import_value_type(error)?),
-            value: Box::new(gate_type_import_value_type(value)?),
+            error: Box::new(poly_gate_type_import_value_type(error, parameters)?),
+            value: Box::new(poly_gate_type_import_value_type(value, parameters)?),
         }),
         crate::GateType::Domain {
             name, arguments, ..
@@ -641,7 +673,7 @@ fn gate_type_import_value_type(ty: &crate::GateType) -> Option<ImportValueType> 
             type_name: name.clone(),
             arguments: arguments
                 .iter()
-                .map(gate_type_import_value_type)
+                .map(|ty| poly_gate_type_import_value_type(ty, parameters))
                 .collect::<Option<Vec<_>>>()?,
             definition: None,
         }),
@@ -654,7 +686,7 @@ fn gate_type_import_value_type(ty: &crate::GateType) -> Option<ImportValueType> 
             type_name: name.clone(),
             arguments: arguments
                 .iter()
-                .map(gate_type_import_value_type)
+                .map(|ty| poly_gate_type_import_value_type(ty, parameters))
                 .collect::<Option<Vec<_>>>()?,
             definition: definition.clone(),
         }),
@@ -1088,9 +1120,6 @@ fn flatten_exported_instance_member_type_application(
 }
 
 fn exported_function_type(module: &Module, item: &crate::FunctionItem) -> Option<ImportValueType> {
-    if !item.context.is_empty() {
-        return None;
-    }
     // Build a mapping from TypeParameterId → index for polymorphic functions.
     let type_param_map: HashMap<TypeParameterId, usize> = item
         .type_parameters
@@ -1230,6 +1259,25 @@ fn named_import_value_type_from_item(
                 debug_assert_eq!(popped, Some(item_id));
                 definition
             }
+            Item::Domain(domain) => {
+                item_stack.push(item_id);
+                let parameters = domain
+                    .parameters
+                    .iter()
+                    .enumerate()
+                    .map(|(index, parameter)| (*parameter, index))
+                    .collect();
+                let definition = poly_import_value_type_with_stack(
+                    module,
+                    domain.carrier,
+                    &parameters,
+                    item_stack,
+                )
+                .map(ImportTypeDefinition::Domain)
+                .map(Box::new);
+                item_stack.pop();
+                definition
+            }
             _ => None,
         }
     };
@@ -1251,6 +1299,10 @@ fn named_import_value_type_from_import(
             definition: Some(definition),
             ..
         } => Some(Box::new(definition.clone())),
+        ImportBindingMetadata::Domain {
+            carrier: Some(carrier),
+            ..
+        } => Some(Box::new(ImportTypeDefinition::Domain(carrier.clone()))),
         _ => None,
     };
     Some(ImportValueType::Named {
@@ -1563,6 +1615,7 @@ fn resolve_type_constructor(
             }
             ImportBindingMetadata::Unknown
             | ImportBindingMetadata::Value { .. }
+            | ImportBindingMetadata::ConstrainedValue { .. }
             | ImportBindingMetadata::IntrinsicValue { .. }
             | ImportBindingMetadata::OpaqueValue
             | ImportBindingMetadata::AmbientValue { .. }
@@ -1662,44 +1715,10 @@ fn poly_name_import_value_type_with_stack(
             Some(ImportValueType::TypeVariable { index, name })
         }
         ResolutionState::Resolved(TypeResolution::Item(item_id)) => {
-            let type_name = item_type_name(&module.items()[*item_id]);
-            let definition = if item_stack.contains(item_id) {
-                None
-            } else {
-                match module.items().get(*item_id)? {
-                    Item::Type(type_item) => {
-                        item_stack.push(*item_id);
-                        let definition =
-                            extract_type_definition_with_stack(module, type_item, item_stack)
-                                .map(Box::new);
-                        let popped = item_stack.pop();
-                        debug_assert_eq!(popped, Some(*item_id));
-                        definition
-                    }
-                    _ => None,
-                }
-            };
-            Some(ImportValueType::Named {
-                type_name,
-                arguments: Vec::new(),
-                definition,
-            })
+            named_import_value_type_from_item(module, *item_id, Vec::new(), item_stack)
         }
         ResolutionState::Resolved(TypeResolution::Import(import_id)) => {
-            let binding = module.imports().get(*import_id)?;
-            let name = binding.imported_name.text().to_owned();
-            let definition = match &binding.metadata {
-                ImportBindingMetadata::TypeConstructor {
-                    definition: Some(definition),
-                    ..
-                } => Some(Box::new(definition.clone())),
-                _ => None,
-            };
-            Some(ImportValueType::Named {
-                type_name: name,
-                arguments: Vec::new(),
-                definition,
-            })
+            named_import_value_type_from_import(module, *import_id, Vec::new())
         }
         _ => None,
     }
@@ -1816,20 +1835,24 @@ fn poly_applied_import_value_type_with_stack(
         }
         _ => {}
     }
-    // Named type constructor (same-module item or fallback)
-    let type_name = match constructor {
-        PolyTypeConstructor::Named(name) => name,
-        _ => return None,
-    };
     let args = arguments
         .iter()
         .map(|arg| poly_import_value_type_with_stack(module, *arg, params, item_stack))
         .collect::<Option<Vec<_>>>()?;
-    Some(ImportValueType::Named {
-        type_name,
-        arguments: args,
-        definition: None,
-    })
+    match constructor {
+        PolyTypeConstructor::Resolved(ResolvedTypeConstructor::Item(item)) => {
+            named_import_value_type_from_item(module, item, args, item_stack)
+        }
+        PolyTypeConstructor::Resolved(ResolvedTypeConstructor::Import(import)) => {
+            named_import_value_type_from_import(module, import, args)
+        }
+        PolyTypeConstructor::Named(type_name) => Some(ImportValueType::Named {
+            type_name,
+            arguments: args,
+            definition: None,
+        }),
+        _ => None,
+    }
 }
 
 enum PolyTypeConstructor {
@@ -1975,20 +1998,32 @@ fn extract_type_definition_with_stack(
             poly_import_value_type_with_stack(module, *alias, &type_param_map, item_stack)
                 .map(ImportTypeDefinition::Alias)
         }
-        TypeItemBody::Sum(variants) => variants
-            .iter()
-            .map(|variant| {
-                Some(ImportSumVariant {
-                    name: variant.name.text().into(),
-                    fields: variant
-                        .fields
-                        .iter()
-                        .map(|field| import_value_type_with_stack(module, field.ty, item_stack))
-                        .collect::<Option<Vec<_>>>()?,
+        TypeItemBody::Sum(variants) => {
+            let params = item
+                .parameters
+                .iter()
+                .enumerate()
+                .map(|(index, id)| (*id, index))
+                .collect::<TypeParamMap>();
+            variants
+                .iter()
+                .map(|variant| {
+                    Some(ImportSumVariant {
+                        name: variant.name.text().into(),
+                        fields: variant
+                            .fields
+                            .iter()
+                            .map(|field| {
+                                poly_import_value_type_with_stack(
+                                    module, field.ty, &params, item_stack,
+                                )
+                            })
+                            .collect::<Option<Vec<_>>>()?,
+                    })
                 })
-            })
-            .collect::<Option<Vec<_>>>()
-            .map(ImportTypeDefinition::Sum),
+                .collect::<Option<Vec<_>>>()
+                .map(ImportTypeDefinition::Sum)
+        }
     }
 }
 

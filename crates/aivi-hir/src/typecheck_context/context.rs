@@ -470,7 +470,7 @@ impl<'a> GateTypeContext<'a> {
         let ty = {
             let binding = &self.module.imports()[import_id];
             match &binding.metadata {
-                crate::ImportBindingMetadata::Value { ty } => ty.clone(),
+                crate::ImportBindingMetadata::Value { ty } | crate::ImportBindingMetadata::ConstrainedValue { ty, .. } => ty.clone(),
                 _ => return Vec::new(),
             }
         };
@@ -1005,7 +1005,7 @@ impl<'a> GateTypeContext<'a> {
             return Some(self.lower_import_value_type(ty));
         }
         match &import.metadata {
-            ImportBindingMetadata::Value { ty }
+            ImportBindingMetadata::Value { ty } | ImportBindingMetadata::ConstrainedValue { ty, .. }
             | ImportBindingMetadata::IntrinsicValue { ty, .. } => {
                 Some(self.lower_import_value_type(ty))
             }
@@ -1237,14 +1237,9 @@ impl<'a> GateTypeContext<'a> {
             GateType::List(Box::new(element))
         }
 
-        fn named(name: &str, arguments: Vec<GateType>) -> GateType {
-            GateType::OpaqueImport {
-                import: ImportId::from_raw(u32::MAX),
-                name: name.to_owned(),
-                arguments,
-                definition: None,
-            }
-        }
+        let named = |name: &str| self.lower_import_value_type(&ImportValueType::Named {
+            type_name: name.to_owned(), arguments: Vec::new(), definition: None,
+        });
 
         fn map(key: GateType, value: GateType) -> GateType {
             GateType::Map {
@@ -1296,33 +1291,19 @@ impl<'a> GateTypeContext<'a> {
             ))
         }
 
-        fn dbus_value_type() -> GateType {
-            named("DbusValue", Vec::new())
-        }
+        let dbus_value_type = || named("DbusValue");
 
-        fn dbus_error_type() -> GateType {
-            named("DbusError", Vec::new())
-        }
+        let dbus_error_type = || named("DbusError");
 
-        fn secret_error_type() -> GateType {
-            named("SecretError", Vec::new())
-        }
+        let secret_error_type = || named("SecretError");
 
-        fn notification_error_type() -> GateType {
-            named("NotificationError", Vec::new())
-        }
+        let notification_error_type = || named("NotificationError");
 
-        fn pkce_error_type() -> GateType {
-            named("PkceError", Vec::new())
-        }
+        let pkce_error_type = || named("PkceError");
 
-        fn pkce_config_type() -> GateType {
-            named("PkceConfig", Vec::new())
-        }
+        let pkce_config_type = || named("PkceConfig");
 
-        fn pkce_token_type() -> GateType {
-            named("PkceToken", Vec::new())
-        }
+        let pkce_token_type = || named("PkceToken");
 
         match value {
             IntrinsicValue::TupleConstructor { arity } => {
@@ -1665,20 +1646,6 @@ impl<'a> GateTypeContext<'a> {
             IntrinsicValue::TimeNowMs | IntrinsicValue::TimeMonotonicMs => {
                 task(primitive(BuiltinType::Text), primitive(BuiltinType::Int))
             }
-            IntrinsicValue::TimeFormat => arrow(
-                primitive(BuiltinType::Int),
-                arrow(
-                    primitive(BuiltinType::Text),
-                    task(primitive(BuiltinType::Text), primitive(BuiltinType::Text)),
-                ),
-            ),
-            IntrinsicValue::TimeParse => arrow(
-                primitive(BuiltinType::Text),
-                arrow(
-                    primitive(BuiltinType::Text),
-                    task(primitive(BuiltinType::Text), primitive(BuiltinType::Int)),
-                ),
-            ),
             // Env intrinsics
             IntrinsicValue::EnvGet => arrow(
                 primitive(BuiltinType::Text),
@@ -1786,7 +1753,7 @@ impl<'a> GateTypeContext<'a> {
             IntrinsicValue::NotificationSend => arrow(
                 primitive(BuiltinType::Text),
                 arrow(
-                    named("Notification", Vec::new()),
+                    named("Notification"),
                     arrow(
                         primitive(BuiltinType::Text),
                         arrow(
@@ -1817,17 +1784,6 @@ impl<'a> GateTypeContext<'a> {
                 arrow(
                     primitive(BuiltinType::Text),
                     task(pkce_error_type(), pkce_token_type()),
-                ),
-            ),
-            // I18n intrinsics
-            IntrinsicValue::I18nTranslate => {
-                arrow(primitive(BuiltinType::Text), primitive(BuiltinType::Text))
-            }
-            IntrinsicValue::I18nTranslatePlural => arrow(
-                primitive(BuiltinType::Text),
-                arrow(
-                    primitive(BuiltinType::Text),
-                    arrow(primitive(BuiltinType::Int), primitive(BuiltinType::Text)),
                 ),
             ),
             // Regex intrinsics
@@ -1917,7 +1873,11 @@ impl<'a> GateTypeContext<'a> {
                     ])),
                 ),
             ),
-            IntrinsicValue::BigIntFromInt => {
+            IntrinsicValue::UrlParse => arrow(
+                primitive(BuiltinType::Text),
+                GateType::Result { error: Box::new(primitive(BuiltinType::Text)), value: Box::new(primitive(BuiltinType::Text)) },
+            ),
+            IntrinsicValue::BigIntFactorial | IntrinsicValue::BigIntFromInt => {
                 arrow(primitive(BuiltinType::Int), primitive(BuiltinType::BigInt))
             }
             IntrinsicValue::BigIntFromText => arrow(
@@ -4438,8 +4398,16 @@ impl<'a> GateTypeContext<'a> {
         peer: &GateType,
     ) -> Option<GateExprInfo> {
         let expr = self.module.exprs()[expr_id].clone();
-        matches!(expr.kind, ExprKind::SuffixedInteger(_))
-            .then(|| self.infer_expr_with_expected(expr_id, env, ambient, peer))
+        if matches!(expr.kind, ExprKind::SuffixedInteger(_)) {
+            return Some(self.infer_expr_with_expected(expr_id, env, ambient, peer));
+        }
+        if expression_matches(self.module, expr_id, env, peer) {
+            let mut info = self.infer_expr(expr_id, env, ambient);
+            info.ty = Some(peer.clone());
+            info.actual = None;
+            return Some(info);
+        }
+        None
     }
 
     fn infer_suffixed_integer_expr_with_expected(
@@ -6214,7 +6182,13 @@ impl<'a> GateTypeContext<'a> {
         };
 
         let step_info = self.infer_expr(step_expr, env, Some(input_payload.as_ref()));
-        let step_ty = step_info.actual_gate_type().or(step_info.ty.clone());
+        let expected_step = GateType::Arrow {
+            parameter: Box::new(input_payload.as_ref().clone()),
+            result: Box::new(GateType::Arrow { parameter: Box::new(seed_ty.clone()), result: Box::new(seed_ty.clone()) }),
+        };
+        let step_ty = step_info.actual_gate_type().or(step_info.ty.clone()).map(|ty| {
+            self.specialize_gate_type_template(&ty, &expected_step).unwrap_or(ty)
+        });
         info.merge(step_info);
         let Some(step_ty) = step_ty else {
             return self.finalize_expr_info(info);

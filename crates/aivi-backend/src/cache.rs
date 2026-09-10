@@ -254,7 +254,7 @@ const JIT_KERNEL_CACHE_MAGIC_V2: &[u8; 5] = b"AIVJ\x02";
 
 const COMPILER_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Bump when backend machine-code semantics change without a Cargo package-version change.
-const CODEGEN_NAMESPACE_REVISION: &str = "5";
+const CODEGEN_NAMESPACE_REVISION: &str = "6";
 const SHARED_CODEGEN_SETTINGS: &[(&str, &str)] =
     &[("enable_llvm_abi_extensions", "1"), ("opt_level", "speed")];
 
@@ -2669,8 +2669,11 @@ value headers:Map Text Text =
 
     #[test]
     fn cached_jit_imported_generic_matrix_artifact_replays_after_disk_roundtrip() {
-        let backend = lower_text(
-            "cache-jit-matrix-roundtrip.aivi",
+        let db = aivi_query::RootDatabase::new();
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/frontend/cache-jit-matrix-roundtrip.aivi");
+        let file = db.open_file(
+            &path,
             r#"
 use aivi.matrix (
     fromRows,
@@ -2686,6 +2689,11 @@ value matrixWidth:Int =
     ||> Err _ -> 0
 "#,
         );
+
+        let unit = aivi_query::whole_program_backend_unit(&db, file)
+            .expect("workspace backend should lower");
+        let backend = crate::lower_module_with_hir(unit.lambda(), unit.entry_hir().module())
+            .expect("workspace backend should lower in this test crate");
 
         with_temp_cache_dir(|cache_root| {
             let kernel = backend.items()[find_item(&backend, "matrixWidth")]

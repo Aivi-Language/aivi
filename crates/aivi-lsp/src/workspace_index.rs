@@ -18,10 +18,8 @@ pub(crate) struct IndexedSymbol {
     pub name: String,
     pub normalized_name: String,
     pub kind: LspSymbolKind,
-    pub detail: Option<String>,
     pub location: Location,
     pub container_name: Option<String>,
-    pub top_level: bool,
 }
 
 pub(crate) struct WorkspaceIndexSnapshot {
@@ -65,7 +63,7 @@ pub(crate) struct WorkspaceIndex {
 
 impl WorkspaceIndex {
     pub fn snapshot(&self, state: &ServerState) -> Arc<WorkspaceIndexSnapshot> {
-        let files = state.open_files();
+        let files = state.project_files();
         let mut cached = self
             .cached
             .lock()
@@ -137,15 +135,14 @@ fn flatten_symbols(
     let mut stack = roots
         .iter()
         .rev()
-        .map(|symbol| (symbol, None, true))
+        .map(|symbol| (symbol, None))
         .collect::<Vec<_>>();
-    while let Some((symbol, container_name, top_level)) = stack.pop() {
+    while let Some((symbol, container_name)) = stack.pop() {
         let range = source.span_to_lsp_range(symbol.span.span());
         out.push(IndexedSymbol {
             name: symbol.name.clone(),
             normalized_name: symbol.name.to_ascii_lowercase(),
             kind: symbol.kind,
-            detail: symbol.detail.clone(),
             location: Location {
                 uri: uri.clone(),
                 range: Range {
@@ -160,14 +157,13 @@ fn flatten_symbols(
                 },
             },
             container_name,
-            top_level,
         });
         stack.extend(
             symbol
                 .children
                 .iter()
                 .rev()
-                .map(|child| (child, Some(symbol.name.clone()), false)),
+                .map(|child| (child, Some(symbol.name.clone()))),
         );
     }
 }

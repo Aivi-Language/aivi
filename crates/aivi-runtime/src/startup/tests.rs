@@ -3202,11 +3202,13 @@ signal flashScore : Signal Int =
         0
     );
 
+    // Native helper compilation can contend with other tests. Keep the exact
+    // publication-count assertion without imposing a compiler-speed deadline.
     assert_eq!(
         pump_until_commit_count(
             &mut linked,
             flash_signal,
-            std::time::Duration::from_millis(300),
+            std::time::Duration::from_secs(2),
             3
         ),
         3

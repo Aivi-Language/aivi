@@ -20,8 +20,8 @@ pub(crate) struct CapturedBinding {
 pub(crate) enum AnalysisError {
     BindingTypeConflict {
         binding: BindingId,
-        previous: core::Type,
-        current: core::Type,
+        previous: Box<core::Type>,
+        current: Box<core::Type>,
         span: SourceSpan,
     },
 }
@@ -71,8 +71,8 @@ pub(crate) fn capture_free_bindings(
                     Some(existing) if existing.ty != expr_ty => {
                         return Err(AnalysisError::BindingTypeConflict {
                             binding: *binding,
-                            previous: existing.ty.clone(),
-                            current: expr_ty,
+                            previous: Box::new(existing.ty.clone()),
+                            current: Box::new(expr_ty),
                             span: expr.span,
                         });
                     }

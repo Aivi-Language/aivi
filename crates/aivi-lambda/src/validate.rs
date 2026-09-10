@@ -855,8 +855,8 @@ fn validate_closure(
             errors.push(ValidationError::ClosureCaptureTypeConflict {
                 closure: closure_id,
                 binding,
-                previous,
-                current,
+                previous: *previous,
+                current: *current,
             });
             return;
         }

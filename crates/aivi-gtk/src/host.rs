@@ -1081,16 +1081,6 @@ where
                 placeholder.set_visible(false);
                 placeholder.upcast::<gtk::Widget>()
             }
-            GtkConcreteWidgetKind::ViewSwitcher => adw::ViewSwitcher::new().upcast::<gtk::Widget>(),
-            GtkConcreteWidgetKind::ViewSwitcherBar => {
-                adw::ViewSwitcherBar::new().upcast::<gtk::Widget>()
-            }
-            GtkConcreteWidgetKind::ViewSwitcherTitle => {
-                #[allow(deprecated)]
-                {
-                    adw::ViewSwitcherTitle::new().upcast::<gtk::Widget>()
-                }
-            }
             GtkConcreteWidgetKind::Avatar => {
                 adw::Avatar::new(32, None::<&str>, false).upcast::<gtk::Widget>()
             }
@@ -5607,9 +5597,7 @@ where
             // Events for new widgets — forward as notify-based Unit events.
             // Concrete per-widget signal connections will be added per widget
             // in follow-up work.
-            GtkEventSignal::ViewSwitcherPageChanged
-            | GtkEventSignal::ViewSwitcherBarPageChanged
-            | GtkEventSignal::StackPageChanged
+            GtkEventSignal::StackPageChanged
             | GtkEventSignal::FlapRevealedChanged
             | GtkEventSignal::AdwDialogClosed
             | GtkEventSignal::GesturePressed

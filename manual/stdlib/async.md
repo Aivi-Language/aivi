@@ -28,7 +28,7 @@ use aivi.async (
 | Export | Type | Use it for |
 | --- | --- | --- |
 | `AsyncTracker E A` | `{ pending: Bool, done: Option A, error: Option E }` | Track async lifecycle state in one record |
-| `step` | `AsyncTracker E A -> Result E A -> AsyncTracker E A` | Fold new results into tracker state |
+| `step` | `Result E A -> AsyncTracker E A -> AsyncTracker E A` | Fold new results into tracker state |
 | `isPending` | `AsyncTracker E A -> Bool` | Check whether no result has arrived yet |
 | `isDone` | `AsyncTracker E A -> Bool` | Check whether at least one success has arrived |
 | `isFailed` | `AsyncTracker E A -> Bool` | Check whether the most recent result was a failure |
@@ -61,7 +61,7 @@ last successful value. This lets the UI keep showing useful data while surfacing
 Accumulation step function. Use it with `+|>` to turn a `Result`-producing signal into an
 `AsyncTracker` signal.
 
-**Type:** `AsyncTracker E A -> Result E A -> AsyncTracker E A`
+**Type:** `Result E A -> AsyncTracker E A -> AsyncTracker E A`
 
 ```aivi group=tracker-projections
 use aivi.async (

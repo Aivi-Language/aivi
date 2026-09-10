@@ -1,7 +1,7 @@
 {
   "name": "vscode-aivi",
   "displayName": "AIVI",
-  "description": "AIVI language support — syntax, diagnostics, formatting, and intelligence",
+  "description": "AIVI language support \u2014 syntax, diagnostics, formatting, and intelligence",
   "version": "0.1.0",
   "publisher": "aivi-lang",
   "engines": {
@@ -166,7 +166,8 @@
     "test:unit": "node --test test-out/tests/contract.test.js test-out/tests/lifecycle.test.js",
     "test:server": "cargo build --manifest-path ../../../Cargo.toml --bin aivi",
     "test:integration": "node --test test-out/tests/lsp.integration.test.js",
-    "package": "vsce package --no-dependencies --allow-missing-repository && node scripts/verify-vsix.mjs"
+    "package": "vsce package --no-dependencies --allow-missing-repository && node scripts/verify-vsix.mjs",
+    "test:host": "pnpm run build && pnpm run test:compile && node scripts/test-host.mjs"
   },
   "dependencies": {
     "vscode-languageclient": "^10.1.0"

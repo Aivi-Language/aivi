@@ -138,10 +138,7 @@ value shifted : RangeInt = shift 3 (make 1 5)
 
 ### `overlaps : RangeInt -> RangeInt -> Bool`
 
-For two nonempty ranges, returns `True` when they share at least one integer.
-Current limitation: the implementation explicitly checks only the first range for
-emptiness. Check `isEmpty` on both inputs before calling it when either can be empty;
-an empty second range can otherwise incorrectly report an overlap.
+Returns `True` when the ranges share at least one integer. Returns `False` if either range is empty.
 
 ```aivi
 use aivi.core.range (

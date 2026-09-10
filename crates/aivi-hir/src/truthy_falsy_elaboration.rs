@@ -417,6 +417,11 @@ fn elaborate_truthy_falsy_pair(
         });
     }
 
+    // Alpha-equivalent branch signatures must share the enclosing result's
+    // parameter identities before entering typed core, which compares types exactly.
+    let truthy_result_type = branch_expected
+        .filter(|expected| expected.same_shape(&truthy_result_type))
+        .unwrap_or(truthy_result_type);
     let stage_result_type =
         typing.apply_truthy_falsy_result_type(subject, truthy_result_type.clone());
     TruthyFalsyStageOutcome::Planned(Box::new(TruthyFalsyStagePlan {
@@ -435,7 +440,7 @@ fn elaborate_truthy_falsy_pair(
             expr: pair.falsy_expr,
             constructor: subject_plan.falsy_constructor,
             payload_subject: subject_plan.falsy_payload.clone(),
-            result_type: falsy_result_type,
+            result_type: truthy_result_type,
         },
         result_type: stage_result_type,
     }))

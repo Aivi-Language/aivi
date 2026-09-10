@@ -314,6 +314,7 @@ impl<'a> ModuleLowerer<'a> {
         &mut self,
         module_name: &str,
         ws_hir: &'a aivi_hir::Module,
+        selected: Option<&HashSet<HirItemId>>,
     ) -> Result<(), LoweringErrors> {
         // ── Claim a non-overlapping origin slice for this workspace module ────
         // ws_origin_base is persistent (not saved/restored); each workspace module
@@ -337,7 +338,6 @@ impl<'a> ModuleLowerer<'a> {
         let saved_debug_items = std::mem::take(&mut self.debug_items);
         let saved_mock_overrides = std::mem::take(&mut self.mock_overrides);
         let saved_hir_item_count = self.hir_item_count;
-        let saved_next_synthetic = self.next_synthetic_item_origin_raw;
         let saved_next_binding = self.next_synthetic_binding_raw;
         let saved_item_origin_offset = self.item_origin_offset;
 
@@ -353,7 +353,8 @@ impl<'a> ModuleLowerer<'a> {
         let ws_non_markup: HashSet<HirItemId> = ws_hir
             .items()
             .iter()
-            .filter(|(item_id, _)| !is_markup_value(ws_hir, *item_id))
+            .filter(|(item_id, item)| selected.is_none_or(|items| items.contains(item_id)) && !is_markup_value(ws_hir, *item_id)
+                && !item.decorators().iter().any(|id| matches!(ws_hir.decorators().get(*id).map(|d| &d.payload), Some(DecoratorPayload::Test(_)))))
             .map(|(item_id, _)| item_id)
             .collect();
         self.included_items = Some(ws_non_markup);
@@ -369,13 +370,13 @@ impl<'a> ModuleLowerer<'a> {
         self.mock_overrides = collect_mock_overrides(ws_hir, self.included_items.as_ref());
         self.hir_item_count = ws_item_count;
         // Seed items for this workspace module use origins starting at module_origin_base.
-        // Synthetic items (domain members, non-signal imports) follow immediately after
-        // the reserved [module_origin_base, module_origin_base + ws_item_count + ws_import_count) slice.
+        // Real items and signal imports occupy the module's stable reserved slice.
+        // The shared synthetic allocator remains above all workspace module slices.
         self.item_origin_offset = module_origin_base;
-        self.next_synthetic_item_origin_raw = module_origin_base + ws_item_count + ws_import_count;
         self.next_synthetic_binding_raw = ws_binding_count;
         self.import_to_module = Self::make_import_to_module_map(ws_hir);
 
+        if self.included_items.as_ref().is_none_or(|items| !items.is_empty()) {
         // ── Compile workspace module items ───────────────────────────────────
         self.seed_items()?;
         self.lower_general_exprs();
@@ -403,10 +404,11 @@ impl<'a> ModuleLowerer<'a> {
             return Err(LoweringErrors::new(std::mem::take(&mut self.errors)));
         }
 
-        // ── Advance ws_origin_base past everything this module may have used ─
-        // next_synthetic_item_origin_raw now points to the high-water mark of all
-        // origins consumed by this module (real items, signal stubs, synthetics).
-        self.ws_origin_base = self.next_synthetic_item_origin_raw;
+        }
+
+        // This range is independent of body selection; synthetic origins live above
+        // all module ranges and use the shared allocator.
+        self.ws_origin_base = module_origin_base + ws_item_count + ws_import_count;
 
         // ── Save name → ItemId map for this workspace module ─────────────────
         let mut name_map: HashMap<Box<str>, ItemId> = ws_hir
@@ -556,6 +558,7 @@ impl<'a> ModuleLowerer<'a> {
                 continue;
             };
             let origin = HirItemId::from_raw(hir_id.as_raw().saturating_add(module_origin_base));
+            constructor_origin_map.insert(type_item.name.text().into(), origin);
             for variant in variants.iter() {
                 constructor_origin_map
                     .entry(variant.name.text().into())
@@ -600,7 +603,6 @@ impl<'a> ModuleLowerer<'a> {
         self.debug_items = saved_debug_items;
         self.mock_overrides = saved_mock_overrides;
         self.hir_item_count = saved_hir_item_count;
-        self.next_synthetic_item_origin_raw = saved_next_synthetic;
         self.next_synthetic_binding_raw = saved_next_binding;
         self.item_origin_offset = saved_item_origin_offset;
         // NOTE: ws_origin_base is intentionally NOT restored — it must persist.
@@ -645,6 +647,32 @@ impl<'a> ModuleLowerer<'a> {
             item_origin_offset: 0,
             ws_origin_base: 0,
         }
+    }
+
+    fn lower_type(&self, ty: &aivi_hir::GateType) -> Type {
+        let mut lowered = Type::lower_in_module(ty, self.hir);
+        let mut work = vec![&mut lowered];
+        while let Some(ty) = work.pop() {
+            match ty {
+                Type::OpaqueItem { item, arguments, .. } => {
+                    *item = HirItemId::from_raw(item.as_raw() + self.item_origin_offset);
+                    work.extend(arguments);
+                }
+                Type::OpaqueImport { arguments, .. } => work.extend(arguments),
+                Type::Domain { arguments, carrier, .. } => {
+                    work.extend(arguments);
+                    if let Some(carrier) = carrier { work.push(carrier); }
+                }
+                Type::Tuple(elements) => work.extend(elements),
+                Type::Record(fields) => work.extend(fields.iter_mut().map(|field| &mut field.ty)),
+                Type::Arrow { parameter, result } => { work.push(parameter); work.push(result); }
+                Type::Map { key, value } => { work.push(key); work.push(value); }
+                Type::Result { error, value } | Type::Validation { error, value } | Type::Task { error, value } => { work.push(error); work.push(value); }
+                Type::List(element) | Type::Set(element) | Type::Option(element) | Type::Signal(element) => work.push(element),
+                Type::Primitive(_) | Type::TypeParameter { .. } => {}
+            }
+        }
+        lowered
     }
 
     fn includes_item(&self, item: HirItemId) -> bool {
@@ -708,7 +736,7 @@ impl<'a> ModuleLowerer<'a> {
             pipe.stages.len() * usize::from(debug) + pipe.stages.len() + usize::from(debug),
         );
         if debug {
-            let head_ty = Type::lower(&pipe.head.ty);
+            let head_ty = self.lower_type(&pipe.head.ty);
             specs.push(PipeStageSpec {
                 span: pipe.head.span,
                 subject_memo: None,
@@ -725,8 +753,8 @@ impl<'a> ModuleLowerer<'a> {
                 span: stage.span,
                 subject_memo: stage.subject_memo,
                 result_memo: stage.result_memo,
-                input_subject: Type::lower(&stage.input_subject),
-                result_subject: Type::lower(&stage.result_subject),
+                input_subject: self.lower_type(&stage.input_subject),
+                result_subject: self.lower_type(&stage.result_subject),
                 kind: match &stage.kind {
                     GateRuntimePipeStageKind::Transform { mode, .. } => {
                         PipeStageKindSpec::Transform { mode: *mode }
@@ -758,7 +786,7 @@ impl<'a> ModuleLowerer<'a> {
                 },
             });
             if debug {
-                let result_subject = Type::lower(&stage.result_subject);
+                let result_subject = self.lower_type(&stage.result_subject);
                 specs.push(PipeStageSpec {
                     span: stage.span,
                     subject_memo: None,
@@ -831,7 +859,18 @@ impl<'a> ModuleLowerer<'a> {
         Ok(self.module)
     }
 
+    fn register_imported_type_origins(&mut self) {
+        for (import, binding) in self.hir.imports().iter() {
+            if matches!(binding.metadata, ImportBindingMetadata::TypeConstructor { .. })
+                && let Some(origin) = self.workspace_constructor_origin(import)
+            {
+                self.module.register_imported_type_origin(self.hir.file(), import, origin);
+            }
+        }
+    }
+
     fn seed_items(&mut self) -> Result<(), LoweringErrors> {
+        self.register_imported_type_origins();
         for (hir_id, item) in self.hir.items().iter() {
             if !self.includes_item(hir_id) {
                 continue;
@@ -988,7 +1027,7 @@ impl<'a> ModuleLowerer<'a> {
         // by the backend).  Errors from blocked ambient items are suppressed — see
         // `lower_general_expr_body`.
         let ambient_report = elaborate_ambient_items(self.hir);
-        let (ambient_items, ambient_domain_members, _) = ambient_report.into_parts();
+        let (ambient_items, ambient_domain_members, ambient_instance_members) = ambient_report.into_parts();
         for item in ambient_items {
             if !self.includes_item(item.owner) {
                 continue;
@@ -1023,6 +1062,12 @@ impl<'a> ModuleLowerer<'a> {
                 member.outcome,
             );
         }
+        for member in ambient_instance_members {
+            if !self.includes_item(member.instance_owner) { continue; }
+            let key = InstanceMemberKey { instance: member.instance_owner, member_index: member.member_index };
+            let Some(owner) = self.instance_member_item_map.get(&key).copied() else { continue; };
+            self.lower_general_expr_body(member.instance_owner, owner, member.body_expr, member.parameters, member.outcome);
+        }
     }
 
     fn lower_general_expr_body(
@@ -1048,7 +1093,7 @@ impl<'a> ModuleLowerer<'a> {
                         binding: parameter.binding,
                         span: parameter.span,
                         name: parameter.name,
-                        ty: Type::lower(&parameter.ty),
+                        ty: self.lower_type(&parameter.ty),
                     })
                     .collect::<Vec<_>>();
                 let Some(core_item) = self.module.items_mut().get_mut(core_owner) else {
@@ -1144,6 +1189,9 @@ impl<'a> ModuleLowerer<'a> {
 
     fn lower_gate_stages(&mut self) {
         for stage in elaborate_gates(self.hir).into_stages() {
+            if !self.includes_item(stage.owner) {
+                continue;
+            }
             if !self.item_map.contains_key(&stage.owner) {
                 self.errors
                     .push(LoweringError::UnknownOwner { owner: stage.owner });
@@ -1155,8 +1203,8 @@ impl<'a> ModuleLowerer<'a> {
             };
             let lowered = match stage.outcome {
                 GateStageOutcome::Ordinary(plan) => {
-                    let input_subject = Type::lower(&plan.input_subject);
-                    let result_subject = Type::lower(&plan.result_type);
+                    let input_subject = self.lower_type(&plan.input_subject);
+                    let result_subject = self.lower_type(&plan.result_type);
                     let ambient = match self.alloc_expr(
                         stage.owner,
                         stage.stage_span,
@@ -1223,10 +1271,10 @@ impl<'a> ModuleLowerer<'a> {
                         };
                     PendingStage::Lowered {
                         span: stage.stage_span,
-                        input_subject: Type::lower(&plan.input_subject),
-                        result_subject: Type::lower(&plan.result_type),
+                        input_subject: self.lower_type(&plan.input_subject),
+                        result_subject: self.lower_type(&plan.result_type),
                         kind: StageKind::Gate(GateStage::SignalFilter {
-                            payload_type: Type::lower(&plan.payload_type),
+                            payload_type: self.lower_type(&plan.payload_type),
                             predicate,
                             emits_negative_update: plan.emits_negative_update,
                         }),
@@ -1259,6 +1307,9 @@ impl<'a> ModuleLowerer<'a> {
 
     fn lower_truthy_falsy_stages(&mut self) {
         for stage in elaborate_truthy_falsy(self.hir).into_stages() {
+            if !self.includes_item(stage.owner) {
+                continue;
+            }
             if !self.item_map.contains_key(&stage.owner) {
                 self.errors
                     .push(LoweringError::UnknownOwner { owner: stage.owner });
@@ -1268,6 +1319,7 @@ impl<'a> ModuleLowerer<'a> {
                 owner: stage.owner,
                 pipe_expr: stage.pipe_expr,
             };
+            let hir = self.hir;
             let builder = match self.pipe_builder(key) {
                 Some(builder) => builder,
                 None => continue,
@@ -1277,8 +1329,8 @@ impl<'a> ModuleLowerer<'a> {
                     let span = join_spans(stage.truthy_stage_span, stage.falsy_stage_span);
                     PendingStage::Lowered {
                         span,
-                        input_subject: Type::lower(&plan.input_subject),
-                        result_subject: Type::lower(&plan.result_type),
+                        input_subject: Type::lower_in_module(&plan.input_subject, hir),
+                        result_subject: Type::lower_in_module(&plan.result_type, hir),
                         kind: StageKind::TruthyFalsy(TruthyFalsyStage {
                             truthy_stage_index: stage.truthy_stage_index,
                             truthy_stage_span: stage.truthy_stage_span,
@@ -1290,8 +1342,8 @@ impl<'a> ModuleLowerer<'a> {
                                     .truthy
                                     .payload_subject
                                     .as_ref()
-                                    .map(Type::lower),
-                                result_type: Type::lower(&plan.truthy.result_type),
+                                    .map(|ty| Type::lower_in_module(ty, hir)),
+                                result_type: Type::lower_in_module(&plan.truthy.result_type, hir),
                                 origin_expr: plan.truthy.expr,
                             },
                             falsy: TruthyFalsyBranch {
@@ -1300,8 +1352,8 @@ impl<'a> ModuleLowerer<'a> {
                                     .falsy
                                     .payload_subject
                                     .as_ref()
-                                    .map(Type::lower),
-                                result_type: Type::lower(&plan.falsy.result_type),
+                                    .map(|ty| Type::lower_in_module(ty, hir)),
+                                result_type: Type::lower_in_module(&plan.falsy.result_type, hir),
                                 origin_expr: plan.falsy.expr,
                             },
                         }),
@@ -1335,6 +1387,9 @@ impl<'a> ModuleLowerer<'a> {
 
     fn lower_fanout_stages(&mut self) {
         for segment in elaborate_fanouts(self.hir).into_segments() {
+            if !self.includes_item(segment.owner) {
+                continue;
+            }
             if !self.item_map.contains_key(&segment.owner) {
                 self.errors.push(LoweringError::UnknownOwner {
                     owner: segment.owner,
@@ -1388,23 +1443,23 @@ impl<'a> ModuleLowerer<'a> {
                             stage_index: join.stage_index,
                             stage_span: join.stage_span,
                             origin_expr: join.expr,
-                            input_subject: Type::lower(&join.input_subject),
-                            collection_subject: Type::lower(&join.collection_subject),
+                            input_subject: self.lower_type(&join.input_subject),
+                            collection_subject: self.lower_type(&join.collection_subject),
                             runtime_expr,
-                            result_type: Type::lower(&join.result_type),
+                            result_type: self.lower_type(&join.result_type),
                         })
                     } else {
                         None
                     };
                     PendingStage::Lowered {
                         span,
-                        input_subject: Type::lower(&plan.input_subject),
-                        result_subject: Type::lower(&plan.result_type),
+                        input_subject: self.lower_type(&plan.input_subject),
+                        result_subject: self.lower_type(&plan.result_type),
                         kind: StageKind::Fanout(FanoutStage {
                             carrier: plan.carrier,
-                            element_subject: Type::lower(&plan.element_subject),
-                            mapped_element_type: Type::lower(&plan.mapped_element_type),
-                            mapped_collection_type: Type::lower(&plan.mapped_collection_type),
+                            element_subject: self.lower_type(&plan.element_subject),
+                            mapped_element_type: self.lower_type(&plan.mapped_element_type),
+                            mapped_collection_type: self.lower_type(&plan.mapped_collection_type),
                             runtime_map,
                             filters,
                             join,
@@ -1442,6 +1497,9 @@ impl<'a> ModuleLowerer<'a> {
 
     fn lower_temporal_stages(&mut self) {
         for stage in elaborate_temporal_stages(self.hir).into_stages() {
+            if !self.includes_item(stage.owner) {
+                continue;
+            }
             if !self.item_map.contains_key(&stage.owner) {
                 self.errors
                     .push(LoweringError::UnknownOwner { owner: stage.owner });
@@ -1462,8 +1520,8 @@ impl<'a> ModuleLowerer<'a> {
                     };
                     PendingStage::Lowered {
                         span: stage.stage_span,
-                        input_subject: Type::lower(&plan.input_subject),
-                        result_subject: Type::lower(&plan.result_subject),
+                        input_subject: self.lower_type(&plan.input_subject),
+                        result_subject: self.lower_type(&plan.result_subject),
                         kind: StageKind::Temporal(TemporalStage::Previous { seed_expr }),
                     }
                 }
@@ -1492,8 +1550,8 @@ impl<'a> ModuleLowerer<'a> {
                     };
                     PendingStage::Lowered {
                         span: stage.stage_span,
-                        input_subject: Type::lower(&plan.input_subject),
-                        result_subject: Type::lower(&plan.result_subject),
+                        input_subject: self.lower_type(&plan.input_subject),
+                        result_subject: self.lower_type(&plan.result_subject),
                         kind: StageKind::Temporal(kind),
                     }
                 }
@@ -1508,8 +1566,8 @@ impl<'a> ModuleLowerer<'a> {
                         };
                     PendingStage::Lowered {
                         span: stage.stage_span,
-                        input_subject: Type::lower(&plan.input_subject),
-                        result_subject: Type::lower(&plan.result_subject),
+                        input_subject: self.lower_type(&plan.input_subject),
+                        result_subject: self.lower_type(&plan.result_subject),
                         kind: StageKind::Temporal(TemporalStage::Delay { duration_expr }),
                     }
                 }
@@ -1530,8 +1588,8 @@ impl<'a> ModuleLowerer<'a> {
                     };
                     PendingStage::Lowered {
                         span: stage.stage_span,
-                        input_subject: Type::lower(&plan.input_subject),
-                        result_subject: Type::lower(&plan.result_subject),
+                        input_subject: self.lower_type(&plan.input_subject),
+                        result_subject: self.lower_type(&plan.result_subject),
                         kind: StageKind::Temporal(TemporalStage::Burst {
                             every_expr,
                             count_expr,
@@ -1565,6 +1623,9 @@ impl<'a> ModuleLowerer<'a> {
 
     fn lower_recurrences(&mut self) {
         for node in elaborate_recurrences(self.hir).into_nodes() {
+            if !self.includes_item(node.owner) {
+                continue;
+            }
             if !self.item_map.contains_key(&node.owner) {
                 self.errors
                     .push(LoweringError::UnknownOwner { owner: node.owner });
@@ -1735,6 +1796,9 @@ impl<'a> ModuleLowerer<'a> {
 
     fn lower_sources(&mut self) -> Result<(), LoweringErrors> {
         for node in elaborate_source_lifecycles(self.hir).into_nodes() {
+            if !self.includes_item(node.owner) {
+                continue;
+            }
             let Some(owner) = self.item_map.get(&node.owner).copied() else {
                 self.errors
                     .push(LoweringError::UnknownOwner { owner: node.owner });
@@ -1952,8 +2016,8 @@ impl<'a> ModuleLowerer<'a> {
             stage_index: stage.stage_index,
             stage_span: stage.stage_span,
             origin_expr: stage.expr,
-            input_subject: Type::lower(&stage.input_subject),
-            result_subject: Type::lower(&stage.result_subject),
+            input_subject: self.lower_type(&stage.input_subject),
+            result_subject: self.lower_type(&stage.result_subject),
             runtime_expr: self.lower_runtime_expr(owner, &stage.runtime_expr)?,
         })
     }
@@ -1967,7 +2031,7 @@ impl<'a> ModuleLowerer<'a> {
             stage_index: guard.stage_index,
             stage_span: guard.stage_span,
             predicate_expr: guard.predicate,
-            input_subject: Type::lower(&guard.input_subject),
+            input_subject: self.lower_type(&guard.input_subject),
             runtime_predicate: self.lower_runtime_expr(owner, &guard.runtime_predicate)?,
         })
     }
@@ -1981,7 +2045,7 @@ impl<'a> ModuleLowerer<'a> {
             stage_index: filter.stage_index,
             stage_span: filter.stage_span,
             predicate_expr: filter.predicate,
-            input_subject: Type::lower(&filter.input_subject),
+            input_subject: self.lower_type(&filter.input_subject),
             runtime_predicate: self.lower_runtime_expr(owner, &filter.runtime_predicate)?,
         })
     }
@@ -2250,7 +2314,7 @@ impl<'a> ModuleLowerer<'a> {
     ) -> Option<Vec<Type>> {
         subject
             .and_then(|subject| aivi_hir::case_pattern_field_types(self.hir, callee, subject))
-            .map(|field_types| field_types.into_iter().map(|ty| Type::lower(&ty)).collect())
+            .map(|field_types| field_types.into_iter().map(|ty| self.lower_type(&ty)).collect())
     }
 
     fn lower_term_reference(&mut self, reference: &aivi_hir::TermReference) -> Reference {
@@ -2343,7 +2407,7 @@ impl<'a> ModuleLowerer<'a> {
                                     }
                                 }
                                 let ty = match &binding.metadata {
-                                    ImportBindingMetadata::Value { ty }
+                                    ImportBindingMetadata::Value { ty } | ImportBindingMetadata::ConstrainedValue { ty, .. }
                                     | ImportBindingMetadata::IntrinsicValue { ty, .. } => ty,
                                     _ => unreachable!(),
                                 };
@@ -2354,7 +2418,7 @@ impl<'a> ModuleLowerer<'a> {
                             _ => variant_name.clone(),
                         };
                         let field_count = match &binding.metadata {
-                            ImportBindingMetadata::Value { ty }
+                            ImportBindingMetadata::Value { ty } | ImportBindingMetadata::ConstrainedValue { ty, .. }
                             | ImportBindingMetadata::IntrinsicValue { ty, .. } => {
                                 fn count_arrow_params(ty: &ImportValueType) -> usize {
                                     match ty {
@@ -2538,7 +2602,7 @@ impl<'a> ModuleLowerer<'a> {
                         .ok_or_else(|| unsupported(
                             "runtime lowering only supports compare for Int, Float, Decimal, BigInt, Bool, Text, and Ordering",
                         ))?,
-                    ordering_item,
+                    HirItemId::from_raw(ordering_item.as_raw().saturating_add(self.item_origin_offset)),
                 )
                 .map_err(unsupported)?
             }
@@ -2737,7 +2801,7 @@ impl<'a> ModuleLowerer<'a> {
     ) -> Result<ItemId, LoweringError> {
         let key = BuiltinEvidenceKey {
             intrinsic,
-            ty: Type::lower(expr_ty),
+            ty: self.lower_type(expr_ty),
         };
         if let Some(item) = self.builtin_evidence_item_map.get(&key).copied() {
             return Ok(item);
@@ -2830,7 +2894,7 @@ impl<'a> ModuleLowerer<'a> {
         expr_ty: &aivi_hir::GateType,
     ) -> Result<(Vec<ItemParameter>, Type), LoweringError> {
         let mut parameters = Vec::new();
-        let mut current = Type::lower(expr_ty);
+        let mut current = self.lower_type(expr_ty);
         while let Type::Arrow { parameter, result } = current {
             let parameter_index = parameters.len();
             parameters.push(ItemParameter {
@@ -2878,7 +2942,7 @@ impl<'a> ModuleLowerer<'a> {
             reason,
         };
         let ty = match &binding.metadata {
-            ImportBindingMetadata::Value { ty }
+            ImportBindingMetadata::Value { ty } | ImportBindingMetadata::ConstrainedValue { ty, .. }
             | ImportBindingMetadata::IntrinsicValue { ty, .. }
             | ImportBindingMetadata::InstanceMember { ty, .. } => ty,
             ImportBindingMetadata::DomainSuffix { .. } => {
@@ -2964,7 +3028,6 @@ impl<'a> ModuleLowerer<'a> {
         // imported workspace signals must keep the real compiled workspace item so
         // runtime linking and hydration can observe the actual source/derived graph
         // rather than a disconnected input placeholder.
-        let (kind, parameters) = self.import_item_shape(import, &binding)?;
         if let Some(module_name) = binding
                 .source_module
                 .as_deref()
@@ -2975,6 +3038,8 @@ impl<'a> ModuleLowerer<'a> {
                         self.import_item_map.insert(import, core_item_id);
                         return Ok(core_item_id);
                     }
+
+        let (kind, parameters) = self.import_item_shape(import, &binding)?;
 
         // Domain suffix imports in a flattened HIR (no workspace modules) resolve to
         // the domain member item that was already seeded from the merged domain declaration.
@@ -3111,7 +3176,7 @@ impl<'a> ModuleLowerer<'a> {
                 field_count: 0,
             };
             let ty = self.lower_import_type(match &binding.metadata {
-                ImportBindingMetadata::Value { ty } => ty,
+                ImportBindingMetadata::Value { ty } | ImportBindingMetadata::ConstrainedValue { ty, .. } => ty,
                 _ => unreachable!(),
             });
             let expr = self.alloc_expr(
@@ -3458,7 +3523,7 @@ impl<'a> ModuleLowerer<'a> {
         while let Some(task) = tasks.pop() {
             match task {
                 Task::Visit(expr) => {
-                    let ty = Type::lower(&expr.ty);
+                    let ty = self.lower_type(&expr.ty);
                     match &expr.kind {
                         GateRuntimeExprKind::AmbientSubject => {
                             values.push(self.alloc_expr(
@@ -3968,8 +4033,8 @@ impl<'a> ModuleLowerer<'a> {
                                                     constructor: truthy.constructor,
                                                     payload_subject: truthy
                                                         .payload_subject
-                                                        .map(|payload| Type::lower(&payload)),
-                                                    result_type: Type::lower(&truthy.result_type),
+                                                        .map(|payload| self.lower_type(&payload)),
+                                                    result_type: self.lower_type(&truthy.result_type),
                                                     body: bodies
                                                         .next()
                                                         .expect("truthy body should exist"),
@@ -3979,8 +4044,8 @@ impl<'a> ModuleLowerer<'a> {
                                                     constructor: falsy.constructor,
                                                     payload_subject: falsy
                                                         .payload_subject
-                                                        .map(|payload| Type::lower(&payload)),
-                                                    result_type: Type::lower(&falsy.result_type),
+                                                        .map(|payload| self.lower_type(&payload)),
+                                                    result_type: self.lower_type(&falsy.result_type),
                                                     body: bodies
                                                         .next()
                                                         .expect("falsy body should exist"),

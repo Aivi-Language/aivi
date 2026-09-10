@@ -814,18 +814,6 @@ fn evaluate_intrinsic_value(
         (IntrinsicValue::TimeMonotonicMs, []) => {
             Ok(RuntimeValue::Task(RuntimeTaskPlan::TimeMonotonicMs))
         }
-        (IntrinsicValue::TimeFormat, [ms, pattern]) => {
-            Ok(RuntimeValue::Task(RuntimeTaskPlan::TimeFormat {
-                epoch_ms: expect_intrinsic_i64(kernel, expr, value, 0, ms)?,
-                pattern: expect_intrinsic_text(kernel, expr, value, 1, pattern)?,
-            }))
-        }
-        (IntrinsicValue::TimeParse, [text, pattern]) => {
-            Ok(RuntimeValue::Task(RuntimeTaskPlan::TimeParse {
-                text: expect_intrinsic_text(kernel, expr, value, 0, text)?,
-                pattern: expect_intrinsic_text(kernel, expr, value, 1, pattern)?,
-            }))
-        }
         // Env intrinsics — Task-returning
         (IntrinsicValue::EnvGet, [name]) => Ok(RuntimeValue::Task(RuntimeTaskPlan::EnvGet {
             name: expect_intrinsic_text(kernel, expr, value, 0, name)?,
@@ -904,21 +892,6 @@ fn evaluate_intrinsic_value(
         }
         // Random float — Task-returning
         (IntrinsicValue::RandomFloat, []) => Ok(RuntimeValue::Task(RuntimeTaskPlan::RandomFloat)),
-        // I18n intrinsics — pure/synchronous
-        (IntrinsicValue::I18nTranslate, [text]) => {
-            let s = expect_intrinsic_text(kernel, expr, value, 0, text)?;
-            Ok(RuntimeValue::Text(s))
-        }
-        (IntrinsicValue::I18nTranslatePlural, [singular, plural, count]) => {
-            let singular = expect_intrinsic_text(kernel, expr, value, 0, singular)?;
-            let plural = expect_intrinsic_text(kernel, expr, value, 1, plural)?;
-            let count = expect_intrinsic_i64(kernel, expr, value, 2, count)?;
-            Ok(RuntimeValue::Text(if count == 1 {
-                singular
-            } else {
-                plural
-            }))
-        }
         // Regex intrinsics — Task-returning
         (IntrinsicValue::RegexIsMatch, [pattern, text]) => {
             Ok(RuntimeValue::Task(RuntimeTaskPlan::RegexIsMatch {
@@ -1057,6 +1030,17 @@ fn evaluate_intrinsic_value(
             }))
         }
         // BigInt intrinsics — pure, no I/O
+        (IntrinsicValue::UrlParse, [text]) => {
+            let text = expect_intrinsic_text(kernel, expr, value, 0, text)?;
+            Ok(match url::Url::parse(&text) {
+                Ok(url) => RuntimeValue::ResultOk(Box::new(RuntimeValue::Text(url.to_string().into()))),
+                Err(error) => RuntimeValue::ResultErr(Box::new(RuntimeValue::Text(error.to_string().into()))),
+            })
+        }
+        (IntrinsicValue::BigIntFactorial, [n]) => {
+            let n = expect_intrinsic_i64(kernel, expr, value, 0, n)?;
+            Ok(RuntimeValue::BigInt(RuntimeBigInt::factorial(n)))
+        }
         (IntrinsicValue::BigIntFromInt, [n]) => {
             let n = expect_intrinsic_i64(kernel, expr, value, 0, n)?;
             Ok(RuntimeValue::BigInt(RuntimeBigInt::from_i64(n)))

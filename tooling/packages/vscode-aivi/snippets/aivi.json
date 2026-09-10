@@ -1,27 +1,43 @@
 {
   "Type declaration (sum)": {
     "prefix": "type",
-    "body": ["type ${1:Name} =", "    | ${2:Constructor}"],
+    "body": [
+      "type ${1:Name} =",
+      "    | ${2:Constructor}"
+    ],
     "description": "Declare a sum type"
   },
   "Type declaration (record)": {
     "prefix": "typerec",
-    "body": ["type ${1:Name} = {", "    ${2:field}: ${3:Type},", "}"],
+    "body": [
+      "type ${1:Name} = {",
+      "    ${2:field}: ${3:Type},",
+      "}"
+    ],
     "description": "Declare a record type"
   },
   "Function declaration": {
     "prefix": "func",
-    "body": ["type ${2:ParamType} -> ${3:ReturnType}", "func ${1:name} ${4:param} =>", "    ${5:body}"],
+    "body": [
+      "type ${2:ParamType} -> ${3:ReturnType}",
+      "func ${1:name} = ${4:param} =>",
+      "    ${5:body}"
+    ],
     "description": "Declare a function"
   },
   "Value binding": {
     "prefix": "val",
-    "body": ["value ${1:name} = ${2:expr}"],
+    "body": [
+      "value ${1:name} = ${2:expr}"
+    ],
     "description": "Declare a value binding"
   },
   "Signal binding": {
     "prefix": "sig",
-    "body": ["signal ${1:name} =", "    ${2:expr}"],
+    "body": [
+      "signal ${1:name} =",
+      "    ${2:expr}"
+    ],
     "description": "Declare a signal"
   },
   "Signal fan-out from": {
@@ -36,22 +52,29 @@
   "HTTP source signal": {
     "prefix": "source-http",
     "body": [
-      "@source http.${1|get,post,put,delete|} \"${2:/path}\" with {",
+      "use aivi.http (HttpError, Strict)",
+      "use aivi.duration (Duration)",
+      "",
+      "@source http.get \"${1:https://example.com/data}\" with {",
       "    decode: Strict,",
-      "    timeout: ${3:5s},",
+      "    timeout: ${2:5sec}",
       "}",
-      "signal ${4:name} : Signal (Result HttpError ${5:Type})"
+      "signal ${3:name} : Signal (Result HttpError ${4:Text})"
     ],
     "description": "Declare an HTTP source signal"
   },
   "Timer source signal": {
     "prefix": "source-timer",
-    "body": ["@source timer.every ${1:1000}", "signal ${2:tick} : Signal Unit"],
+    "body": [
+      "@source timer.every ${1:1000}",
+      "signal ${2:tick} : Signal Unit"
+    ],
     "description": "Declare a timer source signal"
   },
   "File watch source": {
     "prefix": "source-watch",
     "body": [
+      "use aivi.fs (FsEvent, Changed)",
       "@source fs.watch \"${1:path}\" with {",
       "    events: [${2:Changed}],",
       "}",
@@ -61,46 +84,65 @@
   },
   "Applicative cluster": {
     "prefix": "cluster",
-    "body": [" &|> ${1:first}", " &|> ${2:second}", "  |> ${3:Constructor}"],
+    "body": [
+      " &|> ${1:first}",
+      " &|> ${2:second}",
+      "  |> ${3:Constructor}"
+    ],
     "description": "Applicative cluster pipe spine"
   },
   "Case split pipe": {
     "prefix": "cases",
-    "body": [" ||> ${1:PatternA} => ${2:expr}", " ||> ${3:PatternB} => ${4:expr}"],
+    "body": [
+      " ||> ${1:PatternA} -> ${2:expr}",
+      " ||> ${3:PatternB} -> ${4:expr}"
+    ],
     "description": "Case split (||>) pipe arms"
   },
   "Class declaration": {
     "prefix": "class",
-    "body": ["class ${1:Name} ${2:A}", "    ${3:method} : ${4:Type}"],
+    "body": [
+      "class ${1:Name} ${2:A} = {",
+      "    type ${3:method} : ${4:Type}",
+      "}"
+    ],
     "description": "Declare a type class"
   },
   "Instance declaration": {
     "prefix": "instance",
     "body": [
-      "instance ${1:Class} ${2:Type}",
-      "    ${3:method} ${4:args} =",
-      "        ${5:body}"
+      "instance ${1:Class} ${2:Type} = {",
+      "    ${3:method} = ${4:args} => ${5:body}",
+      "}"
     ],
     "description": "Declare a class instance"
   },
   "Use import": {
     "prefix": "use",
-    "body": ["use ${1:module} (${2:name})"],
+    "body": [
+      "use ${1:module} (${2:name})"
+    ],
     "description": "Import from a module"
   },
   "Hoist module": {
     "prefix": "hoist",
-    "body": ["hoist ${1:module}"],
-    "description": "Hoist a module's exports into the project-wide namespace"
+    "body": [
+      "hoist"
+    ],
+    "description": "Publish this module's exports project-wide"
   },
   "Hoist module with filters": {
     "prefix": "hoistf",
-    "body": ["hoist ${1:module} (${2:func, value})"],
+    "body": [
+      "hoist (${1:func, value})"
+    ],
     "description": "Hoist specific kinds from a module (func, value, signal, type, domain, class)"
   },
   "Hoist module with hiding": {
     "prefix": "hoisth",
-    "body": ["hoist ${1:module} hiding (${2:name})"],
+    "body": [
+      "hoist hiding (${1:name})"
+    ],
     "description": "Hoist a module while hiding specific names"
   },
   "Match markup": {
@@ -108,7 +150,7 @@
     "body": [
       "<match on={${1:expr}}>",
       "    <case pattern={${2:Pattern}}>",
-      "        ${3:child}",
+      "        <label text={${3:\"Matched\"}} />",
       "    </case>",
       "</match>"
     ],
@@ -118,14 +160,18 @@
     "prefix": "each",
     "body": [
       "<each of={${1:items}} as={${2:item}} key={${2:item}.${3:id}}>",
-      "    ${4:child}",
+      "    <label text={${4:item}} />",
       "</each>"
     ],
     "description": "Each (list rendering) control node"
   },
   "Show markup": {
     "prefix": "show",
-    "body": ["<show when={${1:condition}}>", "    ${2:child}", "</show>"],
+    "body": [
+      "<show when={${1:condition}}>",
+      "    <label text={${2:\"Visible\"}} />",
+      "</show>"
+    ],
     "description": "Conditional show control node"
   }
 }

@@ -386,8 +386,6 @@ pub enum IntrinsicValue {
     // Time intrinsics (Task-returning)
     TimeNowMs,
     TimeMonotonicMs,
-    TimeFormat,
-    TimeParse,
     // Env intrinsics (Task-returning)
     EnvGet,
     EnvList,
@@ -407,9 +405,6 @@ pub enum IntrinsicValue {
     // Auth intrinsics (Task-returning)
     AuthPkce,
     AuthRefresh,
-    // I18n intrinsics (pure/synchronous)
-    I18nTranslate,
-    I18nTranslatePlural,
     // Regex intrinsics (Task-returning — bad pattern propagates as error)
     RegexIsMatch,
     RegexFind,
@@ -427,6 +422,8 @@ pub enum IntrinsicValue {
     HttpHead,
     HttpPostJson,
     // BigInt intrinsics (pure/synchronous)
+    UrlParse,
+    BigIntFactorial,
     BigIntFromInt,
     BigIntFromText,
     BigIntToInt,
@@ -599,8 +596,6 @@ intrinsic_unit_variants!(
     FloatFrac,
     TimeNowMs,
     TimeMonotonicMs,
-    TimeFormat,
-    TimeParse,
     EnvGet,
     EnvList,
     LogEmit,
@@ -614,8 +609,6 @@ intrinsic_unit_variants!(
     NotificationClose,
     AuthPkce,
     AuthRefresh,
-    I18nTranslate,
-    I18nTranslatePlural,
     RegexIsMatch,
     RegexFind,
     RegexFindText,
@@ -630,6 +623,8 @@ intrinsic_unit_variants!(
     HttpDelete,
     HttpHead,
     HttpPostJson,
+    UrlParse,
+    BigIntFactorial,
     BigIntFromInt,
     BigIntFromText,
     BigIntToInt,
@@ -786,8 +781,6 @@ impl fmt::Display for IntrinsicValue {
             Self::FloatFrac => f.write_str("aivi.core.float.frac"),
             Self::TimeNowMs => f.write_str("aivi.time.nowMs"),
             Self::TimeMonotonicMs => f.write_str("aivi.time.monotonicMs"),
-            Self::TimeFormat => f.write_str("aivi.time.format"),
-            Self::TimeParse => f.write_str("aivi.time.parse"),
             Self::EnvGet => f.write_str("aivi.env.get"),
             Self::EnvList => f.write_str("aivi.env.list"),
             Self::LogEmit => f.write_str("aivi.log.emit"),
@@ -801,8 +794,6 @@ impl fmt::Display for IntrinsicValue {
             Self::NotificationClose => f.write_str("aivi.notifications.close"),
             Self::AuthPkce => f.write_str("aivi.auth.pkce"),
             Self::AuthRefresh => f.write_str("aivi.auth.refresh"),
-            Self::I18nTranslate => f.write_str("aivi.i18n.tr"),
-            Self::I18nTranslatePlural => f.write_str("aivi.i18n.trn"),
             Self::RegexIsMatch => f.write_str("aivi.regex.isMatch"),
             Self::RegexFind => f.write_str("aivi.regex.find"),
             Self::RegexFindText => f.write_str("aivi.regex.findText"),
@@ -817,6 +808,8 @@ impl fmt::Display for IntrinsicValue {
             Self::HttpDelete => f.write_str("aivi.http.delete"),
             Self::HttpHead => f.write_str("aivi.http.head"),
             Self::HttpPostJson => f.write_str("aivi.http.postJson"),
+            Self::UrlParse => f.write_str("aivi.url.parseText"),
+            Self::BigIntFactorial => f.write_str("aivi.bigint.factorial"),
             Self::BigIntFromInt => f.write_str("aivi.bigint.fromInt"),
             Self::BigIntFromText => f.write_str("aivi.bigint.fromText"),
             Self::BigIntToInt => f.write_str("aivi.bigint.toInt"),
@@ -886,6 +879,10 @@ pub enum ImportBindingMetadata {
         value: IntrinsicValue,
         ty: ImportValueType,
     },
+    ConstrainedValue {
+        ty: ImportValueType,
+        evidence: Vec<ImportedClassEvidence>,
+    },
     OpaqueValue,
     AmbientValue {
         name: Box<str>,
@@ -951,22 +948,32 @@ pub enum ImportBundleKind {
     BuiltinOption,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ImportRecordField {
     pub name: Box<str>,
     pub ty: ImportValueType,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct ImportSumVariant {
     pub name: Box<str>,
     pub fields: Vec<ImportValueType>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ImportTypeDefinition {
     Alias(ImportValueType),
+    /// Nominal domain with a resolved runtime carrier; it is not a transparent alias.
+    Domain(ImportValueType),
     Sum(Vec<ImportSumVariant>),
+}
+
+/// Ordered hidden callable arguments, with type variables indexed by the exported signature.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImportedClassEvidence {
+    pub class_name: Box<str>,
+    pub member_name: Box<str>,
+    pub subject: ImportValueType,
 }
 
 /// Portable imported value-type surface that HIR uses before real module-linked nominal typing
@@ -975,7 +982,7 @@ pub enum ImportTypeDefinition {
 /// Supports both closed (monomorphic) and open (polymorphic) function signatures.
 /// `TypeVariable` and `Named` extend the original closed surface to allow polymorphic
 /// function types to cross module boundaries.
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ImportValueType {
     Primitive(BuiltinType),
     Tuple(Vec<Self>),

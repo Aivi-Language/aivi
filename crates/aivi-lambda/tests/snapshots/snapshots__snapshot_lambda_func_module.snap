@@ -54,624 +54,521 @@ func __aivi_list_any:
   params = [predicate: A -> Bool, items: List A]
   body = closure16
 func __aivi_binary_eq:
-  params = [__aivi_eq_evidence479: A -> A -> Bool, left: A, right: A]
+  params = [__aivi_eq_evidence335: A -> A -> Bool, left: A, right: A]
   body = closure17
 func __aivi_binary_neq:
-  params = [__aivi_eq_evidence480: A -> A -> Bool, left: A, right: A]
+  params = [__aivi_eq_evidence336: A -> A -> Bool, left: A, right: A]
   body = closure18
 func __aivi_binary_lt:
-  params = [__aivi_ord_evidence481: A -> A -> Ordering, __aivi_eq_evidence482: A -> A -> Bool, left: A, right: A]
+  params = [__aivi_ord_evidence337: A -> A -> Ordering, __aivi_eq_evidence338: A -> A -> Bool, left: A, right: A]
   body = closure19
 func __aivi_binary_gt:
-  params = [__aivi_ord_evidence483: A -> A -> Ordering, __aivi_eq_evidence484: A -> A -> Bool, left: A, right: A]
+  params = [__aivi_ord_evidence339: A -> A -> Ordering, __aivi_eq_evidence340: A -> A -> Bool, left: A, right: A]
   body = closure20
 func __aivi_binary_lte:
-  params = [__aivi_ord_evidence485: A -> A -> Ordering, __aivi_eq_evidence486: A -> A -> Bool, left: A, right: A]
+  params = [__aivi_ord_evidence341: A -> A -> Ordering, __aivi_eq_evidence342: A -> A -> Bool, left: A, right: A]
   body = closure21
 func __aivi_binary_gte:
-  params = [__aivi_ord_evidence487: A -> A -> Ordering, __aivi_eq_evidence488: A -> A -> Bool, left: A, right: A]
+  params = [__aivi_ord_evidence343: A -> A -> Ordering, __aivi_eq_evidence344: A -> A -> Bool, left: A, right: A]
   body = closure22
 func __aivi_order_min:
-func __aivi_order_max:
-func __aivi_order_minOf:
-  params = [__aivi_ord_evidence493: A -> A -> Ordering, __aivi_eq_evidence494: A -> A -> Bool, first: A, rest: List A]
+  params = [__aivi_ord_evidence345: A -> A -> Ordering, __aivi_eq_evidence346: A -> A -> Bool, left: A, right: A]
   body = closure23
-func __aivi_order_maxOf:
-  params = [__aivi_ord_evidence495: A -> A -> Ordering, __aivi_eq_evidence496: A -> A -> Bool, first: A, rest: List A]
+func __aivi_order_max:
+  params = [__aivi_ord_evidence347: A -> A -> Ordering, __aivi_eq_evidence348: A -> A -> Bool, left: A, right: A]
   body = closure24
-func __aivi_order_clampToMax:
-func __aivi_order_clamp:
-func min:
-  params = [__aivi_ord_evidence501: A -> A -> Ordering, __aivi_eq_evidence502: A -> A -> Bool, left: A, right: A]
+func __aivi_order_minOf:
+  params = [__aivi_ord_evidence349: A -> A -> Ordering, __aivi_eq_evidence350: A -> A -> Bool, first: A, rest: List A]
   body = closure25
-func max:
-  params = [__aivi_ord_evidence503: A -> A -> Ordering, __aivi_eq_evidence504: A -> A -> Bool, left: A, right: A]
+func __aivi_order_maxOf:
+  params = [__aivi_ord_evidence351: A -> A -> Ordering, __aivi_eq_evidence352: A -> A -> Bool, first: A, rest: List A]
   body = closure26
-func minOf:
-  params = [__aivi_ord_evidence505: A -> A -> Ordering, __aivi_eq_evidence506: A -> A -> Bool, first: A, rest: List A]
+func __aivi_order_clampToMax:
+  params = [__aivi_ord_evidence353: A -> A -> Ordering, __aivi_eq_evidence354: A -> A -> Bool, high: A, value: A]
   body = closure27
-func maxOf:
-  params = [__aivi_ord_evidence507: A -> A -> Ordering, __aivi_eq_evidence508: A -> A -> Bool, first: A, rest: List A]
+func __aivi_order_clamp:
+  params = [__aivi_ord_evidence355: A -> A -> Ordering, __aivi_eq_evidence356: A -> A -> Bool, low: A, high: A, value: A]
   body = closure28
-func clamp:
-  params = [__aivi_ord_evidence509: A -> A -> Ordering, __aivi_eq_evidence510: A -> A -> Bool, low: A, high: A, value: A]
+func min:
+  params = [__aivi_ord_evidence357: A -> A -> Ordering, __aivi_eq_evidence358: A -> A -> Bool, left: A, right: A]
   body = closure29
+func max:
+  params = [__aivi_ord_evidence359: A -> A -> Ordering, __aivi_eq_evidence360: A -> A -> Bool, left: A, right: A]
+  body = closure30
+func minOf:
+  params = [__aivi_ord_evidence361: A -> A -> Ordering, __aivi_eq_evidence362: A -> A -> Bool, first: A, rest: List A]
+  body = closure31
+func maxOf:
+  params = [__aivi_ord_evidence363: A -> A -> Ordering, __aivi_eq_evidence364: A -> A -> Bool, first: A, rest: List A]
+  body = closure32
+func clamp:
+  params = [__aivi_ord_evidence365: A -> A -> Ordering, __aivi_eq_evidence366: A -> A -> Bool, low: A, high: A, value: A]
+  body = closure33
 func __aivi_nel_singleton:
   params = [item: A]
-  body = closure30
+  body = closure34
 func __aivi_nel_cons:
   params = [item: A, nel: NonEmptyList A]
-  body = closure31
+  body = closure35
 func __aivi_nel_head:
   params = [nel: NonEmptyList A]
-  body = closure32
+  body = closure36
 func __aivi_nel_toList:
   params = [nel: NonEmptyList A]
-  body = closure33
+  body = closure37
 func __aivi_nel_fromHeadTail:
   params = [h: A, t: List A]
-  body = closure34
+  body = closure38
 func __aivi_nel_length:
   params = [nel: NonEmptyList A]
-  body = closure35
+  body = closure39
 func __aivi_nel_lastStep:
   params = [prev: A, item: A]
-  body = closure36
+  body = closure40
 func __aivi_nel_lastOf:
   params = [h: A, t: List A]
-  body = closure37
+  body = closure41
 func __aivi_nel_last:
   params = [nel: NonEmptyList A]
-  body = closure38
+  body = closure42
 func __aivi_nel_mapNel:
   params = [transform: A -> B, nel: NonEmptyList A]
-  body = closure39
+  body = closure43
 func __aivi_nel_appendNel:
   params = [left: NonEmptyList A, right: NonEmptyList A]
-  body = closure40
+  body = closure44
 func __aivi_nel_initAppendPrev:
   params = [items: List A, prev: Option A]
-  body = closure41
+  body = closure45
 func __aivi_nel_initAccum:
   params = [items: List A, prev: Option A, item: A]
-  body = closure42
+  body = closure46
 func __aivi_nel_initStep:
   params = [state: (List A, Option A), item: A]
-  body = closure43
+  body = closure47
 func __aivi_nel_initExtract:
   params = [state: (List A, Option A)]
-  body = closure44
+  body = closure48
 func __aivi_nel_init:
   params = [nel: NonEmptyList A]
-  body = closure45
+  body = closure49
 func __aivi_nel_fromListStep:
   params = [acc: Option NonEmptyList A, item: A]
-  body = closure46
+  body = closure50
 func __aivi_nel_fromList:
   params = [items: List A]
-  body = closure47
+  body = closure51
 func __aivi_option_map:
   params = [transform: A -> B, opt: Option A]
-  body = closure48
+  body = closure52
 func __aivi_list_contains:
-  params = [__aivi_eq_evidence511: A -> A -> Bool, target: A, items: List A]
-  body = closure49
+  params = [__aivi_eq_evidence367: A -> A -> Bool, target: A, items: List A]
+  body = closure53
 func __aivi_list_uniqueByStep:
   params = [eq: A -> A -> Bool, acc: List A, item: A]
-  body = closure50
+  body = closure54
 func __aivi_list_uniqueBy:
   params = [eq: A -> A -> Bool, items: List A]
-  body = closure51
-func __aivi_list_containsEqStep:
-  params = [__aivi_eq_evidence512: A -> A -> Bool, target: A, found: Bool, item: A]
-  body = closure52
-func __aivi_list_containsEq:
-  params = [__aivi_eq_evidence513: A -> A -> Bool, target: A, items: List A]
-  body = closure53
-func __aivi_list_uniqueEqStep:
-  params = [__aivi_eq_evidence514: A -> A -> Bool, acc: List A, item: A]
-  body = closure54
-func __aivi_list_unique:
-  params = [__aivi_eq_evidence515: A -> A -> Bool, items: List A]
   body = closure55
-func unique:
-  params = [__aivi_eq_evidence516: A -> A -> Bool, items: List A]
+func __aivi_list_containsEqStep:
+  params = [__aivi_eq_evidence368: A -> A -> Bool, target: A, found: Bool, item: A]
   body = closure56
+func __aivi_list_containsEq:
+  params = [__aivi_eq_evidence369: A -> A -> Bool, target: A, items: List A]
+  body = closure57
+func __aivi_list_uniqueEqStep:
+  params = [__aivi_eq_evidence370: A -> A -> Bool, acc: List A, item: A]
+  body = closure58
+func __aivi_list_unique:
+  params = [__aivi_eq_evidence371: A -> A -> Bool, items: List A]
+  body = closure59
+func unique:
+  params = [__aivi_eq_evidence372: A -> A -> Bool, items: List A]
+  body = closure60
 func __aivi_list_mapStep:
   params = [transform: A -> B, acc: List B, item: A]
-  body = closure57
+  body = closure61
 func __aivi_list_map:
   params = [transform: A -> B, items: List A]
-  body = closure58
+  body = closure62
 func __aivi_list_flatMapStep:
   params = [transform: A -> List B, acc: List B, item: A]
-  body = closure59
+  body = closure63
 func __aivi_list_flatMap:
   params = [transform: A -> List B, items: List A]
-  body = closure60
+  body = closure64
 func __aivi_list_filterAppend:
   params = [predicate: A -> Bool, acc: List A, item: A]
-  body = closure61
+  body = closure65
 func __aivi_list_filter:
   params = [predicate: A -> Bool, items: List A]
-  body = closure62
+  body = closure66
 func __aivi_list_countStep:
   params = [predicate: A -> Bool, acc: Int, item: A]
-  body = closure63
+  body = closure67
 func __aivi_list_count:
   params = [predicate: A -> Bool, items: List A]
-  body = closure64
+  body = closure68
 func __aivi_list_sumStep:
   params = [acc: Int, item: Int]
-  body = closure65
+  body = closure69
 func __aivi_list_sum:
   params = [items: List Int]
-  body = closure66
+  body = closure70
 func __aivi_list_maxPick:
   params = [gt: A -> A -> Bool, item: A, prev: A]
-  body = closure67
+  body = closure71
 func __aivi_list_maximumStep:
   params = [gt: A -> A -> Bool, best: Option A, item: A]
-  body = closure68
+  body = closure72
 func __aivi_list_maximum:
   params = [gt: A -> A -> Bool, items: List A]
-  body = closure69
-func __aivi_list_maximumOrdPick:
-  params = [__aivi_ord_evidence517: A -> A -> Ordering, __aivi_eq_evidence518: A -> A -> Bool, item: A, prev: A]
-  body = closure70
-func __aivi_list_maximumOrdStep:
-  params = [__aivi_ord_evidence519: A -> A -> Ordering, __aivi_eq_evidence520: A -> A -> Bool, best: Option A, item: A]
-  body = closure71
-func __aivi_list_maximumFromStep:
-  params = [__aivi_ord_evidence521: A -> A -> Ordering, __aivi_eq_evidence522: A -> A -> Bool, best: A, item: A]
-  body = closure72
-func __aivi_list_maximumFrom:
-  params = [__aivi_ord_evidence523: A -> A -> Ordering, __aivi_eq_evidence524: A -> A -> Bool, best: A, items: List A]
   body = closure73
-func __aivi_list_minimumOrdPick:
-  params = [__aivi_ord_evidence525: A -> A -> Ordering, __aivi_eq_evidence526: A -> A -> Bool, item: A, prev: A]
+func __aivi_list_maximumOrdPick:
+  params = [__aivi_ord_evidence373: A -> A -> Ordering, __aivi_eq_evidence374: A -> A -> Bool, item: A, prev: A]
   body = closure74
-func __aivi_list_minimumOrdStep:
-  params = [__aivi_ord_evidence527: A -> A -> Ordering, __aivi_eq_evidence528: A -> A -> Bool, best: Option A, item: A]
+func __aivi_list_maximumOrdStep:
+  params = [__aivi_ord_evidence375: A -> A -> Ordering, __aivi_eq_evidence376: A -> A -> Bool, best: Option A, item: A]
   body = closure75
-func __aivi_list_minimumFromStep:
-  params = [__aivi_ord_evidence529: A -> A -> Ordering, __aivi_eq_evidence530: A -> A -> Bool, best: A, item: A]
+func __aivi_list_maximumFromStep:
+  params = [__aivi_ord_evidence377: A -> A -> Ordering, __aivi_eq_evidence378: A -> A -> Bool, best: A, item: A]
   body = closure76
-func __aivi_list_minimumFrom:
-  params = [__aivi_ord_evidence531: A -> A -> Ordering, __aivi_eq_evidence532: A -> A -> Bool, best: A, items: List A]
+func __aivi_list_maximumFrom:
+  params = [__aivi_ord_evidence379: A -> A -> Ordering, __aivi_eq_evidence380: A -> A -> Bool, best: A, items: List A]
   body = closure77
-func maximum:
-  params = [__aivi_ord_evidence533: A -> A -> Ordering, __aivi_eq_evidence534: A -> A -> Bool, items: List A]
+func __aivi_list_minimumOrdPick:
+  params = [__aivi_ord_evidence381: A -> A -> Ordering, __aivi_eq_evidence382: A -> A -> Bool, item: A, prev: A]
   body = closure78
-func minimum:
-  params = [__aivi_ord_evidence535: A -> A -> Ordering, __aivi_eq_evidence536: A -> A -> Bool, items: List A]
+func __aivi_list_minimumOrdStep:
+  params = [__aivi_ord_evidence383: A -> A -> Ordering, __aivi_eq_evidence384: A -> A -> Bool, best: Option A, item: A]
   body = closure79
+func __aivi_list_minimumFromStep:
+  params = [__aivi_ord_evidence385: A -> A -> Ordering, __aivi_eq_evidence386: A -> A -> Bool, best: A, item: A]
+  body = closure80
+func __aivi_list_minimumFrom:
+  params = [__aivi_ord_evidence387: A -> A -> Ordering, __aivi_eq_evidence388: A -> A -> Bool, best: A, items: List A]
+  body = closure81
+func maximum:
+  params = [__aivi_ord_evidence389: A -> A -> Ordering, __aivi_eq_evidence390: A -> A -> Bool, items: List A]
+  body = closure82
+func minimum:
+  params = [__aivi_ord_evidence391: A -> A -> Ordering, __aivi_eq_evidence392: A -> A -> Bool, items: List A]
+  body = closure83
 func __aivi_list_rangeDesc:
   params = [current: Int, acc: List Int]
-  body = closure80
+  body = closure84
 func __aivi_list_range:
   params = [n: Int]
-  body = closure81
+  body = closure85
 func __aivi_text_joinFirst:
   params = [sep: Text, result: Text, item: Text]
-  body = closure82
+  body = closure86
 func __aivi_text_joinNext:
   params = [sep: Text, result: Text, item: Text]
-  body = closure83
+  body = closure87
 func __aivi_text_joinPick:
   params = [isFirst: Bool, sep: Text, result: Text, item: Text]
-  body = closure84
+  body = closure88
 func __aivi_text_joinStep:
   params = [sep: Text, state: (Bool, Text), item: Text]
-  body = closure85
+  body = closure89
 func __aivi_text_joinExtract:
   params = [state: (Bool, Text)]
-  body = closure86
+  body = closure90
 func __aivi_text_join:
   params = [sep: Text, items: List Text]
-  body = closure87
-func __aivi_matrix_rows:
-  params = [matrix: Matrix A]
-  body = closure88
-func __aivi_matrix_width:
-  params = [matrix: Matrix A]
-  body = closure89
-func __aivi_matrix_height:
-  params = [matrix: Matrix A]
-  body = closure90
+  body = closure91
 func __aivi_listAt_match:
   params = [matches: Bool, idx: Int, item: A]
-  body = closure91
+  body = closure92
 func __aivi_listAt_check:
   params = [target: Int, idx: Int, found: Option A, item: A]
-  body = closure92
+  body = closure93
 func __aivi_listAt_step:
   params = [target: Int, state: (Int, Option A), item: A]
-  body = closure93
+  body = closure94
 func __aivi_listAt_extract:
   params = [state: (Int, Option A)]
-  body = closure94
+  body = closure95
 func __aivi_listAt:
   params = [target: Int, items: List A]
-  body = closure95
-func __aivi_matrix_atRow:
-  params = [rowOpt: Option List A, x: Int]
   body = closure96
-func __aivi_matrix_at:
-  params = [matrix: Matrix A, x: Int, y: Int]
-  body = closure97
 func __aivi_listReplace_pick:
   params = [matches: Bool, newVal: A, idx: Int, result: List A, item: A]
-  body = closure98
+  body = closure97
 func __aivi_listReplace_check:
   params = [target: Int, newVal: A, idx: Int, result: List A, item: A]
-  body = closure99
+  body = closure98
 func __aivi_listReplace_step:
   params = [target: Int, newVal: A, state: (Int, List A), item: A]
-  body = closure100
+  body = closure99
 func __aivi_listReplace_extract:
   params = [state: (Int, List A)]
-  body = closure101
+  body = closure100
 func __aivi_listReplace:
   params = [target: Int, newVal: A, items: List A]
-  body = closure102
-func __aivi_matrix_doReplace:
-  params = [x: Int, y: Int, w: Int, h: Int, data: List List A, value: A]
-  body = closure103
-func __aivi_matrix_boundsCheck:
-  params = [xOk: Bool, yOk: Bool, xLt: Bool, yLt: Bool, x: Int, y: Int, w: Int, h: Int, data: List List A, value: A]
-  body = closure104
-func __aivi_matrix_boundsCheck2:
-  params = [yOk: Bool, xLt: Bool, yLt: Bool, x: Int, y: Int, w: Int, h: Int, data: List List A, value: A]
-  body = closure105
-func __aivi_matrix_boundsCheck3:
-  params = [xLt: Bool, yLt: Bool, x: Int, y: Int, w: Int, h: Int, data: List List A, value: A]
-  body = closure106
-func __aivi_matrix_boundsCheck4:
-  params = [yLt: Bool, x: Int, y: Int, w: Int, h: Int, data: List List A, value: A]
-  body = closure107
-func __aivi_matrix_replaceCoord:
-  params = [matrix: Matrix A, x: Int, y: Int, value: A]
-  body = closure108
-func __aivi_matrix_replaceAt:
-  params = [matrix: Matrix A, coord: (Int, Int), value: A]
-  body = closure109
-func __aivi_matrix_replaceManyUpdate:
-  params = [matrix: Matrix A, update: ((Int, Int), A)]
-  body = closure110
-func __aivi_matrix_replaceManyStep:
-  params = [current: Option Matrix A, update: ((Int, Int), A)]
-  body = closure111
-func __aivi_matrix_replaceMany:
-  params = [matrix: Matrix A, updates: List ((Int, Int), A)]
-  body = closure112
-func __aivi_matrix_validateFirstRow:
-  params = [rowIdx: Int, expectedWidth: Int, row: List A]
-  body = closure113
-func __aivi_matrix_validateLengthMatch:
-  params = [matches: Bool, rowIdx: Int, expectedWidth: Int, row: List A]
-  body = closure114
-func __aivi_matrix_validateSubsequentRow:
-  params = [isFirst: Bool, rowIdx: Int, expectedWidth: Int, row: List A]
-  body = closure115
-func __aivi_matrix_validateRow:
-  params = [prevError: Option MatrixError, rowIdx: Int, expectedWidth: Int, row: List A]
-  body = closure116
-func __aivi_matrix_fromRowsStep:
-  params = [state: (Int, Int, Option MatrixError), row: List A]
-  body = closure117
-func __aivi_matrix_fromRowsDecide:
-  params = [error: Option MatrixError, rowCount: Int, width: Int, inputRows: List List A]
-  body = closure118
-func __aivi_matrix_fromRowsFinish:
-  params = [inputRows: List List A, state: (Int, Int, Option MatrixError)]
-  body = closure119
-func __aivi_matrix_fromRows:
-  params = [inputRows: List List A]
-  body = closure120
-func __aivi_matrix_initCellAt:
-  params = [build: Int -> Int -> A, y: Int, x: Int]
-  body = closure121
-func __aivi_matrix_buildRow:
-  params = [width: Int, build: Int -> Int -> A, y: Int]
-  body = closure122
-func __aivi_matrix_buildRows:
-  params = [width: Int, height: Int, build: Int -> Int -> A]
-  body = closure123
-func __aivi_matrix_initHeight:
-  params = [width: Int, height: Int, build: Int -> Int -> A]
-  body = closure124
-func __aivi_matrix_init:
-  params = [width: Int, height: Int, build: Int -> Int -> A]
-  body = closure125
-func __aivi_matrix_filledCell:
-  params = [value: A, x: Int, y: Int]
-  body = closure126
-func __aivi_matrix_filled:
-  params = [w: Int, h: Int, value: A]
-  body = closure127
-func __aivi_matrix_countCell:
-  params = [predicate: A -> Bool, total: Int, item: A]
-  body = closure128
-func __aivi_matrix_countRow:
-  params = [predicate: A -> Bool, total: Int, row: List A]
-  body = closure129
-func __aivi_matrix_count:
-  params = [predicate: A -> Bool, matrix: Matrix A]
-  body = closure130
+  body = closure101
 func __aivi_list_findTry:
   params = [predicate: A -> Bool, item: A]
-  body = closure131
+  body = closure102
 func __aivi_list_findStep:
   params = [predicate: A -> Bool, acc: Option A, item: A]
-  body = closure132
+  body = closure103
 func __aivi_list_find:
   params = [predicate: A -> Bool, items: List A]
-  body = closure133
+  body = closure104
 func __aivi_list_takeHelp:
   params = [n: Int, count: Int, acc: List A, item: A]
-  body = closure134
+  body = closure105
 func __aivi_list_takeStep:
   params = [n: Int, state: (Int, List A), item: A]
-  body = closure135
+  body = closure106
 func __aivi_list_takeExtract:
   params = [state: (Int, List A)]
-  body = closure136
+  body = closure107
 func __aivi_list_take:
   params = [n: Int, items: List A]
-  body = closure137
+  body = closure108
 func __aivi_list_sortByInsertFalse:
   params = [cmp: A -> A -> Bool, newItem: A, current: A, acc: List A]
-  body = closure138
+  body = closure109
 func __aivi_list_sortByInsertStep:
   params = [cmp: A -> A -> Bool, newItem: A, state: (Bool, List A), current: A]
-  body = closure139
+  body = closure110
 func __aivi_list_sortByInsertFinish:
   params = [cmp: A -> A -> Bool, newItem: A, state: (Bool, List A)]
-  body = closure140
+  body = closure111
 func __aivi_list_sortByInsert:
   params = [cmp: A -> A -> Bool, newItem: A, sorted: List A]
-  body = closure141
+  body = closure112
 func __aivi_list_sortByStep:
   params = [cmp: A -> A -> Bool, sorted: List A, item: A]
-  body = closure142
+  body = closure113
 func __aivi_list_sortBy:
   params = [cmp: A -> A -> Bool, items: List A]
-  body = closure143
+  body = closure114
 func __aivi_list_insertSortedOrdFalse:
-  params = [__aivi_ord_evidence537: A -> A -> Ordering, __aivi_eq_evidence538: A -> A -> Bool, newItem: A, current: A, acc: List A]
-  body = closure144
+  params = [__aivi_ord_evidence393: A -> A -> Ordering, __aivi_eq_evidence394: A -> A -> Bool, newItem: A, current: A, acc: List A]
+  body = closure115
 func __aivi_list_insertSortedOrdStep:
-  params = [__aivi_ord_evidence539: A -> A -> Ordering, __aivi_eq_evidence540: A -> A -> Bool, newItem: A, state: (Bool, List A), current: A]
-  body = closure145
+  params = [__aivi_ord_evidence395: A -> A -> Ordering, __aivi_eq_evidence396: A -> A -> Bool, newItem: A, state: (Bool, List A), current: A]
+  body = closure116
 func __aivi_list_insertSortedOrdFinish:
-  params = [__aivi_ord_evidence541: A -> A -> Ordering, __aivi_eq_evidence542: A -> A -> Bool, newItem: A, state: (Bool, List A)]
-  body = closure146
+  params = [__aivi_ord_evidence397: A -> A -> Ordering, __aivi_eq_evidence398: A -> A -> Bool, newItem: A, state: (Bool, List A)]
+  body = closure117
 func __aivi_list_insertSortedOrd:
-  params = [__aivi_ord_evidence543: A -> A -> Ordering, __aivi_eq_evidence544: A -> A -> Bool, newItem: A, sorted: List A]
-  body = closure147
+  params = [__aivi_ord_evidence399: A -> A -> Ordering, __aivi_eq_evidence400: A -> A -> Bool, newItem: A, sorted: List A]
+  body = closure118
 func __aivi_list_sortOrdStep:
-  params = [__aivi_ord_evidence545: A -> A -> Ordering, __aivi_eq_evidence546: A -> A -> Bool, sorted: List A, item: A]
-  body = closure148
+  params = [__aivi_ord_evidence401: A -> A -> Ordering, __aivi_eq_evidence402: A -> A -> Bool, sorted: List A, item: A]
+  body = closure119
 func sort:
-  params = [__aivi_ord_evidence547: A -> A -> Ordering, __aivi_eq_evidence548: A -> A -> Bool, items: List A]
-  body = closure149
+  params = [__aivi_ord_evidence403: A -> A -> Ordering, __aivi_eq_evidence404: A -> A -> Bool, items: List A]
+  body = closure120
 func __aivi_text_isEmpty:
   params = [text: Text]
-  body = closure150
+  body = closure121
 func __aivi_text_nonEmpty:
   params = [text: Text]
-  body = closure151
+  body = closure122
 func __aivi_pair_first:
   params = [pair: (A, B)]
-  body = closure152
+  body = closure123
 func __aivi_pair_second:
   params = [pair: (A, B)]
-  body = closure153
+  body = closure124
 func __aivi_pair_swap:
   params = [pair: (A, B)]
-  body = closure154
+  body = closure125
 func __aivi_pair_mapFirst:
   params = [transform: A -> C, pair: (A, B)]
-  body = closure155
+  body = closure126
 func __aivi_pair_mapSecond:
   params = [transform: B -> C, pair: (A, B)]
-  body = closure156
+  body = closure127
 func __aivi_pair_mapBoth:
   params = [transformFst: A -> C, transformSnd: B -> D, pair: (A, B)]
-  body = closure157
+  body = closure128
 func __aivi_pair_fromPair:
   params = [a: A, b: B]
-  body = closure158
+  body = closure129
 func __aivi_pair_duplicate:
   params = [item: A]
-  body = closure159
+  body = closure130
 func domain#62::member#0::lift:
   params = [items: List A]
-  body = closure160
+  body = closure131
 func domain#62::member#1::__aivi_nel_carrier:
   params = [nel: List A]
-  body = closure161
-func domain#187::member#0::ms:
+  body = closure132
+func domain#152::member#0::ms:
   params = [value: Int]
-  body = closure162
-func domain#188::member#0::times:
+  body = closure133
+func domain#153::member#0::times:
   params = [value: Int]
-  body = closure163
-func builtin-evidence#201::reduce:
+  body = closure134
+func builtin-evidence#166::reduce:
   params = [arg0: Int -> A -> Int, arg1: Int, arg2: List A]
+  body = closure135
+func builtin-evidence#167::reduce:
+  params = [arg0: Option A -> A -> Option A, arg1: Option A, arg2: List A]
+  body = closure136
+func builtin-evidence#168::append:
+  params = [arg0: List A, arg1: List A]
+  body = closure137
+func builtin-evidence#169::reduce:
+  params = [arg0: { seenFirst: Bool, items: List A } -> A -> { seenFirst: Bool, items: List A }, arg1: { seenFirst: Bool, items: List A }, arg2: List A]
+  body = closure138
+func builtin-evidence#170::reduce:
+  params = [arg0: Bool -> A -> Bool, arg1: Bool, arg2: List A]
+  body = closure139
+func builtin-evidence#171::structural-eq:
+  params = [arg0: Ordering, arg1: Ordering]
+  body = closure140
+func builtin-evidence#172::append:
+  params = [arg0: List A, arg1: List A]
+  body = closure141
+func builtin-evidence#173::append:
+  params = [arg0: List A, arg1: List A]
+  body = closure142
+func builtin-evidence#174::reduce:
+  params = [arg0: A -> A -> A, arg1: A, arg2: List A]
+  body = closure143
+func builtin-evidence#175::append:
+  params = [arg0: List A, arg1: List A]
+  body = closure144
+func builtin-evidence#176::append:
+  params = [arg0: List A, arg1: List A]
+  body = closure145
+func builtin-evidence#177::reduce:
+  params = [arg0: (List A, Option A) -> A -> (List A, Option A), arg1: (List A, Option A), arg2: List A]
+  body = closure146
+func builtin-evidence#178::append:
+  params = [arg0: List A, arg1: List A]
+  body = closure147
+func builtin-evidence#179::reduce:
+  params = [arg0: Option NonEmptyList A -> A -> Option NonEmptyList A, arg1: Option NonEmptyList A, arg2: List A]
+  body = closure148
+func builtin-evidence#180::append:
+  params = [arg0: List A, arg1: List A]
+  body = closure149
+func builtin-evidence#181::reduce:
+  params = [arg0: List A -> A -> List A, arg1: List A, arg2: List A]
+  body = closure150
+func builtin-evidence#182::reduce:
+  params = [arg0: Bool -> A -> Bool, arg1: Bool, arg2: List A]
+  body = closure151
+func builtin-evidence#183::append:
+  params = [arg0: List A, arg1: List A]
+  body = closure152
+func builtin-evidence#184::reduce:
+  params = [arg0: List A -> A -> List A, arg1: List A, arg2: List A]
+  body = closure153
+func builtin-evidence#185::append:
+  params = [arg0: List B, arg1: List B]
+  body = closure154
+func builtin-evidence#186::reduce:
+  params = [arg0: List B -> A -> List B, arg1: List B, arg2: List A]
+  body = closure155
+func builtin-evidence#187::append:
+  params = [arg0: List B, arg1: List B]
+  body = closure156
+func builtin-evidence#188::reduce:
+  params = [arg0: List B -> A -> List B, arg1: List B, arg2: List A]
+  body = closure157
+func builtin-evidence#189::append:
+  params = [arg0: List A, arg1: List A]
+  body = closure158
+func builtin-evidence#190::reduce:
+  params = [arg0: List A -> A -> List A, arg1: List A, arg2: List A]
+  body = closure159
+func builtin-evidence#191::reduce:
+  params = [arg0: Int -> A -> Int, arg1: Int, arg2: List A]
+  body = closure160
+func builtin-evidence#192::reduce:
+  params = [arg0: Int -> Int -> Int, arg1: Int, arg2: List Int]
+  body = closure161
+func builtin-evidence#193::reduce:
+  params = [arg0: Option A -> A -> Option A, arg1: Option A, arg2: List A]
+  body = closure162
+func builtin-evidence#194::reduce:
+  params = [arg0: A -> A -> A, arg1: A, arg2: List A]
+  body = closure163
+func builtin-evidence#195::reduce:
+  params = [arg0: A -> A -> A, arg1: A, arg2: List A]
   body = closure164
-func builtin-evidence#202::reduce:
+func builtin-evidence#196::reduce:
   params = [arg0: Option A -> A -> Option A, arg1: Option A, arg2: List A]
   body = closure165
-func builtin-evidence#203::append:
-  params = [arg0: List A, arg1: List A]
+func builtin-evidence#197::reduce:
+  params = [arg0: Option A -> A -> Option A, arg1: Option A, arg2: List A]
   body = closure166
-func builtin-evidence#204::reduce:
-  params = [arg0: { seenFirst: Bool, items: List A } -> A -> { seenFirst: Bool, items: List A }, arg1: { seenFirst: Bool, items: List A }, arg2: List A]
+func builtin-evidence#198::compare:
+  params = [arg0: Int, arg1: Int]
   body = closure167
-func builtin-evidence#205::reduce:
-  params = [arg0: Bool -> A -> Bool, arg1: Bool, arg2: List A]
+func builtin-evidence#199::append:
+  params = [arg0: List Int, arg1: List Int]
   body = closure168
-func builtin-evidence#206::append:
-  params = [arg0: List A, arg1: List A]
+func builtin-evidence#200::append:
+  params = [arg0: Text, arg1: Text]
   body = closure169
-func builtin-evidence#207::append:
-  params = [arg0: List A, arg1: List A]
+func builtin-evidence#201::reduce:
+  params = [arg0: (Bool, Text) -> Text -> (Bool, Text), arg1: (Bool, Text), arg2: List Text]
   body = closure170
-func builtin-evidence#208::reduce:
-  params = [arg0: A -> A -> A, arg1: A, arg2: List A]
+func builtin-evidence#202::structural-eq:
+  params = [arg0: Int, arg1: Int]
   body = closure171
-func builtin-evidence#209::append:
-  params = [arg0: List A, arg1: List A]
+func builtin-evidence#203::reduce:
+  params = [arg0: (Int, Option A) -> A -> (Int, Option A), arg1: (Int, Option A), arg2: List A]
   body = closure172
-func builtin-evidence#210::append:
+func builtin-evidence#204::append:
   params = [arg0: List A, arg1: List A]
   body = closure173
-func builtin-evidence#211::reduce:
-  params = [arg0: (List A, Option A) -> A -> (List A, Option A), arg1: (List A, Option A), arg2: List A]
+func builtin-evidence#205::reduce:
+  params = [arg0: (Int, List A) -> A -> (Int, List A), arg1: (Int, List A), arg2: List A]
   body = closure174
-func builtin-evidence#212::append:
-  params = [arg0: List A, arg1: List A]
+func builtin-evidence#206::reduce:
+  params = [arg0: Option A -> A -> Option A, arg1: Option A, arg2: List A]
   body = closure175
-func builtin-evidence#213::reduce:
-  params = [arg0: Option NonEmptyList A -> A -> Option NonEmptyList A, arg1: Option NonEmptyList A, arg2: List A]
-  body = closure176
-func builtin-evidence#214::append:
+func builtin-evidence#207::append:
   params = [arg0: List A, arg1: List A]
+  body = closure176
+func builtin-evidence#208::reduce:
+  params = [arg0: (Int, List A) -> A -> (Int, List A), arg1: (Int, List A), arg2: List A]
   body = closure177
-func builtin-evidence#215::reduce:
-  params = [arg0: List A -> A -> List A, arg1: List A, arg2: List A]
+func builtin-evidence#209::append:
+  params = [arg0: List A, arg1: List A]
   body = closure178
-func builtin-evidence#216::reduce:
-  params = [arg0: Bool -> A -> Bool, arg1: Bool, arg2: List A]
+func builtin-evidence#210::append:
+  params = [arg0: List A, arg1: List A]
   body = closure179
-func builtin-evidence#217::append:
+func builtin-evidence#211::append:
   params = [arg0: List A, arg1: List A]
   body = closure180
+func builtin-evidence#212::reduce:
+  params = [arg0: (Bool, List A) -> A -> (Bool, List A), arg1: (Bool, List A), arg2: List A]
+  body = closure181
+func builtin-evidence#213::reduce:
+  params = [arg0: List A -> A -> List A, arg1: List A, arg2: List A]
+  body = closure182
+func builtin-evidence#214::append:
+  params = [arg0: List A, arg1: List A]
+  body = closure183
+func builtin-evidence#215::append:
+  params = [arg0: List A, arg1: List A]
+  body = closure184
+func builtin-evidence#216::append:
+  params = [arg0: List A, arg1: List A]
+  body = closure185
+func builtin-evidence#217::reduce:
+  params = [arg0: (Bool, List A) -> A -> (Bool, List A), arg1: (Bool, List A), arg2: List A]
+  body = closure186
 func builtin-evidence#218::reduce:
   params = [arg0: List A -> A -> List A, arg1: List A, arg2: List A]
-  body = closure181
-func builtin-evidence#219::append:
-  params = [arg0: List B, arg1: List B]
-  body = closure182
-func builtin-evidence#220::reduce:
-  params = [arg0: List B -> A -> List B, arg1: List B, arg2: List A]
-  body = closure183
-func builtin-evidence#221::append:
-  params = [arg0: List B, arg1: List B]
-  body = closure184
-func builtin-evidence#222::reduce:
-  params = [arg0: List B -> A -> List B, arg1: List B, arg2: List A]
-  body = closure185
-func builtin-evidence#223::append:
-  params = [arg0: List A, arg1: List A]
-  body = closure186
-func builtin-evidence#224::reduce:
-  params = [arg0: List A -> A -> List A, arg1: List A, arg2: List A]
   body = closure187
-func builtin-evidence#225::reduce:
-  params = [arg0: Int -> A -> Int, arg1: Int, arg2: List A]
+func builtin-evidence#219::structural-eq:
+  params = [arg0: Text, arg1: Text]
   body = closure188
-func builtin-evidence#226::reduce:
-  params = [arg0: Int -> Int -> Int, arg1: Int, arg2: List Int]
-  body = closure189
-func builtin-evidence#227::reduce:
-  params = [arg0: Option A -> A -> Option A, arg1: Option A, arg2: List A]
-  body = closure190
-func builtin-evidence#228::reduce:
-  params = [arg0: A -> A -> A, arg1: A, arg2: List A]
-  body = closure191
-func builtin-evidence#229::reduce:
-  params = [arg0: A -> A -> A, arg1: A, arg2: List A]
-  body = closure192
-func builtin-evidence#230::reduce:
-  params = [arg0: Option A -> A -> Option A, arg1: Option A, arg2: List A]
-  body = closure193
-func builtin-evidence#231::reduce:
-  params = [arg0: Option A -> A -> Option A, arg1: Option A, arg2: List A]
-  body = closure194
-func builtin-evidence#232::structural-eq:
-  params = [arg0: Ordering, arg1: Ordering]
-  body = closure195
-func builtin-evidence#233::compare:
-  params = [arg0: Int, arg1: Int]
-  body = closure196
-func builtin-evidence#234::append:
-  params = [arg0: List Int, arg1: List Int]
-  body = closure197
-func builtin-evidence#235::append:
-  params = [arg0: Text, arg1: Text]
-  body = closure198
-func builtin-evidence#236::reduce:
-  params = [arg0: (Bool, Text) -> Text -> (Bool, Text), arg1: (Bool, Text), arg2: List Text]
-  body = closure199
-func builtin-evidence#237::structural-eq:
-  params = [arg0: Int, arg1: Int]
-  body = closure200
-func builtin-evidence#238::reduce:
-  params = [arg0: (Int, Option A) -> A -> (Int, Option A), arg1: (Int, Option A), arg2: List A]
-  body = closure201
-func builtin-evidence#239::append:
-  params = [arg0: List A, arg1: List A]
-  body = closure202
-func builtin-evidence#240::reduce:
-  params = [arg0: (Int, List A) -> A -> (Int, List A), arg1: (Int, List A), arg2: List A]
-  body = closure203
-func builtin-evidence#241::reduce:
-  params = [arg0: Option Matrix A -> ((Int, Int), A) -> Option Matrix A, arg1: Option Matrix A, arg2: List ((Int, Int), A)]
-  body = closure204
-func builtin-evidence#242::reduce:
-  params = [arg0: (Int, Int, Option MatrixError) -> List A -> (Int, Int, Option MatrixError), arg1: (Int, Int, Option MatrixError), arg2: List List A]
-  body = closure205
-func builtin-evidence#243::reduce:
-  params = [arg0: Int -> A -> Int, arg1: Int, arg2: List A]
-  body = closure206
-func builtin-evidence#244::reduce:
-  params = [arg0: Int -> List A -> Int, arg1: Int, arg2: List List A]
-  body = closure207
-func builtin-evidence#245::reduce:
-  params = [arg0: Option A -> A -> Option A, arg1: Option A, arg2: List A]
-  body = closure208
-func builtin-evidence#246::append:
-  params = [arg0: List A, arg1: List A]
-  body = closure209
-func builtin-evidence#247::reduce:
-  params = [arg0: (Int, List A) -> A -> (Int, List A), arg1: (Int, List A), arg2: List A]
-  body = closure210
-func builtin-evidence#248::append:
-  params = [arg0: List A, arg1: List A]
-  body = closure211
-func builtin-evidence#249::append:
-  params = [arg0: List A, arg1: List A]
-  body = closure212
-func builtin-evidence#250::append:
-  params = [arg0: List A, arg1: List A]
-  body = closure213
-func builtin-evidence#251::reduce:
-  params = [arg0: (Bool, List A) -> A -> (Bool, List A), arg1: (Bool, List A), arg2: List A]
-  body = closure214
-func builtin-evidence#252::reduce:
-  params = [arg0: List A -> A -> List A, arg1: List A, arg2: List A]
-  body = closure215
-func builtin-evidence#253::append:
-  params = [arg0: List A, arg1: List A]
-  body = closure216
-func builtin-evidence#254::append:
-  params = [arg0: List A, arg1: List A]
-  body = closure217
-func builtin-evidence#255::append:
-  params = [arg0: List A, arg1: List A]
-  body = closure218
-func builtin-evidence#256::reduce:
-  params = [arg0: (Bool, List A) -> A -> (Bool, List A), arg1: (Bool, List A), arg2: List A]
-  body = closure219
-func builtin-evidence#257::reduce:
-  params = [arg0: List A -> A -> List A, arg1: List A, arg2: List A]
-  body = closure220
-func builtin-evidence#258::structural-eq:
-  params = [arg0: Text, arg1: Text]
-  body = closure221
 closures:
   closure0 add owner=0 root=expr2 kind=item-body
     params = [x:#0:Int, y:#1:Int]
@@ -708,412 +605,346 @@ closures:
   closure16 __aivi_list_any owner=16 root=expr132 kind=item-body
     params = [predicate:#34:A -> Bool, items:#35:List A]
   closure17 __aivi_binary_eq owner=17 root=expr136 kind=item-body
-    params = [__aivi_eq_evidence479:#479:A -> A -> Bool, left:#36:A, right:#37:A]
+    params = [__aivi_eq_evidence335:#335:A -> A -> Bool, left:#36:A, right:#37:A]
   closure18 __aivi_binary_neq owner=18 root=expr141 kind=item-body
-    params = [__aivi_eq_evidence480:#480:A -> A -> Bool, left:#38:A, right:#39:A]
+    params = [__aivi_eq_evidence336:#336:A -> A -> Bool, left:#38:A, right:#39:A]
   closure19 __aivi_binary_lt owner=19 root=expr149 kind=item-body
-    params = [__aivi_ord_evidence481:#481:A -> A -> Ordering, __aivi_eq_evidence482:#482:A -> A -> Bool, left:#40:A, right:#41:A]
+    params = [__aivi_ord_evidence337:#337:A -> A -> Ordering, __aivi_eq_evidence338:#338:A -> A -> Bool, left:#40:A, right:#41:A]
   closure20 __aivi_binary_gt owner=20 root=expr157 kind=item-body
-    params = [__aivi_ord_evidence483:#483:A -> A -> Ordering, __aivi_eq_evidence484:#484:A -> A -> Bool, left:#42:A, right:#43:A]
+    params = [__aivi_ord_evidence339:#339:A -> A -> Ordering, __aivi_eq_evidence340:#340:A -> A -> Bool, left:#42:A, right:#43:A]
   closure21 __aivi_binary_lte owner=21 root=expr164 kind=item-body
-    params = [__aivi_ord_evidence485:#485:A -> A -> Ordering, __aivi_eq_evidence486:#486:A -> A -> Bool, left:#44:A, right:#45:A]
+    params = [__aivi_ord_evidence341:#341:A -> A -> Ordering, __aivi_eq_evidence342:#342:A -> A -> Bool, left:#44:A, right:#45:A]
   closure22 __aivi_binary_gte owner=22 root=expr171 kind=item-body
-    params = [__aivi_ord_evidence487:#487:A -> A -> Ordering, __aivi_eq_evidence488:#488:A -> A -> Bool, left:#46:A, right:#47:A]
-  closure23 __aivi_order_minOf owner=25 root=expr178 kind=item-body
-    params = [__aivi_ord_evidence493:#493:A -> A -> Ordering, __aivi_eq_evidence494:#494:A -> A -> Bool, first:#52:A, rest:#53:List A]
-  closure24 __aivi_order_maxOf owner=26 root=expr185 kind=item-body
-    params = [__aivi_ord_evidence495:#495:A -> A -> Ordering, __aivi_eq_evidence496:#496:A -> A -> Bool, first:#54:A, rest:#55:List A]
-  closure25 min owner=29 root=expr192 kind=item-body
-    params = [__aivi_ord_evidence501:#501:A -> A -> Ordering, __aivi_eq_evidence502:#502:A -> A -> Bool, left:#61:A, right:#62:A]
-  closure26 max owner=30 root=expr199 kind=item-body
-    params = [__aivi_ord_evidence503:#503:A -> A -> Ordering, __aivi_eq_evidence504:#504:A -> A -> Bool, left:#63:A, right:#64:A]
-  closure27 minOf owner=31 root=expr206 kind=item-body
-    params = [__aivi_ord_evidence505:#505:A -> A -> Ordering, __aivi_eq_evidence506:#506:A -> A -> Bool, first:#65:A, rest:#66:List A]
-  closure28 maxOf owner=32 root=expr213 kind=item-body
-    params = [__aivi_ord_evidence507:#507:A -> A -> Ordering, __aivi_eq_evidence508:#508:A -> A -> Bool, first:#67:A, rest:#68:List A]
-  closure29 clamp owner=33 root=expr221 kind=item-body
-    params = [__aivi_ord_evidence509:#509:A -> A -> Ordering, __aivi_eq_evidence510:#510:A -> A -> Bool, low:#69:A, high:#70:A, value:#71:A]
-  closure30 __aivi_nel_singleton owner=34 root=expr225 kind=item-body
+    params = [__aivi_ord_evidence343:#343:A -> A -> Ordering, __aivi_eq_evidence344:#344:A -> A -> Bool, left:#46:A, right:#47:A]
+  closure23 __aivi_order_min owner=23 root=expr185 kind=item-body
+    params = [__aivi_ord_evidence345:#345:A -> A -> Ordering, __aivi_eq_evidence346:#346:A -> A -> Bool, left:#48:A, right:#49:A]
+  closure24 __aivi_order_max owner=24 root=expr195 kind=item-body
+    params = [__aivi_ord_evidence347:#347:A -> A -> Ordering, __aivi_eq_evidence348:#348:A -> A -> Bool, left:#50:A, right:#51:A]
+  closure25 __aivi_order_minOf owner=25 root=expr202 kind=item-body
+    params = [__aivi_ord_evidence349:#349:A -> A -> Ordering, __aivi_eq_evidence350:#350:A -> A -> Bool, first:#52:A, rest:#53:List A]
+  closure26 __aivi_order_maxOf owner=26 root=expr209 kind=item-body
+    params = [__aivi_ord_evidence351:#351:A -> A -> Ordering, __aivi_eq_evidence352:#352:A -> A -> Bool, first:#54:A, rest:#55:List A]
+  closure27 __aivi_order_clampToMax owner=27 root=expr219 kind=item-body
+    params = [__aivi_ord_evidence353:#353:A -> A -> Ordering, __aivi_eq_evidence354:#354:A -> A -> Bool, high:#56:A, value:#57:A]
+  closure28 __aivi_order_clamp owner=28 root=expr235 kind=item-body
+    params = [__aivi_ord_evidence355:#355:A -> A -> Ordering, __aivi_eq_evidence356:#356:A -> A -> Bool, low:#58:A, high:#59:A, value:#60:A]
+  closure29 min owner=29 root=expr242 kind=item-body
+    params = [__aivi_ord_evidence357:#357:A -> A -> Ordering, __aivi_eq_evidence358:#358:A -> A -> Bool, left:#61:A, right:#62:A]
+  closure30 max owner=30 root=expr249 kind=item-body
+    params = [__aivi_ord_evidence359:#359:A -> A -> Ordering, __aivi_eq_evidence360:#360:A -> A -> Bool, left:#63:A, right:#64:A]
+  closure31 minOf owner=31 root=expr256 kind=item-body
+    params = [__aivi_ord_evidence361:#361:A -> A -> Ordering, __aivi_eq_evidence362:#362:A -> A -> Bool, first:#65:A, rest:#66:List A]
+  closure32 maxOf owner=32 root=expr263 kind=item-body
+    params = [__aivi_ord_evidence363:#363:A -> A -> Ordering, __aivi_eq_evidence364:#364:A -> A -> Bool, first:#67:A, rest:#68:List A]
+  closure33 clamp owner=33 root=expr271 kind=item-body
+    params = [__aivi_ord_evidence365:#365:A -> A -> Ordering, __aivi_eq_evidence366:#366:A -> A -> Bool, low:#69:A, high:#70:A, value:#71:A]
+  closure34 __aivi_nel_singleton owner=34 root=expr275 kind=item-body
     params = [item:#74:A]
-  closure31 __aivi_nel_cons owner=35 root=expr238 kind=item-body
+  closure35 __aivi_nel_cons owner=35 root=expr288 kind=item-body
     params = [item:#75:A, nel:#76:NonEmptyList A]
-  closure32 __aivi_nel_head owner=36 root=expr243 kind=item-body
+  closure36 __aivi_nel_head owner=36 root=expr293 kind=item-body
     params = [nel:#77:NonEmptyList A]
-  closure33 __aivi_nel_toList owner=37 root=expr246 kind=item-body
+  closure37 __aivi_nel_toList owner=37 root=expr296 kind=item-body
     params = [nel:#80:NonEmptyList A]
-  closure34 __aivi_nel_fromHeadTail owner=38 root=expr257 kind=item-body
+  closure38 __aivi_nel_fromHeadTail owner=38 root=expr307 kind=item-body
     params = [h:#81:A, t:#82:List A]
-  closure35 __aivi_nel_length owner=39 root=expr262 kind=item-body
+  closure39 __aivi_nel_length owner=39 root=expr312 kind=item-body
     params = [nel:#83:NonEmptyList A]
-  closure36 __aivi_nel_lastStep owner=40 root=expr263 kind=item-body
+  closure40 __aivi_nel_lastStep owner=40 root=expr313 kind=item-body
     params = [prev:#84:A, item:#85:A]
-  closure37 __aivi_nel_lastOf owner=41 root=expr275 kind=item-body
+  closure41 __aivi_nel_lastOf owner=41 root=expr325 kind=item-body
     params = [h:#86:A, t:#87:List A]
-  closure38 __aivi_nel_last owner=42 root=expr283 kind=item-body
+  closure42 __aivi_nel_last owner=42 root=expr333 kind=item-body
     params = [nel:#88:NonEmptyList A]
-  closure39 __aivi_nel_mapNel owner=43 root=expr291 kind=item-body
+  closure43 __aivi_nel_mapNel owner=43 root=expr341 kind=item-body
     params = [transform:#91:A -> B, nel:#92:NonEmptyList A]
-  closure40 __aivi_nel_appendNel owner=44 root=expr305 kind=item-body
+  closure44 __aivi_nel_appendNel owner=44 root=expr355 kind=item-body
     params = [left:#93:NonEmptyList A, right:#94:NonEmptyList A]
-  closure41 __aivi_nel_initAppendPrev owner=45 root=expr317 kind=item-body
+  closure45 __aivi_nel_initAppendPrev owner=45 root=expr367 kind=item-body
     params = [items:#95:List A, prev:#96:Option A]
-  closure42 __aivi_nel_initAccum owner=46 root=expr325 kind=item-body
+  closure46 __aivi_nel_initAccum owner=46 root=expr375 kind=item-body
     params = [items:#98:List A, prev:#99:Option A, item:#100:A]
-  closure43 __aivi_nel_initStep owner=47 root=expr332 kind=item-body
+  closure47 __aivi_nel_initStep owner=47 root=expr382 kind=item-body
     params = [state:#101:(List A, Option A), item:#102:A]
-  closure44 __aivi_nel_initExtract owner=48 root=expr335 kind=item-body
+  closure48 __aivi_nel_initExtract owner=48 root=expr385 kind=item-body
     params = [state:#105:(List A, Option A)]
-  closure45 __aivi_nel_init owner=49 root=expr354 kind=item-body
+  closure49 __aivi_nel_init owner=49 root=expr404 kind=item-body
     params = [nel:#108:NonEmptyList A]
-  closure46 __aivi_nel_fromListStep owner=50 root=expr377 kind=item-body
+  closure50 __aivi_nel_fromListStep owner=50 root=expr427 kind=item-body
     params = [acc:#109:Option NonEmptyList A, item:#110:A]
-  closure47 __aivi_nel_fromList owner=51 root=expr389 kind=item-body
+  closure51 __aivi_nel_fromList owner=51 root=expr439 kind=item-body
     params = [items:#112:List A]
-  closure48 __aivi_option_map owner=52 root=expr397 kind=item-body
+  closure52 __aivi_option_map owner=52 root=expr447 kind=item-body
     params = [transform:#113:A -> B, opt:#114:Option A]
-  closure49 __aivi_list_contains owner=53 root=expr403 kind=item-body
-    params = [__aivi_eq_evidence511:#511:A -> A -> Bool, target:#116:A, items:#117:List A]
-  closure50 __aivi_list_uniqueByStep owner=54 root=expr420 kind=item-body
+  closure53 __aivi_list_contains owner=53 root=expr453 kind=item-body
+    params = [__aivi_eq_evidence367:#367:A -> A -> Bool, target:#116:A, items:#117:List A]
+  closure54 __aivi_list_uniqueByStep owner=54 root=expr470 kind=item-body
     params = [eq:#118:A -> A -> Bool, acc:#119:List A, item:#120:A]
-  closure51 __aivi_list_uniqueBy owner=55 root=expr434 kind=item-body
+  closure55 __aivi_list_uniqueBy owner=55 root=expr484 kind=item-body
     params = [eq:#121:A -> A -> Bool, items:#122:List A]
-  closure52 __aivi_list_containsEqStep owner=56 root=expr443 kind=item-body
-    params = [__aivi_eq_evidence512:#512:A -> A -> Bool, target:#123:A, found:#124:Bool, item:#125:A]
-  closure53 __aivi_list_containsEq owner=57 root=expr459 kind=item-body
-    params = [__aivi_eq_evidence513:#513:A -> A -> Bool, target:#126:A, items:#127:List A]
-  closure54 __aivi_list_uniqueEqStep owner=58 root=expr476 kind=item-body
-    params = [__aivi_eq_evidence514:#514:A -> A -> Bool, acc:#128:List A, item:#129:A]
-  closure55 __aivi_list_unique owner=59 root=expr490 kind=item-body
-    params = [__aivi_eq_evidence515:#515:A -> A -> Bool, items:#130:List A]
-  closure56 unique owner=60 root=expr495 kind=item-body
-    params = [__aivi_eq_evidence516:#516:A -> A -> Bool, items:#131:List A]
-  closure57 __aivi_list_mapStep owner=61 root=expr506 kind=item-body
+  closure56 __aivi_list_containsEqStep owner=56 root=expr493 kind=item-body
+    params = [__aivi_eq_evidence368:#368:A -> A -> Bool, target:#123:A, found:#124:Bool, item:#125:A]
+  closure57 __aivi_list_containsEq owner=57 root=expr509 kind=item-body
+    params = [__aivi_eq_evidence369:#369:A -> A -> Bool, target:#126:A, items:#127:List A]
+  closure58 __aivi_list_uniqueEqStep owner=58 root=expr526 kind=item-body
+    params = [__aivi_eq_evidence370:#370:A -> A -> Bool, acc:#128:List A, item:#129:A]
+  closure59 __aivi_list_unique owner=59 root=expr540 kind=item-body
+    params = [__aivi_eq_evidence371:#371:A -> A -> Bool, items:#130:List A]
+  closure60 unique owner=60 root=expr545 kind=item-body
+    params = [__aivi_eq_evidence372:#372:A -> A -> Bool, items:#131:List A]
+  closure61 __aivi_list_mapStep owner=61 root=expr556 kind=item-body
     params = [transform:#132:A -> B, acc:#133:List B, item:#134:A]
-  closure58 __aivi_list_map owner=62 root=expr520 kind=item-body
+  closure62 __aivi_list_map owner=62 root=expr570 kind=item-body
     params = [transform:#135:A -> B, items:#136:List A]
-  closure59 __aivi_list_flatMapStep owner=63 root=expr530 kind=item-body
+  closure63 __aivi_list_flatMapStep owner=63 root=expr580 kind=item-body
     params = [transform:#137:A -> List B, acc:#138:List B, item:#139:A]
-  closure60 __aivi_list_flatMap owner=64 root=expr544 kind=item-body
+  closure64 __aivi_list_flatMap owner=64 root=expr594 kind=item-body
     params = [transform:#140:A -> List B, items:#141:List A]
-  closure61 __aivi_list_filterAppend owner=65 root=expr558 kind=item-body
+  closure65 __aivi_list_filterAppend owner=65 root=expr608 kind=item-body
     params = [predicate:#142:A -> Bool, acc:#143:List A, item:#144:A]
-  closure62 __aivi_list_filter owner=66 root=expr572 kind=item-body
+  closure66 __aivi_list_filter owner=66 root=expr622 kind=item-body
     params = [predicate:#145:A -> Bool, items:#146:List A]
-  closure63 __aivi_list_countStep owner=67 root=expr580 kind=item-body
+  closure67 __aivi_list_countStep owner=67 root=expr630 kind=item-body
     params = [predicate:#147:A -> Bool, acc:#148:Int, item:#149:A]
-  closure64 __aivi_list_count owner=68 root=expr594 kind=item-body
+  closure68 __aivi_list_count owner=68 root=expr644 kind=item-body
     params = [predicate:#150:A -> Bool, items:#151:List A]
-  closure65 __aivi_list_sumStep owner=69 root=expr597 kind=item-body
+  closure69 __aivi_list_sumStep owner=69 root=expr647 kind=item-body
     params = [acc:#152:Int, item:#153:Int]
-  closure66 __aivi_list_sum owner=70 root=expr609 kind=item-body
+  closure70 __aivi_list_sum owner=70 root=expr659 kind=item-body
     params = [items:#154:List Int]
-  closure67 __aivi_list_maxPick owner=71 root=expr620 kind=item-body
+  closure71 __aivi_list_maxPick owner=71 root=expr670 kind=item-body
     params = [gt:#155:A -> A -> Bool, item:#156:A, prev:#157:A]
-  closure68 __aivi_list_maximumStep owner=72 root=expr630 kind=item-body
+  closure72 __aivi_list_maximumStep owner=72 root=expr680 kind=item-body
     params = [gt:#158:A -> A -> Bool, best:#159:Option A, item:#160:A]
-  closure69 __aivi_list_maximum owner=73 root=expr644 kind=item-body
+  closure73 __aivi_list_maximum owner=73 root=expr694 kind=item-body
     params = [gt:#162:A -> A -> Bool, items:#163:List A]
-  closure70 __aivi_list_maximumOrdPick owner=74 root=expr658 kind=item-body
-    params = [__aivi_ord_evidence517:#517:A -> A -> Ordering, __aivi_eq_evidence518:#518:A -> A -> Bool, item:#164:A, prev:#165:A]
-  closure71 __aivi_list_maximumOrdStep owner=75 root=expr670 kind=item-body
-    params = [__aivi_ord_evidence519:#519:A -> A -> Ordering, __aivi_eq_evidence520:#520:A -> A -> Bool, best:#166:Option A, item:#167:A]
-  closure72 __aivi_list_maximumFromStep owner=76 root=expr680 kind=item-body
-    params = [__aivi_ord_evidence521:#521:A -> A -> Ordering, __aivi_eq_evidence522:#522:A -> A -> Bool, best:#169:A, item:#170:A]
-  closure73 __aivi_list_maximumFrom owner=77 root=expr695 kind=item-body
-    params = [__aivi_ord_evidence523:#523:A -> A -> Ordering, __aivi_eq_evidence524:#524:A -> A -> Bool, best:#171:A, items:#172:List A]
-  closure74 __aivi_list_minimumOrdPick owner=78 root=expr709 kind=item-body
-    params = [__aivi_ord_evidence525:#525:A -> A -> Ordering, __aivi_eq_evidence526:#526:A -> A -> Bool, item:#173:A, prev:#174:A]
-  closure75 __aivi_list_minimumOrdStep owner=79 root=expr721 kind=item-body
-    params = [__aivi_ord_evidence527:#527:A -> A -> Ordering, __aivi_eq_evidence528:#528:A -> A -> Bool, best:#175:Option A, item:#176:A]
-  closure76 __aivi_list_minimumFromStep owner=80 root=expr731 kind=item-body
-    params = [__aivi_ord_evidence529:#529:A -> A -> Ordering, __aivi_eq_evidence530:#530:A -> A -> Bool, best:#178:A, item:#179:A]
-  closure77 __aivi_list_minimumFrom owner=81 root=expr746 kind=item-body
-    params = [__aivi_ord_evidence531:#531:A -> A -> Ordering, __aivi_eq_evidence532:#532:A -> A -> Bool, best:#180:A, items:#181:List A]
-  closure78 maximum owner=82 root=expr761 kind=item-body
-    params = [__aivi_ord_evidence533:#533:A -> A -> Ordering, __aivi_eq_evidence534:#534:A -> A -> Bool, items:#182:List A]
-  closure79 minimum owner=83 root=expr776 kind=item-body
-    params = [__aivi_ord_evidence535:#535:A -> A -> Ordering, __aivi_eq_evidence536:#536:A -> A -> Bool, items:#183:List A]
-  closure80 __aivi_list_rangeDesc owner=84 root=expr807 kind=item-body
+  closure74 __aivi_list_maximumOrdPick owner=74 root=expr708 kind=item-body
+    params = [__aivi_ord_evidence373:#373:A -> A -> Ordering, __aivi_eq_evidence374:#374:A -> A -> Bool, item:#164:A, prev:#165:A]
+  closure75 __aivi_list_maximumOrdStep owner=75 root=expr720 kind=item-body
+    params = [__aivi_ord_evidence375:#375:A -> A -> Ordering, __aivi_eq_evidence376:#376:A -> A -> Bool, best:#166:Option A, item:#167:A]
+  closure76 __aivi_list_maximumFromStep owner=76 root=expr730 kind=item-body
+    params = [__aivi_ord_evidence377:#377:A -> A -> Ordering, __aivi_eq_evidence378:#378:A -> A -> Bool, best:#169:A, item:#170:A]
+  closure77 __aivi_list_maximumFrom owner=77 root=expr745 kind=item-body
+    params = [__aivi_ord_evidence379:#379:A -> A -> Ordering, __aivi_eq_evidence380:#380:A -> A -> Bool, best:#171:A, items:#172:List A]
+  closure78 __aivi_list_minimumOrdPick owner=78 root=expr759 kind=item-body
+    params = [__aivi_ord_evidence381:#381:A -> A -> Ordering, __aivi_eq_evidence382:#382:A -> A -> Bool, item:#173:A, prev:#174:A]
+  closure79 __aivi_list_minimumOrdStep owner=79 root=expr771 kind=item-body
+    params = [__aivi_ord_evidence383:#383:A -> A -> Ordering, __aivi_eq_evidence384:#384:A -> A -> Bool, best:#175:Option A, item:#176:A]
+  closure80 __aivi_list_minimumFromStep owner=80 root=expr781 kind=item-body
+    params = [__aivi_ord_evidence385:#385:A -> A -> Ordering, __aivi_eq_evidence386:#386:A -> A -> Bool, best:#178:A, item:#179:A]
+  closure81 __aivi_list_minimumFrom owner=81 root=expr796 kind=item-body
+    params = [__aivi_ord_evidence387:#387:A -> A -> Ordering, __aivi_eq_evidence388:#388:A -> A -> Bool, best:#180:A, items:#181:List A]
+  closure82 maximum owner=82 root=expr811 kind=item-body
+    params = [__aivi_ord_evidence389:#389:A -> A -> Ordering, __aivi_eq_evidence390:#390:A -> A -> Bool, items:#182:List A]
+  closure83 minimum owner=83 root=expr826 kind=item-body
+    params = [__aivi_ord_evidence391:#391:A -> A -> Ordering, __aivi_eq_evidence392:#392:A -> A -> Bool, items:#183:List A]
+  closure84 __aivi_list_rangeDesc owner=84 root=expr853 kind=item-body
     params = [current:#184:Int, acc:#185:List Int]
-  closure81 __aivi_list_range owner=85 root=expr823 kind=item-body
+  closure85 __aivi_list_range owner=85 root=expr869 kind=item-body
     params = [n:#186:Int]
-  closure82 __aivi_text_joinFirst owner=86 root=expr826 kind=item-body
+  closure86 __aivi_text_joinFirst owner=86 root=expr872 kind=item-body
     params = [sep:#187:Text, result:#188:Text, item:#189:Text]
-  closure83 __aivi_text_joinNext owner=87 root=expr839 kind=item-body
+  closure87 __aivi_text_joinNext owner=87 root=expr885 kind=item-body
     params = [sep:#190:Text, result:#191:Text, item:#192:Text]
-  closure84 __aivi_text_joinPick owner=88 root=expr851 kind=item-body
+  closure88 __aivi_text_joinPick owner=88 root=expr897 kind=item-body
     params = [isFirst:#193:Bool, sep:#194:Text, result:#195:Text, item:#196:Text]
-  closure85 __aivi_text_joinStep owner=89 root=expr859 kind=item-body
+  closure89 __aivi_text_joinStep owner=89 root=expr905 kind=item-body
     params = [sep:#197:Text, state:#198:(Bool, Text), item:#199:Text]
-  closure86 __aivi_text_joinExtract owner=90 root=expr862 kind=item-body
+  closure90 __aivi_text_joinExtract owner=90 root=expr908 kind=item-body
     params = [state:#202:(Bool, Text)]
-  closure87 __aivi_text_join owner=91 root=expr881 kind=item-body
+  closure91 __aivi_text_join owner=91 root=expr927 kind=item-body
     params = [sep:#205:Text, items:#206:List Text]
-  closure88 __aivi_matrix_rows owner=92 root=expr884 kind=item-body
-    params = [matrix:#207:Matrix A]
-  closure89 __aivi_matrix_width owner=93 root=expr887 kind=item-body
-    params = [matrix:#211:Matrix A]
-  closure90 __aivi_matrix_height owner=94 root=expr890 kind=item-body
-    params = [matrix:#215:Matrix A]
-  closure91 __aivi_listAt_match owner=95 root=expr904 kind=item-body
-    params = [matches:#219:Bool, idx:#220:Int, item:#221:A]
-  closure92 __aivi_listAt_check owner=96 root=expr925 kind=item-body
-    params = [target:#222:Int, idx:#223:Int, found:#224:Option A, item:#225:A]
-  closure93 __aivi_listAt_step owner=97 root=expr933 kind=item-body
-    params = [target:#227:Int, state:#228:(Int, Option A), item:#229:A]
-  closure94 __aivi_listAt_extract owner=98 root=expr936 kind=item-body
-    params = [state:#232:(Int, Option A)]
-  closure95 __aivi_listAt owner=99 root=expr955 kind=item-body
-    params = [target:#235:Int, items:#236:List A]
-  closure96 __aivi_matrix_atRow owner=100 root=expr962 kind=item-body
-    params = [rowOpt:#237:Option List A, x:#238:Int]
-  closure97 __aivi_matrix_at owner=101 root=expr971 kind=item-body
-    params = [matrix:#240:Matrix A, x:#241:Int, y:#242:Int]
-  closure98 __aivi_listReplace_pick owner=102 root=expr995 kind=item-body
-    params = [matches:#246:Bool, newVal:#247:A, idx:#248:Int, result:#249:List A, item:#250:A]
-  closure99 __aivi_listReplace_check owner=103 root=expr1005 kind=item-body
-    params = [target:#251:Int, newVal:#252:A, idx:#253:Int, result:#254:List A, item:#255:A]
-  closure100 __aivi_listReplace_step owner=104 root=expr1014 kind=item-body
-    params = [target:#256:Int, newVal:#257:A, state:#258:(Int, List A), item:#259:A]
-  closure101 __aivi_listReplace_extract owner=105 root=expr1017 kind=item-body
-    params = [state:#262:(Int, List A)]
-  closure102 __aivi_listReplace owner=106 root=expr1037 kind=item-body
-    params = [target:#265:Int, newVal:#266:A, items:#267:List A]
-  closure103 __aivi_matrix_doReplace owner=107 root=expr1058 kind=item-body
-    params = [x:#268:Int, y:#269:Int, w:#270:Int, h:#271:Int, data:#272:List List A, value:#273:A]
-  closure104 __aivi_matrix_boundsCheck owner=108 root=expr1072 kind=item-body
-    params = [xOk:#275:Bool, yOk:#276:Bool, xLt:#277:Bool, yLt:#278:Bool, x:#279:Int, y:#280:Int, w:#281:Int, h:#282:Int, data:#283:List List A, value:#284:A]
-  closure105 __aivi_matrix_boundsCheck2 owner=109 root=expr1085 kind=item-body
-    params = [yOk:#285:Bool, xLt:#286:Bool, yLt:#287:Bool, x:#288:Int, y:#289:Int, w:#290:Int, h:#291:Int, data:#292:List List A, value:#293:A]
-  closure106 __aivi_matrix_boundsCheck3 owner=110 root=expr1097 kind=item-body
-    params = [xLt:#294:Bool, yLt:#295:Bool, x:#296:Int, y:#297:Int, w:#298:Int, h:#299:Int, data:#300:List List A, value:#301:A]
-  closure107 __aivi_matrix_boundsCheck4 owner=111 root=expr1108 kind=item-body
-    params = [yLt:#302:Bool, x:#303:Int, y:#304:Int, w:#305:Int, h:#306:Int, data:#307:List List A, value:#308:A]
-  closure108 __aivi_matrix_replaceCoord owner=112 root=expr1148 kind=item-body
-    params = [matrix:#309:Matrix A, x:#310:Int, y:#311:Int, value:#312:A]
-  closure109 __aivi_matrix_replaceAt owner=113 root=expr1156 kind=item-body
-    params = [matrix:#316:Matrix A, coord:#317:(Int, Int), value:#318:A]
-  closure110 __aivi_matrix_replaceManyUpdate owner=114 root=expr1163 kind=item-body
-    params = [matrix:#321:Matrix A, update:#322:((Int, Int), A)]
-  closure111 __aivi_matrix_replaceManyStep owner=115 root=expr1170 kind=item-body
-    params = [current:#325:Option Matrix A, update:#326:((Int, Int), A)]
-  closure112 __aivi_matrix_replaceMany owner=116 root=expr1184 kind=item-body
-    params = [matrix:#328:Matrix A, updates:#329:List ((Int, Int), A)]
-  closure113 __aivi_matrix_validateFirstRow owner=117 root=expr1190 kind=item-body
-    params = [rowIdx:#330:Int, expectedWidth:#331:Int, row:#332:List A]
-  closure114 __aivi_matrix_validateLengthMatch owner=118 root=expr1212 kind=item-body
-    params = [matches:#333:Bool, rowIdx:#334:Int, expectedWidth:#335:Int, row:#336:List A]
-  closure115 __aivi_matrix_validateSubsequentRow owner=119 root=expr1230 kind=item-body
-    params = [isFirst:#337:Bool, rowIdx:#338:Int, expectedWidth:#339:Int, row:#340:List A]
-  closure116 __aivi_matrix_validateRow owner=120 root=expr1249 kind=item-body
-    params = [prevError:#341:Option MatrixError, rowIdx:#342:Int, expectedWidth:#343:Int, row:#344:List A]
-  closure117 __aivi_matrix_fromRowsStep owner=121 root=expr1257 kind=item-body
-    params = [state:#346:(Int, Int, Option MatrixError), row:#347:List A]
-  closure118 __aivi_matrix_fromRowsDecide owner=122 root=expr1269 kind=item-body
-    params = [error:#351:Option MatrixError, rowCount:#352:Int, width:#353:Int, inputRows:#354:List List A]
-  closure119 __aivi_matrix_fromRowsFinish owner=123 root=expr1277 kind=item-body
-    params = [inputRows:#356:List List A, state:#357:(Int, Int, Option MatrixError)]
-  closure120 __aivi_matrix_fromRows owner=124 root=expr1296 kind=item-body
-    params = [inputRows:#361:List List A]
-  closure121 __aivi_matrix_initCellAt owner=125 root=expr1300 kind=item-body
-    params = [build:#362:Int -> Int -> A, y:#363:Int, x:#364:Int]
-  closure122 __aivi_matrix_buildRow owner=126 root=expr1309 kind=item-body
-    params = [width:#365:Int, build:#366:Int -> Int -> A, y:#367:Int]
-  closure123 __aivi_matrix_buildRows owner=127 root=expr1318 kind=item-body
-    params = [width:#368:Int, height:#369:Int, build:#370:Int -> Int -> A]
-  closure124 __aivi_matrix_initHeight owner=128 root=expr1342 kind=item-body
-    params = [width:#371:Int, height:#372:Int, build:#373:Int -> Int -> A]
-  closure125 __aivi_matrix_init owner=129 root=expr1360 kind=item-body
-    params = [width:#374:Int, height:#375:Int, build:#376:Int -> Int -> A]
-  closure126 __aivi_matrix_filledCell owner=130 root=expr1361 kind=item-body
-    params = [value:#377:A, x:#378:Int, y:#379:Int]
-  closure127 __aivi_matrix_filled owner=131 root=expr1368 kind=item-body
-    params = [w:#380:Int, h:#381:Int, value:#382:A]
-  closure128 __aivi_matrix_countCell owner=132 root=expr1376 kind=item-body
-    params = [predicate:#383:A -> Bool, total:#384:Int, item:#385:A]
-  closure129 __aivi_matrix_countRow owner=133 root=expr1388 kind=item-body
-    params = [predicate:#386:A -> Bool, total:#387:Int, row:#388:List A]
-  closure130 __aivi_matrix_count owner=134 root=expr1402 kind=item-body
-    params = [predicate:#389:A -> Bool, matrix:#390:Matrix A]
-  closure131 __aivi_list_findTry owner=135 root=expr1410 kind=item-body
-    params = [predicate:#391:A -> Bool, item:#392:A]
-  closure132 __aivi_list_findStep owner=136 root=expr1419 kind=item-body
-    params = [predicate:#393:A -> Bool, acc:#394:Option A, item:#395:A]
-  closure133 __aivi_list_find owner=137 root=expr1433 kind=item-body
-    params = [predicate:#397:A -> Bool, items:#398:List A]
-  closure134 __aivi_list_takeHelp owner=138 root=expr1458 kind=item-body
-    params = [n:#399:Int, count:#400:Int, acc:#401:List A, item:#402:A]
-  closure135 __aivi_list_takeStep owner=139 root=expr1466 kind=item-body
-    params = [n:#403:Int, state:#404:(Int, List A), item:#405:A]
-  closure136 __aivi_list_takeExtract owner=140 root=expr1469 kind=item-body
-    params = [state:#408:(Int, List A)]
-  closure137 __aivi_list_take owner=141 root=expr1488 kind=item-body
-    params = [n:#410:Int, items:#411:List A]
-  closure138 __aivi_list_sortByInsertFalse owner=142 root=expr1515 kind=item-body
-    params = [cmp:#412:A -> A -> Bool, newItem:#413:A, current:#414:A, acc:#415:List A]
-  closure139 __aivi_list_sortByInsertStep owner=143 root=expr1534 kind=item-body
-    params = [cmp:#416:A -> A -> Bool, newItem:#417:A, state:#418:(Bool, List A), current:#419:A]
-  closure140 __aivi_list_sortByInsertFinish owner=144 root=expr1546 kind=item-body
-    params = [cmp:#422:A -> A -> Bool, newItem:#423:A, state:#424:(Bool, List A)]
-  closure141 __aivi_list_sortByInsert owner=145 root=expr1568 kind=item-body
-    params = [cmp:#427:A -> A -> Bool, newItem:#428:A, sorted:#429:List A]
-  closure142 __aivi_list_sortByStep owner=146 root=expr1573 kind=item-body
-    params = [cmp:#430:A -> A -> Bool, sorted:#431:List A, item:#432:A]
-  closure143 __aivi_list_sortBy owner=147 root=expr1587 kind=item-body
-    params = [cmp:#433:A -> A -> Bool, items:#434:List A]
-  closure144 __aivi_list_insertSortedOrdFalse owner=148 root=expr1617 kind=item-body
-    params = [__aivi_ord_evidence537:#537:A -> A -> Ordering, __aivi_eq_evidence538:#538:A -> A -> Bool, newItem:#435:A, current:#436:A, acc:#437:List A]
-  closure145 __aivi_list_insertSortedOrdStep owner=149 root=expr1638 kind=item-body
-    params = [__aivi_ord_evidence539:#539:A -> A -> Ordering, __aivi_eq_evidence540:#540:A -> A -> Bool, newItem:#438:A, state:#439:(Bool, List A), current:#440:A]
-  closure146 __aivi_list_insertSortedOrdFinish owner=150 root=expr1650 kind=item-body
-    params = [__aivi_ord_evidence541:#541:A -> A -> Ordering, __aivi_eq_evidence542:#542:A -> A -> Bool, newItem:#443:A, state:#444:(Bool, List A)]
-  closure147 __aivi_list_insertSortedOrd owner=151 root=expr1676 kind=item-body
-    params = [__aivi_ord_evidence543:#543:A -> A -> Ordering, __aivi_eq_evidence544:#544:A -> A -> Bool, newItem:#447:A, sorted:#448:List A]
-  closure148 __aivi_list_sortOrdStep owner=152 root=expr1683 kind=item-body
-    params = [__aivi_ord_evidence545:#545:A -> A -> Ordering, __aivi_eq_evidence546:#546:A -> A -> Bool, sorted:#449:List A, item:#450:A]
-  closure149 sort owner=153 root=expr1698 kind=item-body
-    params = [__aivi_ord_evidence547:#547:A -> A -> Ordering, __aivi_eq_evidence548:#548:A -> A -> Bool, items:#451:List A]
-  closure150 __aivi_text_isEmpty owner=154 root=expr1706 kind=item-body
-    params = [text:#452:Text]
-  closure151 __aivi_text_nonEmpty owner=155 root=expr1713 kind=item-body
-    params = [text:#453:Text]
-  closure152 __aivi_pair_first owner=156 root=expr1716 kind=item-body
-    params = [pair:#456:(A, B)]
-  closure153 __aivi_pair_second owner=157 root=expr1719 kind=item-body
-    params = [pair:#458:(A, B)]
-  closure154 __aivi_pair_swap owner=158 root=expr1724 kind=item-body
-    params = [pair:#460:(A, B)]
-  closure155 __aivi_pair_mapFirst owner=159 root=expr1731 kind=item-body
-    params = [transform:#463:A -> C, pair:#464:(A, B)]
-  closure156 __aivi_pair_mapSecond owner=160 root=expr1738 kind=item-body
-    params = [transform:#467:B -> C, pair:#468:(A, B)]
-  closure157 __aivi_pair_mapBoth owner=161 root=expr1747 kind=item-body
-    params = [transformFst:#471:A -> C, transformSnd:#472:B -> D, pair:#473:(A, B)]
-  closure158 __aivi_pair_fromPair owner=162 root=expr1750 kind=item-body
-    params = [a:#476:A, b:#477:B]
-  closure159 __aivi_pair_duplicate owner=163 root=expr1753 kind=item-body
-    params = [item:#478:A]
-  closure160 domain#62::member#0::lift owner=164 root=expr1754 kind=item-body
+  closure92 __aivi_listAt_match owner=92 root=expr941 kind=item-body
+    params = [matches:#207:Bool, idx:#208:Int, item:#209:A]
+  closure93 __aivi_listAt_check owner=93 root=expr962 kind=item-body
+    params = [target:#210:Int, idx:#211:Int, found:#212:Option A, item:#213:A]
+  closure94 __aivi_listAt_step owner=94 root=expr970 kind=item-body
+    params = [target:#215:Int, state:#216:(Int, Option A), item:#217:A]
+  closure95 __aivi_listAt_extract owner=95 root=expr973 kind=item-body
+    params = [state:#220:(Int, Option A)]
+  closure96 __aivi_listAt owner=96 root=expr992 kind=item-body
+    params = [target:#223:Int, items:#224:List A]
+  closure97 __aivi_listReplace_pick owner=97 root=expr1016 kind=item-body
+    params = [matches:#225:Bool, newVal:#226:A, idx:#227:Int, result:#228:List A, item:#229:A]
+  closure98 __aivi_listReplace_check owner=98 root=expr1026 kind=item-body
+    params = [target:#230:Int, newVal:#231:A, idx:#232:Int, result:#233:List A, item:#234:A]
+  closure99 __aivi_listReplace_step owner=99 root=expr1035 kind=item-body
+    params = [target:#235:Int, newVal:#236:A, state:#237:(Int, List A), item:#238:A]
+  closure100 __aivi_listReplace_extract owner=100 root=expr1038 kind=item-body
+    params = [state:#241:(Int, List A)]
+  closure101 __aivi_listReplace owner=101 root=expr1058 kind=item-body
+    params = [target:#244:Int, newVal:#245:A, items:#246:List A]
+  closure102 __aivi_list_findTry owner=102 root=expr1066 kind=item-body
+    params = [predicate:#247:A -> Bool, item:#248:A]
+  closure103 __aivi_list_findStep owner=103 root=expr1075 kind=item-body
+    params = [predicate:#249:A -> Bool, acc:#250:Option A, item:#251:A]
+  closure104 __aivi_list_find owner=104 root=expr1089 kind=item-body
+    params = [predicate:#253:A -> Bool, items:#254:List A]
+  closure105 __aivi_list_takeHelp owner=105 root=expr1114 kind=item-body
+    params = [n:#255:Int, count:#256:Int, acc:#257:List A, item:#258:A]
+  closure106 __aivi_list_takeStep owner=106 root=expr1122 kind=item-body
+    params = [n:#259:Int, state:#260:(Int, List A), item:#261:A]
+  closure107 __aivi_list_takeExtract owner=107 root=expr1125 kind=item-body
+    params = [state:#264:(Int, List A)]
+  closure108 __aivi_list_take owner=108 root=expr1144 kind=item-body
+    params = [n:#266:Int, items:#267:List A]
+  closure109 __aivi_list_sortByInsertFalse owner=109 root=expr1171 kind=item-body
+    params = [cmp:#268:A -> A -> Bool, newItem:#269:A, current:#270:A, acc:#271:List A]
+  closure110 __aivi_list_sortByInsertStep owner=110 root=expr1190 kind=item-body
+    params = [cmp:#272:A -> A -> Bool, newItem:#273:A, state:#274:(Bool, List A), current:#275:A]
+  closure111 __aivi_list_sortByInsertFinish owner=111 root=expr1202 kind=item-body
+    params = [cmp:#278:A -> A -> Bool, newItem:#279:A, state:#280:(Bool, List A)]
+  closure112 __aivi_list_sortByInsert owner=112 root=expr1224 kind=item-body
+    params = [cmp:#283:A -> A -> Bool, newItem:#284:A, sorted:#285:List A]
+  closure113 __aivi_list_sortByStep owner=113 root=expr1229 kind=item-body
+    params = [cmp:#286:A -> A -> Bool, sorted:#287:List A, item:#288:A]
+  closure114 __aivi_list_sortBy owner=114 root=expr1243 kind=item-body
+    params = [cmp:#289:A -> A -> Bool, items:#290:List A]
+  closure115 __aivi_list_insertSortedOrdFalse owner=115 root=expr1273 kind=item-body
+    params = [__aivi_ord_evidence393:#393:A -> A -> Ordering, __aivi_eq_evidence394:#394:A -> A -> Bool, newItem:#291:A, current:#292:A, acc:#293:List A]
+  closure116 __aivi_list_insertSortedOrdStep owner=116 root=expr1294 kind=item-body
+    params = [__aivi_ord_evidence395:#395:A -> A -> Ordering, __aivi_eq_evidence396:#396:A -> A -> Bool, newItem:#294:A, state:#295:(Bool, List A), current:#296:A]
+  closure117 __aivi_list_insertSortedOrdFinish owner=117 root=expr1306 kind=item-body
+    params = [__aivi_ord_evidence397:#397:A -> A -> Ordering, __aivi_eq_evidence398:#398:A -> A -> Bool, newItem:#299:A, state:#300:(Bool, List A)]
+  closure118 __aivi_list_insertSortedOrd owner=118 root=expr1332 kind=item-body
+    params = [__aivi_ord_evidence399:#399:A -> A -> Ordering, __aivi_eq_evidence400:#400:A -> A -> Bool, newItem:#303:A, sorted:#304:List A]
+  closure119 __aivi_list_sortOrdStep owner=119 root=expr1339 kind=item-body
+    params = [__aivi_ord_evidence401:#401:A -> A -> Ordering, __aivi_eq_evidence402:#402:A -> A -> Bool, sorted:#305:List A, item:#306:A]
+  closure120 sort owner=120 root=expr1354 kind=item-body
+    params = [__aivi_ord_evidence403:#403:A -> A -> Ordering, __aivi_eq_evidence404:#404:A -> A -> Bool, items:#307:List A]
+  closure121 __aivi_text_isEmpty owner=121 root=expr1362 kind=item-body
+    params = [text:#308:Text]
+  closure122 __aivi_text_nonEmpty owner=122 root=expr1369 kind=item-body
+    params = [text:#309:Text]
+  closure123 __aivi_pair_first owner=123 root=expr1372 kind=item-body
+    params = [pair:#312:(A, B)]
+  closure124 __aivi_pair_second owner=124 root=expr1375 kind=item-body
+    params = [pair:#314:(A, B)]
+  closure125 __aivi_pair_swap owner=125 root=expr1380 kind=item-body
+    params = [pair:#316:(A, B)]
+  closure126 __aivi_pair_mapFirst owner=126 root=expr1387 kind=item-body
+    params = [transform:#319:A -> C, pair:#320:(A, B)]
+  closure127 __aivi_pair_mapSecond owner=127 root=expr1394 kind=item-body
+    params = [transform:#323:B -> C, pair:#324:(A, B)]
+  closure128 __aivi_pair_mapBoth owner=128 root=expr1403 kind=item-body
+    params = [transformFst:#327:A -> C, transformSnd:#328:B -> D, pair:#329:(A, B)]
+  closure129 __aivi_pair_fromPair owner=129 root=expr1406 kind=item-body
+    params = [a:#332:A, b:#333:B]
+  closure130 __aivi_pair_duplicate owner=130 root=expr1409 kind=item-body
+    params = [item:#334:A]
+  closure131 domain#62::member#0::lift owner=131 root=expr1410 kind=item-body
     params = [items:#72:List A]
-  closure161 domain#62::member#1::__aivi_nel_carrier owner=165 root=expr1755 kind=item-body
+  closure132 domain#62::member#1::__aivi_nel_carrier owner=132 root=expr1411 kind=item-body
     params = [nel:#73:List A]
-  closure162 domain#187::member#0::ms owner=166 root=expr1758 kind=item-body
-    params = [value:#454:Int]
-  closure163 domain#188::member#0::times owner=167 root=expr1761 kind=item-body
-    params = [value:#455:Int]
-  closure164 builtin-evidence#201::reduce owner=168 root=expr30 kind=item-body
-    params = [arg0:#479:Int -> A -> Int, arg1:#480:Int, arg2:#481:List A]
-  closure165 builtin-evidence#202::reduce owner=169 root=expr42 kind=item-body
-    params = [arg0:#482:Option A -> A -> Option A, arg1:#483:Option A, arg2:#484:List A]
-  closure166 builtin-evidence#203::append owner=170 root=expr54 kind=item-body
-    params = [arg0:#485:List A, arg1:#486:List A]
-  closure167 builtin-evidence#204::reduce owner=171 root=expr89 kind=item-body
-    params = [arg0:#487:{ seenFirst: Bool, items: List A } -> A -> { seenFirst: Bool, items: List A }, arg1:#488:{ seenFirst: Bool, items: List A }, arg2:#489:List A]
-  closure168 builtin-evidence#205::reduce owner=172 root=expr124 kind=item-body
-    params = [arg0:#490:Bool -> A -> Bool, arg1:#491:Bool, arg2:#492:List A]
-  closure169 builtin-evidence#206::append owner=173 root=expr230 kind=item-body
-    params = [arg0:#493:List A, arg1:#494:List A]
-  closure170 builtin-evidence#207::append owner=174 root=expr251 kind=item-body
-    params = [arg0:#495:List A, arg1:#496:List A]
-  closure171 builtin-evidence#208::reduce owner=175 root=expr269 kind=item-body
-    params = [arg0:#497:A -> A -> A, arg1:#498:A, arg2:#499:List A]
-  closure172 builtin-evidence#209::append owner=176 root=expr296 kind=item-body
-    params = [arg0:#500:List A, arg1:#501:List A]
-  closure173 builtin-evidence#210::append owner=177 root=expr310 kind=item-body
-    params = [arg0:#502:List A, arg1:#503:List A]
-  closure174 builtin-evidence#211::reduce owner=178 root=expr343 kind=item-body
-    params = [arg0:#504:(List A, Option A) -> A -> (List A, Option A), arg1:#505:(List A, Option A), arg2:#506:List A]
-  closure175 builtin-evidence#212::append owner=179 root=expr367 kind=item-body
-    params = [arg0:#507:List A, arg1:#508:List A]
-  closure176 builtin-evidence#213::reduce owner=180 root=expr383 kind=item-body
-    params = [arg0:#509:Option NonEmptyList A -> A -> Option NonEmptyList A, arg1:#510:Option NonEmptyList A, arg2:#511:List A]
-  closure177 builtin-evidence#214::append owner=181 root=expr414 kind=item-body
-    params = [arg0:#512:List A, arg1:#513:List A]
-  closure178 builtin-evidence#215::reduce owner=182 root=expr426 kind=item-body
-    params = [arg0:#514:List A -> A -> List A, arg1:#515:List A, arg2:#516:List A]
-  closure179 builtin-evidence#216::reduce owner=183 root=expr449 kind=item-body
-    params = [arg0:#517:Bool -> A -> Bool, arg1:#518:Bool, arg2:#519:List A]
-  closure180 builtin-evidence#217::append owner=184 root=expr470 kind=item-body
-    params = [arg0:#520:List A, arg1:#521:List A]
-  closure181 builtin-evidence#218::reduce owner=185 root=expr482 kind=item-body
-    params = [arg0:#522:List A -> A -> List A, arg1:#523:List A, arg2:#524:List A]
-  closure182 builtin-evidence#219::append owner=186 root=expr499 kind=item-body
-    params = [arg0:#525:List B, arg1:#526:List B]
-  closure183 builtin-evidence#220::reduce owner=187 root=expr512 kind=item-body
-    params = [arg0:#527:List B -> A -> List B, arg1:#528:List B, arg2:#529:List A]
-  closure184 builtin-evidence#221::append owner=188 root=expr524 kind=item-body
-    params = [arg0:#530:List B, arg1:#531:List B]
-  closure185 builtin-evidence#222::reduce owner=189 root=expr536 kind=item-body
-    params = [arg0:#532:List B -> A -> List B, arg1:#533:List B, arg2:#534:List A]
-  closure186 builtin-evidence#223::append owner=190 root=expr551 kind=item-body
-    params = [arg0:#535:List A, arg1:#536:List A]
-  closure187 builtin-evidence#224::reduce owner=191 root=expr564 kind=item-body
-    params = [arg0:#537:List A -> A -> List A, arg1:#538:List A, arg2:#539:List A]
-  closure188 builtin-evidence#225::reduce owner=192 root=expr586 kind=item-body
-    params = [arg0:#540:Int -> A -> Int, arg1:#541:Int, arg2:#542:List A]
-  closure189 builtin-evidence#226::reduce owner=193 root=expr603 kind=item-body
-    params = [arg0:#543:Int -> Int -> Int, arg1:#544:Int, arg2:#545:List Int]
-  closure190 builtin-evidence#227::reduce owner=194 root=expr636 kind=item-body
-    params = [arg0:#546:Option A -> A -> Option A, arg1:#547:Option A, arg2:#548:List A]
-  closure191 builtin-evidence#228::reduce owner=195 root=expr686 kind=item-body
-    params = [arg0:#549:A -> A -> A, arg1:#550:A, arg2:#551:List A]
-  closure192 builtin-evidence#229::reduce owner=196 root=expr737 kind=item-body
-    params = [arg0:#552:A -> A -> A, arg1:#553:A, arg2:#554:List A]
-  closure193 builtin-evidence#230::reduce owner=197 root=expr752 kind=item-body
-    params = [arg0:#555:Option A -> A -> Option A, arg1:#556:Option A, arg2:#557:List A]
-  closure194 builtin-evidence#231::reduce owner=198 root=expr767 kind=item-body
-    params = [arg0:#558:Option A -> A -> Option A, arg1:#559:Option A, arg2:#560:List A]
-  closure195 builtin-evidence#232::structural-eq owner=199 root=expr780 kind=item-body
-    params = [arg0:#561:Ordering, arg1:#562:Ordering]
-  closure196 builtin-evidence#233::compare owner=200 root=expr785 kind=item-body
-    params = [arg0:#563:Int, arg1:#564:Int]
-  closure197 builtin-evidence#234::append owner=201 root=expr800 kind=item-body
-    params = [arg0:#565:List Int, arg1:#566:List Int]
-  closure198 builtin-evidence#235::append owner=202 root=expr831 kind=item-body
-    params = [arg0:#567:Text, arg1:#568:Text]
-  closure199 builtin-evidence#236::reduce owner=203 root=expr868 kind=item-body
-    params = [arg0:#569:(Bool, Text) -> Text -> (Bool, Text), arg1:#570:(Bool, Text), arg2:#571:List Text]
-  closure200 builtin-evidence#237::structural-eq owner=204 root=expr917 kind=item-body
-    params = [arg0:#572:Int, arg1:#573:Int]
-  closure201 builtin-evidence#238::reduce owner=205 root=expr942 kind=item-body
-    params = [arg0:#574:(Int, Option A) -> A -> (Int, Option A), arg1:#575:(Int, Option A), arg2:#576:List A]
-  closure202 builtin-evidence#239::append owner=206 root=expr979 kind=item-body
-    params = [arg0:#577:List A, arg1:#578:List A]
-  closure203 builtin-evidence#240::reduce owner=207 root=expr1023 kind=item-body
-    params = [arg0:#579:(Int, List A) -> A -> (Int, List A), arg1:#580:(Int, List A), arg2:#581:List A]
-  closure204 builtin-evidence#241::reduce owner=208 root=expr1176 kind=item-body
-    params = [arg0:#582:Option Matrix A -> ((Int, Int), A) -> Option Matrix A, arg1:#583:Option Matrix A, arg2:#584:List ((Int, Int), A)]
-  closure205 builtin-evidence#242::reduce owner=209 root=expr1283 kind=item-body
-    params = [arg0:#585:(Int, Int, Option MatrixError) -> List A -> (Int, Int, Option MatrixError), arg1:#586:(Int, Int, Option MatrixError), arg2:#587:List List A]
-  closure206 builtin-evidence#243::reduce owner=210 root=expr1381 kind=item-body
-    params = [arg0:#588:Int -> A -> Int, arg1:#589:Int, arg2:#590:List A]
-  closure207 builtin-evidence#244::reduce owner=211 root=expr1393 kind=item-body
-    params = [arg0:#591:Int -> List A -> Int, arg1:#592:Int, arg2:#593:List List A]
-  closure208 builtin-evidence#245::reduce owner=212 root=expr1425 kind=item-body
-    params = [arg0:#594:Option A -> A -> Option A, arg1:#595:Option A, arg2:#596:List A]
-  closure209 builtin-evidence#246::append owner=213 root=expr1451 kind=item-body
-    params = [arg0:#597:List A, arg1:#598:List A]
-  closure210 builtin-evidence#247::reduce owner=214 root=expr1475 kind=item-body
-    params = [arg0:#599:(Int, List A) -> A -> (Int, List A), arg1:#600:(Int, List A), arg2:#601:List A]
-  closure211 builtin-evidence#248::append owner=215 root=expr1497 kind=item-body
-    params = [arg0:#602:List A, arg1:#603:List A]
-  closure212 builtin-evidence#249::append owner=216 root=expr1521 kind=item-body
-    params = [arg0:#604:List A, arg1:#605:List A]
-  closure213 builtin-evidence#250::append owner=217 root=expr1540 kind=item-body
-    params = [arg0:#606:List A, arg1:#607:List A]
-  closure214 builtin-evidence#251::reduce owner=218 root=expr1552 kind=item-body
-    params = [arg0:#608:(Bool, List A) -> A -> (Bool, List A), arg1:#609:(Bool, List A), arg2:#610:List A]
-  closure215 builtin-evidence#252::reduce owner=219 root=expr1579 kind=item-body
-    params = [arg0:#611:List A -> A -> List A, arg1:#612:List A, arg2:#613:List A]
-  closure216 builtin-evidence#253::append owner=220 root=expr1599 kind=item-body
-    params = [arg0:#614:List A, arg1:#615:List A]
-  closure217 builtin-evidence#254::append owner=221 root=expr1623 kind=item-body
-    params = [arg0:#616:List A, arg1:#617:List A]
-  closure218 builtin-evidence#255::append owner=222 root=expr1644 kind=item-body
-    params = [arg0:#618:List A, arg1:#619:List A]
-  closure219 builtin-evidence#256::reduce owner=223 root=expr1656 kind=item-body
-    params = [arg0:#620:(Bool, List A) -> A -> (Bool, List A), arg1:#621:(Bool, List A), arg2:#622:List A]
-  closure220 builtin-evidence#257::reduce owner=224 root=expr1689 kind=item-body
-    params = [arg0:#623:List A -> A -> List A, arg1:#624:List A, arg2:#625:List A]
-  closure221 builtin-evidence#258::structural-eq owner=225 root=expr1702 kind=item-body
-    params = [arg0:#626:Text, arg1:#627:Text]
+  closure133 domain#152::member#0::ms owner=133 root=expr1414 kind=item-body
+    params = [value:#310:Int]
+  closure134 domain#153::member#0::times owner=134 root=expr1417 kind=item-body
+    params = [value:#311:Int]
+  closure135 builtin-evidence#166::reduce owner=135 root=expr30 kind=item-body
+    params = [arg0:#335:Int -> A -> Int, arg1:#336:Int, arg2:#337:List A]
+  closure136 builtin-evidence#167::reduce owner=136 root=expr42 kind=item-body
+    params = [arg0:#338:Option A -> A -> Option A, arg1:#339:Option A, arg2:#340:List A]
+  closure137 builtin-evidence#168::append owner=137 root=expr54 kind=item-body
+    params = [arg0:#341:List A, arg1:#342:List A]
+  closure138 builtin-evidence#169::reduce owner=138 root=expr89 kind=item-body
+    params = [arg0:#343:{ seenFirst: Bool, items: List A } -> A -> { seenFirst: Bool, items: List A }, arg1:#344:{ seenFirst: Bool, items: List A }, arg2:#345:List A]
+  closure139 builtin-evidence#170::reduce owner=139 root=expr124 kind=item-body
+    params = [arg0:#346:Bool -> A -> Bool, arg1:#347:Bool, arg2:#348:List A]
+  closure140 builtin-evidence#171::structural-eq owner=140 root=expr175 kind=item-body
+    params = [arg0:#349:Ordering, arg1:#350:Ordering]
+  closure141 builtin-evidence#172::append owner=141 root=expr280 kind=item-body
+    params = [arg0:#351:List A, arg1:#352:List A]
+  closure142 builtin-evidence#173::append owner=142 root=expr301 kind=item-body
+    params = [arg0:#353:List A, arg1:#354:List A]
+  closure143 builtin-evidence#174::reduce owner=143 root=expr319 kind=item-body
+    params = [arg0:#355:A -> A -> A, arg1:#356:A, arg2:#357:List A]
+  closure144 builtin-evidence#175::append owner=144 root=expr346 kind=item-body
+    params = [arg0:#358:List A, arg1:#359:List A]
+  closure145 builtin-evidence#176::append owner=145 root=expr360 kind=item-body
+    params = [arg0:#360:List A, arg1:#361:List A]
+  closure146 builtin-evidence#177::reduce owner=146 root=expr393 kind=item-body
+    params = [arg0:#362:(List A, Option A) -> A -> (List A, Option A), arg1:#363:(List A, Option A), arg2:#364:List A]
+  closure147 builtin-evidence#178::append owner=147 root=expr417 kind=item-body
+    params = [arg0:#365:List A, arg1:#366:List A]
+  closure148 builtin-evidence#179::reduce owner=148 root=expr433 kind=item-body
+    params = [arg0:#367:Option NonEmptyList A -> A -> Option NonEmptyList A, arg1:#368:Option NonEmptyList A, arg2:#369:List A]
+  closure149 builtin-evidence#180::append owner=149 root=expr464 kind=item-body
+    params = [arg0:#370:List A, arg1:#371:List A]
+  closure150 builtin-evidence#181::reduce owner=150 root=expr476 kind=item-body
+    params = [arg0:#372:List A -> A -> List A, arg1:#373:List A, arg2:#374:List A]
+  closure151 builtin-evidence#182::reduce owner=151 root=expr499 kind=item-body
+    params = [arg0:#375:Bool -> A -> Bool, arg1:#376:Bool, arg2:#377:List A]
+  closure152 builtin-evidence#183::append owner=152 root=expr520 kind=item-body
+    params = [arg0:#378:List A, arg1:#379:List A]
+  closure153 builtin-evidence#184::reduce owner=153 root=expr532 kind=item-body
+    params = [arg0:#380:List A -> A -> List A, arg1:#381:List A, arg2:#382:List A]
+  closure154 builtin-evidence#185::append owner=154 root=expr549 kind=item-body
+    params = [arg0:#383:List B, arg1:#384:List B]
+  closure155 builtin-evidence#186::reduce owner=155 root=expr562 kind=item-body
+    params = [arg0:#385:List B -> A -> List B, arg1:#386:List B, arg2:#387:List A]
+  closure156 builtin-evidence#187::append owner=156 root=expr574 kind=item-body
+    params = [arg0:#388:List B, arg1:#389:List B]
+  closure157 builtin-evidence#188::reduce owner=157 root=expr586 kind=item-body
+    params = [arg0:#390:List B -> A -> List B, arg1:#391:List B, arg2:#392:List A]
+  closure158 builtin-evidence#189::append owner=158 root=expr601 kind=item-body
+    params = [arg0:#393:List A, arg1:#394:List A]
+  closure159 builtin-evidence#190::reduce owner=159 root=expr614 kind=item-body
+    params = [arg0:#395:List A -> A -> List A, arg1:#396:List A, arg2:#397:List A]
+  closure160 builtin-evidence#191::reduce owner=160 root=expr636 kind=item-body
+    params = [arg0:#398:Int -> A -> Int, arg1:#399:Int, arg2:#400:List A]
+  closure161 builtin-evidence#192::reduce owner=161 root=expr653 kind=item-body
+    params = [arg0:#401:Int -> Int -> Int, arg1:#402:Int, arg2:#403:List Int]
+  closure162 builtin-evidence#193::reduce owner=162 root=expr686 kind=item-body
+    params = [arg0:#404:Option A -> A -> Option A, arg1:#405:Option A, arg2:#406:List A]
+  closure163 builtin-evidence#194::reduce owner=163 root=expr736 kind=item-body
+    params = [arg0:#407:A -> A -> A, arg1:#408:A, arg2:#409:List A]
+  closure164 builtin-evidence#195::reduce owner=164 root=expr787 kind=item-body
+    params = [arg0:#410:A -> A -> A, arg1:#411:A, arg2:#412:List A]
+  closure165 builtin-evidence#196::reduce owner=165 root=expr802 kind=item-body
+    params = [arg0:#413:Option A -> A -> Option A, arg1:#414:Option A, arg2:#415:List A]
+  closure166 builtin-evidence#197::reduce owner=166 root=expr817 kind=item-body
+    params = [arg0:#416:Option A -> A -> Option A, arg1:#417:Option A, arg2:#418:List A]
+  closure167 builtin-evidence#198::compare owner=167 root=expr831 kind=item-body
+    params = [arg0:#419:Int, arg1:#420:Int]
+  closure168 builtin-evidence#199::append owner=168 root=expr846 kind=item-body
+    params = [arg0:#421:List Int, arg1:#422:List Int]
+  closure169 builtin-evidence#200::append owner=169 root=expr877 kind=item-body
+    params = [arg0:#423:Text, arg1:#424:Text]
+  closure170 builtin-evidence#201::reduce owner=170 root=expr914 kind=item-body
+    params = [arg0:#425:(Bool, Text) -> Text -> (Bool, Text), arg1:#426:(Bool, Text), arg2:#427:List Text]
+  closure171 builtin-evidence#202::structural-eq owner=171 root=expr954 kind=item-body
+    params = [arg0:#428:Int, arg1:#429:Int]
+  closure172 builtin-evidence#203::reduce owner=172 root=expr979 kind=item-body
+    params = [arg0:#430:(Int, Option A) -> A -> (Int, Option A), arg1:#431:(Int, Option A), arg2:#432:List A]
+  closure173 builtin-evidence#204::append owner=173 root=expr1000 kind=item-body
+    params = [arg0:#433:List A, arg1:#434:List A]
+  closure174 builtin-evidence#205::reduce owner=174 root=expr1044 kind=item-body
+    params = [arg0:#435:(Int, List A) -> A -> (Int, List A), arg1:#436:(Int, List A), arg2:#437:List A]
+  closure175 builtin-evidence#206::reduce owner=175 root=expr1081 kind=item-body
+    params = [arg0:#438:Option A -> A -> Option A, arg1:#439:Option A, arg2:#440:List A]
+  closure176 builtin-evidence#207::append owner=176 root=expr1107 kind=item-body
+    params = [arg0:#441:List A, arg1:#442:List A]
+  closure177 builtin-evidence#208::reduce owner=177 root=expr1131 kind=item-body
+    params = [arg0:#443:(Int, List A) -> A -> (Int, List A), arg1:#444:(Int, List A), arg2:#445:List A]
+  closure178 builtin-evidence#209::append owner=178 root=expr1153 kind=item-body
+    params = [arg0:#446:List A, arg1:#447:List A]
+  closure179 builtin-evidence#210::append owner=179 root=expr1177 kind=item-body
+    params = [arg0:#448:List A, arg1:#449:List A]
+  closure180 builtin-evidence#211::append owner=180 root=expr1196 kind=item-body
+    params = [arg0:#450:List A, arg1:#451:List A]
+  closure181 builtin-evidence#212::reduce owner=181 root=expr1208 kind=item-body
+    params = [arg0:#452:(Bool, List A) -> A -> (Bool, List A), arg1:#453:(Bool, List A), arg2:#454:List A]
+  closure182 builtin-evidence#213::reduce owner=182 root=expr1235 kind=item-body
+    params = [arg0:#455:List A -> A -> List A, arg1:#456:List A, arg2:#457:List A]
+  closure183 builtin-evidence#214::append owner=183 root=expr1255 kind=item-body
+    params = [arg0:#458:List A, arg1:#459:List A]
+  closure184 builtin-evidence#215::append owner=184 root=expr1279 kind=item-body
+    params = [arg0:#460:List A, arg1:#461:List A]
+  closure185 builtin-evidence#216::append owner=185 root=expr1300 kind=item-body
+    params = [arg0:#462:List A, arg1:#463:List A]
+  closure186 builtin-evidence#217::reduce owner=186 root=expr1312 kind=item-body
+    params = [arg0:#464:(Bool, List A) -> A -> (Bool, List A), arg1:#465:(Bool, List A), arg2:#466:List A]
+  closure187 builtin-evidence#218::reduce owner=187 root=expr1345 kind=item-body
+    params = [arg0:#467:List A -> A -> List A, arg1:#468:List A, arg2:#469:List A]
+  closure188 builtin-evidence#219::structural-eq owner=188 root=expr1358 kind=item-body
+    params = [arg0:#470:Text, arg1:#471:Text]

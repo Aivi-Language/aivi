@@ -88,6 +88,19 @@ impl NavigationAnalysis {
         Self { file, hir, source }
     }
 
+    pub(crate) fn reference_range_at_lsp_position(
+        &self,
+        position: LspPosition,
+    ) -> Option<tower_lsp::lsp_types::Range> {
+        let cursor = self.source.lsp_position_to_offset(position)?;
+        self.collect_all_sites()
+            .into_iter()
+            .map(|(span, _)| span)
+            .filter(|span| span.span().contains(cursor))
+            .min_by_key(|span| span.span().len())
+            .map(|span| crate::diagnostics::lsp_range(self.source.span_to_lsp_range(span.span())))
+    }
+
     pub fn definition_targets_at_lsp_position(
         &self,
         db: &RootDatabase,
@@ -1217,6 +1230,7 @@ impl NavigationAnalysis {
                 imported.type_declaration_targets(import_binding.imported_name.text())
             }
             ImportBindingMetadata::Value { .. }
+            | ImportBindingMetadata::ConstrainedValue { .. }
             | ImportBindingMetadata::IntrinsicValue { .. }
             | ImportBindingMetadata::DomainSuffix { .. }
             | ImportBindingMetadata::OpaqueValue

@@ -4857,37 +4857,6 @@ fn normalizer_does_not_treat_constructor_type_as_class_constraint() {
 }
 
 #[test]
-fn ambient_matrix_at_row_has_correct_list_input_type() {
-    // __aivi_matrix_atRow takes Option(List A) and returns Option A,
-    // not Option A -> Int -> Option A (which was the old incorrect signature).
-    let lowered = lower_text(
-        "matrix-at-row-type.aivi",
-        "use aivi.matrix (Matrix)\n\
-             value x:Int = 1\n",
-    );
-    assert!(
-        !lowered.has_errors(),
-        "matrix import should lower cleanly: {:?}",
-        lowered.diagnostics()
-    );
-
-    let function = lowered
-        .module()
-        .items()
-        .iter()
-        .find_map(|(_, item)| match item {
-            Item::Function(f) if f.name.text() == "__aivi_matrix_atRow" => Some(f),
-            _ => None,
-        })
-        .expect("ambient prelude should contain __aivi_matrix_atRow");
-    assert_eq!(
-        function.parameters.len(),
-        2,
-        "atRow should have 2 parameters: rowOpt and x"
-    );
-}
-
-#[test]
 fn hoist_item_lowers_to_hir() {
     let lowered = lower_text("hoist-basic.aivi", "hoist\n");
     let hoist_item = lowered

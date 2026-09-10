@@ -11,8 +11,6 @@ use aivi.list (
     reduceWithIndex as listReduceWithIndex
 )
 
-use aivi.option (flatMap as optionFlatMap)
-
 type MatrixError =
   | NegativeWidth Int
   | NegativeHeight Int
@@ -85,8 +83,9 @@ func finalizeRows = inputRows state => state.error
  ||> None       -> Ok inputRows
 
 type List (List A) -> Result MatrixError (List (List A))
-func validateRows = inputRows =>
-    finalizeRows inputRows (reduce (validateRowWidth (rowWidth inputRows)) { rowIndex: 0, error: None } inputRows)
+func validateRows = inputRows => inputRows
+  |> reduce (validateRowWidth (rowWidth inputRows)) { rowIndex: 0, error: None }
+  |> finalizeRows inputRows
 
 type (List A) -> Int -> A -> Option (List A)
 func setRowCell = inputRow x value => listAt x inputRow
@@ -102,12 +101,12 @@ func mapMatrixBase = transform matrix =>
     MkMatrix (width matrix) (height matrix) (listMap (listMap transform) (rows matrix))
 
 type (B -> A -> B) -> B -> (List A) -> B
-func reduceRow = step seed inputRow =>
-    reduce step seed inputRow
+func reduceRow = step seed inputRow => inputRow
+  |> reduce step seed
 
 type (B -> A -> B) -> B -> Matrix A -> B
-func reduceMatrixBase = step seed matrix =>
-    reduce (reduceRow step) seed (rows matrix)
+func reduceMatrixBase = step seed matrix => rows matrix
+  |> reduce (reduceRow step) seed
 
 instance Functor Matrix = {
     map = mapMatrixBase
@@ -156,10 +155,15 @@ type Matrix A -> Int -> (List A) -> (Option (Matrix A))
 func rebuildWithRow = matrix y newRow =>
     Some (buildMatrix (width matrix) (height matrix) (listReplaceAt y newRow (rows matrix)))
 
+type Matrix A -> Int -> Option (List A) -> Option (Matrix A)
+func rebuildWithUpdatedRow = matrix y updated => updated
+ ||> None -> None
+ ||> Some newRow -> rebuildWithRow matrix y newRow
+
 type Matrix A -> Int -> Int -> A -> (Option (Matrix A))
 func replaceAtCoords = matrix x y value => row matrix y
  ||> None           -> None
- ||> Some targetRow -> optionFlatMap (rebuildWithRow matrix y) (setRowCell targetRow x value)
+ ||> Some targetRow -> rebuildWithUpdatedRow matrix y (setRowCell targetRow x value)
 
 type Matrix A -> (Int, Int) -> A -> (Option (Matrix A))
 func replaceAt = matrix coord value => coord
@@ -209,14 +213,24 @@ type Matrix A -> (List (MatrixIndex, A))
 func entries = matrix =>
     listFlatten (rows (mapWithIndex matrixEntry matrix))
 
-type (A -> Bool) -> Int -> Int -> Int -> A -> Int
-func countStep = predicate total x y item => predicate item
+type (A -> Bool) -> Int -> A -> Int
+func countCell = predicate total item => predicate item
  T|> total + 1
  F|> total
 
+type (A -> Bool) -> Int -> List A -> Int
+func countCells = predicate total cells => cells
+ ||> [] -> total
+ ||> [item, ...rest] -> countCells predicate (countCell predicate total item) rest
+
+type (A -> Bool) -> Int -> List (List A) -> Int
+func countRows = predicate total inputRows => inputRows
+ ||> [] -> total
+ ||> [cells, ...rest] -> countRows predicate (countCells predicate total cells) rest
+
 type (A -> Bool) -> Matrix A -> Int
 func count = predicate matrix =>
-    reduceWithIndex (countStep predicate) 0 matrix
+    countRows predicate 0 (rows matrix)
 
 type (A -> Bool) -> (List MatrixIndex) -> Int -> Int -> A -> (List MatrixIndex)
 func positionsWhereStep = predicate acc x y item => predicate item
@@ -246,8 +260,8 @@ func replaceManyStep = current update => current
  ||> Some matrix -> replaceManyUpdate matrix update
 
 type Matrix A -> (List (MatrixIndex, A)) -> (Option (Matrix A))
-func replaceMany = matrix updates =>
-    reduce replaceManyStep (Some matrix) updates
+func replaceMany = matrix updates => updates
+  |> reduce replaceManyStep (Some matrix)
 
 type Int -> Int -> A -> Result MatrixError (Matrix A)
 func filled = w h value =>

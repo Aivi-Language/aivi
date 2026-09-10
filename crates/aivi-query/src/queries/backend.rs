@@ -512,9 +512,6 @@ fn collect_workspace_hir_modules(
         let Some(module_name) = workspace.module_name_for_file(db, candidate) else {
             continue;
         };
-        if module_name.starts_with("aivi.") {
-            continue;
-        }
         module_files.insert(module_name, candidate);
     }
 

@@ -361,8 +361,6 @@ These built-ins publish one host-context snapshot when the source starts. They d
 | --- | --- | --- |
 | `refreshOn` | `Signal B` | Supported through the existing source reconfiguration lifecycle, including pre-elaborated `.changed` projections. |
 | `debounce` | `Duration` | Supported for refresh reconfiguration; activation still loads immediately. |
-| `optimistic` | `Bool` | Accepted and stored, but not used by the current query worker. No optimistic publication is implemented. |
-| `onRollback` | `Signal DbError` | Accepted but ignored by the current runtime; no rollback notification is published. |
 | `activeWhen` | `Signal Bool` | Supported through the existing source activation lifecycle. |
 
 **Notes**
@@ -370,6 +368,7 @@ These built-ins publish one host-context snapshot when the source starts. They d
 - The compiler now recognizes `db.live` as a built-in provider key.
 - Runtime execution now runs the query task on a worker thread and republishes on activation or refresh.
 - The intended result shape is `Signal (Result DbError A)`.
+- Optimistic publication and rollback notifications have no specified semantics yet. The closed source contract rejects `optimistic` and `onRollback` instead of silently ignoring them.
 - Successful `db.commit` tasks now advance matching input-backed `.changed` signals using the current `Connection.database` path plus changed table names, so `db.live refreshOn` paths refresh automatically after commits.
 - `refreshOn` is the whole refresh boundary in the current slice. A `users.changed` projection is accepted, but it is still just an explicit trigger signal routed through that same path.
 - `commit()` now drives `TableRef.changed`-style refreshes automatically when the commit plan names the changed tables and the table handle resolves to the same normalized `Connection.database` path.

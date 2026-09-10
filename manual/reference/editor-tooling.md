@@ -36,8 +36,15 @@ after the entire batch validates.
 
 Compiler analysis runs on a bounded worker pool rather than on Tokio executor threads. New edits
 cancel superseded diagnostic work, and a final document-version check prevents stale results from
-being published. Workspace references and symbols use one immutable index per query-database
-revision instead of rescanning the workspace for every request.
+being published. Workspace references and symbols index all `.aivi` files under the initialized workspace roots,
+including unopened callers. Open buffers override disk contents. Hidden directories, `target`,
+`node_modules`, and symlink directories are excluded. Without workspace roots, discovery uses the
+nearest `aivi.toml` ancestor, or the document's parent directory. File-watcher and workspace-folder
+notifications refresh the disk snapshot; closing a buffer restores its disk contents. Changes
+schedule diagnostics for all open documents so importers do not retain stale errors.
+
+The navigation index is cached by query-database revision and project file set. Discovery and
+analysis run on workers; publication remains serialized with document updates.
 
 ## Supported LSP capabilities
 
@@ -51,8 +58,19 @@ revision instead of rescanning the workspace for every request.
 | Structure | Folding ranges, code lenses for `@test` values |
 | Highlighting | Full, range, and delta semantic tokens |
 
-Inlay hints and code lenses can be disabled through initialization options. Completion currently
-returns compiler-backed names and member suggestions but does not synthesize import edits.
+Inlay hints and code lenses can be disabled through initialization options. Completion returns current-module declarations, imported names, scoped function/lambda parameters,
+and case-pattern bindings. After a dotted record name it returns fields when compiler elaboration
+supplies a structural record type; it does not guess fields for opaque or unresolved types and does
+not synthesize import edits. Semantic tokens classify resolved type, function, and variable sites,
+with lexical highlighting for keywords and literals and TextMate fallback for incomplete code.
+
+Rename emits versioned edits for open buffers and includes unopened callers. It conservatively
+requires a fresh identifier in every affected module, a single project-owned target, and unaliased
+references. It refuses malformed names, collisions, incomplete disk discovery, erroneous affected
+modules, library targets, and record shorthands whose binding rename would also change a field key.
+The server reports a rejected rename instead of returning a partial edit. Unused-symbol removal
+covers the complete parsed declaration, its attached signature, and decorators; `main` and `@test`
+entry points are not treated as unused.
 
 ## VS Code extension
 
@@ -68,7 +86,7 @@ Commands:
 | AIVI: Show Output Channel | Open the extension and server log. |
 | AIVI: Format Document | Format the active AIVI document. |
 | AIVI: Check Current File | Save and check the active file through a structured process task. |
-| AIVI: Run Test | Run the selected `@test` value, or prompt for an exact value name. |
+| AIVI: Run Test | Save workspace files, then run the selected `@test` value or prompt for its name. |
 
 Settings:
 
@@ -91,3 +109,12 @@ leaves the extension available, marks the server as crashed, and offers to open 
 
 The extension does not bundle the compiler and does not provide a separate compiler-argument
 setting. Those behaviors are not part of the shipped contract.
+
+## Editor verification
+
+`cargo test -p aivi-lsp` covers protocol behavior, edit safety, workspace discovery, and parsing of
+all expanded snippet templates. In `tooling`, `pnpm -F vscode-aivi test` runs TypeScript unit and raw
+stdio-server integration tests. `pnpm -F vscode-aivi test:host` additionally launches an installed
+VS Code in an isolated temporary profile to exercise the actual extension, commands, and restart.
+Set `AIVI_VSCODE_EXECUTABLE` to select a VS Code executable; the host test needs a desktop display.
+The raw stdio test alone is not extension-host validation.

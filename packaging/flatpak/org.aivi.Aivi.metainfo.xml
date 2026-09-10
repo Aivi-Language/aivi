@@ -2,7 +2,7 @@
 <component type="desktop-application">
   <id>org.aivi.Aivi</id>
   <metadata_license>MIT</metadata_license>
-  <project_license>MIT</project_license>
+  <project_license>GPL-3.0-only</project_license>
   <name>AIVI</name>
   <summary>Purely functional GTK4/libadwaita language and runtime</summary>
 
@@ -24,12 +24,6 @@
   </description>
 
   <launchable type="desktop-id">org.aivi.Aivi.desktop</launchable>
-
-  <screenshots>
-    <screenshot type="default">
-      <caption>The AIVI development environment</caption>
-    </screenshot>
-  </screenshots>
 
   <url type="homepage">https://aivi.dev</url>
   <url type="bugtracker">https://github.com/aivi/aivi/issues</url>

@@ -1,3 +1,5 @@
+use aivi.text (contains as textContains)
+
 use aivi.path (
     parent
     filename
@@ -15,18 +17,26 @@ type PathError =
   | PathNotFound Text
 
 domain Path over Text = {
-    type parse : Text -> Result PathError Path
+    type wrapPath : Text -> Path
+    wrapPath = text => text
 
-    type (/) : Path -> Text -> Path
-
-    type parent : Path -> Option Path
-
-    type filename : Path -> Option Text
-
-    type stem : Path -> Option Text
-
-    type ext : Path -> Option Text
+    type pathText : Path -> Text
+    pathText = path => path
 }
+
+type Text -> Bool
+func pathTextHasNul = text =>
+    textContains "\0" text
+
+// Parsing is lexical. Existence and permissions belong to filesystem tasks.
+type Text -> Result PathError Path
+func parse = text => pathTextHasNul text
+ T|> Err (InvalidPath "path contains a NUL character")
+ F|> Ok (wrapPath text)
+
+type Path -> Text
+func toText = path =>
+    pathText path
 
 type Text -> Bool
 func hasExtension = path => extension path
@@ -45,3 +55,5 @@ value has_extension_for_dotted : Task Text Bool = pure (hasExtension "foo.txt")
 value is_relative_for_local : Task Text Bool = pure (isRelative "foo/bar.txt")
 
 export (PathSource, Path, PathError, InvalidPath, PathNotFound, parent, filename, stem, extension, join, isAbsolute, normalize, hasExtension, isRelative)
+export parse
+export toText

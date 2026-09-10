@@ -1,24 +1,26 @@
+use aivi.url (parseText)
+
+use aivi.result (map)
+
 type UrlError = Text
 
 domain Url over Text = {
-    type parse : Text -> Result UrlError Url
+    type wrapUrl : Text -> Url
+    wrapUrl = text => text
 
-    type scheme : Url -> Option Text
-
-    type host : Url -> Option Text
-
-    type port : Url -> Option Int
-
-    type path : Url -> Text
-
-    type query : Url -> Option Text
-
-    type fragment : Url -> Option Text
-
-    type withPath : Url -> Text -> Url
-
-    type withQuery : Url -> Text -> Url
+    type urlText : Url -> Text
+    urlText = url => url
 }
+
+type Text -> Result UrlError Url
+func parse = text =>
+    map wrapUrl (parseText text)
+
+type Url -> Text
+func toText = url =>
+    urlText url
 
 export UrlError
 export Url
+export parse
+export toText

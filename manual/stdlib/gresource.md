@@ -1,17 +1,6 @@
 # aivi.gresource
 
-Types for working with GTK and GNOME GResources.
-
-If you have not used GResources before, think of them as read-only files bundled inside
-your application binary or resource package. They are commonly used for CSS, UI XML, icons,
-and other assets that should ship with the app.
-
-This module currently exports the path type, error type, and task aliases used by
-resource-loading APIs. The stdlib comments also document resource loading source shapes.
-
-Current status: this is shared vocabulary around a host-backed resource provider. The target
-architecture is to keep bundled resource loads under provider capabilities rather than parallel
-task-only APIs.
+Application data types for gresource. This module supplies vocabulary only: it does not load data, watch sources, or implement the task aliases it defines.
 
 ## Import
 
@@ -31,13 +20,11 @@ use aivi.gresource (
 | Item | Type | Description |
 |------|------|-------------|
 | `ResourceError` | type | Things that can go wrong when resolving or decoding a resource |
-| `ResourcePath` | domain over `Text` | Checked resource path value |
+| `ResourcePath` | `Text` alias | Checked resource path value |
 | `ResourceTask A` | `Task ResourceError A` | Generic resource task alias |
 | `ResourceTextTask` | `Task ResourceError Text` | Resource task that returns text |
 | `ResourceBytesTask` | `Task ResourceError Bytes` | Resource task that returns bytes |
 | `ResourceListTask` | `Task ResourceError (List Text)` | Resource task that returns a list of text values |
-| `resource.text` | `Signal (Result ResourceError Text)` | Documented source shape for text resources |
-| `resource.bytes` | `Signal (Result ResourceError Bytes)` | Documented source shape for byte resources |
 
 ## Types
 
@@ -58,26 +45,7 @@ These variants describe the common failure cases when loading a bundled resource
 
 ### ResourcePath
 
-```aivi
-use aivi.gresource (ResourceError)
-
-domain ResourcePath over Text = {
-    type parse : Text -> Result ResourceError ResourcePath
-}
-```
-
-`ResourcePath` is a dedicated type for paths such as `"/com/example/app/style.css"`.
-Using a domain instead of plain `Text` makes it clearer when a value is supposed to point to
-bundled app resources.
-
-```aivi
-use aivi.gresource (
-    ResourceError
-    ResourcePath
-)
-
-value cssPath : Option ResourcePath = None
-```
+`ResourcePath` is a `Text` alias for application resource paths. It does not prove that a resource exists. This module provides no loader.
 
 ### ResourceTask
 
@@ -118,19 +86,3 @@ type ResourceListTask = (Task ResourceError (List Text))
 ```
 
 Alias for resource-related tasks that return a list of text values.
-
-## Documented source shapes
-
-The stdlib module comments document the following source-backed patterns:
-
-```aivi
-use aivi.gresource (ResourceError)
-
-@source resource.text "/com/example/app/style.css"
-signal appCss : Signal (Result ResourceError Text)
-
-@source resource.bytes "/com/example/app/icon.png"
-signal iconData : Signal (Result ResourceError Bytes)
-```
-
-This module does not currently export direct `readText` or `readBytes` functions.

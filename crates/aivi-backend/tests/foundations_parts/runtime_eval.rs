@@ -29,7 +29,8 @@ fn expect_backend_builtin_evidence_item(
             );
         }
         KernelExprKind::Apply { callee, arguments } => {
-            let KernelExprKind::BuiltinClassMember(intrinsic) = &wrapper.exprs()[*callee].kind else {
+            let KernelExprKind::BuiltinClassMember(intrinsic) = &wrapper.exprs()[*callee].kind
+            else {
                 panic!("builtin evidence item should call a builtin class member");
             };
             assert_eq!(*intrinsic, expected);
@@ -39,7 +40,9 @@ fn expect_backend_builtin_evidence_item(
                 "builtin evidence item should forward each synthetic parameter"
             );
         }
-        other => panic!("builtin evidence item should lower to a builtin wrapper body, found {other:?}"),
+        other => {
+            panic!("builtin evidence item should lower to a builtin wrapper body, found {other:?}")
+        }
     }
     item
 }
@@ -737,7 +740,10 @@ value filteredMissing:Option Int =
             else {
                 panic!("compare evidence item should lower to a builtin wrapper call");
             };
-            assert_eq!(compare_arguments.len(), backend.items()[item].parameters.len());
+            assert_eq!(
+                compare_arguments.len(),
+                backend.items()[item].parameters.len()
+            );
             assert!(matches!(
                 &wrapper.exprs()[*compare_callee].kind,
                 KernelExprKind::BuiltinClassMember(BuiltinClassMemberIntrinsic::Compare {
@@ -1187,4 +1193,279 @@ value totalImported : Int =
     assert_eq!(authored_total, imported_total);
     assert_eq!(builtin_mapped_value, imported_mapped_value);
     assert_eq!(builtin_total, imported_total);
+}
+
+#[test]
+fn bundled_stdlib_imports_execute_real_bodies_and_ordering() {
+    let backend = lower_workspace_text(
+        "stdlib-regression/main.aivi",
+        r#"
+use aivi.option (isSome, isNone, getOrElse)
+use aivi.core.range (make, contains, overlaps)
+use aivi.math (isPrime, gcd)
+value absent : Option Int = None
+value result : Bool = isSome (Some 3) and isNone absent and getOrElse 0 (Some 7) == 7
+value outside : Bool = contains (make 1 10) 11
+value emptyOverlap : Bool = overlaps (make 1 10) (make 6 5)
+value prime : Bool = isPrime 7
+value composite : Bool = isPrime 9
+value divisor : Int = gcd 12 8
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    for (name, expected) in [
+        ("result", RuntimeValue::Bool(true)),
+        ("outside", RuntimeValue::Bool(false)),
+        ("emptyOverlap", RuntimeValue::Bool(false)),
+        ("prime", RuntimeValue::Bool(true)),
+        ("composite", RuntimeValue::Bool(false)),
+        ("divisor", RuntimeValue::Int(4)),
+    ] {
+        assert_eq!(
+            evaluator
+                .evaluate_item(find_item(&backend, name), &BTreeMap::new())
+                .unwrap(),
+            expected,
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn bundled_stdlib_dict_consumer_executes() {
+    let backend = lower_workspace_text(
+        "stdlib-regression/main.aivi",
+        r#"
+use aivi.core.dict (Dict, singleton as dictSingleton, insert as dictInsert, get as dictGet)
+value initial : Dict Text Int = dictSingleton "x" 1
+value updated : Dict Text Int = dictInsert "y" 2 initial
+value lookup : Option Int = dictGet "x" updated
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "lookup"), &BTreeMap::new())
+            .unwrap(),
+        RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(1)))
+    );
+}
+
+#[test]
+fn bundled_stdlib_date_consumer_executes() {
+    let backend = lower_workspace_text(
+        "stdlib-regression/main.aivi",
+        r#"
+use aivi.date (Date, dateToIso, epoch)
+value dateText : Text = dateToIso epoch
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "dateText"), &BTreeMap::new())
+            .unwrap(),
+        RuntimeValue::Text("1970-01-01".into())
+    );
+}
+
+#[test]
+fn bigint_factorial_is_stack_safe() {
+    assert_eq!(
+        RuntimeBigInt::factorial(0),
+        RuntimeBigInt::parse_literal("1n").unwrap()
+    );
+    assert_eq!(
+        RuntimeBigInt::factorial(-1),
+        RuntimeBigInt::parse_literal("1n").unwrap()
+    );
+    assert_eq!(
+        RuntimeBigInt::factorial(10),
+        RuntimeBigInt::parse_literal("3628800n").unwrap()
+    );
+    let result = std::thread::Builder::new()
+        .stack_size(64 * 1024)
+        .spawn(|| RuntimeBigInt::factorial(10_000))
+        .unwrap()
+        .join()
+        .unwrap();
+    assert!(result > RuntimeBigInt::factorial(100));
+}
+
+#[test]
+fn bundled_stdlib_nominal_boundaries_execute() {
+    let backend = lower_workspace_text(
+        "stdlib-regression/main.aivi",
+        r#"
+use aivi.duration (millis, toMillis, toSeconds, trySeconds)
+use aivi.url (parse as parseUrl, toText as urlText)
+use aivi.path (parse as parsePath, toText as pathText)
+value duration : Int = toMillis (millis 250)
+value seconds : Int = toSeconds (millis 2500)
+value validUrl : Text = parseUrl "https://example.com/a/../b"
+ ||> Ok url -> urlText url
+ ||> Err _ -> "invalid"
+value invalidUrl : Bool = parseUrl "not a url"
+ ||> Ok _ -> False
+ ||> Err _ -> True
+value validPath : Text = parsePath "a/b.txt"
+ ||> Ok path -> pathText path
+ ||> Err _ -> "invalid"
+value invalidPath : Bool = parsePath "a\0b"
+ ||> Ok _ -> False
+ ||> Err _ -> True
+value overflow : Bool = trySeconds 9223372036854776
+ ||> Ok _ -> False
+ ||> Err _ -> True
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    for (name, expected) in [
+        ("duration", RuntimeValue::Int(250)),
+        ("seconds", RuntimeValue::Int(2)),
+        (
+            "validUrl",
+            RuntimeValue::Text("https://example.com/b".into()),
+        ),
+        ("invalidUrl", RuntimeValue::Bool(true)),
+        ("validPath", RuntimeValue::Text("a/b.txt".into())),
+        ("invalidPath", RuntimeValue::Bool(true)),
+        ("overflow", RuntimeValue::Bool(true)),
+    ] {
+        assert_eq!(
+            evaluator
+                .evaluate_item(find_item(&backend, name), &BTreeMap::new())
+                .unwrap(),
+            expected,
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn bundled_stdlib_matrix_consumer_executes() {
+    let backend = lower_workspace_text(
+        "stdlib-regression/main.aivi",
+        r#"
+use aivi.matrix (Matrix, init, rows)
+type Int -> Int -> Int
+func coordinate = x y => x + y * 10
+value matrixRows : List (List Int) = init 3 2 coordinate
+ ||> Ok matrix -> rows matrix
+ ||> Err _ -> []
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "matrixRows"), &BTreeMap::new())
+            .unwrap(),
+        RuntimeValue::List(vec![
+            RuntimeValue::List(vec![
+                RuntimeValue::Int(0),
+                RuntimeValue::Int(1),
+                RuntimeValue::Int(2)
+            ]),
+            RuntimeValue::List(vec![
+                RuntimeValue::Int(10),
+                RuntimeValue::Int(11),
+                RuntimeValue::Int(12)
+            ])
+        ])
+    );
+}
+
+#[test]
+fn bundled_stdlib_matrix_operations_execute() {
+    let backend = lower_workspace_text(
+        "stdlib-regression/main.aivi",
+        include_str!("../../../../stdlib/tests/matrix-validation/main.aivi"),
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    for name in [
+        "matrixCoordinatesOk",
+        "matrixReplaceOk",
+        "matrixFunctorOk",
+        "matrixIndexedOk",
+        "matrixModifyOk",
+    ] {
+        assert_eq!(
+            evaluator
+                .evaluate_item(find_item(&backend, name), &BTreeMap::new())
+                .unwrap(),
+            RuntimeValue::Bool(true),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn bundled_stdlib_empty_values_use_their_context() {
+    let backend = lower_workspace_text(
+        "stdlib-regression/main.aivi",
+        r#"
+use aivi.text (parseInt)
+use aivi.data.json (JsonObject, isObject)
+value invalidInt : Bool = parseInt "abc" == None
+value object : Bool = isObject (JsonObject { entries: [] })
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    for name in ["invalidInt", "object"] {
+        assert_eq!(
+            evaluator
+                .evaluate_item(find_item(&backend, name), &BTreeMap::new())
+                .unwrap(),
+            RuntimeValue::Bool(true)
+        );
+    }
+}
+
+#[test]
+fn bundled_stdlib_auth_commands_can_be_built_inside_functions() {
+    let backend = lower_workspace_text(
+        "stdlib-regression/main.aivi",
+        r#"
+use aivi.auth (AuthSource, AuthTask, PkceToken, PkceConfig)
+use aivi.url (parse)
+@source auth
+signal auth : AuthSource
+type PkceConfig -> AuthTask PkceToken
+func login = config => auth.pkce config
+value prepared : Option (AuthTask PkceToken) = parse "https://example.com/oauth"
+ ||> Err _ -> None
+ ||> Ok endpoint -> Some (login {
+     clientId: "test-client", authEndpoint: endpoint, tokenEndpoint: endpoint,
+     scopes: ["profile"], redirectPort: 0
+ })
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    let result = evaluator
+        .evaluate_item(find_item(&backend, "prepared"), &BTreeMap::new())
+        .unwrap();
+    assert!(
+        matches!(result, RuntimeValue::OptionSome(task) if matches!(*task, RuntimeValue::Task(RuntimeTaskPlan::AuthPkce { .. })))
+    );
+}
+
+#[test]
+fn bundled_stdlib_async_step_preserves_last_success_after_failure() {
+    let backend = lower_workspace_text(
+        "stdlib-regression/main.aivi",
+        r#"
+use aivi.async (AsyncTracker, step)
+value initial : AsyncTracker Text Int = { pending: True, done: None, error: None }
+value loaded : AsyncTracker Text Int = step (Ok 7) initial
+value failed : AsyncTracker Text Int = step (Err "offline") loaded
+value preserved : Bool = not (failed.pending) and failed.done == Some 7 and failed.error == Some "offline"
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "preserved"), &BTreeMap::new())
+            .unwrap(),
+        RuntimeValue::Bool(true)
+    );
 }

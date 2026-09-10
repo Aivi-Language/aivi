@@ -20,13 +20,14 @@ cranelift-module.workspace = true
 cranelift-native.workspace = true
 cranelift-object.workspace = true
 indexmap = { version = "2", features = ["serde"] }
-num-bigint = { version = "0.4.6", features = ["serde"] }
+num-bigint = { workspace = true, features = ["serde"] }
 num-traits = "0.2"
 rayon = "1"
 rust_decimal = { version = "1.40.0", features = ["serde"] }
 rustc-hash.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+url = "2.5"
 
 [dev-dependencies]
 aivi-query.workspace = true

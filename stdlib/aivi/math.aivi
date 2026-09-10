@@ -102,14 +102,14 @@ func checkDivisor = n d => n % d == 0
  F|> hasDivisorFrom n (d + 1)
 
 type Int -> Int -> Bool
-func hasDivisorFrom = n d => d * d > n
+func hasDivisorFrom = n d => d > n / d
  T|> False
  F|> checkDivisor n d
 
 type Int -> Bool
 func isPrimeAbove2 = n => isEven n
  T|> False
- F|> hasDivisorFrom n 3
+ F|> not (hasDivisorFrom n 3)
 
 type Int -> Bool
 func isPrimeAbove1 = n => n == 2

@@ -633,7 +633,7 @@ fn test_file_with_context_selected(
         let artifact = match prepare_test_artifact_with_query_context(
             module,
             test.owner,
-            Some(snapshot.backend_query_context()),
+            Some(BackendQueryContext { db: &snapshot.frontend.db, entry: test.file }),
         ) {
             Ok(artifact) => artifact,
             Err(message) => {
@@ -815,7 +815,7 @@ fn execute_file_with_context(
     }
 
     let lowered = snapshot.entry_hir();
-    let artifact = match prepare_execute_artifact(lowered.module()) {
+    let artifact = match prepare_execute_artifact_with_query_context(lowered.module(), Some(snapshot.backend_query_context())) {
         Ok(artifact) => artifact,
         Err(message) => {
             write_output_line(stderr, &message)?;
@@ -829,7 +829,15 @@ fn execute_file_with_context(
     Ok(ExitCode::SUCCESS)
 }
 
+#[cfg(test)]
 fn prepare_execute_artifact(module: &HirModule) -> Result<ExecuteArtifact, String> {
+    prepare_execute_artifact_with_query_context(module, None)
+}
+
+fn prepare_execute_artifact_with_query_context(
+    module: &HirModule,
+    query_context: Option<BackendQueryContext<'_>>,
+) -> Result<ExecuteArtifact, String> {
     let main = select_execute_main(module)?;
     let main_owner = find_value_owner(module, main).ok_or_else(|| {
         format!(
@@ -838,8 +846,7 @@ fn prepare_execute_artifact(module: &HirModule) -> Result<ExecuteArtifact, Strin
         )
     })?;
     let included_items = production_item_ids(module);
-    let lowered =
-        lower_runtime_backend_stack_with_items(module, &included_items, "`aivi execute`")?;
+    let lowered = lower_execution_backend(module, &included_items, query_context, "`aivi execute`")?;
     let runtime_assembly =
         assemble_hir_runtime_with_items(module, &included_items).map_err(|errors| {
             let mut rendered =
@@ -876,7 +883,7 @@ fn prepare_test_artifact_with_query_context(
         && let Ok(artifact) = prepare_backend_only_test_artifact(module, &fragment, query_context) {
             return Ok(artifact);
         }
-    let lowered = lower_runtime_backend_stack_with_items(module, &included_items, "`aivi test`")?;
+    let lowered = lower_execution_backend(module, &included_items, query_context, "`aivi test`")?;
     let runtime_assembly =
         assemble_hir_runtime_with_items(module, &included_items).map_err(|errors| {
             let mut rendered = String::from("failed to assemble runtime plans for `aivi test`:\n");
@@ -1243,4 +1250,18 @@ fn execute_test_task_value(
 
 fn write_output_line(target: &mut impl Write, text: &str) -> Result<(), String> {
     writeln!(target, "{text}").map_err(|error| format!("failed to write CLI output: {error}"))
+}
+
+fn lower_execution_backend(
+    module: &HirModule,
+    included_items: &IncludedItems,
+    query_context: Option<BackendQueryContext<'_>>,
+    command: &str,
+) -> Result<LoweredRunBackendStack, String> {
+    match query_context {
+        Some(context) => whole_program_backend_unit_with_items(context.db, context.entry, included_items)
+            .map(|unit| LoweredRunBackendStack { core: unit.core().clone(), backend: unit.backend_arc() })
+            .map_err(|error| format!("failed to lower {command}: {error}")),
+        None => lower_runtime_backend_stack_with_items(module, included_items, command),
+    }
 }

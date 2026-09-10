@@ -48,6 +48,8 @@ pub enum Type {
         item: HirItemId,
         name: Box<str>,
         arguments: Vec<Type>,
+        /// Resolved in the defining module, before module-local HIR IDs lose context.
+        carrier: Option<Box<Type>>,
     },
     OpaqueItem {
         item: HirItemId,
@@ -58,14 +60,23 @@ pub enum Type {
         import: HirImportId,
         name: Box<str>,
         arguments: Vec<Type>,
+        definition: Option<Box<ImportTypeDefinition>>,
     },
 }
 
 impl Type {
     pub fn lower(root: &HirGateType) -> Self {
+        Self::lower_in_context(root, None)
+    }
+
+    pub fn lower_in_module(root: &HirGateType, module: &aivi_hir::Module) -> Self {
+        Self::lower_in_context(root, Some(module))
+    }
+
+    fn lower_in_context(root: &HirGateType, module: Option<&aivi_hir::Module>) -> Self {
         #[allow(clippy::enum_variant_names)]
-        enum Task<'a> {
-            Visit(&'a HirGateType),
+        enum Task {
+            Visit(HirGateType),
             BuildTuple(usize),
             BuildRecord(Vec<Box<str>>),
             BuildArrow,
@@ -81,6 +92,12 @@ impl Type {
                 item: HirItemId,
                 name: Box<str>,
                 arguments: usize,
+                has_carrier: bool,
+            },
+            BuildImportedCarrier {
+                carrier: ImportValueType,
+                domain_name: Option<Box<str>>,
+                arguments: usize,
             },
             BuildOpaqueItem {
                 item: HirItemId,
@@ -91,25 +108,26 @@ impl Type {
                 import: HirImportId,
                 name: Box<str>,
                 arguments: usize,
+                definition: Option<Box<ImportTypeDefinition>>,
             },
         }
 
-        let mut tasks = vec![Task::Visit(root)];
+        let mut tasks = vec![Task::Visit(root.clone())];
         let mut values = Vec::new();
 
         while let Some(task) = tasks.pop() {
             match task {
                 Task::Visit(ty) => match ty {
-                    HirGateType::Primitive(builtin) => values.push(Self::Primitive(*builtin)),
+                    HirGateType::Primitive(builtin) => values.push(Self::Primitive(builtin)),
                     HirGateType::TypeParameter { parameter, name } => {
                         values.push(Self::TypeParameter {
-                            parameter: *parameter,
+                            parameter,
                             name: name.clone().into_boxed_str(),
                         });
                     }
                     HirGateType::Tuple(elements) => {
                         tasks.push(Task::BuildTuple(elements.len()));
-                        for element in elements.iter().rev() {
+                        for element in elements.into_iter().rev() {
                             tasks.push(Task::Visit(element));
                         }
                     }
@@ -120,62 +138,69 @@ impl Type {
                                 .map(|field| field.name.clone().into_boxed_str())
                                 .collect(),
                         ));
-                        for field in fields.iter().rev() {
-                            tasks.push(Task::Visit(&field.ty));
+                        for field in fields.into_iter().rev() {
+                            tasks.push(Task::Visit(field.ty));
                         }
                     }
                     HirGateType::Arrow { parameter, result } => {
                         tasks.push(Task::BuildArrow);
-                        tasks.push(Task::Visit(result));
-                        tasks.push(Task::Visit(parameter));
+                        tasks.push(Task::Visit(*result));
+                        tasks.push(Task::Visit(*parameter));
                     }
                     HirGateType::List(element) => {
                         tasks.push(Task::BuildList);
-                        tasks.push(Task::Visit(element));
+                        tasks.push(Task::Visit(*element));
                     }
                     HirGateType::Map { key, value } => {
                         tasks.push(Task::BuildMap);
-                        tasks.push(Task::Visit(value));
-                        tasks.push(Task::Visit(key));
+                        tasks.push(Task::Visit(*value));
+                        tasks.push(Task::Visit(*key));
                     }
                     HirGateType::Set(element) => {
                         tasks.push(Task::BuildSet);
-                        tasks.push(Task::Visit(element));
+                        tasks.push(Task::Visit(*element));
                     }
                     HirGateType::Option(element) => {
                         tasks.push(Task::BuildOption);
-                        tasks.push(Task::Visit(element));
+                        tasks.push(Task::Visit(*element));
                     }
                     HirGateType::Result { error, value } => {
                         tasks.push(Task::BuildResult);
-                        tasks.push(Task::Visit(value));
-                        tasks.push(Task::Visit(error));
+                        tasks.push(Task::Visit(*value));
+                        tasks.push(Task::Visit(*error));
                     }
                     HirGateType::Validation { error, value } => {
                         tasks.push(Task::BuildValidation);
-                        tasks.push(Task::Visit(value));
-                        tasks.push(Task::Visit(error));
+                        tasks.push(Task::Visit(*value));
+                        tasks.push(Task::Visit(*error));
                     }
                     HirGateType::Signal(inner) => {
                         tasks.push(Task::BuildSignal);
-                        tasks.push(Task::Visit(inner));
+                        tasks.push(Task::Visit(*inner));
                     }
                     HirGateType::Task { error, value } => {
                         tasks.push(Task::BuildTask);
-                        tasks.push(Task::Visit(value));
-                        tasks.push(Task::Visit(error));
+                        tasks.push(Task::Visit(*value));
+                        tasks.push(Task::Visit(*error));
                     }
                     HirGateType::Domain {
                         item,
                         name,
                         arguments,
                     } => {
-                        tasks.push(Task::BuildDomain {
-                            item: *item,
-                            name: name.clone().into_boxed_str(),
-                            arguments: arguments.len(),
+                        let carrier = module.and_then(|module| {
+                            aivi_hir::domain_carrier_type(module, item, &arguments)
                         });
-                        for argument in arguments.iter().rev() {
+                        tasks.push(Task::BuildDomain {
+                            item,
+                            name: name.into_boxed_str(),
+                            arguments: arguments.len(),
+                            has_carrier: carrier.is_some(),
+                        });
+                        if let Some(carrier) = carrier {
+                            tasks.push(Task::Visit(carrier));
+                        }
+                        for argument in arguments.into_iter().rev() {
                             tasks.push(Task::Visit(argument));
                         }
                     }
@@ -184,12 +209,18 @@ impl Type {
                         name,
                         arguments,
                     } => {
+                        if let Some(carrier) = module.and_then(|module| {
+                            aivi_hir::opaque_type_carrier_type(module, item, &arguments)
+                        }) {
+                            tasks.push(Task::Visit(carrier));
+                            continue;
+                        }
                         tasks.push(Task::BuildOpaqueItem {
-                            item: *item,
+                            item,
                             name: name.clone().into_boxed_str(),
                             arguments: arguments.len(),
                         });
-                        for argument in arguments.iter().rev() {
+                        for argument in arguments.into_iter().rev() {
                             tasks.push(Task::Visit(argument));
                         }
                     }
@@ -199,24 +230,36 @@ impl Type {
                         arguments,
                         definition,
                     } => match definition.as_deref() {
-                        Some(ImportTypeDefinition::Alias(alias)) => {
-                            let substitutions = Rc::from(
-                                arguments
-                                    .iter()
-                                    .map(Self::lower)
-                                    .collect::<Vec<_>>()
-                                    .into_boxed_slice(),
-                            );
-                            values
-                                .push(Self::lower_import_with_substitutions(alias, substitutions));
+                        Some(
+                            definition @ (ImportTypeDefinition::Alias(_)
+                            | ImportTypeDefinition::Domain(_)),
+                        ) => {
+                            let (carrier, domain_name) = match definition {
+                                ImportTypeDefinition::Alias(carrier) => (carrier, None),
+                                ImportTypeDefinition::Domain(carrier) => {
+                                    (carrier, Some(name.into_boxed_str()))
+                                }
+                                ImportTypeDefinition::Sum(_) => {
+                                    unreachable!("carrier definition was matched")
+                                }
+                            };
+                            tasks.push(Task::BuildImportedCarrier {
+                                carrier: carrier.clone(),
+                                domain_name,
+                                arguments: arguments.len(),
+                            });
+                            for argument in arguments.into_iter().rev() {
+                                tasks.push(Task::Visit(argument));
+                            }
                         }
                         Some(ImportTypeDefinition::Sum(_)) | None => {
                             tasks.push(Task::BuildOpaqueImport {
-                                import: *import,
+                                import,
                                 name: name.clone().into_boxed_str(),
+                                definition: definition.clone(),
                                 arguments: arguments.len(),
                             });
-                            for argument in arguments.iter().rev() {
+                            for argument in arguments.into_iter().rev() {
                                 tasks.push(Task::Visit(argument));
                             }
                         }
@@ -300,12 +343,36 @@ impl Type {
                     item,
                     name,
                     arguments,
+                    has_carrier,
                 } => {
+                    let carrier = has_carrier
+                        .then(|| Box::new(values.pop().expect("domain carrier should exist")));
                     let arguments = drain_tail(&mut values, arguments);
                     values.push(Self::Domain {
                         item,
                         name,
                         arguments,
+                        carrier,
+                    });
+                }
+                Task::BuildImportedCarrier {
+                    carrier,
+                    domain_name,
+                    arguments,
+                } => {
+                    let arguments = drain_tail(&mut values, arguments);
+                    let carrier = Self::lower_import_with_substitutions(
+                        &carrier,
+                        Rc::from(arguments.clone().into_boxed_slice()),
+                    );
+                    values.push(match domain_name {
+                        Some(name) => Self::Domain {
+                            item: HirItemId::from_raw(u32::MAX),
+                            name,
+                            arguments,
+                            carrier: Some(Box::new(carrier)),
+                        },
+                        None => carrier,
                     });
                 }
                 Task::BuildOpaqueItem {
@@ -324,12 +391,14 @@ impl Type {
                     import,
                     name,
                     arguments,
+                    definition,
                 } => {
                     let arguments = drain_tail(&mut values, arguments);
                     values.push(Self::OpaqueImport {
                         import,
                         name,
                         arguments,
+                        definition,
                     });
                 }
             }
@@ -361,6 +430,16 @@ impl Type {
             BuildTask,
             BuildOpaqueImport {
                 name: Box<str>,
+                arguments: usize,
+                definition: Option<Box<ImportTypeDefinition>>,
+            },
+            WrapDomain {
+                name: Box<str>,
+                arguments: Vec<Type>,
+            },
+            EnterDomain {
+                name: Box<str>,
+                carrier: &'a ImportValueType,
                 arguments: usize,
             },
             EnterAlias {
@@ -439,6 +518,7 @@ impl Type {
                                 import: aivi_hir::ImportId::from_raw(u32::MAX),
                                 name: "".into(),
                                 arguments: Vec::new(),
+                                definition: None,
                             });
                         }
                     }
@@ -456,9 +536,20 @@ impl Type {
                                 tasks.push(Task::Visit(argument, substitutions.clone()));
                             }
                         }
+                        Some(ImportTypeDefinition::Domain(carrier)) => {
+                            tasks.push(Task::EnterDomain {
+                                name: type_name.clone().into_boxed_str(),
+                                carrier,
+                                arguments: arguments.len(),
+                            });
+                            for argument in arguments.iter().rev() {
+                                tasks.push(Task::Visit(argument, substitutions.clone()));
+                            }
+                        }
                         Some(ImportTypeDefinition::Sum(_)) | None => {
                             tasks.push(Task::BuildOpaqueImport {
                                 name: type_name.clone().into_boxed_str(),
+                                definition: definition.clone(),
                                 arguments: arguments.len(),
                             });
                             for argument in arguments.iter().rev() {
@@ -543,12 +634,36 @@ impl Type {
                         value: Box::new(value),
                     });
                 }
-                Task::BuildOpaqueImport { name, arguments } => {
+                Task::BuildOpaqueImport {
+                    name,
+                    arguments,
+                    definition,
+                } => {
                     let arguments = drain_tail(&mut values, arguments);
                     values.push(Self::OpaqueImport {
                         import: aivi_hir::ImportId::from_raw(u32::MAX),
                         name,
                         arguments,
+                        definition,
+                    });
+                }
+                Task::EnterDomain {
+                    name,
+                    carrier,
+                    arguments,
+                } => {
+                    let arguments = drain_tail(&mut values, arguments);
+                    let substitutions = Rc::from(arguments.clone().into_boxed_slice());
+                    tasks.push(Task::WrapDomain { name, arguments });
+                    tasks.push(Task::Visit(carrier, substitutions));
+                }
+                Task::WrapDomain { name, arguments } => {
+                    let carrier = values.pop().expect("domain carrier should exist");
+                    values.push(Self::Domain {
+                        item: HirItemId::from_raw(u32::MAX),
+                        name,
+                        arguments,
+                        carrier: Some(Box::new(carrier)),
                     });
                 }
                 Task::EnterAlias { alias, arguments } => {
@@ -674,6 +789,47 @@ mod tests {
     use aivi_hir::{
         BuiltinType, GateType as HirGateType, ImportId, ImportTypeDefinition, ImportValueType,
     };
+
+    #[test]
+    fn imported_sum_keeps_unobserved_constructor_definitions() {
+        let definition = Some(Box::new(ImportTypeDefinition::Sum(vec![
+            aivi_hir::ImportSumVariant {
+                name: "Empty".into(),
+                fields: vec![],
+            },
+            aivi_hir::ImportSumVariant {
+                name: "Full".into(),
+                fields: vec![ImportValueType::Primitive(BuiltinType::Int)],
+            },
+        ])));
+        let gate = HirGateType::OpaqueImport {
+            import: ImportId::from_raw(0),
+            name: "Container".into(),
+            arguments: vec![],
+            definition: definition.clone(),
+        };
+        let Type::OpaqueImport {
+            definition: lowered,
+            ..
+        } = Type::lower(&gate)
+        else {
+            panic!("sum must retain its nominal type");
+        };
+        assert_eq!(lowered, definition);
+        let portable = ImportValueType::Named {
+            type_name: "Container".into(),
+            arguments: vec![],
+            definition: definition.clone(),
+        };
+        let Type::OpaqueImport {
+            definition: lowered,
+            ..
+        } = Type::lower_import(&portable)
+        else {
+            panic!("portable sum must retain its nominal type");
+        };
+        assert_eq!(lowered, definition);
+    }
 
     #[test]
     fn lower_hir_import_alias_substitutes_type_arguments() {

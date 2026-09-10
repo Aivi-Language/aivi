@@ -11,9 +11,8 @@ func notEq = x y => x == y
  F|> True
 
 type Eq A => A -> (List A) -> Bool
-func notContains = x items => items
-  |> filter (notEq x)
-  |> length == length items
+func notContains = x items =>
+    length (filter (notEq x) items) == length items
 
 type Set A -> Bool
 func isEmpty = s =>

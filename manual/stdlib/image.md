@@ -1,13 +1,6 @@
 # aivi.image
 
-Types for loaded images and image-loading errors.
-
-This module does not currently export a concrete image-loading function. Instead, it defines
-the value shapes used by image-loading integrations, including the source shape documented in
-the stdlib comments.
-
-Current status: this page describes a host-backed integration vocabulary. The target architecture is
-to treat image loading as another provider capability family with typed decode at the boundary.
+Application data types for image. This module supplies vocabulary only: it does not load data, watch sources, or implement the task aliases it defines.
 
 ## Import
 
@@ -32,7 +25,6 @@ use aivi.image (
 | `ImageMetadata` | record | Format, size, and alpha information without carrying the bytes |
 | `ImageTask A` | `Task ImageError A` | Generic image task alias |
 | `ImageData` | record | Loaded image bytes plus format and size |
-| `image.load` | `Signal (Result ImageError ImageData)` | Documented source shape for reactive image loading |
 
 ## Types
 
@@ -160,20 +152,3 @@ type ImageData -> Int
 func imageWidth = image =>
     image.size.width
 ```
-
-## Documented source shape
-
-The stdlib module comments document the following source pattern:
-
-```aivi
-use aivi.image (
-    ImageData
-    ImageError
-)
-
-@source image.load "/app/icons/logo.png"
-signal appLogo : Signal (Result ImageError ImageData)
-```
-
-The module comments also note a future one-shot task helper, but that function is not
-exported here today.

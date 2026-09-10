@@ -32,7 +32,7 @@ pub const TASK_COMPOSITION_EXPR_ID: KernelExprId = KernelExprId::from_raw(u32::M
 /// The executor holds [`RuntimeTaskPlan::Map`] / [`RuntimeTaskPlan::Chain`] variants whose
 /// `function` field is a [`RuntimeValue::Callable`]. Executing those variants requires
 /// calling back into the Cranelift evaluator.  Callers that have a live [`KernelEvaluator`]
-/// implement this trait and supply it to [`execute_runtime_task_plan_with_applier`].
+/// implement this trait and supply it to the runtime task-plan executor.
 pub trait TaskFunctionApplier {
     fn apply_task_function(
         &mut self,
@@ -3278,15 +3278,13 @@ fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
         | IntrinsicValue::TextParseInt
         | IntrinsicValue::TextFromBool
         | IntrinsicValue::TextParseBool
-        | IntrinsicValue::TextConcat
-        | IntrinsicValue::I18nTranslate => 1,
+        | IntrinsicValue::TextConcat => 1,
         IntrinsicValue::TextFind
         | IntrinsicValue::TextContains
         | IntrinsicValue::TextStartsWith
         | IntrinsicValue::TextEndsWith
         | IntrinsicValue::TextSplit
-        | IntrinsicValue::TextRepeat
-        | IntrinsicValue::I18nTranslatePlural => 2,
+        | IntrinsicValue::TextRepeat => 2,
         IntrinsicValue::TextSlice
         | IntrinsicValue::TextReplace
         | IntrinsicValue::TextReplaceAll => 3,
@@ -3308,7 +3306,6 @@ fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
         IntrinsicValue::TimeNowMs
         | IntrinsicValue::TimeMonotonicMs
         | IntrinsicValue::RandomFloat => 0,
-        IntrinsicValue::TimeFormat | IntrinsicValue::TimeParse => 2,
         // Env intrinsics
         IntrinsicValue::EnvGet | IntrinsicValue::EnvList => 1,
         // Log intrinsics
@@ -3336,7 +3333,9 @@ fn intrinsic_value_arity(value: IntrinsicValue) -> usize {
         IntrinsicValue::HttpPostJson => 2,
         IntrinsicValue::HttpPost | IntrinsicValue::HttpPut => 3,
         // BigInt intrinsics
-        IntrinsicValue::BigIntFromInt
+        IntrinsicValue::UrlParse
+        | IntrinsicValue::BigIntFactorial
+        | IntrinsicValue::BigIntFromInt
         | IntrinsicValue::BigIntFromText
         | IntrinsicValue::BigIntToInt
         | IntrinsicValue::BigIntToText

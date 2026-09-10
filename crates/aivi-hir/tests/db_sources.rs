@@ -1,4 +1,4 @@
-use aivi_base::SourceDatabase;
+use aivi_base::{DiagnosticCode, SourceDatabase};
 use aivi_hir::{
     Item, SourceLifecycleNodeOutcome, SourceProviderRef, ValidationMode,
     elaborate_source_lifecycles, lower_module, validate_module,
@@ -178,5 +178,34 @@ fn db_live_lifecycle_keeps_changed_refresh_and_active_when() {
             );
         }
         other => panic!("expected planned db.live lifecycle, found {other:?}"),
+    }
+}
+
+#[test]
+fn db_live_rejects_options_without_defined_semantics() {
+    for option_name in ["optimistic", "onRollback"] {
+        let source = DB_SOURCE_FIXTURE.replacen(
+            "refreshOn: users.changed,",
+            &format!("refreshOn: users.changed,\n    {option_name}: True,"),
+            1,
+        );
+        let mut sources = SourceDatabase::new();
+        let file_id = sources.add_file(format!("db-live-{option_name}.aivi"), source);
+        let parsed = parse_module(&sources[file_id]);
+        assert!(
+            !parsed.has_errors(),
+            "fixture should parse before contract validation: {:?}",
+            parsed.all_diagnostics().collect::<Vec<_>>()
+        );
+
+        let lowered = lower_module(&parsed.module);
+        assert!(
+            lowered.diagnostics().iter().any(|diagnostic| {
+                diagnostic.code == Some(DiagnosticCode::new("hir", "unknown-source-option"))
+                    && diagnostic.message.contains(option_name)
+            }),
+            "expected {option_name} to be rejected by the db.live contract, got {:?}",
+            lowered.diagnostics()
+        );
     }
 }

@@ -216,8 +216,6 @@ const stdlibSections: DocSection[] = [
     text: 'Desktop, UI & GNOME',
     collapsed: true,
     items: [
-      { text: 'Application Framework', link: '/stdlib/app' },
-      { text: 'Application Lifecycle', link: '/stdlib/lifecycle' },
       { text: 'XDG Directories', link: '/stdlib/xdg' },
       { text: 'Portals', link: '/stdlib/portal' },
       { text: 'D-Bus', link: '/stdlib/dbus' },
@@ -233,7 +231,6 @@ const stdlibSections: DocSection[] = [
       { text: 'CSS Classes', link: '/stdlib/styles' },
       { text: 'Images', link: '/stdlib/image' },
       { text: 'GResources', link: '/stdlib/gresource' },
-      { text: 'Internationalization', link: '/stdlib/i18n' },
     ],
   },
 ]

@@ -63,6 +63,13 @@ pub enum RuntimeSourceProvider {
 }
 
 impl RuntimeSourceProvider {
+    pub fn key(&self) -> &str {
+        match self {
+            Self::Builtin(provider) => provider.key(),
+            Self::Custom(key) => key,
+        }
+    }
+
     pub const fn builtin(provider: BuiltinSourceProvider) -> Self {
         Self::Builtin(provider)
     }

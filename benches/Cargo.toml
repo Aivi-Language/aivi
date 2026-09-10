@@ -14,7 +14,6 @@ aivi-lsp.workspace = true
 aivi-query.workspace = true
 aivi-runtime = { path = "../crates/aivi-runtime" }
 aivi-syntax.workspace = true
-tokio = { version = "1", features = ["rt"] }
 tower-lsp = "0.20"
 
 [dev-dependencies]

@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use aivi_base::{Diagnostic, DiagnosticCode, DiagnosticLabel, SourceSpan};
 use aivi_typing::BuiltinSourceProvider;
@@ -9,7 +9,7 @@ use crate::{
     ImportBindingResolution, ImportId, ImportValueType, IntrinsicValue, Item, ItemId, Module, Name,
     NamePath, NonEmpty, ProjectionBase, RecordExpr, RecordExprField, RecordFieldSurface,
     ResolutionState, SignalItem, SourceDecorator, SourceProviderRef, TermReference, TermResolution,
-    TypeKind, TypeResolution, ValueItem,
+    TypeKind, TypeResolution,
     custom_source_capabilities::{
         CustomSourceCapabilityKind, resolve_custom_source_capability_member,
     },
@@ -276,7 +276,7 @@ fn rewrite_capability_uses(
                     continue;
                 };
                 if let Some(body) =
-                    lower_value_capability_use(module, &value, handle, &invocation, diagnostics)
+                    lower_value_capability_use(module, handle, &invocation, diagnostics)
                 {
                     value_rewrites.push(ValueCapabilityRewrite { item_id, body })
                 }
@@ -289,6 +289,68 @@ fn rewrite_capability_uses(
     }
     for rewrite in value_rewrites {
         apply_value_rewrite(module, rewrite);
+    }
+    // Commands produce ordinary Task values, including inside functions and nested
+    // expressions. Rewrite parents first so complete argument lists retain provider options.
+    let mut expressions = BTreeSet::new();
+    let mut applied_callees = BTreeSet::new();
+    for (_, item) in module.items().iter() {
+        let roots = match item {
+            Item::Value(value) => vec![value.body],
+            Item::Function(function) => vec![function.body],
+            Item::Signal(signal) => signal.body.into_iter().collect(),
+            Item::Domain(domain) => domain
+                .members
+                .iter()
+                .filter_map(|member| member.body)
+                .collect(),
+            Item::Instance(instance) => instance.members.iter().map(|member| member.body).collect(),
+            _ => Vec::new(),
+        };
+        for root in roots {
+            crate::type_analysis::walk_expr_tree(module, root, |id, expr, _| {
+                expressions.insert(id);
+                if parse_capability_invocation(module, id, handles).is_some()
+                    && let ExprKind::Apply { callee, .. } = &expr.kind
+                {
+                    applied_callees.insert(*callee);
+                }
+            });
+        }
+    }
+    for expr_id in expressions
+        .into_iter()
+        .rev()
+        .filter(|id| !applied_callees.contains(id))
+    {
+        let Some(invocation) = parse_capability_invocation(module, expr_id, handles) else {
+            continue;
+        };
+        let Some(handle) = handles.get(&invocation.handle) else {
+            continue;
+        };
+        let is_command = match &handle.provider {
+            CapabilityHandleProvider::BuiltinFamily(family) => {
+                supports_builtin_value_member(*family, &invocation.member)
+            }
+            CapabilityHandleProvider::Custom(key) => {
+                resolve_custom_source_capability_member(module, key, &invocation.member)
+                    .is_some_and(|resolved| {
+                        matches!(resolved.kind, CustomSourceCapabilityKind::Command)
+                    })
+            }
+        };
+        if is_command
+            && let Some(replacement) =
+                lower_value_capability_use(module, handle, &invocation, diagnostics)
+        {
+            let replacement = module.exprs()[replacement].clone();
+            *module
+                .arenas
+                .exprs
+                .get_mut(expr_id)
+                .expect("existing capability expression") = replacement;
+        }
     }
 }
 
@@ -453,7 +515,6 @@ fn lower_signal_capability_use(
 
 fn lower_value_capability_use(
     module: &mut Module,
-    _value: &ValueItem,
     handle: &CapabilityHandleBinding,
     invocation: &CapabilityInvocation,
     diagnostics: &mut Vec<Diagnostic>,
@@ -966,17 +1027,7 @@ fn lower_builtin_signal_member(
                 options: handle.options,
             })
         }
-        BuiltinCapabilityFamily::Time => match invocation.member.as_str() {
-            "nowMs" => Some(SourceDecorator {
-                provider: Some(provider_name_path(
-                    invocation.span,
-                    BuiltinSourceProvider::TimeNowMs,
-                )),
-                arguments: inherited_arguments(handle, &invocation.arguments),
-                options: handle.options,
-            }),
-            _ => None,
-        },
+        BuiltinCapabilityFamily::Time => None,
         BuiltinCapabilityFamily::Api => {
             lower_api_signal_member(module, handle, invocation, diagnostics)
         }
@@ -1879,7 +1930,7 @@ fn supports_builtin_signal_member(family: BuiltinCapabilityFamily, member: &str)
         ),
         BuiltinCapabilityFamily::Dbus => matches!(member, "ownName" | "signal" | "method"),
         BuiltinCapabilityFamily::Imap => matches!(member, "connect" | "idle" | "fetchBody"),
-        BuiltinCapabilityFamily::Time => matches!(member, "nowMs"),
+        BuiltinCapabilityFamily::Time => false,
         BuiltinCapabilityFamily::Tray => matches!(member, "ownName" | "actions"),
         BuiltinCapabilityFamily::Notifications => matches!(member, "events"),
         BuiltinCapabilityFamily::Log

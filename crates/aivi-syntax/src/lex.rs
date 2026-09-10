@@ -103,8 +103,7 @@ impl TokenKind {
     pub const fn is_top_level_keyword(self) -> bool {
         matches!(
             self,
-            TokenKind::PatchKw
-                | TokenKind::TypeKw
+            TokenKind::TypeKw
                 | TokenKind::FuncKw
                 | TokenKind::ValueKw
                 | TokenKind::SignalKw

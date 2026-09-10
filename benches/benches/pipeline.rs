@@ -111,8 +111,12 @@ fn bench_incremental_queries(c: &mut Criterion) {
             open_workspace_reachability_program,
             |(db, entry)| {
                 let modules = reachable_workspace_hir_modules(&db, entry);
-                assert_eq!(modules.len(), 1);
-                assert_eq!(modules[0].name(), "shared.math");
+                let project_modules = modules
+                    .iter()
+                    .filter(|module| !module.name().starts_with("aivi."))
+                    .collect::<Vec<_>>();
+                assert_eq!(project_modules.len(), 1);
+                assert_eq!(project_modules[0].name(), "shared.math");
                 black_box(modules);
             },
             BatchSize::LargeInput,

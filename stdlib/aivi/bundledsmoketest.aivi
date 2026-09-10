@@ -243,7 +243,7 @@ value smoke_math_works : Task Text Bool = pure (absResult == 7 and clampResult =
 value smoke_list_works : Task Text Bool = pure (lenResult == 5 and doubled == [2, 4, 6, 8, 10])
 
 @test
-value smoke_option_works : Task Text Bool = pure (hasSome and not hasNone and gotten == 42)
+value smoke_option_works : Task Text Bool = pure (hasSome and hasNone and gotten == 42)
 
 @test
 value smoke_result_works : Task Text Bool = pure (okCheck and errCheck and withDef == 99)

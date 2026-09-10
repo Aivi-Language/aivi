@@ -25,7 +25,9 @@ directory. Language-server traffic and process failures are available in the
 | `AIVI: Show Output Channel` | Open the AIVI extension and server log. |
 | `AIVI: Format Document` | Format the active AIVI document. |
 | `AIVI: Check Current File` | Save and check the active file with a structured process task. |
-| `AIVI: Run Test` | Run the selected code-lens test, or prompt for a test value. |
+| `AIVI: Run Test` | Save workspace files, then run the selected code-lens test or prompt for a test value. |
+
+A failed or cancelled save aborts the command.
 
 `check` and `test` use `ProcessExecution`, so paths and test names are passed as
 literal process arguments rather than interpolated shell text. Code-lens
@@ -49,6 +51,19 @@ tracing is controlled by the `AIVI Trace` output channel's standard VS Code log
 level. If the executable cannot be found or startup times out, the extension
 keeps running, marks the status item as crashed, logs the failure, and offers to
 open `aivi.compiler.path`.
+
+## Scope and verification
+
+Project references, rename, and symbols include unopened `.aivi` files. Unsaved buffers take
+precedence over disk. Completion includes local parameters and case bindings; record-field
+suggestions require a compiler-resolved structural type. Rename rejects ambiguous targets,
+non-project/library definitions, aliases, record shorthands, and identifiers that could capture
+existing names. These conservative refusals prevent partial or source-damaging edits.
+
+`pnpm test` runs unit tests and a raw stdio LSP integration test. `pnpm test:host` launches the
+actual extension in an installed VS Code with a temporary project/profile, checking activation,
+completion, code lenses, save-before-task commands, and restart. It needs a desktop display;
+`AIVI_VSCODE_EXECUTABLE` can select the executable. Build `aivi` before running host tests.
 
 ## License
 

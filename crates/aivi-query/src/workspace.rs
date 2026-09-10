@@ -105,10 +105,10 @@ impl Workspace {
         // workspace and the bundled stdlib, the workspace file wins (intentional
         // user override). We emit a warning so the override is never silent.
         //
-        // TODO: On case-insensitive filesystems (macOS HFS+, Windows NTFS) a
-        // user directory `Aivi/` could collide with `aivi/` in ways this check
-        // doesn't catch.  Normalise the first segment to lowercase before
-        // comparing if case-insensitive FS support is needed in the future.
+        // Module identity is case-sensitive, including the reserved `aivi`
+        // namespace. Filesystems that fold path case are outside this resolver's
+        // supported contract; silently normalizing here would change language
+        // identity and make workspace overrides platform-dependent.
         let workspace_file = self.resolve_module_file_in_root(db, &self.root, module);
 
         if let Some(ref file) = workspace_file {

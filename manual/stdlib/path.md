@@ -23,12 +23,14 @@ use aivi.path (
 ### `Path`
 
 ```aivi
-type Path = Text
+use aivi.path (
+    Path
+    parse
+    toText
+)
 ```
 
-A nominal domain over `Text`, not a type alias. It is distinct from `Text`; the lexical
-intrinsics below still accept and return plain text. The domain declares members internally,
-but does not currently export a public parser or carrier conversion.
+`Path` is a nominal domain over `Text`. `parse : Text -> Result PathError Path` rejects NUL characters; it preserves the input and does not check filesystem existence or permissions. `toText : Path -> Text` explicitly unwraps it. The lexical intrinsics below accept and return plain text.
 
 ```aivi
 use aivi.path (Path)

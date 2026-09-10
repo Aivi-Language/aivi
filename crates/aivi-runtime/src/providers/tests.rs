@@ -1496,6 +1496,20 @@ signal snapshots : Signal (Result ImapError (List ImapSnapshot))
 }
 
 #[test]
+fn imap_tcp_connection_installs_read_and_write_deadlines() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("test listener should bind");
+    let address = listener
+        .local_addr()
+        .expect("listener address should exist");
+
+    let stream = connect_imap_tcp("127.0.0.1", address.port())
+        .expect("loopback IMAP connection should succeed");
+
+    assert_eq!(stream.read_timeout().unwrap(), Some(IMAP_SOCKET_TIMEOUT));
+    assert_eq!(stream.write_timeout().unwrap(), Some(IMAP_SOCKET_TIMEOUT));
+}
+
+#[test]
 fn db_live_source_executes_task_immediately_on_activation_even_with_debounce() {
     let instance = SourceInstanceId::from_raw(41);
     let (mut runtime, rows_signal, port) = db_live_test_runtime(instance);
@@ -1531,6 +1545,43 @@ fn db_live_source_executes_task_immediately_on_activation_even_with_debounce() {
     };
     assert_eq!(value.as_ref(), &RuntimeValue::Int(7));
     providers.suspend_active_provider(instance);
+}
+
+#[test]
+fn db_live_rejects_options_without_runtime_semantics() {
+    for option_name in ["optimistic", "onRollback"] {
+        let instance = SourceInstanceId::from_raw(44);
+        let (_, _, port) = db_live_test_runtime(instance);
+        let mut config = db_live_config(
+            instance,
+            RuntimeValue::Task(aivi_backend::RuntimeTaskPlan::Pure {
+                value: Box::new(RuntimeValue::ResultOk(Box::new(RuntimeValue::Int(7)))),
+            }),
+            None,
+        );
+        config.options = vec![EvaluatedSourceOption {
+            option_name: option_name.into(),
+            value: DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Bool(true)),
+        }]
+        .into_boxed_slice();
+
+        let error = SourceProviderManager::new()
+            .apply_actions(&[LinkedSourceLifecycleAction::Activate {
+                instance,
+                port,
+                config,
+            }])
+            .expect_err("unsupported db.live option must fail before a worker starts");
+
+        assert!(matches!(
+            error,
+            SourceProviderExecutionError::UnsupportedOption {
+                provider: BuiltinSourceProvider::DbLive,
+                option_name: ref rejected,
+                ..
+            } if rejected.as_ref() == option_name
+        ));
+    }
 }
 
 #[test]
@@ -1808,4 +1859,38 @@ fn portal_screenshot_bytes_reads_local_file_uris() {
         b"portal-bytes".as_slice()
     );
     let _ = fs::remove_file(path);
+}
+
+#[test]
+fn unknown_provider_fails_without_publishing_a_fake_value() {
+    let lowered = lower_text(
+        "unavailable-provider.aivi",
+        r#"
+@source unavailable.read
+signal missing : Signal Text
+"#,
+    );
+    let assembly = assemble_hir_runtime(lowered.hir.module()).unwrap();
+    let mut linked = link_backend_runtime(
+        assembly,
+        &lowered.core,
+        std::sync::Arc::new(lowered.backend.clone()),
+    )
+    .unwrap();
+    let signal = linked
+        .assembly()
+        .signal(item_id(lowered.hir.module(), "missing"))
+        .unwrap()
+        .signal();
+    let actions = linked.tick_with_source_lifecycle().unwrap();
+    let mut providers = SourceProviderManager::new();
+    let error = providers
+        .apply_actions(actions.source_actions())
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        SourceProviderExecutionError::UnavailableProvider { .. }
+    ));
+    linked.tick().unwrap();
+    assert_eq!(linked.runtime().current_value(signal).unwrap(), None);
 }

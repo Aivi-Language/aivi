@@ -57,7 +57,7 @@ impl Validator<'_> {
                     ImportBindingResolution::UnknownModule
                     | ImportBindingResolution::MissingExport
                     | ImportBindingResolution::Cycle,
-                    ImportBindingMetadata::Value { .. }
+                    ImportBindingMetadata::Value { .. } | ImportBindingMetadata::ConstrainedValue { .. }
                     | ImportBindingMetadata::IntrinsicValue { .. }
                     | ImportBindingMetadata::OpaqueValue
                     | ImportBindingMetadata::TypeConstructor { .. }
@@ -6156,9 +6156,7 @@ impl Validator<'_> {
                             | BuiltinSourceProvider::GtkWindowSize
                             | BuiltinSourceProvider::GtkWindowFocus
                             | BuiltinSourceProvider::ImapIdle
-                            | BuiltinSourceProvider::ImapFetchBody
-                            | BuiltinSourceProvider::SmtpSend
-                            | BuiltinSourceProvider::DbExec => {
+                            | BuiltinSourceProvider::ImapFetchBody => {
                                 "this built-in source should already have planned a wakeup; if you hit this diagnostic, keep the failing fixture because the recurrence wakeup adapter is inconsistent"
                             }
                             BuiltinSourceProvider::ProcessArgs
@@ -6170,8 +6168,7 @@ impl Validator<'_> {
                             | BuiltinSourceProvider::PathConfigHome
                             | BuiltinSourceProvider::PathDataHome
                             | BuiltinSourceProvider::PathCacheHome
-                            | BuiltinSourceProvider::PathTempDir
-                            | BuiltinSourceProvider::TimeNowMs => {
+                            | BuiltinSourceProvider::PathTempDir => {
                                 "this built-in source publishes one host-context snapshot when subscribed; add an explicit recurrence wakeup or switch to a non-recurrent signal"
                             }
                             BuiltinSourceProvider::DbConnect
@@ -7993,7 +7990,7 @@ impl Validator<'_> {
             ImportBindingMetadata::TypeConstructor { kind, .. } => Some(kind.clone()),
             ImportBindingMetadata::Domain { kind, .. } => Some(kind.clone()),
             ImportBindingMetadata::BuiltinType(builtin) => Some(builtin_kind(*builtin)),
-            ImportBindingMetadata::Value { .. }
+            ImportBindingMetadata::Value { .. } | ImportBindingMetadata::ConstrainedValue { .. }
             | ImportBindingMetadata::IntrinsicValue { .. }
             | ImportBindingMetadata::OpaqueValue
             | ImportBindingMetadata::AmbientValue { .. }

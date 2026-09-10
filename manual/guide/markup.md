@@ -1015,14 +1015,13 @@ value view =
 
 **Properties:** `html` (Text)
 
-### ViewStack + ViewSwitcher
+### ViewStack navigation
 
-`ViewStack` is the primary Adwaita page-navigation container. `ViewSwitcher` is a tab bar
-that presents the pages of a `ViewStack`. Since AIVI uses reactive state instead of
-cross-widget references, page selection on the stack is exposed as `visibleChildName`.
-The current bridge does not attach `ViewSwitcher` to a stack; an unbound switcher does
-not provide working page navigation. Use explicit controls that update the stack's
-selection signal until that connection is implemented.
+`ViewStack` is the primary Adwaita page-navigation container. Page selection is exposed as
+`visibleChildName`, so explicit controls can update the same signal without introducing mutable
+cross-widget references. The association-dependent `ViewSwitcher`, `ViewSwitcherBar`, and
+`ViewSwitcherTitle` widgets are intentionally not registered until AIVI has a typed widget-reference
+model; advertising an unbound switcher would create a control that cannot navigate.
 
 ```aivi
 signal activePage : Signal Text = "home"
@@ -1031,9 +1030,7 @@ value view =
     <Window title="App">
         <ToolbarView>
             <ToolbarView.top>
-                <HeaderBar>
-                    <ViewSwitcher policy="Wide" />
-                </HeaderBar>
+                <HeaderBar />
             </ToolbarView.top>
             <ViewStack visibleChildName={activePage}>
                 <ViewStack.pages>
@@ -1059,13 +1056,6 @@ value view =
 - `pages` — sequence of `ViewStackPage` wrappers. Set each wrapper's `name`, `title`,
   and `iconName`; the bridge uses those values when adding the page. The stack's
   `visibleChildName` selects a page by that name; it does not rename child widgets.
-
-**ViewSwitcher properties:**
-- `policy` (Text) — `"Narrow"` (icon-only) or `"Wide"` (icon + label); default `Narrow`
-
-> **Note:** ViewSwitcher does not automatically link to a ViewStack in AIVI's declarative
-> model. The example shows page metadata and stack selection, not a complete switcher
-> connection. A shared signal alone cannot create the missing GTK stack association.
 
 ### AlertDialog
 
@@ -1532,9 +1522,9 @@ events, and child slots, and `crates/aivi-gtk/src/host.rs` for their runtime wir
 | Area | Registered names |
 | --- | --- |
 | GTK controls and views | `InfoBar`, `LevelBar`, `LinkButton`, `Stack`, `StackSwitcher`, `StackSidebar`, `TreeExpander`, `GLArea` |
-| Adwaita controls and layout | `Breakpoint`, `ViewSwitcherBar`, `ViewSwitcherTitle`, `Avatar`, `Squeezer`, `Flap`, `ButtonContent`, `WindowTitle`, `MultiLayoutView`, `AdwDialog` |
+| Adwaita controls and layout | `Breakpoint`, `Avatar`, `Squeezer`, `Flap`, `ButtonContent`, `WindowTitle`, `MultiLayoutView`, `AdwDialog` |
 | Gestures and controllers | `GestureClick`, `GestureDrag`, `GestureSwipe`, `GestureLongPress`, `GestureRotate`, `GestureZoom`, `DragSource`, `DropTarget`, `ShortcutController` |
 | Styling | `CssProvider` |
 
-Do not infer an arbitrary GTK API from a widget's name. In particular, the `ViewSwitcher`
-family's registration does not supply the missing stack association described above.
+Do not infer an arbitrary GTK API from a widget's name. Association-dependent widgets are exposed
+only when the bridge can represent and execute their required relationship.

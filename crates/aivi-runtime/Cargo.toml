@@ -21,10 +21,10 @@ rayon = "1"
 url = "2.5"
 ureq = "3.4.0"
 fastrand = "2"
-base64 = "0.22"
-sha2 = "0.10"
+base64 = "0.23.1"
+sha2 = "0.11.0"
 imap = "2.4"
-mailparse = "0.15"
+mailparse = "0.17.0"
 native-tls = "0.2"
 secret-service = { version = "5.1.0", features = ["rt-async-io-crypto-rust"] }
 

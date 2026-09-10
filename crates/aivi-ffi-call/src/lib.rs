@@ -382,6 +382,14 @@ impl FunctionCaller {
         signature
     }
 
+    /// Calls `function` using this caller's libffi signature and the already-marshaled arguments.
+    ///
+    /// # Safety
+    ///
+    /// `function` must be non-null, remain executable for the duration of the call, and use the
+    /// exact ABI represented by `self.signature`. Every element of `owned_args` must match the
+    /// corresponding signature entry. The invoked machine code must uphold Rust memory safety for
+    /// every pointer argument and returned pointer.
     unsafe fn call_code_ptr(
         &self,
         function: *const u8,
@@ -1309,6 +1317,13 @@ fn read_marshaled_map_view_from<'a>(
     })
 }
 
+/// Reads a little-endian `u64` byte length followed by that many payload bytes.
+///
+/// # Safety
+///
+/// `pointer` must be null or point to a live, initialized allocation containing the complete
+/// length prefix and the number of bytes declared by it. The allocation must remain immutable and
+/// readable for the entire caller-selected lifetime `'a`.
 unsafe fn read_len_prefixed_bytes<'a>(pointer: *const u8) -> Option<&'a [u8]> {
     if pointer.is_null() {
         return None;
@@ -1325,6 +1340,12 @@ unsafe fn read_len_prefixed_bytes<'a>(pointer: *const u8) -> Option<&'a [u8]> {
     Some(unsafe { slice::from_raw_parts(data_pointer, len) })
 }
 
+/// Copies exactly `len` bytes from a raw ABI pointer into owned storage.
+///
+/// # Safety
+///
+/// `pointer` must be null or point to at least `len` live, initialized, readable bytes. The source
+/// allocation must not be concurrently mutated for the duration of the copy.
 unsafe fn read_exact_bytes(pointer: *const u8, len: usize) -> Option<Box<[u8]>> {
     if pointer.is_null() || len > isize::MAX as usize {
         return None;
@@ -1338,9 +1359,17 @@ unsafe fn read_exact_bytes(pointer: *const u8, len: usize) -> Option<Box<[u8]>> 
     Some(bytes)
 }
 
+/// Borrows a sequence encoded as count, element size, and contiguous element bytes.
+///
+/// # Safety
+///
+/// `pointer` must be null or point to a live, initialized allocation containing the full sequence
+/// header and `count * element_size` bytes described by that header. The allocation must remain
+/// immutable and readable for the entire caller-selected lifetime `'a`.
 unsafe fn read_marshaled_sequence_view<'a>(
     pointer: *const u8,
 ) -> Option<MarshaledSequenceView<'a>> {
+    // SAFETY: the function contract requires a readable sequence header at `pointer`.
     let header = unsafe { read_exact_bytes(pointer, SEQUENCE_HEADER_BYTES) }?;
     let count = usize::try_from(u64::from_le_bytes(header[..8].try_into().ok()?)).ok()?;
     let element_size = usize::try_from(u64::from_le_bytes(header[8..16].try_into().ok()?)).ok()?;

@@ -668,31 +668,10 @@ impl GateType {
                     .collect();
                 Some(GateType::Record(lowered?))
             }
-            // Named references: produce a sentinel OpaqueImport keyed by name so that
-            // same_shape_inner can match via named_type_parts even without a real ImportId.
-            ImportValueType::Named {
-                type_name,
-                arguments: type_args,
-                ..
-            } => {
-                let lowered_args: Vec<GateType> = type_args
-                    .iter()
-                    .map(|a| {
-                        Self::expand_import_alias_type(a, arguments).unwrap_or_else(|| {
-                            GateType::OpaqueImport {
-                                import: ImportId::from_raw(u32::MAX),
-                                name: String::new(),
-                                arguments: Vec::new(),
-                                definition: None,
-                            }
-                        })
-                    })
-                    .collect();
+            ImportValueType::Named { type_name, arguments: type_args, definition } => {
+                let arguments = type_args.iter().map(|ty| Self::expand_import_alias_type(ty, arguments)).collect::<Option<Vec<_>>>()?;
                 Some(GateType::OpaqueImport {
-                    import: ImportId::from_raw(u32::MAX),
-                    name: type_name.clone(),
-                    arguments: lowered_args,
-                    definition: None,
+                    import: ImportId::from_raw(u32::MAX), name: type_name.clone(), arguments, definition: definition.clone(),
                 })
             }
         }
@@ -704,6 +683,39 @@ impl GateType {
         left_to_right: &mut HashMap<TypeParameterId, TypeParameterId>,
         right_to_left: &mut HashMap<TypeParameterId, TypeParameterId>,
     ) -> bool {
+        let same_named_constructor = matches!((left.named_type_parts(), right.named_type_parts()), (Some((left, _)), Some((right, _))) if left == right);
+        if !same_named_constructor {
+                // Expand transparent imported type aliases (e.g. `type Envelope A = A`)
+                // so that `Envelope Text` is recognised as the same shape as `Text`.
+                if let Self::OpaqueImport {
+                    arguments,
+                    definition: Some(def),
+                    ..
+                } = left
+                    && let ImportTypeDefinition::Alias(alias) = def.as_ref()
+                        && let Some(expanded) = Self::expand_import_alias_type(alias, arguments) {
+                            return Self::same_shape_inner(
+                                &expanded,
+                                right,
+                                left_to_right,
+                                right_to_left,
+                            );
+                        }
+                if let Self::OpaqueImport {
+                    arguments,
+                    definition: Some(def),
+                    ..
+                } = right
+                    && let ImportTypeDefinition::Alias(alias) = def.as_ref()
+                        && let Some(expanded) = Self::expand_import_alias_type(alias, arguments) {
+                            return Self::same_shape_inner(
+                                left,
+                                &expanded,
+                                left_to_right,
+                                right_to_left,
+                            );
+                        }
+        }
         match (left, right) {
             (Self::Primitive(left), Self::Primitive(right)) => left == right,
             (
@@ -903,36 +915,6 @@ impl GateType {
                     {
                         return true;
                     }
-                // Expand transparent imported type aliases (e.g. `type Envelope A = A`)
-                // so that `Envelope Text` is recognised as the same shape as `Text`.
-                if let Self::OpaqueImport {
-                    arguments,
-                    definition: Some(def),
-                    ..
-                } = left
-                    && let ImportTypeDefinition::Alias(alias) = def.as_ref()
-                        && let Some(expanded) = Self::expand_import_alias_type(alias, arguments) {
-                            return Self::same_shape_inner(
-                                &expanded,
-                                right,
-                                left_to_right,
-                                right_to_left,
-                            );
-                        }
-                if let Self::OpaqueImport {
-                    arguments,
-                    definition: Some(def),
-                    ..
-                } = right
-                    && let ImportTypeDefinition::Alias(alias) = def.as_ref()
-                        && let Some(expanded) = Self::expand_import_alias_type(alias, arguments) {
-                            return Self::same_shape_inner(
-                                left,
-                                &expanded,
-                                left_to_right,
-                                right_to_left,
-                            );
-                        }
                 false
             }
         }

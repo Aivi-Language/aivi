@@ -67,7 +67,7 @@ impl BackendLinkedRuntime {
         self.source_bindings.values()
     }
 
-    /// Build a [`RuntimeSourceMap`] for error rendering, enriched with
+    /// Build a [`crate::RuntimeSourceMap`] for error rendering, enriched with
     /// pipeline IDs from the linked runtime.
     pub fn build_source_map(&self) -> crate::source_map::RuntimeSourceMap {
         let mut map = crate::source_map::RuntimeSourceMap::from_assembly(&self.assembly);

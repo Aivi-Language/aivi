@@ -54,7 +54,7 @@ export function createClient(
     outputChannel,
     traceOutputChannel,
     revealOutputChannelOn: RevealOutputChannelOn.Never,
-    markdown: { isTrusted: true, supportHtml: false },
+    markdown: { isTrusted: false, supportHtml: false },
   };
 
   return new LanguageClient(

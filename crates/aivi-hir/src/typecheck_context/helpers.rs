@@ -659,7 +659,7 @@ pub fn case_pattern_field_types(
             // type matches the subject's OpaqueImport name.
             let binding = module.imports().get(*import_id)?;
             let ty_owned: ImportValueType = match &binding.metadata {
-                ImportBindingMetadata::Value { ty } => ty.clone(),
+                ImportBindingMetadata::Value { ty } | ImportBindingMetadata::ConstrainedValue { ty, .. } => ty.clone(),
                 ImportBindingMetadata::IntrinsicValue { ty, .. } => ty.clone(),
                 _ => return None,
             };
@@ -905,7 +905,7 @@ pub(crate) fn lower_import_value_type_with_substitutions(
                 Some(ImportTypeDefinition::Alias(alias)) => {
                     lower_import_value_type_with_substitutions(module, alias, &lowered_args)
                 }
-                Some(ImportTypeDefinition::Sum(_)) | None => {
+                Some(ImportTypeDefinition::Sum(_) | ImportTypeDefinition::Domain(_)) | None => {
                     let import_id = module
                         .imports()
                         .iter()
@@ -974,6 +974,7 @@ pub fn opaque_type_variants(module: &Module, subject: &GateType) -> Option<Vec<O
             arguments,
             ..
         } => match definition.as_ref() {
+            ImportTypeDefinition::Domain(_) => None,
             ImportTypeDefinition::Alias(alias) => {
                 opaque_type_variants(
                     module,

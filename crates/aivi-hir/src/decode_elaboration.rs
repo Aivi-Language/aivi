@@ -947,7 +947,7 @@ impl<'a> DecodeTypeLowerer<'a> {
                 ..
             } => {
                 self.imports_in_progress.push(import_id);
-                let lowered = self.lower_import_type_definition(definition, arguments, span);
+                let lowered = self.lower_import_type_definition(&name, definition, arguments, span);
                 let popped = self.imports_in_progress.pop();
                 debug_assert_eq!(popped, Some(import_id));
                 if let (Ok(ty), Some(constructors), ImportTypeDefinition::Sum(_)) =
@@ -978,6 +978,7 @@ impl<'a> DecodeTypeLowerer<'a> {
             }
             ImportBindingMetadata::Unknown
             | ImportBindingMetadata::Value { .. }
+            | ImportBindingMetadata::ConstrainedValue { .. }
             | ImportBindingMetadata::IntrinsicValue { .. }
             | ImportBindingMetadata::OpaqueValue
             | ImportBindingMetadata::AmbientValue { .. }
@@ -995,11 +996,16 @@ impl<'a> DecodeTypeLowerer<'a> {
 
     fn lower_import_type_definition(
         &mut self,
+        name: &str,
         definition: &ImportTypeDefinition,
         arguments: &[StructuralTypeId],
         span: SourceSpan,
     ) -> Result<StructuralTypeId, DecodeTypeLoweringError> {
         match definition {
+            ImportTypeDefinition::Domain(carrier) => {
+                let carrier = self.lower_import_value_type(carrier, arguments, span)?;
+                Ok(self.types.domain(name.to_owned(), carrier))
+            }
             ImportTypeDefinition::Alias(alias) => {
                 self.lower_import_value_type(alias, arguments, span)
             }
@@ -1140,6 +1146,7 @@ impl<'a> DecodeTypeLowerer<'a> {
                     } else {
                         self.inline_named_in_progress.push(type_name.clone());
                         let lowered = self.lower_import_type_definition(
+                            type_name,
                             definition.as_ref(),
                             &lowered_arguments,
                             span,

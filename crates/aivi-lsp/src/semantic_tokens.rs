@@ -192,8 +192,7 @@ pub fn semantic_tokens_full(
 ) -> Option<SemanticTokensResult> {
     let uri = &params.text_document.uri;
     let file = state.file(uri)?;
-    let source = file.source(&state.db);
-    let data = encode_tokens(&collect_absolute_tokens(&source, None));
+    let data = encode_tokens(&collect_document_tokens(&state, file, None));
     let result_id = state.semantic_tokens.record(uri, &data);
     Some(SemanticTokensResult::Tokens(SemanticTokens {
         result_id: Some(result_id),
@@ -207,8 +206,7 @@ pub fn semantic_tokens_full_delta(
 ) -> Option<SemanticTokensFullDeltaResult> {
     let uri = &params.text_document.uri;
     let file = state.file(uri)?;
-    let source = file.source(&state.db);
-    let data = encode_tokens(&collect_absolute_tokens(&source, None));
+    let data = encode_tokens(&collect_document_tokens(&state, file, None));
     let previous = state.semantic_tokens.get(uri, &params.previous_result_id);
     let result_id = state.semantic_tokens.record(uri, &data);
 
@@ -240,11 +238,61 @@ pub fn semantic_tokens_range(
     let file = state.file(uri)?;
     let source = file.source(&state.db);
     validate_range(&source, params.range)?;
-    let data = encode_tokens(&collect_absolute_tokens(&source, Some(params.range)));
+    let data = encode_tokens(&collect_document_tokens(&state, file, Some(params.range)));
     Some(SemanticTokensRangeResult::Tokens(SemanticTokens {
         result_id: None,
         data,
     }))
+}
+
+fn collect_document_tokens(
+    state: &ServerState,
+    file: aivi_query::SourceFile,
+    range: Option<Range>,
+) -> Vec<AbsoluteSemanticToken> {
+    use aivi_hir::LspSymbolKind;
+    let source = file.source(&state.db);
+    let navigation = crate::navigation::NavigationAnalysis::load(&state.db, file);
+    let mut tokens = collect_absolute_tokens(&source, range)
+        .into_iter()
+        .map(|token| ((token.line, token.start), token))
+        .collect::<std::collections::BTreeMap<_, _>>();
+    for (target, location) in navigation.reference_entries(&state.db) {
+        let r = location.range;
+        if r.start.line != r.end.line || range.is_some_and(|range| !ranges_overlap(range, r)) {
+            continue;
+        }
+        let Some(symbol) = target.find_symbol_at_target(&state.db) else {
+            continue;
+        };
+        if symbol.selection_span != target.span {
+            continue;
+        }
+        let kind = match symbol.kind {
+            LspSymbolKind::Function | LspSymbolKind::Method => 1,
+            LspSymbolKind::Struct
+            | LspSymbolKind::Enum
+            | LspSymbolKind::Class
+            | LspSymbolKind::Interface
+            | LspSymbolKind::TypeParameter => 0,
+            LspSymbolKind::Variable
+            | LspSymbolKind::Constant
+            | LspSymbolKind::Field
+            | LspSymbolKind::Property => 2,
+            _ => continue,
+        };
+        tokens.insert(
+            (r.start.line, r.start.character),
+            AbsoluteSemanticToken {
+                line: r.start.line,
+                start: r.start.character,
+                length: r.end.character - r.start.character,
+                token_type: kind,
+                token_modifiers_bitset: 0,
+            },
+        );
+    }
+    tokens.into_values().collect()
 }
 
 fn collect_absolute_tokens(

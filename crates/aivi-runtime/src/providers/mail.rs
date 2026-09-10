@@ -1072,6 +1072,8 @@ fn imap_highest_uid(account: &ImapAccountConfig, mailbox: &str) -> Result<Option
 trait ImapIo: Read + Write + Send {}
 impl<T: Read + Write + Send> ImapIo for T {}
 
+const IMAP_SOCKET_TIMEOUT: Duration = Duration::from_secs(30);
+
 struct Xoauth2Authenticator {
     payload: Box<str>,
 }
@@ -1092,15 +1094,7 @@ fn open_imap_session(
             "STARTTLS-backed GOA IMAP accounts are not executed by this runtime slice yet".into(),
         );
     }
-    let tcp = TcpStream::connect((account.host.as_ref(), account.port)).map_err(|error| {
-        format!(
-            "failed to connect to {}:{}: {error}",
-            account.host, account.port
-        )
-        .into_boxed_str()
-    })?;
-    tcp.set_read_timeout(Some(Duration::from_secs(30))).ok();
-    tcp.set_write_timeout(Some(Duration::from_secs(30))).ok();
+    let tcp = connect_imap_tcp(account.host.as_ref(), account.port)?;
     let client = if account.use_ssl {
         let tls = TlsConnector::builder()
             .build()
@@ -1134,6 +1128,42 @@ fn open_imap_session(
                 })
         }
     }
+}
+
+fn connect_imap_tcp(host: &str, port: u16) -> Result<TcpStream, Box<str>> {
+    let deadline = Instant::now() + IMAP_SOCKET_TIMEOUT;
+    let addresses = std::net::ToSocketAddrs::to_socket_addrs(&(host, port)).map_err(|error| {
+        format!("failed to resolve IMAP host {host}:{port}: {error}").into_boxed_str()
+    })?;
+    let mut last_error = None;
+    for address in addresses {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        match TcpStream::connect_timeout(&address, remaining) {
+            Ok(stream) => {
+                configure_imap_socket(&stream, IMAP_SOCKET_TIMEOUT)?;
+                return Ok(stream);
+            }
+            Err(error) => last_error = Some(error),
+        }
+    }
+
+    let detail = last_error
+        .map(|error| error.to_string())
+        .unwrap_or_else(|| "no address completed within the connection deadline".to_owned());
+    Err(format!("failed to connect to {host}:{port}: {detail}").into_boxed_str())
+}
+
+fn configure_imap_socket(stream: &TcpStream, timeout: Duration) -> Result<(), Box<str>> {
+    stream
+        .set_read_timeout(Some(timeout))
+        .map_err(|error| format!("failed to configure IMAP read timeout: {error}").into_boxed_str())?;
+    stream.set_write_timeout(Some(timeout)).map_err(|error| {
+        format!("failed to configure IMAP write timeout: {error}").into_boxed_str()
+    })?;
+    Ok(())
 }
 
 fn imap_flag_external(flag: &imap::types::Flag<'_>) -> Option<ExternalSourceValue> {

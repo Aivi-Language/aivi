@@ -160,7 +160,10 @@ fn collect_exported_items(module: &Module) -> HashSet<ItemId> {
 }
 
 fn skip_unused_diagnostic(module: &Module, item_id: ItemId) -> bool {
-    if item_has_internal_name(module, item_id) {
+    // Runnable task and GTK entry values need no lexical caller.
+    if item_name_and_span(module, item_id).is_some_and(|(name, _)| name == "main")
+        || item_has_internal_name(module, item_id)
+    {
         return true;
     }
     module.items()[item_id]

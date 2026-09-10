@@ -8,7 +8,7 @@ impl<'a> RuntimeFragmentLowerer<'a> {
         // Ambient prelude items are elaborated separately; merge their results so
         // runtime fragments that reference ambient functions can lower them.
         let ambient_report = elaborate_ambient_items(hir);
-        let (ambient_items, ambient_domain_members, _) = ambient_report.into_parts();
+        let (ambient_items, ambient_domain_members, ambient_instance_members) = ambient_report.into_parts();
         for item in ambient_items {
             report_by_owner.entry(item.owner).or_insert(item);
         }
@@ -34,6 +34,7 @@ impl<'a> RuntimeFragmentLowerer<'a> {
         }
         let instance_member_reports = instance_members
             .into_iter()
+            .chain(ambient_instance_members)
             .map(|item| {
                 (
                     InstanceMemberKey {
@@ -68,10 +69,13 @@ impl<'a> RuntimeFragmentLowerer<'a> {
     ) -> Result<Self, LoweringErrors> {
         let mut lowerer = Self::new(hir, fragment);
         lowerer.lowerer.ws_origin_base = lowerer.lowerer.next_synthetic_item_origin_raw;
-        for (name, ws_hir) in workspace_hirs {
-            lowerer.lowerer.compile_workspace_module(name, ws_hir)?;
+        lowerer.lowerer.next_synthetic_item_origin_raw = workspace_origin_ranges(hir, workspace_hirs)?.1;
+        let roots = runtime_fragment_included_items(hir, fragment);
+        let selected = select_workspace_items(hir, workspace_hirs, &roots);
+        for ((name, ws_hir), items) in workspace_hirs.iter().zip(&selected[1..]) {
+            lowerer.lowerer.compile_workspace_module(name, ws_hir, Some(items))?;
         }
-        lowerer.lowerer.next_synthetic_item_origin_raw = lowerer.lowerer.ws_origin_base;
+        lowerer.lowerer.register_imported_type_origins();
         Ok(lowerer)
     }
 
@@ -451,7 +455,7 @@ impl<'a> RuntimeFragmentItemCollector<'a> {
             items.into_iter().map(|item| (item.owner, item)).collect();
         // Include ambient prelude items so fragment dependency collection can
         // transitively walk through ambient function bodies.
-        let (ambient_items, ambient_domain_members, _) = elaborate_ambient_items(hir).into_parts();
+        let (ambient_items, ambient_domain_members, ambient_instance_members) = elaborate_ambient_items(hir).into_parts();
         for item in ambient_items {
             report_by_owner.entry(item.owner).or_insert(item);
         }
@@ -477,6 +481,7 @@ impl<'a> RuntimeFragmentItemCollector<'a> {
         }
         let instance_member_reports = instance_members
             .into_iter()
+            .chain(ambient_instance_members)
             .map(|item| {
                 (
                     InstanceMemberKey {
@@ -652,12 +657,14 @@ impl<'a> RuntimeFragmentItemCollector<'a> {
 
 #[derive(Default)]
 struct HirDependencies {
+    imports: Vec<ImportId>,
     items: Vec<HirItemId>,
     domain_members: Vec<DomainMemberKey>,
     instance_members: Vec<InstanceMemberKey>,
 }
 
 fn referenced_hir_dependencies(root: &GateRuntimeExpr) -> HirDependencies {
+    let mut seen_imports = HashSet::new();
     let mut seen_items = HashSet::new();
     let mut seen_domain_members = HashSet::new();
     let mut seen_instance_members = HashSet::new();
@@ -673,8 +680,8 @@ fn referenced_hir_dependencies(root: &GateRuntimeExpr) -> HirDependencies {
             | GateRuntimeExprKind::Reference(GateRuntimeReference::Local(_))
             | GateRuntimeExprKind::Reference(GateRuntimeReference::Builtin(_))
             | GateRuntimeExprKind::Reference(GateRuntimeReference::IntrinsicValue(_))
-            | GateRuntimeExprKind::Reference(GateRuntimeReference::Import(_))
             | GateRuntimeExprKind::Reference(GateRuntimeReference::SumConstructor(_)) => {}
+            GateRuntimeExprKind::Reference(GateRuntimeReference::Import(import)) => { seen_imports.insert(*import); }
             GateRuntimeExprKind::Reference(GateRuntimeReference::Item(item)) => {
                 seen_items.insert(*item);
             }
@@ -685,15 +692,12 @@ fn referenced_hir_dependencies(root: &GateRuntimeExpr) -> HirDependencies {
                 });
             }
             GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(dispatch)) => {
-                if let aivi_hir::ClassMemberImplementation::SameModuleInstance {
-                    instance,
-                    member_index,
-                } = dispatch.implementation
-                {
-                    seen_instance_members.insert(InstanceMemberKey {
-                        instance,
-                        member_index,
-                    });
+                match dispatch.implementation {
+                    aivi_hir::ClassMemberImplementation::SameModuleInstance { instance, member_index } => {
+                        seen_instance_members.insert(InstanceMemberKey { instance, member_index });
+                    }
+                    aivi_hir::ClassMemberImplementation::ImportedInstance { import } => { seen_imports.insert(import); }
+                    aivi_hir::ClassMemberImplementation::Builtin => {}
                 }
             }
             GateRuntimeExprKind::Text(text) => {
@@ -767,9 +771,111 @@ fn referenced_hir_dependencies(root: &GateRuntimeExpr) -> HirDependencies {
     domain_members.sort();
     let mut instance_members = seen_instance_members.into_iter().collect::<Vec<_>>();
     instance_members.sort();
+    let mut imports = seen_imports.into_iter().collect::<Vec<_>>();
+    imports.sort_by_key(|import| import.as_raw());
     HirDependencies {
+        imports,
         items,
         domain_members,
         instance_members,
     }
+}
+/// Select bundled implementations through resolved references. Hoisting makes names
+/// available; it must not make every library body an execution dependency.
+fn select_workspace_items(
+    entry: &aivi_hir::Module,
+    workspace: &[(&str, &aivi_hir::Module)],
+    roots: &HashSet<HirItemId>,
+) -> Vec<HashSet<HirItemId>> {
+    enum Pending { Item(usize, HirItemId), Import(usize, ImportId) }
+    let modules = std::iter::once(entry).chain(workspace.iter().map(|(_, hir)| *hir)).collect::<Vec<_>>();
+    let module_indices = workspace.iter().enumerate().map(|(index, (name, _))| (*name, index + 1)).collect::<HashMap<_, _>>();
+    let import_maps = modules.iter().map(|hir| ModuleLowerer::make_import_to_module_map(hir)).collect::<Vec<_>>();
+    let mut reports = (0..modules.len()).map(|_| None).collect::<Vec<Option<HashMap<HirItemId, Vec<HirDependencies>>>>>();
+    let mut names = Vec::new();
+    for hir in &modules {
+        names.push(hir.items().iter().filter_map(|(id, item)| {
+            let name = match item {
+                HirItem::Function(item) => item.name.text(),
+                HirItem::Value(item) => item.name.text(),
+                HirItem::Signal(item) => item.name.text(),
+                HirItem::Domain(item) => item.name.text(),
+                _ => return None,
+            };
+            Some((name, id))
+        }).collect::<HashMap<_, _>>());
+    }
+    let mut selected = vec![HashSet::new(); modules.len()];
+    let mut visited_imports = HashSet::new();
+    let mut work = roots.iter().map(|id| Pending::Item(0, *id)).collect::<Vec<_>>();
+    // Application modules retain their source/markup lifecycle roots.
+    for (index, (name, hir)) in workspace.iter().enumerate() {
+        if !name.starts_with("aivi.") && *name != "aivi" {
+            work.extend(hir.items().iter().map(|(id, _)| Pending::Item(index + 1, id)));
+        }
+    }
+    while let Some(pending) = work.pop() {
+        match pending {
+            Pending::Item(index, id) => {
+                if !selected[index].insert(id) { continue; }
+                let report = reports[index].get_or_insert_with(|| workspace_item_dependencies(modules[index]));
+                if let Some(deps) = report.get(&id) {
+                    for dep in deps {
+                        work.extend(dep.items.iter().map(|id| Pending::Item(index, *id)));
+                        work.extend(dep.domain_members.iter().map(|key| Pending::Item(index, key.domain)));
+                        work.extend(dep.instance_members.iter().map(|key| Pending::Item(index, key.instance)));
+                        work.extend(dep.imports.iter().map(|id| Pending::Import(index, *id)));
+                    }
+                }
+            }
+            Pending::Import(index, id) => {
+                if !visited_imports.insert((index, id)) { continue; }
+                let Some(binding) = modules[index].imports().get(id) else { continue; };
+                let Some(source) = binding.source_module.as_deref().or_else(|| import_maps[index].get(&id).map(|name| name.as_ref())) else { continue; };
+                let Some(&target) = module_indices.get(source) else { continue; };
+                let name = workspace_import_cache_key(binding);
+                if let Some(&item) = names[target].get(name) {
+                    work.push(Pending::Item(target, item));
+                } else if let ImportBindingMetadata::InstanceMember { class_name, member_name, subject, .. } = &binding.metadata {
+                    for (owner, item) in modules[target].items().iter() {
+                        let HirItem::Instance(instance) = item else { continue; };
+                        if instance.class.path.segments().last().text() == class_name.as_ref()
+                            && instance.arguments.iter().next().and_then(|ty| workspace_instance_subject_label(modules[target], *ty)).as_deref() == Some(subject.as_ref())
+                            && instance.members.iter().any(|member| member.name.text() == member_name.as_ref())
+                        { work.push(Pending::Item(target, owner)); }
+                    }
+                } else if let ImportBindingMetadata::DomainSuffix { domain_name, .. } = &binding.metadata {
+                    if let Some(&item) = names[target].get(domain_name.as_ref()) { work.push(Pending::Item(target, item)); }
+                } else {
+                    for (import, candidate) in modules[target].imports().iter() {
+                        if candidate.local_name.text() == name { work.push(Pending::Import(target, import)); }
+                    }
+                }
+            }
+        }
+    }
+    selected
+}
+
+fn workspace_item_dependencies(hir: &aivi_hir::Module) -> HashMap<HirItemId, Vec<HirDependencies>> {
+        let mut deps: HashMap<HirItemId, Vec<HirDependencies>> = HashMap::new();
+        for report in [elaborate_general_expressions(hir), elaborate_ambient_items(hir)] {
+            let (items, domains, instances) = report.into_parts();
+            for item in items {
+                if let GeneralExprOutcome::Lowered(body) = item.outcome {
+                    deps.entry(item.owner).or_default().push(referenced_hir_dependencies(&body));
+                }
+            }
+            for item in domains {
+                if let GeneralExprOutcome::Lowered(body) = item.outcome {
+                    deps.entry(item.domain_owner).or_default().push(referenced_hir_dependencies(&body));
+                }
+            }
+            for item in instances {
+                if let GeneralExprOutcome::Lowered(body) = item.outcome {
+                    deps.entry(item.instance_owner).or_default().push(referenced_hir_dependencies(&body));
+                }
+            }
+        }
+    deps
 }

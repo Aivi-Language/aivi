@@ -4943,8 +4943,36 @@ impl<'a> Lowerer<'a> {
                 ImportBindingResolution::Cycle => continue,
             }
 
+            // A same-named sum constructor occupies the term namespace while
+            // its type occupies the type namespace (for example Date).
+            if let ImportBindingMetadata::TypeConstructor {
+                kind, definition: Some(crate::ImportTypeDefinition::Sum(variants)), ..
+            } = &import.metadata
+                && let Some(variant) = variants.iter().find(|variant| variant.name.as_ref() == import.imported_name.text())
+            {
+                let mut arity = 0;
+                let mut result_kind = kind;
+                while let aivi_typing::Kind::Arrow(_, result) = result_kind {
+                    arity += 1;
+                    result_kind = result;
+                }
+                let mut ty = ImportValueType::Named {
+                    type_name: import.imported_name.text().to_owned(),
+                    arguments: (0..arity).map(|index| ImportValueType::TypeVariable { index, name: format!("T{index}") }).collect(),
+                    definition: Some(Box::new(crate::ImportTypeDefinition::Sum(variants.clone()))),
+                };
+                for field in variant.fields.iter().rev() {
+                    ty = ImportValueType::Arrow { parameter: Box::new(field.clone()), result: Box::new(ty) };
+                }
+                let mut constructor = import.clone();
+                constructor.metadata = ImportBindingMetadata::Value { ty };
+                constructor.source_module = Some(module_name.clone().into());
+                let constructor_id = self.alloc_import(constructor);
+                insert_site(&mut namespaces.term_imports, import.local_name.text(), constructor_id, import.span);
+            }
+
             match import.metadata.clone() {
-                ImportBindingMetadata::Value { .. }
+                ImportBindingMetadata::Value { .. } | ImportBindingMetadata::ConstrainedValue { .. }
                 | ImportBindingMetadata::IntrinsicValue { .. }
                 | ImportBindingMetadata::OpaqueValue
                 | ImportBindingMetadata::AmbientValue { .. }

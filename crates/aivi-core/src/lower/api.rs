@@ -353,40 +353,43 @@ pub fn lower_runtime_module_with_workspace<'a>(
         .copied()
         .filter(|item_id| !is_markup_value(hir, *item_id))
         .collect::<HashSet<_>>();
-    let mut lowerer = ModuleLowerer::new_internal(hir, Some(included_items));
-    // Workspace module origins must not overlap with the entry module's origin range:
-    //   [0, hir_item_count)                 — entry module real item origins
-    //   [hir_item_count, next_synthetic)     — entry module signal import stub origins
-    //   [next_synthetic, ...)               — entry module synthetic item origins
-    // By starting workspace origins at next_synthetic_item_origin_raw, each workspace
-    // module receives a non-overlapping origin slice above the entry module's reserved range.
-    // After all workspace modules are compiled, we advance next_synthetic_item_origin_raw
-    // to ws_origin_base so that the entry module's own synthetic items (domain members, pipes,
-    // etc.) start above all workspace module items and don't collide with them.
+    let selected = select_workspace_items(hir, workspace_hirs, &included_items);
+    let mut lowerer = ModuleLowerer::new_internal(hir, Some(selected[0].clone()));
+    // Real items and signal import slots have stable module ranges. Synthetic
+    // origins are allocated separately above every module, regardless of reachability.
     lowerer.ws_origin_base = lowerer.next_synthetic_item_origin_raw;
-    for (name, ws_hir) in workspace_hirs {
-        lowerer.compile_workspace_module(name, ws_hir)?;
+    lowerer.next_synthetic_item_origin_raw = workspace_origin_ranges(hir, workspace_hirs)?.1;
+    for ((name, ws_hir), items) in workspace_hirs.iter().zip(&selected[1..]) {
+        lowerer.compile_workspace_module(name, ws_hir, Some(items))?;
     }
-    // Advance the entry module's synthetic item counter past all workspace-allocated origins.
-    lowerer.next_synthetic_item_origin_raw = lowerer.ws_origin_base;
     lowerer.build()
 }
 
-/// Computes the exact item-origin base assigned to each workspace module during
-/// `lower_runtime_module_with_workspace`, using the same internal lowering pass
-/// that allocates synthetic item origins.
+/// Stable module origin ranges for real items and signal imports. Allocation does
+/// not depend on which function bodies are reachable in a particular runtime fragment.
 pub fn runtime_workspace_item_origin_offsets<'a>(
     hir: &'a aivi_hir::Module,
     workspace_hirs: &[(&str, &'a aivi_hir::Module)],
 ) -> Result<HashMap<aivi_base::FileId, u32>, LoweringErrors> {
-    let mut lowerer = ModuleLowerer::new_internal(hir, Some(HashSet::new()));
-    lowerer.ws_origin_base = lowerer.next_synthetic_item_origin_raw;
-    let mut offsets = HashMap::from([(hir.file(), 0)]);
-    for (name, ws_hir) in workspace_hirs {
-        offsets.insert(ws_hir.file(), lowerer.ws_origin_base);
-        lowerer.compile_workspace_module(name, ws_hir)?;
+    workspace_origin_ranges(hir, workspace_hirs).map(|(offsets, _)| offsets)
+}
+
+fn workspace_origin_ranges(
+    hir: &aivi_hir::Module,
+    workspace_hirs: &[(&str, &aivi_hir::Module)],
+) -> Result<(HashMap<aivi_base::FileId, u32>, u32), LoweringErrors> {
+    let mut offsets = HashMap::new();
+    let mut next = 0_u32;
+    for module in std::iter::once(hir).chain(workspace_hirs.iter().map(|(_, module)| *module)) {
+        offsets.insert(module.file(), next);
+        next = u32::try_from(module.items().len()).ok()
+            .and_then(|items| next.checked_add(items))
+            .and_then(|end| u32::try_from(module.imports().len()).ok().and_then(|imports| end.checked_add(imports)))
+            .ok_or_else(|| LoweringErrors::new(vec![LoweringError::ArenaOverflow {
+                arena: "workspace item origins", attempted_len: usize::MAX,
+            }]))?;
     }
-    Ok(offsets)
+    Ok((offsets, next))
 }
 
 fn validate_general_expr_report_completeness(

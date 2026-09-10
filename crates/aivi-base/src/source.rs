@@ -354,14 +354,13 @@ impl SourceFile {
     }
 }
 
-/// Collection of immutable source files used for span rendering.
-#[derive(Clone, Debug, Default)]
 /// A collection of source files indexed by their [`FileId`].
 ///
-/// Files may be added with sequentially assigned ids via [`add_file`] or
-/// inserted with a pre-assigned id via [`insert`].  The latter supports
+/// Files may be added with sequentially assigned ids via [`Self::add_file`] or
+/// inserted with a pre-assigned id via [`Self::insert`]. The latter supports
 /// query-layer databases where file ids may be non-contiguous (e.g. after a
 /// file is removed and the id slot is not recycled).
+#[derive(Clone, Debug, Default)]
 pub struct SourceDatabase {
     files: std::collections::BTreeMap<u32, SourceFile>,
 }

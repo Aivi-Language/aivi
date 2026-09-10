@@ -14,11 +14,13 @@ type Dict K V = {
     entries: List (DictEntry K V)
 }
 
+type K -> V -> (DictEntry K V)
+func entry = k v =>
+    { key: k, value: v }
+
 type K -> V -> (Dict K V)
 func singleton = k v =>
-    {
-        entries: [{ key: k, value: v }]
-    }
+    { entries: [entry k v] }
 
 type Eq K => K -> (DictEntry K V) -> Bool
 func matchesKey = k entry =>
@@ -36,13 +38,13 @@ func filterOldKey = k d => d.entries
 type Eq K => K -> V -> (Dict K V) -> (Dict K V)
 func insert = k v d =>
     {
-        entries: append [{ key: k, value: v }] (filterOldKey k d)
+        entries: append [entry k v] (filterOldKey k d)
     }
 
 type Eq K => (V -> V -> V) -> K -> V -> (Dict K V) -> (Dict K V)
 func insertWith = merge k v d => d.entries
   |> find (matchesKey k)
- ||> None          -> { entries: append d.entries [{ key: k, value: v }] }
+ ||> None          -> { entries: append d.entries [entry k v] }
  ||> Some existing -> insert k (merge existing.value v) d
 
 type Eq K => K -> (Dict K V) -> (Option V)

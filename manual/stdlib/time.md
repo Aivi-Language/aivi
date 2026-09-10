@@ -1,67 +1,13 @@
 # aivi.time
 
-Clock, timestamp, and millisecond helpers.
-
-`aivi.time` mixes two kinds of tools:
-
-- task-based functions that ask the runtime for clock or timestamp work
-- pure helpers for doing ordinary millisecond math in your own code
-
-Unlike [`aivi.duration`](/stdlib/duration), this module does **not** define a time domain today.
-`EpochMs` is still just an `Int` alias.
-
-## Import
-
-```aivi
-use aivi.time (
-    EpochMs
-    nowMs
-    monotonicMs
-    format
-    parse
-    isoPattern
-    datePattern
-    timePattern
-    formatIso
-    formatDate
-    formatTime
-    parseIso
-    msPerSecond
-    msPerMinute
-    msPerHour
-    msPerDay
-    toSeconds
-    toMinutes
-    toHours
-    toDays
-    fromSeconds
-    fromMinutes
-    fromHours
-    fromDays
-    elapsed
-)
-```
-
-## Runtime clock functions
+Wall-clock and monotonic clock tasks, plus pure millisecond arithmetic. `EpochMs` is an `Int` alias.
 
 | Value | Type | Description |
 | --- | --- | --- |
-| `nowMs` | `Task Text Int` | Current wall-clock time in milliseconds since the Unix epoch |
-| `monotonicMs` | `Task Text Int` | Monotonic milliseconds since the runtime started |
-| `format` | `Int -> Text -> Task Text Text` | Format a timestamp using a pattern |
-| `parse` | `Text -> Text -> Task Text Int` | Parse text into a timestamp |
+| `nowMs` | `Task Text Int` | Unix epoch milliseconds from the system clock |
+| `monotonicMs` | `Task Text Int` | Milliseconds since the first monotonic-clock request in this process |
 
-### `nowMs`
-
-
-Use this when you need a real-world timestamp for storage, logging, or comparing with other
-epoch-based values.
-
-### `monotonicMs`
-
-
-Use this when you want a steady clock for measuring elapsed time inside the running program.
-It is a better fit for timing than `nowMs`, because it is not tied to the wall clock.
+Use `nowMs` for stored timestamps and `monotonicMs` for elapsed durations. The monotonic origin is process-local and must not be persisted or compared between processes.
 
 ```aivi
 use aivi.time (
@@ -73,70 +19,7 @@ value savedAt : Task Text Int = nowMs
 value stopwatchNow : Task Text Int = monotonicMs
 ```
 
-## Current runtime note for `format` and `parse`
-
-The API surface is already present, but the current runtime behavior is intentionally small:
-
-- `format` ignores the pattern argument and returns the millisecond number as plain text
-- `parse` ignores the pattern argument and only accepts text that is already an integer
-  millisecond value
-
-That means `formatIso`, `formatDate`, `formatTime`, and `parseIso` currently share the same
-fallback behavior.
-
-## Current limits
-
-- timestamps are raw epoch-millisecond `Int` values, not a dedicated domain
-- `format` and `parse` are still partial runtime stubs
-- this module does not convert epoch values to calendar structures; [aivi.date](date.md)
-  separately supplies date/time data types and pure formatting helpers
-
-### `format`
-
-
-The surface API takes an epoch millisecond value and a pattern string.
-
-```aivi
-use aivi.time (
-    format
-    isoPattern
-)
-
-value shown : Task Text Text = format 1735689600000 isoPattern
-```
-
-Today this returns `"1735689600000"`, not a human-readable ISO timestamp yet.
-
-### `parse`
-
-
-The surface API takes text plus a pattern string and returns epoch milliseconds.
-
-```aivi
-use aivi.time (
-    parse
-    isoPattern
-)
-
-value parsed : Task Text Int = parse "1735689600000" isoPattern
-```
-
-Today this succeeds for decimal millisecond text and fails for ordinary date strings such as
-`"2025-01-01T00:00:00"`.
-
-## Pattern constants and wrappers
-
-| Value | Type | Description |
-| --- | --- | --- |
-| `isoPattern` | `Text` | Named pattern string for ISO-like timestamps |
-| `datePattern` | `Text` | Named pattern string for dates |
-| `timePattern` | `Text` | Named pattern string for times |
-| `formatIso` | `Int -> Task Text Text` | `format ms isoPattern` |
-| `formatDate` | `Int -> Task Text Text` | `format ms datePattern` |
-| `formatTime` | `Int -> Task Text Text` | `format ms timePattern` |
-| `parseIso` | `Text -> Task Text Int` | `parse text isoPattern` |
-
-These names make intent clearer even before the full formatter/parser behavior lands.
+Timestamp pattern formatting and parsing are not offered. Calendar records and formatting live in [aivi.date](date.md); epoch-to-calendar conversion is not currently provided.
 
 ## Pure millisecond helpers
 

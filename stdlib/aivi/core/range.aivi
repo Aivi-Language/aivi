@@ -25,7 +25,7 @@ func overlapsHelper = a b =>
     a.start <= b.end and b.start <= a.end
 
 type RangeInt -> RangeInt -> Bool
-func overlaps = a b => isEmpty a
+func overlaps = a b => isEmpty a or isEmpty b
  T|> False
  F|> overlapsHelper a b
 

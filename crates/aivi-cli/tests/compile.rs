@@ -645,7 +645,7 @@ fn compile_accepts_workspace_value_imports() {
 }
 
 #[test]
-fn compile_rejects_recursive_list_pattern_fixture_with_cycle_error() {
+fn compile_accepts_recursive_list_pattern_functions() {
     let output_dir = TempDir::new("compile-list-patterns");
     let output_path = output_dir.path().join("list-patterns.o");
     let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
@@ -657,18 +657,15 @@ fn compile_rejects_recursive_list_pattern_fixture_with_cycle_error() {
         .expect("compile command should run");
 
     assert!(
-        !output.status.success(),
-        "expected recursive list pattern compile to fail during backend lowering"
+        output.status.success(),
+        "recursive functions should compile: {}",
+        String::from_utf8_lossy(&output.stderr)
     );
     assert!(
-        !output_path.exists(),
-        "recursive list pattern compile should not emit an object file"
-    );
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("backend lowering detected a global item dependency cycle"),
-        "expected global cycle diagnostic, got stderr: {stderr}"
+        fs::metadata(&output_path)
+            .expect("compiled object should exist")
+            .len()
+            > 0
     );
 }
 

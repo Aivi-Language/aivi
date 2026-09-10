@@ -3,7 +3,7 @@
 Types for GNOME desktop notifications.
 
 These are operating-system notifications: the kind that appear in the desktop shell. They
-are separate from `AppNotification` in `aivi.app.lifecycle`, which describes messages shown
+are separate from `AppNotification` in the optional application-types package, which describes messages shown
 inside your own app window.
 
 This module defines the payloads, handle annotation, task alias, and response types used by the

@@ -6,8 +6,8 @@ type AsyncTracker E A = {
     error: Option E
 }
 
-type AsyncTracker E A -> Result E A -> AsyncTracker E A
-func step = current result => result
+type Result E A -> AsyncTracker E A -> AsyncTracker E A
+func step = result current => result
  ||> Ok a  -> { pending: False, done: Some a, error: None }
  ||> Err e -> { pending: False, done: current.done, error: Some e }
 

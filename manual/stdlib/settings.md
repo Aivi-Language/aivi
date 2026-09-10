@@ -1,12 +1,6 @@
 # aivi.gnome.settings
 
-Types for working with GNOME settings (GSettings).
-
-GSettings is the desktop settings system used for values such as the color scheme, text
-scaling, and many other GNOME preferences.
-
-This module currently exports the schema type, key type, setting value type, and task alias
-used by GSettings integrations. The stdlib comments also document the watcher source shape.
+Application data types for settings. This module supplies vocabulary only: it does not load data, watch sources, or implement the task aliases it defines.
 
 ## Import
 
@@ -25,11 +19,10 @@ use aivi.gnome.settings (
 | Item | Type | Description |
 |------|------|-------------|
 | `SettingsError` | type | Things that can go wrong when resolving or decoding a setting |
-| `SettingsSchema` | domain over `Text` | Checked schema identifier |
-| `SettingsKey` | domain over `Text` | Wrapped key name |
+| `SettingsSchema` | `Text` alias | Schema identifier text |
+| `SettingsKey` | `Text` alias | Key name text |
 | `SettingValue` | type | Generic setting value |
 | `SettingsTask A` | `Task SettingsError A` | Generic settings task alias |
-| `gsettings.watch` | source | Documented watcher source shape |
 
 ## Types
 
@@ -50,50 +43,9 @@ These variants describe the usual GSettings failure cases.
 - `TypeMismatch` — the key exists, but not with the type you expected
 - `SettingsUnavailable` — GSettings access is not available in the current runtime
 
-### SettingsSchema
+### Settings identifiers
 
-```aivi
-use aivi.gnome.settings (SettingsError)
-
-domain SettingsSchema over Text = {
-    type parse : Text -> Result SettingsError SettingsSchema
-}
-```
-
-Schema identifier such as `"org.gnome.desktop.interface"`. The module currently publishes the
-domain declaration, but it does not export a runtime schema-validation function.
-
-An integration receives a `SettingsSchema` from code that owns schema validation; consumers keep
-the nominal type intact:
-
-```aivi
-use aivi.gnome.settings (SettingsSchema)
-
-type SettingsSchema -> SettingsSchema
-func retainSchema = schema =>
-    schema
-```
-
-### SettingsKey
-
-```aivi
-domain SettingsKey over Text = {
-    type make : Text -> SettingsKey
-}
-```
-
-Wrapped key name such as `"color-scheme"`.
-
-The domain declaration names a future `make` member, but the current module does not export that
-member. Construct the domain value explicitly for now.
-
-```aivi
-use aivi.gnome.settings (SettingsKey)
-
-type SettingsKey -> SettingsKey
-func retainKey = key =>
-    key
-```
+`SettingsSchema` and `SettingsKey` are `Text` aliases. They do not validate installed schemas or keys. This module supplies data types only.
 
 ### SettingValue
 
@@ -136,20 +88,3 @@ type SettingsTask A = (Task SettingsError A)
 ```
 
 Generic alias for settings-related tasks.
-
-## Documented source shapes
-
-The stdlib module comments document the following watcher patterns:
-
-```aivi
-use aivi.gnome.settings (SettingsError)
-
-@source gsettings.watch "org.gnome.desktop.interface" "color-scheme"
-signal colorScheme : Signal (Result SettingsError Text)
-
-@source gsettings.watch "org.gnome.desktop.interface" "text-scaling-factor"
-signal textScale : Signal (Result SettingsError Float)
-```
-
-The concrete signal payload depends on the key you watch. This module does not currently
-export direct read or write helpers.

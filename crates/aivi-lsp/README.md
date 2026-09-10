@@ -27,7 +27,7 @@ Handlers live in capability-named modules. `server::Backend` is the protocol bou
 - Superseded diagnostics are cancelled. Publication is serialized with a final revision check, so
   a rapid edit cannot publish an older result.
 - `workspace_index` publishes one immutable navigation index per query-database workspace
-  revision.
+  revision, including unopened project files. Disk snapshots retain unsaved-buffer precedence.
 - `semantic_tokens` keeps bounded revision history for delta responses.
 - Protocol traffic uses stdout and tracing uses stderr.
 
@@ -44,3 +44,8 @@ wire list is deterministically sorted.
 
 See [Diagnostics and Editor Tooling](../../manual/reference/editor-tooling.md) and
 [AIVI_RFC.md §27](../../AIVI_RFC.md#27-language-server-lsp).
+
+Rename is deliberately conservative: it rejects ambiguous/library targets, aliases, record
+shorthands, invalid identifiers, and names already present in an affected module. Open-document
+edits carry versions. Completion is scoped to declarations/imports, lexical parameters/patterns,
+and compiler-resolved structural record fields; it does not generate import edits.

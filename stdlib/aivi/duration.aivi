@@ -28,28 +28,28 @@ domain Duration over Int = {
     type dy : Int
     dy = n => Duration (mul n 86400000)
 
-    type millis : Int -> Duration
-    millis = n => n
+    type millisValue : Int -> Duration
+    millisValue = n => n
 
-    type toMillis : Duration -> Int
-    toMillis = duration => duration
+    type toMillisValue : Duration -> Int
+    toMillisValue = duration => duration
 
-    type toSeconds : Duration -> Int
-    toSeconds = duration => div duration 1000
+    type toSecondsValue : Duration -> Int
+    toSecondsValue = duration => div duration 1000
 
-    type toMinutes : Duration -> Int
-    toMinutes = duration => div duration 60000
+    type toMinutesValue : Duration -> Int
+    toMinutesValue = duration => div duration 60000
 
-    type toHours : Duration -> Int
-    toHours = duration => div duration 3600000
+    type toHoursValue : Duration -> Int
+    toHoursValue = duration => div duration 3600000
 
-    type toDays : Duration -> Int
-    toDays = duration => div duration 86400000
+    type toDaysValue : Duration -> Int
+    toDaysValue = duration => div duration 86400000
 
-    type trySeconds : Int -> Result DurationError Duration
-    trySeconds = seconds =>
-        seconds < 0
-        T|> Err "Duration cannot be negative"
+    type trySecondsValue : Int -> Result DurationError Duration
+    trySecondsValue = seconds =>
+        seconds < 0 or seconds > 9223372036854775
+        T|> Err "seconds are outside the supported duration range"
         F|> Ok (mul seconds 1000)
 
     type (+) : Duration -> Duration -> Duration
@@ -67,3 +67,46 @@ domain Duration over Int = {
 
 export DurationError
 export Duration
+
+// Public functions delegate to the domain's carrier-aware implementation.
+type Int -> Duration
+func millis = value =>
+    millisValue value
+
+export millis
+
+type Duration -> Int
+func toMillis = value =>
+    toMillisValue value
+
+export toMillis
+
+type Duration -> Int
+func toSeconds = value =>
+    toSecondsValue value
+
+export toSeconds
+
+type Duration -> Int
+func toMinutes = value =>
+    toMinutesValue value
+
+export toMinutes
+
+type Duration -> Int
+func toHours = value =>
+    toHoursValue value
+
+export toHours
+
+type Duration -> Int
+func toDays = value =>
+    toDaysValue value
+
+export toDays
+
+type Int -> Result DurationError Duration
+func trySeconds = value =>
+    trySecondsValue value
+
+export trySeconds

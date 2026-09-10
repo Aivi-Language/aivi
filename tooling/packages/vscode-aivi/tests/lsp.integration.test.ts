@@ -123,7 +123,7 @@ async function timeout<T>(operation: Promise<T>, milliseconds: number): Promise<
   }
 }
 
-test("packaged client options complete a real AIVI LSP lifecycle", async () => {
+test("raw stdio transport completes a real AIVI LSP lifecycle", async () => {
   const packageRoot = resolve(__dirname, "../..");
   const repositoryRoot = resolve(packageRoot, "../../..");
   const executable = resolve(repositoryRoot, "target/debug/aivi");

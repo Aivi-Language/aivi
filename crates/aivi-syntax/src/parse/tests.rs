@@ -131,6 +131,19 @@ fn parser_preserves_bare_root_patch_field_selectors() {
 }
 
 #[test]
+fn parser_reports_bare_top_level_patch_without_panicking() {
+    let (_, parsed) = load("patch\n");
+
+    assert!(parsed.has_errors());
+    assert!(matches!(parsed.module.items(), [Item::Error(_)]));
+    assert!(
+        parsed
+            .all_diagnostics()
+            .any(|diagnostic| diagnostic.code == Some(UNEXPECTED_TOP_LEVEL_TOKEN))
+    );
+}
+
+#[test]
 fn lexer_distinguishes_line_and_doc_comments_as_trivia() {
     let mut sources = SourceDatabase::new();
     let file_id = sources.add_file(
@@ -2587,4 +2600,25 @@ value view =
             .iter()
             .any(|diagnostic| diagnostic.code == Some(INVALID_MARKUP_CHILD_CONTENT))
     );
+}
+
+#[test]
+fn unterminated_braced_declaration_bodies_keep_token_ranges_in_bounds() {
+    let sources = [
+        "class Eq A = {\n    equal : A -> A -> Bool\n",
+        "instance Eq Int = {\n    equal left right = true\n",
+        "domain Duration over Int = {\n    suffix ms : Int = value => Duration value\n",
+    ];
+
+    for source in sources {
+        let (_, parsed) = load(source);
+        assert!(
+            parsed
+                .module
+                .items()
+                .iter()
+                .all(|item| item.token_range().end() <= parsed.module.token_count),
+            "unterminated declaration body must not advance beyond the token buffer: {source:?}"
+        );
+    }
 }

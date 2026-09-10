@@ -1852,6 +1852,13 @@ fn validate_no_item_dep_cycles(program: &Program, errors: &mut Vec<ValidationErr
     }
     for (_kernel_id, kernel) in program.kernels().iter() {
         let owner = kernel.origin.item;
+        if program
+            .items()
+            .get(owner)
+            .is_some_and(|item| !item.parameters.is_empty())
+        {
+            continue;
+        }
         let entry = deps.entry(owner).or_default();
         for &dep in &kernel.global_items {
             if dep != owner && !entry.contains(&dep) {

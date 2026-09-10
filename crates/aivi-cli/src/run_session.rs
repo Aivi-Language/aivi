@@ -2120,8 +2120,19 @@ mod tests {
             validation_diagnostics.is_empty(),
             "run-session test fixture should validate cleanly: {validation_diagnostics:?}"
         );
-        crate::prepare_run_artifact(&snapshot.sources, lowered.module(), &[], None)
-            .expect("run-session test fixture should prepare")
+        let workspace_modules = crate::collect_workspace_hirs_sorted(&snapshot);
+        let workspace_hirs = workspace_modules
+            .iter()
+            .map(|(name, module)| (name.as_str(), module.module()))
+            .collect::<Vec<_>>();
+        crate::prepare_run_artifact_with_query_context(
+            &snapshot.sources,
+            lowered.module(),
+            &workspace_hirs,
+            None,
+            Some(snapshot.backend_query_context()),
+        )
+        .expect("run-session test fixture should prepare")
     }
 
     fn prepare_run_from_text(path: &str, source: &str) -> crate::RunArtifact {

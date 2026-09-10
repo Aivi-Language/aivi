@@ -79,6 +79,7 @@ value tags : (Set Text) =
 
 ```aivi
 use aivi.core.set (
+    Set
     fromList
     isEmpty
 )
@@ -90,6 +91,7 @@ value noTags : Bool = isEmpty (fromList [])
 
 ```aivi
 use aivi.core.set (
+    Set
     fromList
     member
 )
@@ -107,6 +109,7 @@ value hasWork : Bool =
 
 ```aivi
 use aivi.core.set (
+    Set
     fromList
     size
 )
@@ -127,6 +130,7 @@ Returns the items in insertion order.
 
 ```aivi
 use aivi.core.set (
+    Set
     fromList
     toList
 )
@@ -151,6 +155,7 @@ Add a value. If already present, the set is unchanged.
 
 ```aivi
 use aivi.core.set (
+    Set
     fromList
     insert
 )
@@ -169,6 +174,7 @@ Remove a value. No-op if not present.
 
 ```aivi
 use aivi.core.set (
+    Set
     fromList
     remove
 )
@@ -192,6 +198,7 @@ All items from both sets (items from `b` appended when not already in `a`).
 
 ```aivi
 use aivi.core.set (
+    Set
     fromList
     union
 )
@@ -211,6 +218,7 @@ Items that appear in both sets.
 
 ```aivi
 use aivi.core.set (
+    Set
     fromList
     intersection
 )
@@ -230,6 +238,7 @@ Items in `a` that are not in `b`.
 
 ```aivi
 use aivi.core.set (
+    Set
     fromList
     difference
 )
@@ -248,6 +257,7 @@ value remaining : (Set Text) =
 
 ```aivi
 use aivi.core.set (
+    Set
     fromList
     subsetOf
 )

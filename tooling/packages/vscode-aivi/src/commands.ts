@@ -81,7 +81,10 @@ export function registerCommands(
       const editor = vscode.window.activeTextEditor;
       if (!editor || editor.document.languageId !== "aivi") return;
       const document = editor.document;
-      await document.save();
+      if (!await document.save()) {
+        await vscode.window.showWarningMessage("AIVI check cancelled because the document was not saved.");
+        return;
+      }
       if (document.uri.scheme !== "file") {
         await vscode.window.showWarningMessage(
           "Save the AIVI document to disk before checking it."
@@ -118,6 +121,11 @@ export function registerCommands(
         });
         if (!testName?.trim()) return;
 
+        // Tests can depend on other edited modules, so save all workspace buffers.
+        if (!await vscode.workspace.saveAll(false)) {
+          await vscode.window.showWarningMessage("AIVI test cancelled because files were not saved.");
+          return;
+        }
         const config = getConfig(uri);
         await executeCompilerTask(
           `Test ${testName.trim()}`,

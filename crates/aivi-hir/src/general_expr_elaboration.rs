@@ -745,6 +745,44 @@ impl EqualityEvidenceCatalog {
     }
 }
 
+pub(crate) fn export_function_evidence(
+    module: &Module,
+    function: &crate::FunctionItem,
+) -> Option<Vec<crate::ImportedClassEvidence>> {
+    let mut typing = GateTypeContext::new(module);
+    let parameters = function
+        .type_parameters
+        .iter()
+        .enumerate()
+        .map(|(index, parameter)| (*parameter, index))
+        .collect();
+    collect_owner_equality_requirements(
+        module,
+        &mut typing,
+        &function.context,
+        function.header.span,
+        &mut 0,
+    )
+    .into_iter()
+    .map(|requirement| {
+        let Item::Class(class) = &module.items()[requirement.member.class] else {
+            return None;
+        };
+        Some(crate::ImportedClassEvidence {
+            class_name: class.name.text().into(),
+            member_name: class.members[requirement.member.member_index]
+                .name
+                .text()
+                .into(),
+            subject: crate::exports::poly_gate_type_import_value_type(
+                &requirement.subject,
+                &parameters,
+            )?,
+        })
+    })
+    .collect()
+}
+
 fn collect_owner_equality_requirements(
     module: &Module,
     typing: &mut GateTypeContext<'_>,
@@ -1081,6 +1119,74 @@ pub(crate) fn lower_name_expr_with_equality_evidence(
     env: &GateExprEnv,
     visible_ty: &GateType,
 ) -> Option<GateRuntimeExpr> {
+    let imported = match reference.resolution.as_ref() {
+        ResolutionState::Resolved(TermResolution::Import(id)) => Some(*id),
+        ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(_)) => {
+            typing.select_hoisted_import(reference, Some(visible_ty))
+        }
+        _ => None,
+    };
+    if let Some(import) = imported
+        && let crate::ImportBindingMetadata::ConstrainedValue { ty, evidence } =
+            &module.imports()[import].metadata
+    {
+        let signature = typing.lower_import_value_type(ty);
+        let substitutions = collect_type_param_subs(
+            std::slice::from_ref(&signature),
+            std::slice::from_ref(visible_ty),
+        );
+        let requirements = evidence
+            .iter()
+            .map(|required| {
+                let (class_id, class) =
+                    module.items().iter().find_map(|(id, item)| match item {
+                        Item::Class(class) if class.name.text() == required.class_name.as_ref() => {
+                            Some((id, class))
+                        }
+                        _ => None,
+                    })?;
+                let member_index = class
+                    .members
+                    .iter()
+                    .position(|member| member.name.text() == required.member_name.as_ref())?;
+                let member = ClassMemberResolution {
+                    class: class_id,
+                    member_index,
+                };
+                let subject = typing.lower_import_value_type(&required.subject);
+                Some(EqualityEvidenceRequirement {
+                    binding: BindingId::from_raw(0),
+                    span,
+                    name: required.member_name.clone(),
+                    ty: instantiate_class_member_type(module, typing, member, &subject)?,
+                    subject,
+                    member,
+                    priority: 0,
+                })
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let arguments =
+            lower_equality_evidence_arguments(module, env, &requirements, &substitutions, span)?;
+        let callee = GateRuntimeExpr {
+            span,
+            ty: prepend_callable_parameters(
+                visible_ty.clone(),
+                arguments
+                    .iter()
+                    .map(|argument| argument.ty.clone())
+                    .collect(),
+            ),
+            kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Import(import)),
+        };
+        return Some(GateRuntimeExpr {
+            span,
+            ty: visible_ty.clone(),
+            kind: GateRuntimeExprKind::Apply {
+                callee: Box::new(callee),
+                arguments,
+            },
+        });
+    }
     let item_id = match reference.resolution.as_ref() {
         ResolutionState::Resolved(TermResolution::Item(item_id)) => *item_id,
         ResolutionState::Resolved(TermResolution::Import(import_id)) => {
@@ -1382,6 +1488,7 @@ impl<'a> GeneralExprElaborator<'a> {
     fn build_ambient(mut self) -> GeneralExprElaborationReport {
         let mut items = Vec::new();
         let mut domain_members = Vec::new();
+        let mut instance_members = Vec::new();
         for (item_id, item) in self.module.items().iter() {
             if !self.module.ambient_items().contains(&item_id) {
                 continue;
@@ -1392,10 +1499,13 @@ impl<'a> GeneralExprElaborator<'a> {
                 Item::Domain(domain) => {
                     domain_members.extend(self.elaborate_domain_members(item_id, domain));
                 }
+                Item::Instance(instance) => {
+                    instance_members.extend(self.elaborate_instance_members(item_id, instance))
+                }
                 _ => {}
             }
         }
-        GeneralExprElaborationReport::new(items, domain_members, Vec::new())
+        GeneralExprElaborationReport::new(items, domain_members, instance_members)
     }
 
     fn collect_markup_runtime_expr_sites(
@@ -2425,45 +2535,24 @@ impl<'a> GeneralExprElaborator<'a> {
                 )
             }
             ExprKind::Record(record) => {
-                let expected_fields: Option<HashMap<String, GateType>> = match expected {
-                    Some(GateType::Record(fields)) => Some(
-                        fields
-                            .iter()
-                            .map(|field| (field.name.clone(), field.ty.clone()))
-                            .collect(),
-                    ),
-                    Some(GateType::OpaqueImport { import, .. }) => {
-                        let binding = &self.module.imports()[*import];
-                        if let crate::ImportBindingMetadata::TypeConstructor {
-                            fields: Some(record_fields),
-                            ..
-                        } = &binding.metadata
-                        {
-                            Some(
-                                record_fields
-                                    .iter()
-                                    .map(|f| {
-                                        (
-                                            f.name.to_string(),
-                                            self.typing.lower_import_value_type(&f.ty),
-                                        )
-                                    })
-                                    .collect(),
-                            )
-                        } else {
-                            None
-                        }
-                    }
-                    _ => None,
-                };
+                let expected_fields = record
+                    .fields
+                    .iter()
+                    .filter_map(|field| {
+                        let path = NamePath::from_vec(vec![field.label.clone()]).ok()?;
+                        let field_ty = self
+                            .typing
+                            .project_type(&ty, &path, env.current_domain)
+                            .ok()?;
+                        Some((field.label.text().to_owned(), field_ty))
+                    })
+                    .collect::<HashMap<_, _>>();
                 GateRuntimeExprKind::Record(
                     record
                         .fields
                         .into_iter()
                         .map(|field| {
-                            let expected = expected_fields
-                                .as_ref()
-                                .and_then(|fields| fields.get(field.label.text()).cloned());
+                            let expected = expected_fields.get(field.label.text()).cloned();
                             Ok(GateRuntimeRecordField {
                                 label: field.label,
                                 value: self.lower_expr(
@@ -2515,7 +2604,7 @@ impl<'a> GeneralExprElaborator<'a> {
                     crate::BinaryOperator::Equals | crate::BinaryOperator::NotEquals => None,
                 };
                 let left = self.lower_expr(left, env, ambient, expected_operand.as_ref())?;
-                let right = self.lower_expr(right, env, ambient, expected_operand.as_ref())?;
+                let right = self.lower_expr(right, env, ambient, Some(&left.ty))?;
                 if matches!(operator, BinaryOperator::Equals | BinaryOperator::NotEquals) {
                     return Ok(build_equality_runtime_expr(
                         self.module,
@@ -4235,6 +4324,23 @@ impl<'a> GeneralExprElaborator<'a> {
         ambient: Option<&GateType>,
         expected: Option<&GateType>,
     ) -> Result<GateType, Vec<GeneralExprBlocker>> {
+        // Predicate result types are fixed. Infer their operands during lowering so an
+        // unannotated constructor on one side can use the other operand's type.
+        if let ExprKind::Binary { operator, .. } = &self.module.exprs()[expr_id].kind
+            && matches!(
+                operator,
+                BinaryOperator::Equals
+                    | BinaryOperator::NotEquals
+                    | BinaryOperator::LessThan
+                    | BinaryOperator::GreaterThan
+                    | BinaryOperator::LessThanOrEqual
+                    | BinaryOperator::GreaterThanOrEqual
+                    | BinaryOperator::And
+                    | BinaryOperator::Or
+            )
+        {
+            return Ok(GateType::Primitive(crate::BuiltinType::Bool));
+        }
         if let Some(expected) = expected {
             // Pipe expressions always adopt the expected type directly: their inner stages carry
             // the typing and the outer pipe node is not independently inferred.
@@ -4678,7 +4784,8 @@ impl<'a> GeneralExprElaborator<'a> {
                 let ty_clone = {
                     let binding = &self.module.imports()[*import_id];
                     match &binding.metadata {
-                        crate::ImportBindingMetadata::Value { ty } => ty.clone(),
+                        crate::ImportBindingMetadata::Value { ty }
+                        | crate::ImportBindingMetadata::ConstrainedValue { ty, .. } => ty.clone(),
                         _ => return None,
                     }
                 };

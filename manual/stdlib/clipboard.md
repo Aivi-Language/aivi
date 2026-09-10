@@ -1,14 +1,6 @@
 # aivi.clipboard
 
-Types for working with the desktop clipboard.
-
-If you are new to AIVI's desktop integrations, this module is mostly a set of data shapes.
-It tells you what clipboard content looks like and how clipboard errors are reported. The
-stdlib comments also describe a reactive clipboard watcher.
-
-Current status: clipboard work already spans both watcher-style and task-style shapes. The target
-architecture is a unified provider capability under `@source` for clipboard snapshots, watches, and
-writes.
+Application data types for clipboard. This module supplies vocabulary only: it does not load data, watch sources, or implement the task aliases it defines.
 
 ## Import
 
@@ -29,7 +21,6 @@ use aivi.clipboard (
 | `ClipboardContent` | type | Tagged clipboard contents: text, URIs, image bytes, HTML, or empty |
 | `ClipboardTask A` | `Task ClipboardError A` | Task alias for clipboard-related work |
 | `ClipboardWriteTask` | `Task ClipboardError Unit` | Task alias for clipboard writes |
-| `clipboard.watch` | `Signal (Result ClipboardError ClipboardContent)` | Reactive watcher shape documented in the module comments |
 
 ## Types
 
@@ -112,18 +103,13 @@ Convenience name for clipboard write operations.
 At the time of writing, this module does not export a concrete write function. The alias is
 still useful because it documents the task shape other clipboard APIs are expected to use.
 
-## Documented source shape
+## Clipboard text source
 
-The stdlib module comments document the following watcher shape:
+The GTK bridge implements `clipboard.changed`, which publishes text:
 
 ```aivi
-use aivi.clipboard (
-    ClipboardContent
-    ClipboardError
-)
-
-@source clipboard.watch
-signal clipboardContent : Signal (Result ClipboardError ClipboardContent)
+@source clipboard.changed
+signal clipboardText : Signal Text
 ```
 
-This module does not currently export a direct clipboard write helper.
+It does not publish `ClipboardContent` or support the richer content variants above.

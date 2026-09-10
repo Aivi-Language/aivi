@@ -306,7 +306,7 @@ impl RootDatabase {
     /// Each file is inserted with its own stable query-layer id as the
     /// `aivi_base::FileId`, so cached diagnostic spans remain valid even when
     /// file ids are non-contiguous (e.g. after a file has been removed via
-    /// [`remove_file`]).
+    /// [`Self::remove_file`]).
     pub fn source_database(&self) -> aivi_base::SourceDatabase {
         let state = self.state.read();
         let mut sources = aivi_base::SourceDatabase::new();

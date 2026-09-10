@@ -53,7 +53,7 @@ value mixed : Color = blend gnomeBlue3 gnomeRed3 0.5
 
 ## Blending
 
-`blend` linearly interpolates two colors channel by channel. The third argument is a
+`blend` linearly interpolates two colors across the red, green, blue, and alpha channels. The third argument is a
 `Float` in `0.0..1.0` where `0.0` returns the first color and `1.0` returns the second.
 
 ```aivi
@@ -99,4 +99,4 @@ Current limits:
   but not importable; use the palette constants or `blend` for most UI needs
 - no lightness / hue / saturation algebra
 - no alternate color-space helpers such as HSL or OKLCH
-- no `fromHex` text parser such as `#RRGGBB` (planned)
+- no `fromHex` text parser such as `#RRGGBB`

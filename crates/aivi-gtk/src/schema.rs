@@ -126,9 +126,6 @@ pub enum GtkConcreteWidgetKind {
     GLArea,
     // Group N: Expanded libadwaita widgets
     Breakpoint,
-    ViewSwitcher,
-    ViewSwitcherBar,
-    ViewSwitcherTitle,
     Avatar,
     Squeezer,
     Flap,
@@ -233,9 +230,6 @@ impl GtkConcreteWidgetKind {
             Self::TreeExpander => "TreeExpander",
             Self::GLArea => "GLArea",
             Self::Breakpoint => "Breakpoint",
-            Self::ViewSwitcher => "ViewSwitcher",
-            Self::ViewSwitcherBar => "ViewSwitcherBar",
-            Self::ViewSwitcherTitle => "ViewSwitcherTitle",
             Self::Avatar => "Avatar",
             Self::Squeezer => "Squeezer",
             Self::Flap => "Flap",
@@ -382,7 +376,6 @@ pub enum GtkBoolPropertySetter {
     InfoBarShowCloseButton,
     LevelBarInverted,
     StackSwitcherHomogeneous,
-    ViewSwitcherNarrowEllipsize,
     SqueezerHomogeneous,
     SqueezerAllowNone,
     FlapRevealed,
@@ -545,7 +538,6 @@ pub enum GtkTextPropertySetter {
     ButtonContentIconName,
     WindowTitleTitle,
     WindowTitleSubtitle,
-    ViewSwitcherPolicy,
     AdwDialogTitle,
     // Shortcuts
     ShortcutAction,
@@ -759,9 +751,6 @@ impl GtkPropertySetter {
             Self::Text(GtkTextPropertySetter::LevelBarMode) => {
                 "text naming a valid LevelBarMode (Continuous, Discrete)"
             }
-            Self::Text(GtkTextPropertySetter::ViewSwitcherPolicy) => {
-                "text naming a valid ViewSwitcherPolicy (Narrow, Wide)"
-            }
             Self::Text(GtkTextPropertySetter::GestureType) => "text naming a gesture type",
             Self::Text(
                 GtkTextPropertySetter::DragSourceActions | GtkTextPropertySetter::DropTargetActions,
@@ -861,8 +850,6 @@ pub enum GtkEventSignal {
     SplitButtonClicked,
     // Group M: Expanded widgets
     InfoBarResponse,
-    ViewSwitcherPageChanged,
-    ViewSwitcherBarPageChanged,
     StackPageChanged,
     FlapRevealedChanged,
     AdwDialogClosed,
@@ -5730,16 +5717,6 @@ const WINDOW_TITLE_SUBTITLE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescrip
     value_shape: GtkPropertyValueShape::Text,
     setter: GtkPropertySetter::Text(GtkTextPropertySetter::WindowTitleSubtitle),
 };
-const VIEW_SWITCHER_POLICY_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
-    name: "policy",
-    value_shape: GtkPropertyValueShape::Text,
-    setter: GtkPropertySetter::Text(GtkTextPropertySetter::ViewSwitcherPolicy),
-};
-const VIEW_SWITCHER_NARROW_ELLIPSIZE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
-    name: "narrowEllipsize",
-    value_shape: GtkPropertyValueShape::Bool,
-    setter: GtkPropertySetter::Bool(GtkBoolPropertySetter::ViewSwitcherNarrowEllipsize),
-};
 const ADW_DIALOG_TITLE_PROPERTY: GtkPropertyDescriptor = GtkPropertyDescriptor {
     name: "title",
     value_shape: GtkPropertyValueShape::Text,
@@ -5877,11 +5854,6 @@ const INFO_BAR_RESPONSE_EVENT: GtkEventDescriptor = GtkEventDescriptor {
     name: "onResponse",
     payload: GtkConcreteEventPayload::Text,
     signal: GtkEventSignal::InfoBarResponse,
-};
-const VIEW_SWITCHER_PAGE_CHANGED_EVENT: GtkEventDescriptor = GtkEventDescriptor {
-    name: "onPageChanged",
-    payload: GtkConcreteEventPayload::Unit,
-    signal: GtkEventSignal::ViewSwitcherPageChanged,
 };
 const STACK_PAGE_CHANGED_EVENT: GtkEventDescriptor = GtkEventDescriptor {
     name: "onPageChanged",
@@ -6174,50 +6146,6 @@ const BREAKPOINT_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
     kind: GtkConcreteWidgetKind::Breakpoint,
     root_kind: GtkWidgetRootKind::Embedded,
     properties: &[WIDTH_REQUEST_PROPERTY],
-    events: &[],
-    default_child_group_override: None,
-    child_groups: &[],
-};
-
-const VIEW_SWITCHER_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
-    markup_name: "ViewSwitcher",
-    kind: GtkConcreteWidgetKind::ViewSwitcher,
-    root_kind: GtkWidgetRootKind::Embedded,
-    properties: &[
-        VISIBLE_PROPERTY,
-        SENSITIVE_PROPERTY,
-        VIEW_SWITCHER_POLICY_PROPERTY,
-        VIEW_SWITCHER_NARROW_ELLIPSIZE_PROPERTY,
-    ],
-    events: &[VIEW_SWITCHER_PAGE_CHANGED_EVENT],
-    default_child_group_override: None,
-    child_groups: &[],
-};
-
-const VIEW_SWITCHER_BAR_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
-    markup_name: "ViewSwitcherBar",
-    kind: GtkConcreteWidgetKind::ViewSwitcherBar,
-    root_kind: GtkWidgetRootKind::Embedded,
-    properties: &[
-        VISIBLE_PROPERTY,
-        SENSITIVE_PROPERTY,
-        VIEW_SWITCHER_POLICY_PROPERTY,
-    ],
-    events: &[],
-    default_child_group_override: None,
-    child_groups: &[],
-};
-
-const VIEW_SWITCHER_TITLE_SCHEMA: GtkWidgetSchema = GtkWidgetSchema {
-    markup_name: "ViewSwitcherTitle",
-    kind: GtkConcreteWidgetKind::ViewSwitcherTitle,
-    root_kind: GtkWidgetRootKind::Embedded,
-    properties: &[
-        VISIBLE_PROPERTY,
-        SENSITIVE_PROPERTY,
-        VIEW_SWITCHER_POLICY_PROPERTY,
-        TOOLTIP_PROPERTY,
-    ],
     events: &[],
     default_child_group_override: None,
     child_groups: &[],
@@ -6560,9 +6488,6 @@ const GTK_WIDGET_SCHEMAS: &[GtkWidgetSchema] = &[
     TREE_EXPANDER_SCHEMA,
     GL_AREA_SCHEMA,
     BREAKPOINT_SCHEMA,
-    VIEW_SWITCHER_SCHEMA,
-    VIEW_SWITCHER_BAR_SCHEMA,
-    VIEW_SWITCHER_TITLE_SCHEMA,
     AVATAR_SCHEMA,
     SQUEEZER_SCHEMA,
     FLAP_SCHEMA,
@@ -6740,9 +6665,6 @@ mod tests {
                 "TreeExpander",
                 "GLArea",
                 "Breakpoint",
-                "ViewSwitcher",
-                "ViewSwitcherBar",
-                "ViewSwitcherTitle",
                 "Avatar",
                 "Squeezer",
                 "Flap",
@@ -6762,6 +6684,16 @@ mod tests {
                 "ShortcutController",
             ]
         );
+    }
+
+    #[test]
+    fn association_dependent_view_switchers_require_a_typed_reference_model() {
+        for name in ["ViewSwitcher", "ViewSwitcherBar", "ViewSwitcherTitle"] {
+            assert!(
+                lookup_widget_schema_by_name(name).is_none(),
+                "{name} must not be advertised without an executable ViewStack association"
+            );
+        }
     }
 
     #[test]

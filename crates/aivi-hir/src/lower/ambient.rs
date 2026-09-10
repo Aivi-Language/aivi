@@ -567,26 +567,6 @@ func __aivi_text_join = sep items => items
     |> reduce (__aivi_text_joinStep sep) (True, "")
     |> __aivi_text_joinExtract
 
-type Matrix A =
-  | MkMatrix Int Int (List (List A))
-
-type MatrixError =
-  | NegativeWidth Int
-  | NegativeHeight Int
-  | RaggedRows Int Int Int
-
-type (Matrix A) -> (List (List A))
-func __aivi_matrix_rows = matrix => matrix
-    ||> MkMatrix w h data -> data
-
-type (Matrix A) -> Int
-func __aivi_matrix_width = matrix => matrix
-    ||> MkMatrix w h data -> w
-
-type (Matrix A) -> Int
-func __aivi_matrix_height = matrix => matrix
-    ||> MkMatrix w h data -> h
-
 type Bool -> Int -> A -> (Int, Option A)
 func __aivi_listAt_match = matches idx item => matches
     T|> (idx + 1, Some item)
@@ -610,16 +590,6 @@ func __aivi_listAt = target items => items
     |> reduce (__aivi_listAt_step target) (0, None)
     |> __aivi_listAt_extract
 
-type (Option (List A)) -> Int -> (Option A)
-func __aivi_matrix_atRow = rowOpt x => rowOpt
-    ||> Some row -> __aivi_listAt x row
-    ||> None     -> None
-
-type (Matrix A) -> Int -> Int -> (Option A)
-func __aivi_matrix_at = matrix x y => matrix
-    ||> MkMatrix w h data ->
-        __aivi_matrix_atRow (__aivi_listAt y data) x
-
 type Bool -> A -> Int -> (List A) -> A -> (Int, List A)
 func __aivi_listReplace_pick = matches newVal idx result item => matches
     T|> (idx + 1, append result [newVal])
@@ -641,133 +611,6 @@ type Int -> A -> (List A) -> (List A)
 func __aivi_listReplace = target newVal items => items
     |> reduce (__aivi_listReplace_step target newVal) (0, [])
     |> __aivi_listReplace_extract
-
-type Int -> Int -> Int -> Int -> (List (List A)) -> A -> (Option (Matrix A))
-func __aivi_matrix_doReplace = x y w h data value =>
-    __aivi_listAt y data
-        ||> Some row -> Some (MkMatrix w h (__aivi_listReplace y (__aivi_listReplace x value row) data))
-        ||> None     -> None
-
-type Bool -> Bool -> Bool -> Bool -> Int -> Int -> Int -> Int -> (List (List A)) -> A -> (Option (Matrix A))
-func __aivi_matrix_boundsCheck = xOk yOk xLt yLt x y w h data value => xOk
-    T|> __aivi_matrix_boundsCheck2 yOk xLt yLt x y w h data value
-    F|> None
-
-type Bool -> Bool -> Bool -> Int -> Int -> Int -> Int -> (List (List A)) -> A -> (Option (Matrix A))
-func __aivi_matrix_boundsCheck2 = yOk xLt yLt x y w h data value => yOk
-    T|> __aivi_matrix_boundsCheck3 xLt yLt x y w h data value
-    F|> None
-
-type Bool -> Bool -> Int -> Int -> Int -> Int -> (List (List A)) -> A -> (Option (Matrix A))
-func __aivi_matrix_boundsCheck3 = xLt yLt x y w h data value => xLt
-    T|> __aivi_matrix_boundsCheck4 yLt x y w h data value
-    F|> None
-
-type Bool -> Int -> Int -> Int -> Int -> (List (List A)) -> A -> (Option (Matrix A))
-func __aivi_matrix_boundsCheck4 = yLt x y w h data value => yLt
-    T|> __aivi_matrix_doReplace x y w h data value
-    F|> None
-
-type (Matrix A) -> Int -> Int -> A -> (Option (Matrix A))
-func __aivi_matrix_replaceCoord = matrix x y value => matrix
-    ||> MkMatrix w h data -> __aivi_matrix_boundsCheck (x >= 0) (y >= 0) (x < w) (y < h) x y w h data value
-
-type (Matrix A) -> (Int, Int) -> A -> (Option (Matrix A))
-func __aivi_matrix_replaceAt = matrix coord value => coord
-    ||> (x, y) -> __aivi_matrix_replaceCoord matrix x y value
-
-type (Matrix A) -> ((Int, Int), A) -> (Option (Matrix A))
-func __aivi_matrix_replaceManyUpdate = matrix update => update
-    ||> (coord, value) -> __aivi_matrix_replaceAt matrix coord value
-
-type (Option (Matrix A)) -> ((Int, Int), A) -> (Option (Matrix A))
-func __aivi_matrix_replaceManyStep = current update => current
-    ||> None        -> None
-    ||> Some matrix -> __aivi_matrix_replaceManyUpdate matrix update
-
-type (Matrix A) -> (List ((Int, Int), A)) -> (Option (Matrix A))
-func __aivi_matrix_replaceMany = matrix updates =>
-    updates |> reduce __aivi_matrix_replaceManyStep (Some matrix)
-
-type Int -> Int -> (List A) -> (Int, Int, Option MatrixError)
-func __aivi_matrix_validateFirstRow = rowIdx expectedWidth row =>
-    (1, __aivi_list_length row, None)
-
-type Bool -> Int -> Int -> (List A) -> (Int, Int, Option MatrixError)
-func __aivi_matrix_validateLengthMatch = matches rowIdx expectedWidth row => matches
-    T|> (rowIdx + 1, expectedWidth, None)
-    F|> (rowIdx + 1, expectedWidth, Some (RaggedRows rowIdx expectedWidth (__aivi_list_length row)))
-
-type Bool -> Int -> Int -> (List A) -> (Int, Int, Option MatrixError)
-func __aivi_matrix_validateSubsequentRow = isFirst rowIdx expectedWidth row => isFirst
-    T|> __aivi_matrix_validateFirstRow rowIdx expectedWidth row
-    F|> __aivi_matrix_validateLengthMatch (__aivi_list_length row == expectedWidth) rowIdx expectedWidth row
-
-type (Option MatrixError) -> Int -> Int -> (List A) -> (Int, Int, Option MatrixError)
-func __aivi_matrix_validateRow = prevError rowIdx expectedWidth row => prevError
-    ||> Some e -> (rowIdx + 1, expectedWidth, Some e)
-    ||> None -> __aivi_matrix_validateSubsequentRow (rowIdx == 0) rowIdx expectedWidth row
-
-type (Int, Int, Option MatrixError) -> (List A) -> (Int, Int, Option MatrixError)
-func __aivi_matrix_fromRowsStep = state row => state
-    ||> (rowIdx, width, error) -> __aivi_matrix_validateRow error rowIdx width row
-
-type (Option MatrixError) -> Int -> Int -> (List (List A)) -> (Result MatrixError (Matrix A))
-func __aivi_matrix_fromRowsDecide = error rowCount width inputRows => error
-    ||> Some e -> Err e
-    ||> None   -> Ok (MkMatrix width rowCount inputRows)
-
-type (List (List A)) -> (Int, Int, Option MatrixError) -> (Result MatrixError (Matrix A))
-func __aivi_matrix_fromRowsFinish = inputRows state => state
-    ||> (rowCount, width, error) -> __aivi_matrix_fromRowsDecide error rowCount width inputRows
-
-type (List (List A)) -> (Result MatrixError (Matrix A))
-func __aivi_matrix_fromRows = inputRows => inputRows
-    |> reduce __aivi_matrix_fromRowsStep (0, 0, None)
-    |> __aivi_matrix_fromRowsFinish inputRows
-
-type (Int -> Int -> A) -> Int -> Int -> A
-func __aivi_matrix_initCellAt = build y x =>
-    build x y
-
-type Int -> (Int -> Int -> A) -> Int -> (List A)
-func __aivi_matrix_buildRow = width build y =>
-    __aivi_list_map (__aivi_matrix_initCellAt build y) (__aivi_list_range width)
-
-type Int -> Int -> (Int -> Int -> A) -> (List (List A))
-func __aivi_matrix_buildRows = width height build =>
-    __aivi_list_map (__aivi_matrix_buildRow width build) (__aivi_list_range height)
-
-type Int -> Int -> (Int -> Int -> A) -> Result MatrixError (Matrix A)
-func __aivi_matrix_initHeight = width height build => height < 0
-    T|> Err (NegativeHeight height)
-    F|> Ok (MkMatrix width height (__aivi_matrix_buildRows width height build))
-
-type Int -> Int -> (Int -> Int -> A) -> Result MatrixError (Matrix A)
-func __aivi_matrix_init = width height build => width < 0
-    T|> Err (NegativeWidth width)
-    F|> __aivi_matrix_initHeight width height build
-
-type A -> Int -> Int -> A
-func __aivi_matrix_filledCell = value x y =>
-    value
-
-type Int -> Int -> A -> Result MatrixError (Matrix A)
-func __aivi_matrix_filled = w h value =>
-    __aivi_matrix_init w h (__aivi_matrix_filledCell value)
-
-type (A -> Bool) -> Int -> A -> Int
-func __aivi_matrix_countCell = predicate total item => predicate item
-    T|> total + 1
-    F|> total
-
-type (A -> Bool) -> Int -> (List A) -> Int
-func __aivi_matrix_countRow = predicate total row =>
-    reduce (__aivi_matrix_countCell predicate) total row
-
-type (A -> Bool) -> Matrix A -> Int
-func __aivi_matrix_count = predicate matrix =>
-    reduce (__aivi_matrix_countRow predicate) 0 (__aivi_matrix_rows matrix)
 
 type (A -> Bool) -> A -> (Option A)
 func __aivi_list_findTry = predicate item => predicate item

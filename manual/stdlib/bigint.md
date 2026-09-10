@@ -231,7 +231,7 @@ Small sign-check helpers for common conditions.
 
 
 Compute `n!` as a `BigInt`. `factorial 0` returns `one`, and negative input currently also returns
-`one`.
+`one`. Factorial uses constant host stack space.
 
 ```aivi
 use aivi.bigint (

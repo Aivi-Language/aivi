@@ -117,6 +117,10 @@ fn reachable_workspace_hir_modules_follow_project_imports() {
     let (main, dependency, dependency_path) = open_workspace_math_program(&db, 1);
     let modules = reachable_workspace_hir_modules(&db, main);
 
+    let modules = modules
+        .iter()
+        .filter(|module| !module.name().starts_with("aivi."))
+        .collect::<Vec<_>>();
     assert_eq!(modules.len(), 1);
     assert_eq!(modules[0].name(), "shared.math");
     assert_eq!(
@@ -128,8 +132,13 @@ fn reachable_workspace_hir_modules_follow_project_imports() {
 
     let unit = whole_program_backend_unit(&db, main)
         .expect("workspace-aware whole-program lowering should succeed");
-    assert_eq!(unit.workspace_modules().len(), 1);
-    assert_eq!(unit.workspace_modules()[0].name(), "shared.math");
+    let application_modules = unit
+        .workspace_modules()
+        .iter()
+        .filter(|module| !module.name().starts_with("aivi."))
+        .collect::<Vec<_>>();
+    assert_eq!(application_modules.len(), 1);
+    assert_eq!(application_modules[0].name(), "shared.math");
 }
 
 #[test]
@@ -143,6 +152,10 @@ fn reachable_workspace_hir_modules_do_not_lower_unrelated_files() {
     );
 
     let modules = reachable_workspace_hir_modules(&db, main);
+    let modules = modules
+        .iter()
+        .filter(|module| !module.name().starts_with("aivi."))
+        .collect::<Vec<_>>();
     assert_eq!(modules.len(), 1);
     assert_eq!(modules[0].name(), "shared.math");
 
@@ -179,6 +192,7 @@ fn reachable_workspace_hir_modules_order_transitive_dependencies_first() {
     let modules = reachable_workspace_hir_modules(&db, main);
     let names = modules
         .iter()
+        .filter(|module| !module.name().starts_with("aivi."))
         .map(|module| module.name())
         .collect::<Vec<_>>();
     assert_eq!(names, ["graph.leaf", "graph.middle"]);
@@ -207,7 +221,11 @@ fn reachable_workspace_hir_modules_order_cycles_deterministically() {
     let first = reachable_workspace_hir_modules(&db, main);
     let second = reachable_workspace_hir_modules(&db, main);
     assert!(Arc::ptr_eq(&first, &second));
-    let names = first.iter().map(|module| module.name()).collect::<Vec<_>>();
+    let names = first
+        .iter()
+        .filter(|module| !module.name().starts_with("aivi."))
+        .map(|module| module.name())
+        .collect::<Vec<_>>();
     assert_eq!(names, ["cycle.alpha", "cycle.beta"]);
 }
 

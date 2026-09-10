@@ -341,9 +341,9 @@ fn is_known_module(module: &str) -> bool {
             | "aivi.fs"
             | "aivi.db"
             | "aivi.text"
+            | "aivi.url"
             | "aivi.time"
             | "aivi.env"
-            | "aivi.i18n"
             | "aivi.log"
             | "aivi.regex"
             | "aivi.http"
@@ -1180,32 +1180,6 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
                 primitive_import_type(BuiltinType::Int),
             ),
         )),
-        ("aivi.time", "format") => Some(intrinsic_import_value(
-            IntrinsicValue::TimeFormat,
-            arrow_import_type(
-                primitive_import_type(BuiltinType::Int),
-                arrow_import_type(
-                    primitive_import_type(BuiltinType::Text),
-                    task_import_type(
-                        primitive_import_type(BuiltinType::Text),
-                        primitive_import_type(BuiltinType::Text),
-                    ),
-                ),
-            ),
-        )),
-        ("aivi.time", "parse") => Some(intrinsic_import_value(
-            IntrinsicValue::TimeParse,
-            arrow_import_type(
-                primitive_import_type(BuiltinType::Text),
-                arrow_import_type(
-                    primitive_import_type(BuiltinType::Text),
-                    task_import_type(
-                        primitive_import_type(BuiltinType::Text),
-                        primitive_import_type(BuiltinType::Int),
-                    ),
-                ),
-            ),
-        )),
         // Regex intrinsics
         ("aivi.regex", "isMatch") => Some(intrinsic_import_value(
             IntrinsicValue::RegexIsMatch,
@@ -1291,28 +1265,21 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
                 ),
             ),
         )),
-        // I18n intrinsics
-        ("aivi.i18n", "tr") => Some(intrinsic_import_value(
-            IntrinsicValue::I18nTranslate,
-            arrow_import_type(
-                primitive_import_type(BuiltinType::Text),
-                primitive_import_type(BuiltinType::Text),
-            ),
-        )),
-        ("aivi.i18n", "trn") => Some(intrinsic_import_value(
-            IntrinsicValue::I18nTranslatePlural,
-            arrow_import_type(
-                primitive_import_type(BuiltinType::Text),
-                arrow_import_type(
-                    primitive_import_type(BuiltinType::Text),
-                    arrow_import_type(
-                        primitive_import_type(BuiltinType::Int),
-                        primitive_import_type(BuiltinType::Text),
-                    ),
-                ),
-            ),
-        )),
         // BigInt intrinsics (pure/synchronous)
+        ("aivi.url", "parseText") => Some(intrinsic_import_value(
+            IntrinsicValue::UrlParse,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Text),
+                ImportValueType::Result { error: Box::new(primitive_import_type(BuiltinType::Text)), value: Box::new(primitive_import_type(BuiltinType::Text)) },
+            ),
+        )),
+        ("aivi.bigint", "factorial") => Some(intrinsic_import_value(
+            IntrinsicValue::BigIntFactorial,
+            arrow_import_type(
+                primitive_import_type(BuiltinType::Int),
+                primitive_import_type(BuiltinType::BigInt),
+            ),
+        )),
         ("aivi.bigint", "fromInt") => Some(intrinsic_import_value(
             IntrinsicValue::BigIntFromInt,
             arrow_import_type(
@@ -1667,42 +1634,6 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
         }),
         ("aivi.list", "sortBy") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_list_sortBy".into(),
-        }),
-        // Matrix ambient types and values
-        ("aivi.matrix", "Matrix") => Some(ImportBindingMetadata::AmbientType),
-        ("aivi.matrix", "MatrixError") => Some(ImportBindingMetadata::AmbientType),
-        ("aivi.matrix", "indices") => Some(ImportBindingMetadata::AmbientValue {
-            name: "__aivi_list_range".into(),
-        }),
-        ("aivi.matrix", "fromRows") => Some(ImportBindingMetadata::AmbientValue {
-            name: "__aivi_matrix_fromRows".into(),
-        }),
-        ("aivi.matrix", "at") => Some(ImportBindingMetadata::AmbientValue {
-            name: "__aivi_matrix_at".into(),
-        }),
-        ("aivi.matrix", "replaceAt") => Some(ImportBindingMetadata::AmbientValue {
-            name: "__aivi_matrix_replaceAt".into(),
-        }),
-        ("aivi.matrix", "replaceMany") => Some(ImportBindingMetadata::AmbientValue {
-            name: "__aivi_matrix_replaceMany".into(),
-        }),
-        ("aivi.matrix", "rows") => Some(ImportBindingMetadata::AmbientValue {
-            name: "__aivi_matrix_rows".into(),
-        }),
-        ("aivi.matrix", "width") => Some(ImportBindingMetadata::AmbientValue {
-            name: "__aivi_matrix_width".into(),
-        }),
-        ("aivi.matrix", "height") => Some(ImportBindingMetadata::AmbientValue {
-            name: "__aivi_matrix_height".into(),
-        }),
-        ("aivi.matrix", "count") => Some(ImportBindingMetadata::AmbientValue {
-            name: "__aivi_matrix_count".into(),
-        }),
-        ("aivi.matrix", "filled") => Some(ImportBindingMetadata::AmbientValue {
-            name: "__aivi_matrix_filled".into(),
-        }),
-        ("aivi.matrix", "init") => Some(ImportBindingMetadata::AmbientValue {
-            name: "__aivi_matrix_init".into(),
         }),
         _ => None,
     }

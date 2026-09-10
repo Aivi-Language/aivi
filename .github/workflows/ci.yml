@@ -37,7 +37,10 @@ jobs:
             libwebkitgtk-6.0-dev \
             libssl-dev \
             libdbus-1-dev \
-            libsecret-1-dev
+            libsecret-1-dev \
+            xvfb \
+            xauth \
+            dbus-x11
 
       - uses: dtolnay/rust-toolchain@1.98.0
         with:
@@ -55,9 +58,12 @@ jobs:
         run: cargo clippy --workspace --all-targets --all-features --no-deps -- -D warnings
 
       - name: Run workspace tests
-        run: cargo test --workspace --all-features --exclude aivi-lsp -- --test-threads=1
+        run: dbus-run-session -- xvfb-run -a cargo test --workspace --all-features --exclude aivi-lsp -- --test-threads=1
         env:
           GTK_A11Y: none
+          GDK_BACKEND: x11
+          GSK_RENDERER: cairo
+          GSETTINGS_BACKEND: memory
 
       - name: Run LSP tests
         run: cargo test -p aivi-lsp --all-features -- --test-threads=1
@@ -157,7 +163,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libglib2.0-dev libssl-dev
+
       - uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: x86_64-unknown-linux-gnu
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -168,9 +181,9 @@ jobs:
           tool: cargo-fuzz
 
       - name: Smoke parser losslessness
-        run: cargo +nightly fuzz run parser_lossless -- -runs=512 -max_total_time=30
+        run: cargo +nightly fuzz run parser_lossless --target x86_64-unknown-linux-gnu -- -runs=512 -max_total_time=30
         working-directory: fuzz
 
       - name: Smoke hostile decoder paths
-        run: cargo +nightly fuzz run decoder_paths -- -runs=512 -max_total_time=30
+        run: cargo +nightly fuzz run decoder_paths --target x86_64-unknown-linux-gnu -- -runs=512 -max_total_time=30
         working-directory: fuzz

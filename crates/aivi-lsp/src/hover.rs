@@ -32,13 +32,14 @@ pub fn hover(params: HoverParams, state: Arc<ServerState>) -> Option<Hover> {
             let target_analysis = crate::analysis::FileAnalysis::load(&state.db, target.file());
             if let Some(declaration) = target_analysis.typed_declaration_for_name_span(target.span)
             {
-                return Some(hover_for_typed_declaration(
-                    declaration,
-                    &target_analysis.source,
-                ));
+                let mut hover = hover_for_typed_declaration(declaration, &target_analysis.source);
+                hover.range = navigation.reference_range_at_lsp_position(cursor);
+                return Some(hover);
             }
             if let Some(decl_sym) = target.find_symbol_at_target(&state.db) {
-                return Some(hover_for_symbol(&decl_sym, &target_analysis.source));
+                let mut hover = hover_for_symbol(&decl_sym, &target_analysis.source);
+                hover.range = navigation.reference_range_at_lsp_position(cursor);
+                return Some(hover);
             }
         }
     }

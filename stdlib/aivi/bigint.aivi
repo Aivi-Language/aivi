@@ -1,5 +1,6 @@
 use aivi.bigint (
     fromInt
+    factorial
     fromText
     toInt
     toText
@@ -101,17 +102,6 @@ func isPositive = n =>
 type BigInt -> Bool
 func isNegative = n =>
     lt n zero
-
-// Factorial (recursive — unbounded BigInt result)
-type BigInt -> BigInt
-func factHelper = n => bigEq n zero
- T|> one
- F|> mul n (factHelper (sub n one))
-
-type Int -> BigInt
-func factorial = n => n <= 0
- T|> one
- F|> factHelper (fromInt n)
 
 @test
 value bigint_fromInt_basic : Task Text Bool = pure (bigEq (fromInt 42) (fromInt 42))

@@ -1,13 +1,13 @@
 use std::sync::{
-    RwLock,
-    atomic::{AtomicU64, Ordering},
+    Arc, Mutex, RwLock,
+    atomic::{AtomicBool, AtomicU64, Ordering},
 };
 
 use aivi_query::{RootDatabase, SourceFile};
 use dashmap::{DashMap, mapref::entry::Entry};
 use ropey::Rope;
 use serde::Deserialize;
-use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
+use tokio::sync::{Mutex as AsyncMutex, Notify, RwLock as AsyncRwLock};
 use tower_lsp::lsp_types::Url;
 
 use crate::analysis_pool::{AnalysisPool, CancellationToken};
@@ -76,8 +76,12 @@ pub struct ServerState {
     pub(crate) semantic_tokens: SemanticTokenHistory,
     pub diagnostic_publication: AsyncMutex<()>,
     pending_diagnostics: DashMap<Url, PendingDiagnostics>,
+    diagnostic_lifecycle: Arc<DiagnosticLifecycle>,
     next_diagnostic_request: AtomicU64,
     config: RwLock<ServerConfig>,
+    pub(crate) workspace_complete: AtomicBool,
+    pub(crate) workspace_roots: RwLock<Vec<std::path::PathBuf>>,
+    pub(crate) disk_files: RwLock<std::collections::BTreeMap<Url, SourceFile>>,
 }
 
 #[derive(Clone)]
@@ -99,6 +103,103 @@ struct PendingDiagnostics {
     cancellation: CancellationToken,
 }
 
+#[derive(Debug)]
+struct DiagnosticLifecycle {
+    state: Mutex<DiagnosticLifecycleState>,
+    idle: Notify,
+}
+
+#[derive(Debug)]
+struct DiagnosticLifecycleState {
+    accepting: bool,
+    active: usize,
+}
+
+pub(crate) struct DiagnosticTaskPermit {
+    lifecycle: Arc<DiagnosticLifecycle>,
+}
+
+impl DiagnosticLifecycle {
+    fn new() -> Self {
+        Self {
+            state: Mutex::new(DiagnosticLifecycleState {
+                accepting: true,
+                active: 0,
+            }),
+            idle: Notify::new(),
+        }
+    }
+
+    fn try_begin(self: &Arc<Self>) -> Option<DiagnosticTaskPermit> {
+        let mut state = self
+            .state
+            .lock()
+            .expect("diagnostic lifecycle lock should not be poisoned");
+        if !state.accepting {
+            return None;
+        }
+        state.active = state
+            .active
+            .checked_add(1)
+            .expect("diagnostic task count overflowed usize");
+        Some(DiagnosticTaskPermit {
+            lifecycle: Arc::clone(self),
+        })
+    }
+
+    fn close(&self) {
+        self.state
+            .lock()
+            .expect("diagnostic lifecycle lock should not be poisoned")
+            .accepting = false;
+    }
+
+    fn is_accepting(&self) -> bool {
+        self.state
+            .lock()
+            .expect("diagnostic lifecycle lock should not be poisoned")
+            .accepting
+    }
+
+    async fn wait_until_idle(&self) {
+        loop {
+            let notified = self.idle.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
+            if self
+                .state
+                .lock()
+                .expect("diagnostic lifecycle lock should not be poisoned")
+                .active
+                == 0
+            {
+                return;
+            }
+            notified.await;
+        }
+    }
+}
+
+impl Drop for DiagnosticTaskPermit {
+    fn drop(&mut self) {
+        let became_idle = {
+            let mut state = self
+                .lifecycle
+                .state
+                .lock()
+                .expect("diagnostic lifecycle lock should not be poisoned");
+            state.active = state
+                .active
+                .checked_sub(1)
+                .expect("diagnostic task permit must correspond to one active task");
+            state.active == 0
+        };
+        if became_idle {
+            self.lifecycle.idle.notify_waiters();
+        }
+    }
+}
+
 impl ServerState {
     pub fn new() -> Self {
         Self {
@@ -110,8 +211,12 @@ impl ServerState {
             semantic_tokens: SemanticTokenHistory::default(),
             diagnostic_publication: AsyncMutex::new(()),
             pending_diagnostics: DashMap::new(),
+            diagnostic_lifecycle: Arc::new(DiagnosticLifecycle::new()),
             next_diagnostic_request: AtomicU64::new(0),
             config: RwLock::new(ServerConfig::default()),
+            workspace_complete: AtomicBool::new(true),
+            workspace_roots: RwLock::new(Vec::new()),
+            disk_files: RwLock::new(std::collections::BTreeMap::new()),
         }
     }
 
@@ -147,7 +252,11 @@ impl ServerState {
         })
     }
 
-    pub fn start_diagnostics(&self, uri: &Url) -> (u64, CancellationToken) {
+    pub(crate) fn start_diagnostics(
+        &self,
+        uri: &Url,
+    ) -> Option<(u64, CancellationToken, DiagnosticTaskPermit)> {
+        let permit = self.diagnostic_lifecycle.try_begin()?;
         let request_id = self.next_diagnostic_request.fetch_add(1, Ordering::Relaxed);
         let cancellation = CancellationToken::default();
         let pending = PendingDiagnostics {
@@ -157,7 +266,13 @@ impl ServerState {
         if let Some(previous) = self.pending_diagnostics.insert(uri.clone(), pending) {
             previous.cancellation.cancel();
         }
-        (request_id, cancellation)
+        // Shutdown can race the short interval between reserving the permit and
+        // publishing this request in the per-document map. The lifecycle permit
+        // makes shutdown wait for us; this check makes the request stop promptly.
+        if !self.diagnostic_lifecycle.is_accepting() {
+            cancellation.cancel();
+        }
+        Some((request_id, cancellation, permit))
     }
 
     pub fn finish_diagnostics(&self, uri: &Url, request_id: u64) {
@@ -172,6 +287,35 @@ impl ServerState {
         if let Some((_, pending)) = self.pending_diagnostics.remove(uri) {
             pending.cancellation.cancel();
         }
+    }
+
+    pub fn diagnostics_are_accepting(&self) -> bool {
+        self.diagnostic_lifecycle.is_accepting()
+    }
+
+    fn begin_diagnostics_shutdown(&self) {
+        self.diagnostic_lifecycle.close();
+        let cancellations = self
+            .pending_diagnostics
+            .iter()
+            .map(|pending| pending.cancellation.clone())
+            .collect::<Vec<_>>();
+        for cancellation in cancellations {
+            cancellation.cancel();
+        }
+    }
+
+    pub async fn shutdown_diagnostics(&self) {
+        self.begin_diagnostics_shutdown();
+
+        // Wait for a publication already in progress, but release the mutex
+        // before draining: cancelled tasks may be waiting for this same lock so
+        // that they can observe the closed lifecycle and exit.
+        {
+            let _publication = self.diagnostic_publication.lock().await;
+        }
+        self.diagnostic_lifecycle.wait_until_idle().await;
+        self.pending_diagnostics.clear();
     }
 
     pub fn config(&self) -> ServerConfig {
@@ -197,7 +341,7 @@ impl Default for ServerState {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use std::{path::PathBuf, sync::Arc};
 
     use tower_lsp::lsp_types::Url;
 
@@ -224,14 +368,46 @@ mod tests {
         let uri = Url::from_file_path(PathBuf::from("/state-tests/diagnostics.aivi"))
             .expect("test URI should be valid");
 
-        let (first_id, first) = state.start_diagnostics(&uri);
-        let (second_id, second) = state.start_diagnostics(&uri);
+        let (first_id, first, first_permit) = state
+            .start_diagnostics(&uri)
+            .expect("running server should accept diagnostics");
+        let (second_id, second, second_permit) = state
+            .start_diagnostics(&uri)
+            .expect("running server should accept replacement diagnostics");
 
         assert!(first.is_cancelled());
         assert!(!second.is_cancelled());
         state.finish_diagnostics(&uri, first_id);
         state.cancel_diagnostics(&uri);
         assert!(second.is_cancelled());
+        drop(first_permit);
+        drop(second_permit);
         state.finish_diagnostics(&uri, second_id);
+    }
+
+    #[tokio::test]
+    async fn diagnostic_shutdown_rejects_new_work_and_drains_active_permits() {
+        let state = Arc::new(ServerState::new());
+        let uri = Url::from_file_path(PathBuf::from("/state-tests/shutdown.aivi"))
+            .expect("test URI should be valid");
+        let (_, cancellation, permit) = state
+            .start_diagnostics(&uri)
+            .expect("running server should accept diagnostics");
+
+        state.begin_diagnostics_shutdown();
+
+        assert!(cancellation.is_cancelled());
+        assert!(!state.diagnostics_are_accepting());
+        assert!(state.start_diagnostics(&uri).is_none());
+
+        let draining = state.diagnostic_lifecycle.wait_until_idle();
+        tokio::pin!(draining);
+        tokio::select! {
+            biased;
+            () = &mut draining => panic!("shutdown must wait for the active diagnostic permit"),
+            () = tokio::task::yield_now() => {}
+        }
+        drop(permit);
+        draining.await;
     }
 }

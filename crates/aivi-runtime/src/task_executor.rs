@@ -269,20 +269,6 @@ pub fn execute_runtime_task_plan_with_context(
             let ms = start.elapsed().as_millis() as i64;
             Ok(RuntimeValue::Int(ms))
         }
-        RuntimeTaskPlan::TimeFormat {
-            epoch_ms,
-            pattern: _,
-        } => {
-            // Basic fallback: return epoch_ms as decimal text (chrono not available)
-            Ok(RuntimeValue::Text(format!("{epoch_ms}").into()))
-        }
-        RuntimeTaskPlan::TimeParse { text, pattern: _ } => {
-            // Basic fallback: try parsing as epoch ms integer string
-            match text.trim().parse::<i64>() {
-                Ok(ms) => Ok(RuntimeValue::Int(ms)),
-                Err(_) => Err(task_error(format!("cannot parse timestamp: {}", text))),
-            }
-        }
         // Env intrinsics
         RuntimeTaskPlan::EnvGet { name } => Ok(match std::env::var(name.as_ref()) {
             Ok(val) => RuntimeValue::OptionSome(Box::new(RuntimeValue::Text(val.into()))),

@@ -14,6 +14,18 @@ use aivi_core::{lower_module as lower_core_module, validate_module as validate_c
 use aivi_lambda::{lower_module as lower_lambda_module, validate_module as validate_lambda_module};
 use aivi_syntax::parse_module;
 
+fn lower_workspace_text(path: &str, text: &str) -> aivi_backend::Program {
+    let db = aivi_query::RootDatabase::new();
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/frontend")
+        .join(path);
+    let file = db.open_file(&path, text);
+    aivi_query::whole_program_backend_unit(&db, file)
+        .expect("workspace backend should lower")
+        .backend()
+        .clone()
+}
+
 fn lower_text(path: &str, text: &str) -> aivi_backend::Program {
     let mut sources = SourceDatabase::new();
     let file_id = sources.add_file(path, text);
@@ -681,10 +693,8 @@ fn jit_engine_supports_opaque_matrix_layouts() {
     let backend = lower_text(
         "backend-engine-matrix.aivi",
         r#"
-use aivi.matrix (
-    Matrix,
-    MatrixError
-)
+type Matrix A = MkMatrix Int Int (List (List A))
+type MatrixError = NegativeWidth Int | NegativeHeight Int | RaggedRows Int Int Int
 
 value matrix:Matrix Int =
     MkMatrix 2 2 [
@@ -735,7 +745,7 @@ value matrixRows:List (List Int) =
 
 #[test]
 fn jit_engine_supports_imported_generic_matrix_helpers() {
-    let backend = lower_text(
+    let backend = lower_workspace_text(
         "backend-engine-matrix-generic.aivi",
         r#"
 use aivi.matrix (
@@ -821,7 +831,7 @@ value matrixRows:List (List Int) =
 
 #[test]
 fn jit_engine_supports_checked_matrix_filled() {
-    let backend = lower_text(
+    let backend = lower_workspace_text(
         "backend-engine-matrix-filled.aivi",
         r#"
 use aivi.matrix (
@@ -1195,4 +1205,27 @@ value total:Int = 21 + 21
     assert_eq!(cache.len(), 1);
     assert_eq!(cached, cached_again);
     assert_eq!(cached, lazy);
+}
+
+#[test]
+fn native_option_flat_map_is_not_classified_as_a_list_wrapper() {
+    let backend = lower_workspace_text(
+        "backend-option-flat-map.aivi",
+        r#"
+use aivi.option (flatMap)
+type Int -> Option Int
+func increment = value => Some (value + 1)
+value result : Option Int = flatMap increment (Some 4)
+"#,
+    );
+    let item = find_item(&backend, "result");
+    let body = backend.items()[item].body.expect("result has a body");
+    compile_native_kernel_artifact(&backend, body)
+        .expect("Option flatMap must compile as Option code");
+    assert_eq!(
+        KernelEvaluator::new(&backend)
+            .evaluate_item(item, &BTreeMap::new())
+            .unwrap(),
+        RuntimeValue::OptionSome(Box::new(RuntimeValue::Int(5)))
+    );
 }

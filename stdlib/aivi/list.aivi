@@ -132,10 +132,14 @@ type AtState A = {
 }
 
 type AtState A -> A -> (AtState A)
-func atStep = state item => (state.found, state.remaining == 0)
- ||> (Some _, _)   -> state
- ||> (None, True)  -> { remaining: -1, found: Some item }
- ||> (None, False) -> { remaining: state.remaining - 1, found: None }
+func atStep = state item => state.found
+ T|> state
+ F|> atMissing state item
+
+type AtState A -> A -> (AtState A)
+func atMissing = state item => state.remaining == 0
+ T|> { remaining: -1, found: Some item }
+ F|> { remaining: state.remaining - 1, found: None }
 
 type List A -> Int
 func length = items => items
@@ -148,7 +152,10 @@ func head = items => items
 type Int -> (List A) -> (Option A)
 func at = index items => index < 0
  T|> None
- F|> items
+ F|> atNonNegative index items
+
+type Int -> (List A) -> (Option A)
+func atNonNegative = index items => items
   |> reduce atStep { remaining: index, found: None }
   |> .found
 
@@ -375,16 +382,6 @@ type List Int -> Int
 func product = items => items
   |> reduce productStep 1
 
-type Ord A => A -> A -> A
-func chooseGreater = best item => best < item
- T|> item
- F|> best
-
-type Ord A => A -> A -> A
-func chooseLesser = best item => item < best
- T|> item
- F|> best
-
 type (A -> A -> Bool) -> A -> A -> A
 func chooseGreaterBy = compare best item => compare best item
  T|> item
@@ -514,25 +511,6 @@ func doSkipInsert = state current =>
         inserted: False,
         items: append state.items [current]
     }
-
-type Ord A => A -> (InsertState A) -> A -> (InsertState A)
-func insertStep = item state current => state.inserted
- T|> { inserted: True, items: append state.items [current] }
- F|> insertCheckOrder item state current
-
-type Ord A => A -> (InsertState A) -> A -> (InsertState A)
-func insertCheckOrder = item state current => item < current
- T|> doInsertBefore state item current
- F|> doSkipInsert state current
-
-type Ord A => A -> (List A) -> (List A)
-func insertSorted = item sorted => sorted
-  |> reduce (insertStep item) { inserted: False, items: [] }
-  |> finalizeSortInsert item
-
-type Ord A => (List A) -> A -> (List A)
-func sortStep = sorted item =>
-    insertSorted item sorted
 
 type (A -> A -> Bool) -> A -> (InsertState A) -> A -> (InsertState A)
 func insertByStep = compare item state current => state.inserted

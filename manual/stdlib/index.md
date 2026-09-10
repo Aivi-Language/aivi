@@ -67,7 +67,7 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 | [aivi.core.bytes](bytes.md) | Byte sequence operations | `fromText`, `toText`, `slice`, `append` |
 | [aivi.data.json](json.md) | JSON text helpers plus structural JSON types | `validate`, `get`, `pretty`, `Json` |
 | [aivi.duration](duration.md) | Typed time spans | `ms`, `sec`, `min`, `hr`, `millis` |
-| [aivi.time](time.md) | Clock, timestamp, and formatting helpers | `nowMs`, `monotonicMs`, `format`, `parse` |
+| [aivi.time](time.md) | Clocks, timestamps, and duration arithmetic | `nowMs`, `monotonicMs`, `toSeconds`, `elapsed` |
 | [aivi.date](date.md) | Calendar data and pure formatting | `Date`, `TimeOfDay`, `DateDelta`, `dateToIso` |
 | [aivi.timer](timer.md) | Marker types for timer-backed signals | `TimerTick`, `TimerReady`, `TimerMode` |
 | [aivi.random](random.md) | Randomness vocabulary and `RandomSource` | `RandomSource`, `RandomError` |
@@ -77,15 +77,13 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 | [aivi.stdio](stdio.md) | Standard I/O vocabulary and `StdioSource` | `StdioSource`, `Stream`, `Stdout`, `Stderr` |
 | [aivi.log](log.md) | Logging vocabulary and `LogSource` | `levelToText`, `kv`, `LogSource` |
 | [aivi.process](process.md) | Process vocabulary and `ProcessSource` | `command`, `args`, `workingDir`, `env` |
-| [aivi.url](url.md) | Typed URLs with explicit parsing | `Url`, `UrlError` (domain members are not public yet) |
+| [aivi.url](url.md) | Typed URLs with explicit parsing | `Url`, `UrlError`, `parse`, `toText` |
 | [aivi.http](http.md) | HTTP vocabulary and `HttpSource` | `HttpSource`, `HttpResponse`, `HttpError` |
 | [aivi.api](api.md) | OpenAPI capability auth and error vocabulary | `ApiAuth`, `ApiError`, `ApiResponse` |
 | [aivi.auth](auth.md) | OAuth 2.0 / PKCE sign-in records | `PkceConfig`, `PkceToken`, `PkceState` |
 | [aivi.db](db.md) | Database vocabulary and `DbSource` | `query`, `commit`, `DbSource` |
 | [aivi.imap](imap.md) | Mailbox and folder types for IMAP integrations | `FolderSummary`, `MailEvent`, `lastSyncedAt` |
 | [aivi.smtp](smtp.md) | Outgoing mail configuration and messages | `from`, `to`, `subject`, `bodyText`, `SmtpConfig` |
-| [aivi.app](app.md) | Application framework types | `AppLifecycle`, `AppActionResult`, `AppCommand` |
-| [aivi.app.lifecycle](lifecycle.md) | Lifecycle state, commands, undo, notifications | `label`, `shortcut`, `canUndo`, `NotificationLevel` |
 | [aivi.desktop.xdg](xdg.md) | XDG error vocabulary | `dataHome`, `configHome`, `cacheHome` |
 | [aivi.portal](portal.md) | Desktop portal result vocabulary plus built-in portal sources | `openFile`, `openUri`, `screenshot` |
 | [aivi.dbus](dbus.md) | D-Bus vocabulary and `DbusSource` | `destination`, `path`, `interface`, `member` |
@@ -101,7 +99,6 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 | [aivi.secret](secret.md) | Desktop keyring capability vocabulary | `SecretSource`, `SecretError`, `SecretTask` |
 | [aivi.image](image.md) | Image data, metadata, and load errors | `format`, `size`, `bytes`, `hasAlpha` |
 | [aivi.gresource](gresource.md) | Bundled GResource paths and load errors | `ResourcePath`, `ResourceError`, `ResourceTask` |
-| [aivi.i18n](i18n.md) | Internationalisation marker helpers | `tr`, `trn` |
 
 ## Built-in types you will see often
 
@@ -153,7 +150,7 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 ### Time, randomness, and scheduling
 
 - [`aivi.duration`](/stdlib/duration) — typed time spans such as `5sec`.
-- [`aivi.time`](/stdlib/time) — clocks, timestamps, and time formatting helpers.
+- [`aivi.time`](/stdlib/time) — clocks, timestamps, and duration arithmetic.
 - [`aivi.date`](/stdlib/date) — calendar data types and pure formatting.
 - [`aivi.timer`](/stdlib/timer) — marker types for timer-backed signals.
 - [`aivi.random`](/stdlib/random) — randomness vocabulary plus `RandomSource`.
@@ -172,12 +169,12 @@ After [`aivi.prelude`](/stdlib/prelude), the modules most people reach for first
 Some modules in this group are full helpers, and some are shared data shapes for integrations.
 The linked pages spell out which functions exist today.
 
-- [`aivi.url`](/stdlib/url) — typed URLs and helpers for their parts.
+- [`aivi.url`](/stdlib/url) — validated, normalized URLs and their text representation.
 - [`aivi.http`](/stdlib/http) — HTTP vocabulary plus `HttpSource`.
 - [`aivi.api`](/stdlib/api) — auth and error vocabulary shared by `@source api`.
 - [`aivi.auth`](/stdlib/auth) — OAuth / PKCE sign-in records and state types.
 - [`aivi.db`](/stdlib/db) — database vocabulary plus `DbSource`.
-- [`aivi.imap`](/stdlib/imap) — mailbox types for current integrations and future source capabilities.
+- [`aivi.imap`](/stdlib/imap) — mailbox records used by the built-in IMAP sources.
 - [`aivi.smtp`](/stdlib/smtp) — outgoing mail settings, messages, and errors.
 
 ### Desktop, UI, and GNOME
@@ -186,8 +183,6 @@ Many pages in this group describe handle vocabularies, watcher/source shapes, pa
 surfaces, or shared desktop data types rather than a full feature API. They are still the right
 place to look when wiring a Linux desktop app together.
 
-- [`aivi.app`](/stdlib/app) — application framework types.
-- [`aivi.app.lifecycle`](/stdlib/lifecycle) — lifecycle state, commands, undo state, and in-app notifications.
 - [`aivi.desktop.xdg`](/stdlib/xdg) — XDG error vocabulary; actual directories come from `PathSource`.
 - [`aivi.portal`](/stdlib/portal) — desktop portal results and built-in sources for file picking, opening URIs, and screenshots.
 - [`aivi.dbus`](/stdlib/dbus) — D-Bus vocabulary plus `DbusSource`.
@@ -203,7 +198,6 @@ place to look when wiring a Linux desktop app together.
 - [`aivi.gtk.styles`](/stdlib/styles) — CSS class constants.
 - [`aivi.image`](/stdlib/image) — image data, metadata, and load errors.
 - [`aivi.gresource`](/stdlib/gresource) — bundled resource paths and load errors.
-- [`aivi.i18n`](/stdlib/i18n) — translation marker helpers.
 
 ## Common interfaces (typeclasses)
 

@@ -13,8 +13,9 @@ use aivi_hir::{
     ValidationMode, generate_source_decode_programs, lower_module, validate_module,
 };
 use aivi_runtime::{
-    ExternalSourceValue, SourceDecodeError, SourceDecodeProgramSupportError, decode_external,
-    encode_runtime_json, parse_json_text, validate_supported_program,
+    ExternalSourceValue, SourceDecodeError, SourceDecodeErrorWithPath,
+    SourceDecodeProgramSupportError, decode_external, encode_runtime_json, parse_json_text,
+    validate_supported_program,
 };
 use aivi_syntax::{Formatter, Item as SyntaxItem, ParsedModule, parse_module};
 use aivi_typing::PrimitiveType;
@@ -209,9 +210,13 @@ fn exercise_decode_program(program: &SourceDecodeProgram, payload_seed: &[u8]) {
             let error = decode_external(program, &valid_value)
                 .expect_err("unsupported decode program must fail before runtime decoding");
             assert_eq!(
-                error,
+                error.error,
                 SourceDecodeError::UnsupportedProgram(expected.clone()),
                 "unsupported decode programs must preserve their support error"
+            );
+            assert!(
+                error.path.is_empty(),
+                "program-support failures must occur before value traversal"
             );
         }
     }
@@ -222,19 +227,21 @@ fn exercise_decode_program(program: &SourceDecodeProgram, payload_seed: &[u8]) {
     let payload_text = String::from_utf8_lossy(payload_seed).into_owned();
     match parse_json_text(&payload_text) {
         Ok(value) => assert_decode_result(program, decode_external(program, &value), &support),
-        Err(SourceDecodeError::InvalidJson { detail }) => {
-            assert!(
-                !detail.is_empty(),
-                "invalid JSON errors should explain why parsing failed"
-            );
-        }
-        Err(SourceDecodeError::UnsupportedNumber { value }) => {
-            assert!(
-                !value.is_empty(),
-                "unsupported JSON numbers should preserve the original number text"
-            );
-        }
-        Err(other) => panic!("JSON parsing should fail only before decode: {other:?}"),
+        Err(error) => match error.error {
+            SourceDecodeError::InvalidJson { detail } => {
+                assert!(
+                    !detail.is_empty(),
+                    "invalid JSON errors should explain why parsing failed"
+                );
+            }
+            SourceDecodeError::UnsupportedNumber { value } => {
+                assert!(
+                    !value.is_empty(),
+                    "unsupported JSON numbers should preserve the original number text"
+                );
+            }
+            other => panic!("JSON parsing should fail only before decode: {other:?}"),
+        },
     }
 
     if let Some(external) = arbitrary_external_value(payload_seed) {
@@ -244,7 +251,7 @@ fn exercise_decode_program(program: &SourceDecodeProgram, payload_seed: &[u8]) {
 
 fn assert_decode_result(
     program: &SourceDecodeProgram,
-    result: Result<RuntimeValue, SourceDecodeError>,
+    result: Result<RuntimeValue, SourceDecodeErrorWithPath>,
     support: &Result<(), SourceDecodeProgramSupportError>,
 ) {
     match result {
@@ -255,13 +262,21 @@ fn assert_decode_result(
             );
             assert_runtime_roundtrip(program, &decoded);
         }
-        Err(SourceDecodeError::UnsupportedProgram(error)) => {
+        Err(SourceDecodeErrorWithPath {
+            path,
+            error: SourceDecodeError::UnsupportedProgram(error),
+            ..
+        }) => {
             let expected = support
                 .as_ref()
                 .expect_err("supported decode programs must not return UnsupportedProgram");
             assert_eq!(
                 &error, expected,
                 "unsupported decode errors must match validate_supported_program"
+            );
+            assert!(
+                path.is_empty(),
+                "program-support failures must occur before value traversal"
             );
         }
         Err(error) => {
@@ -288,16 +303,56 @@ fn assert_runtime_roundtrip(program: &SourceDecodeProgram, decoded: &RuntimeValu
     );
 }
 
-fn assert_decode_error_consistent(program: &SourceDecodeProgram, error: &SourceDecodeError) {
+fn assert_decode_error_consistent(
+    program: &SourceDecodeProgram,
+    error: &SourceDecodeErrorWithPath,
+) {
     let facts = collect_decode_error_facts(program);
-    match error {
+    assert!(
+        error.path_string().starts_with("root"),
+        "decode errors must render a rooted breadcrumb path"
+    );
+    match &error.error {
         SourceDecodeError::TypeMismatch { found, .. } => {
             assert!(
                 matches!(
                     *found,
-                    "unit" | "bool" | "integer" | "text" | "list" | "record" | "variant"
+                    "unit"
+                        | "bool"
+                        | "integer"
+                        | "float"
+                        | "text"
+                        | "bytes"
+                        | "list"
+                        | "record"
+                        | "variant"
                 ),
                 "type-mismatch reports must use known runtime source kinds"
+            );
+        }
+        SourceDecodeError::InvalidScalarLiteral { scalar, .. } => {
+            assert!(
+                matches!(*scalar, "Decimal" | "BigInt"),
+                "invalid scalar literals must name a supported text-encoded scalar"
+            );
+        }
+        SourceDecodeError::InvalidBytesElementKind { found, .. } => {
+            assert_ne!(
+                *found, "integer",
+                "integer byte elements have a value error"
+            );
+            assert!(
+                matches!(
+                    *found,
+                    "unit" | "bool" | "float" | "text" | "bytes" | "list" | "record" | "variant"
+                ),
+                "invalid byte-element errors must use known runtime source kinds"
+            );
+        }
+        SourceDecodeError::InvalidByteValue { value, .. } => {
+            assert!(
+                !(0..=u8::MAX as i64).contains(value),
+                "invalid byte values must fall outside the byte range"
             );
         }
         SourceDecodeError::InvalidTupleLength { expected, found } => {

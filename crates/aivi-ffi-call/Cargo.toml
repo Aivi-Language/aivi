@@ -10,5 +10,5 @@ cranelift-codegen.workspace = true
 cranelift-jit.workspace = true
 cranelift-module.workspace = true
 libffi = "5.1.0"
-num-bigint = "0.4.6"
+num-bigint.workspace = true
 rust_decimal = "1.40.0"

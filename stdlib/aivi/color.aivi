@@ -45,7 +45,7 @@ func blendChannel = a b t =>
 
 type Color -> Color -> Float -> Color
 func blend = c1 c2 t =>
-    argb (4278190080 + (blendChannel (red c1) (red c2) t) * 65536 + (blendChannel (green c1) (green c2) t) * 256 + blendChannel (blue c1) (blue c2) t)
+    argb ((blendChannel (alpha c1) (alpha c2) t) * 16777216 + (blendChannel (red c1) (red c2) t) * 65536 + (blendChannel (green c1) (green c2) t) * 256 + blendChannel (blue c1) (blue c2) t)
 
 // GNOME palette — canonical Adwaita brand colours
 value black : Color = argb 4278190080

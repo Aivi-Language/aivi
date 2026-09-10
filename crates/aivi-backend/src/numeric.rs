@@ -94,6 +94,15 @@ impl std::fmt::Display for RuntimeDecimal {
 pub struct RuntimeBigInt(BigInt);
 
 impl RuntimeBigInt {
+    /// Computes n! without consuming the host call stack; nonpositive inputs yield one.
+    pub fn factorial(n: i64) -> Self {
+        let mut product = BigInt::from(1);
+        for factor in 2..=n {
+            product *= factor;
+        }
+        Self(product)
+    }
+
     pub(crate) const HEADER_BYTES: usize = 16;
 
     pub fn parse_literal(raw: &str) -> Option<Self> {

@@ -592,8 +592,8 @@ impl<'a> ModuleLowerer<'a> {
                     item: owner,
                     kind,
                     binding,
-                    previous,
-                    current,
+                    previous: *previous,
+                    current: *current,
                     span,
                 });
                 return None;

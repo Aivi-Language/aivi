@@ -341,11 +341,11 @@ impl<'a> ProgramLowerer<'a> {
     fn check_global_item_cycles(&self) -> Result<(), LoweringError> {
         // Build an adjacency map: for each core item that has a body, collect the set of
         // other core items directly referenced in its closure expressions.
-        // Ambient prelude items (__aivi_*) are runtime-interpreted and may be recursive,
-        // so they are excluded from the cycle check.
+        // Function bodies execute only when called. Their recursive references do
+        // not form cycles in eager global-value initialization.
         let mut adjacency: HashMap<core::ItemId, Vec<core::ItemId>> = HashMap::new();
         for (core_id, item) in self.lambda.items().iter() {
-            if item.name.starts_with("__aivi_") {
+            if !item.parameters.is_empty() {
                 continue;
             }
             let Some(body_closure_id) = item.body else {
@@ -1022,6 +1022,18 @@ impl<'a> ProgramLowerer<'a> {
     }
 
     fn attach_opaque_variants(&mut self) -> Result<(), LoweringError> {
+        // Declared payloads can introduce nested sum layouts. Reach a fixed point
+        // before freezing the ABI so unused constructors remain representable.
+        loop {
+            let previous_layout_count = self.program.layouts().len();
+            self.attach_opaque_variant_pass()?;
+            if self.program.layouts().len() == previous_layout_count {
+                return Ok(());
+            }
+        }
+    }
+
+    fn attach_opaque_variant_pass(&mut self) -> Result<(), LoweringError> {
         let mut variants_by_layout: HashMap<LayoutId, CollectedOpaqueLayout> = HashMap::new();
         for (ty, collected) in self.collect_opaque_variants() {
             let Some(layout_id) = self.core_layouts.get(&ty).copied() else {
@@ -1059,7 +1071,47 @@ impl<'a> ProgramLowerer<'a> {
                 }
             }
         }
-        for (layout_id, collected) in variants_by_layout {
+        // Imported and defining-module views of one instantiated nominal type
+        // must agree on the full constructor set, even if a function only uses
+        // a subset (for example, init never constructs RaggedRows).
+        let mut declarations = HashMap::new();
+        for (layout_id, collected) in &variants_by_layout {
+            let LayoutKind::Opaque {
+                item,
+                name,
+                arguments,
+                ..
+            } = &self.program.layouts()[*layout_id].kind
+            else {
+                continue;
+            };
+            let Some(origin) = item.or(collected.item) else {
+                continue;
+            };
+            let entry: &mut HashMap<Box<str>, Vec<core::Type>> = declarations
+                .entry((origin, name.clone(), arguments.clone()))
+                .or_default();
+            for (name, fields) in &collected.variants {
+                entry.entry(name.clone()).or_insert_with(|| fields.clone());
+            }
+        }
+        for (layout_id, mut collected) in variants_by_layout {
+            if let LayoutKind::Opaque {
+                item,
+                name,
+                arguments,
+                ..
+            } = &self.program.layouts()[layout_id].kind
+                && let Some(origin) = item.or(collected.item)
+                && let Some(declared) = declarations.get(&(origin, name.clone(), arguments.clone()))
+            {
+                for (name, fields) in declared {
+                    collected
+                        .variants
+                        .entry(name.clone())
+                        .or_insert_with(|| fields.clone());
+                }
+            }
             let mut lowered_variants = collected
                 .variants
                 .into_iter()
@@ -1108,7 +1160,10 @@ impl<'a> ProgramLowerer<'a> {
         for ty in self.core_layouts.keys() {
             let item = match ty {
                 core::Type::OpaqueItem { item, .. } => Some(*item),
-                core::Type::OpaqueImport { .. } => None,
+                core::Type::OpaqueImport { import, .. } => self
+                    .lambda
+                    .core()
+                    .imported_type_origin(hir_module.file(), *import),
                 _ => continue,
             };
             let subject = hir_gate_type_for_core_type(ty);
@@ -1170,6 +1225,28 @@ impl<'a> ProgramLowerer<'a> {
     fn collect_opaque_variants(&self) -> HashMap<core::Type, CollectedOpaqueLayout> {
         let mut collected = HashMap::new();
         for (_, expr) in self.lambda.core().exprs().iter() {
+            // Runtime comparison produces all three Ordering constructors, even
+            // when a caller only names one of them in a comparison expression.
+            if let core::ExprKind::Reference(core::Reference::BuiltinClassMember(
+                core::BuiltinClassMemberIntrinsic::Compare { ordering_item, .. },
+            )) = &expr.kind
+            {
+                let mut result = &expr.ty;
+                while let core::Type::Arrow { result: next, .. } = result {
+                    result = next;
+                }
+                if is_opaque_type(result) {
+                    for name in ["Less", "Equal", "Greater"] {
+                        record_opaque_variant(
+                            &mut collected,
+                            result,
+                            Some(*ordering_item),
+                            name.into(),
+                            Vec::new(),
+                        );
+                    }
+                }
+            }
             match &expr.kind {
                 core::ExprKind::Apply { callee, arguments }
                     if opaque_variant_type(&expr.ty).is_some()
@@ -3725,24 +3802,27 @@ impl<'a> ProgramLowerer<'a> {
                     };
                     let id = self.intern_layout(layout)?;
                     self.core_layouts.insert(cache_key.clone(), id);
-                    if let (
-                        Some(hir),
-                        core::Type::Domain {
-                            item, arguments, ..
-                        },
-                    ) = (self.hir, &cache_key)
+                    if let core::Type::Domain {
+                        carrier,
+                        item,
+                        arguments,
+                        ..
+                    } = &cache_key
                     {
-                        let carrier = aivi_hir::domain_carrier_type(
-                            hir,
-                            *item,
-                            &arguments
-                                .iter()
-                                .map(hir_gate_type_for_core_type)
-                                .collect::<Vec<_>>(),
-                        );
+                        let carrier = carrier.as_deref().cloned().or_else(|| {
+                            let hir = self.hir?;
+                            aivi_hir::domain_carrier_type(
+                                hir,
+                                *item,
+                                &arguments
+                                    .iter()
+                                    .map(hir_gate_type_for_core_type)
+                                    .collect::<Vec<_>>(),
+                            )
+                            .map(|ty| core::Type::lower_in_module(&ty, hir))
+                        });
                         if let Some(carrier) = carrier {
-                            let carrier_layout =
-                                self.intern_core_type(&core::Type::lower(&carrier))?;
+                            let carrier_layout = self.intern_core_type(&carrier)?;
                             self.program
                                 .register_named_domain_carrier(id, carrier_layout);
                         }
@@ -3850,6 +3930,7 @@ fn hir_gate_type_for_core_type(ty: &core::Type) -> HirGateType {
             item,
             name,
             arguments,
+            ..
         } => HirGateType::Domain {
             item: *item,
             name: name.to_string(),
@@ -3868,11 +3949,12 @@ fn hir_gate_type_for_core_type(ty: &core::Type) -> HirGateType {
             import,
             name,
             arguments,
+            definition,
         } => HirGateType::OpaqueImport {
             import: *import,
             name: name.to_string(),
             arguments: arguments.iter().map(hir_gate_type_for_core_type).collect(),
-            definition: None,
+            definition: definition.clone(),
         },
     }
 }
