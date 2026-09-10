@@ -78,7 +78,9 @@ export default defineConfig({
       provider: 'local',
     },
 
-    socialLinks: [],
+    socialLinks: [
+      { icon: 'github', link: 'https://github.com/Aivi-Language/aivi' },
+    ],
 
     footer: {
       message: '(c) 2026 by Andreas Herd',

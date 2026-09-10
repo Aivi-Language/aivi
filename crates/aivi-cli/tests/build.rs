@@ -53,6 +53,10 @@ fn repo_path(relative: &str) -> PathBuf {
 const EMBEDDED_BUNDLE_ARCHIVE_MAGIC: [u8; 16] = *b"AIVI_ARCHIVE_V1_";
 const EMBEDDED_BUNDLE_FOOTER_MAGIC: [u8; 16] = *b"AIVI_BUNDLE_V1__";
 const EMBEDDED_BUNDLE_FOOTER_LEN: u64 = 24;
+const ALLOWED_LAUNCH_STDERR_LINES: [&str; 2] = [
+    "libEGL warning: DRI3 error: Could not get DRI3 device",
+    "libEGL warning: Ensure your X server supports DRI3 to get accelerated rendering",
+];
 
 fn read_embedded_bundle_entries(path: &Path) -> BTreeMap<String, Vec<u8>> {
     let mut file = fs::File::open(path).expect("built executable should exist");
@@ -125,6 +129,13 @@ fn bytes_contain(haystack: &[u8], needle: &[u8]) -> bool {
         .any(|window| window == needle)
 }
 
+fn unexpected_launch_stderr(stderr: &str) -> Vec<&str> {
+    stderr
+        .lines()
+        .filter(|line| !ALLOWED_LAUNCH_STDERR_LINES.contains(line))
+        .collect()
+}
+
 #[cfg(unix)]
 fn assert_executable_launches(executable_path: &Path) {
     let output = Command::new("timeout")
@@ -150,10 +161,27 @@ fn assert_executable_launches(executable_path: &Path) {
         )),
         "expected standalone launch to report the built executable path, got stdout: {stdout}"
     );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let unexpected_stderr = unexpected_launch_stderr(&stderr);
     assert!(
-        output.stderr.is_empty(),
-        "expected standalone launch probe stderr to stay empty, got: {}",
-        String::from_utf8_lossy(&output.stderr)
+        unexpected_stderr.is_empty(),
+        "expected standalone launch probe stderr to contain only known harmless Mesa DRI3 warnings, got unexpected lines: {unexpected_stderr:?}; full stderr: {stderr}"
+    );
+}
+
+#[test]
+fn launch_stderr_accepts_only_the_known_mesa_dri3_warning() {
+    let known_warning = format!("{}\n", ALLOWED_LAUNCH_STDERR_LINES.join("\n"));
+    assert!(unexpected_launch_stderr("").is_empty());
+    assert!(unexpected_launch_stderr(&known_warning).is_empty());
+
+    assert_eq!(
+        unexpected_launch_stderr("AIVI failed to initialize\n"),
+        vec!["AIVI failed to initialize"]
+    );
+    assert_eq!(
+        unexpected_launch_stderr(&format!("{known_warning}AIVI failed to initialize\n")),
+        vec!["AIVI failed to initialize"]
     );
 }
 
