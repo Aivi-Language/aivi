@@ -86,7 +86,7 @@ func toCode = message =>
     42
 
 type Result Text Int -> (Result Int Int)
-func withErrorCode = r => r
+func withErrorCode =
   |> mapErr toCode
 ```
 
@@ -118,7 +118,7 @@ Returns the result unchanged if it is `Ok`, otherwise returns the fallback resul
 use aivi.result (orElse)
 
 type Result Text Int -> (Result Text Int) -> (Result Text Int)
-func withFallback = primary secondary => primary
+func withFallback = primary! secondary
   |> orElse secondary
 ```
 
@@ -139,7 +139,7 @@ func ensurePositive = n => n > 0
  F|> Err "must be positive"
 
 type Result Text Int -> (Result Text Int)
-func validateCount = result => result
+func validateCount =
   |> flatMap ensurePositive
 ```
 
@@ -207,7 +207,7 @@ func double = n =>
     n * 2
 
 type Result Text Int -> (Result Text Int)
-func doubleResult = result => result
+func doubleResult =
   |> map double
 ```
 

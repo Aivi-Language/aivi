@@ -73,7 +73,7 @@ use aivi.image (
 )
 
 type ImageFormat -> Text
-func formatLabel = format => format
+func formatLabel =
  ||> Png             -> "PNG"
  ||> Jpeg            -> "JPEG"
  ||> Webp            -> "WebP"

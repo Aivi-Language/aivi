@@ -32,8 +32,7 @@ In most languages:
 ```js
 // JavaScript
 function classify(score) {
-  if (score >= 90) return "excellent";
-  else if (score >= 50) return "pass";
+  if (score >= 50) return "pass";
   else return "fail";
 }
 ```
@@ -44,7 +43,7 @@ truthy/falsy splits, use `T|>` and `F|>`. They work with `Bool`, `Option`,
 
 ```aivi
 type Int -> Text
-func classify = arg1 => arg1 >= 50
+func classify = . >= 50
  T|> "pass"
  F|> "fail"
 ```
@@ -59,7 +58,7 @@ type Direction =
   | West
 
 type Direction -> Text
-func label = arg1 => arg1
+func label =
  ||> North -> "up"
  ||> South -> "down"
  ||> East  -> "right"
@@ -111,12 +110,10 @@ AIVI uses the same ideas, but as pipes:
 
 ```aivi
 type Int -> Int
-func double = arg1 =>
-    arg1 * 2
+func double = . * 2
 
 type Int -> Bool
-func isEven = arg1 =>
-    arg1 % 2 == 0
+func isEven = . % 2 == 0
 
 type Int -> Int -> Int
 func add = total value =>

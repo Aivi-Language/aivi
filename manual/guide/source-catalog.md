@@ -545,8 +545,7 @@ value view =
 
 ### `dbus.method`
 
-**Form:**
-
+**Form:** `@source dbus.method destination` or `@source dbus.method destination, replyTask`
 
 | Option | Type | Current support |
 | --- | --- | --- |

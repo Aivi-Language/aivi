@@ -104,7 +104,7 @@ Function bodies are still just expressions, so multi-line definitions usually le
 
 ```aivi
 type Int -> Text
-func describeScore = arg1 => arg1 >= 50
+func describeScore = score => score >= 50
  T|> "good"
  F|> "keep going"
 
@@ -126,8 +126,20 @@ func compareWithPrevious = value => value
 
 When a unary function starts from its argument directly, you can omit the explicit parameter and use `.` as the implicit subject:
 
-For example, `func statusLineFor = .status` projects directly from the implicit subject, and
-`func scoreLineFor = "Score: {.}"` interpolates it without introducing an explicit parameter.
+```aivi
+type Status = { status: Text }
+
+type Status -> Text
+func statusLineFor = .status
+
+type Int -> Text
+func scoreLineFor = "Score: {.}"
+
+value statusText = statusLineFor { status: "ready" }
+value scoreText = scoreLineFor 42
+```
+
+`.status` projects from the implicit subject; `{.}` interpolates it without naming a parameter.
 
 The same shorthand also works for pipe-rooted bodies. When the unary body starts with a pipe
 operator, you can omit the explicit `.` head and start directly with the stages:
@@ -158,14 +170,16 @@ func add = left right =>
     left + right
 
 type Int -> Int -> Int
-func addFrom = amount value => value
+func addFrom = amount value!
   |> add amount
 
 value total = addFrom 2 40
 ```
 
 The marked parameter becomes the subject for the following continuation, so the next line can start
-with `|>` directly. The same sugar also works for patch-rooted bodies:
+with `|>` directly. Here `amount value!` is equivalent to `amount value => value` followed by
+the same stages. Select exactly one named parameter; `!` does not change argument order.
+The same sugar also works for patch-rooted bodies:
 
 ```aivi
 type Counter = {
@@ -174,14 +188,18 @@ type Counter = {
 }
 
 type Counter -> Int -> Counter
-func bump = counter amount =>
-    counter <| {
-        total: counter.total + amount,
+func bump = counter! amount
+    <| {
+        total: . + amount,
         ready: True,
     }
 
 value bumped = bump ({ total: 2, ready: False }) 3
 ```
+
+This patch-rooted form passes `aivi check`, but `aivi test` currently rejects this example
+during typed-core lowering. Its intended result is `{ total: 5, ready: True }`.
+The pipe-rooted examples above and below do execute through `aivi test`.
 
 You can also select a projection from the preceding named parameter:
 
@@ -197,7 +215,7 @@ func addOne = value =>
     value + 1
 
 type X -> Int
-func readNested = state => state.x.y.z
+func readNested = state { x.y.z! }
   |> addOne
 
 value nestedTotal =
@@ -301,8 +319,7 @@ func trimStatus =
  ||> _         -> .
 
 type Text -> Text
-func decorateStatus = status =>
-    "[{status}]"
+func decorateStatus = "[{.}]"
 
 value shownStatus = " ready "
   |> trimStatus
@@ -316,6 +333,9 @@ same helper written with an explicit unary subject head such as `func trimStatus
 the same stages.
 
 ## Structural patches
+
+The checker accepts the patch forms described here. Execution support is narrower:
+see the [current patch-function execution limit](/guide/predicates#predicates-in-patches).
 
 Use `<|` to produce an updated value without mutating the original:
 
@@ -383,7 +403,7 @@ Structural removal syntax (`field: -`) removes a field from the result type. See
 
 ## Type annotations
 
-Both `value` and `func` use `:` for type annotations:
+Annotate a `value` with `:`, and give a named function its signature on a preceding `type` line:
 
 ```aivi
 value count : Int = 0

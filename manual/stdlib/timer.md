@@ -63,7 +63,7 @@ use aivi.timer (
 )
 
 type TimerMode -> Text
-func describeMode = mode => mode
+func describeMode =
  ||> Repeating -> "repeat"
  ||> OneShot   -> "run once"
 ```

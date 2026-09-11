@@ -156,7 +156,7 @@ use aivi.imap (
 )
 
 type ImapEvent -> Text
-func describeEvent = event => event
+func describeEvent =
  ||> NewMessage _           -> "new message"
  ||> MessageFlagChanged _ _ -> "message flag changed"
  ||> FolderChanged name     -> "folder changed: {name}"

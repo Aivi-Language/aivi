@@ -157,7 +157,7 @@ Returns the option unchanged if it is `Some`, otherwise returns the fallback opt
 use aivi.option (orElse)
 
 type Option Text -> (Option Text) -> (Option Text)
-func firstAvailable = primary secondary => primary
+func firstAvailable = primary! secondary
   |> orElse secondary
 ```
 
@@ -178,7 +178,7 @@ func parsePositive = n => n > 0
  F|> None
 
 type Option Int -> (Option Int)
-func parseAndFilter = opt => opt
+func parseAndFilter =
   |> flatMap parsePositive
 ```
 
@@ -246,7 +246,7 @@ func double = n =>
     n * 2
 
 type Option Int -> (Option Int)
-func doubleOpt = opt => opt
+func doubleOpt =
   |> map double
 ```
 
@@ -266,7 +266,7 @@ func isPositive = n =>
     n > 0
 
 type Option Int -> (Option Int)
-func keepPositive = opt => opt
+func keepPositive =
   |> filter isPositive
 ```
 

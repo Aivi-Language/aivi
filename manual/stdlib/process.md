@@ -73,7 +73,7 @@ use aivi.process (
 )
 
 type ProcessStatus -> Text
-func describeStatus = status => status
+func describeStatus =
  ||> Exited code -> "finished with code {code}"
  ||> Killed      -> "killed"
 ```

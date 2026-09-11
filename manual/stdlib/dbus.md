@@ -84,8 +84,7 @@ Current canonical handle members:
 Handle-level `bus` / `address` options apply to `bus.call`.
 
 For service-side method handlers, `@source dbus.method destination` now accepts an optional
-second argument:
-
+second argument: `@source dbus.method destination, replyTask`.
 
 When present, that task is executed on each incoming call and its `List DbusValue` result is
 sent back as the method reply body.

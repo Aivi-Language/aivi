@@ -17,7 +17,7 @@ func readyHeadline = tasks => tasks
   |> "{.} tasks ready"
 
 type Screen (List Text) -> Text
-func headline = screen => screen
+func headline =
  ||> Loading      -> "Loading tasks..."
  ||> Ready tasks  -> readyHeadline tasks
  ||> Failed error -> "Could not load tasks: {error}"

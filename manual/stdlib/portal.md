@@ -104,7 +104,7 @@ use aivi.portal (
 )
 
 type PortalFileSelection -> Text
-func selectionSummary = selection => selection
+func selectionSummary =
  ||> SingleFile path     -> path
  ||> MultipleFiles paths -> "Several files selected"
  ||> SelectionCancelled  -> "No file selected"

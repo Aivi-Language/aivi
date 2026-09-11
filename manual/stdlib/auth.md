@@ -187,7 +187,7 @@ use aivi.auth (
 )
 
 type PkceState -> Bool
-func signedIn = state => state
+func signedIn =
  ||> PkceComplete _ -> True
  ||> _              -> False
 ```

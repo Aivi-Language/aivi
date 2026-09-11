@@ -46,7 +46,7 @@ type LoadState =
   | Failed Text
 
 type LoadState -> Text
-func describe = state => state
+func describe =
  ||> Loading      -> "Loading..."
  ||> Ready data   -> "Ready: {data}"
  ||> Failed error -> "Error: {error}"
@@ -62,7 +62,7 @@ In AIVI, use the simplest readable form first:
 
 ```aivi
 type Text -> Text
-func greeting = name => name
+func greeting =
   |> trim
   |> "Hello, {.}!"
 ```

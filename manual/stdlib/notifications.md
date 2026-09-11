@@ -154,7 +154,7 @@ use aivi.gnome.notifications (
 )
 
 type NotificationResponse -> Text
-func responseLabel = response => response
+func responseLabel =
  ||> ActionTriggered actionId -> "Clicked: {actionId}"
  ||> Dismissed                -> "Dismissed"
 ```

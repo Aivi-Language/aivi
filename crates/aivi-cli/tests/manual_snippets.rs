@@ -87,6 +87,76 @@ fn manual_snippets_writes_formatted_blocks() {
 }
 
 #[test]
+fn manual_snippets_preserves_teaching_syntax_and_checks_original_diagnostics() {
+    let temp = TempDir::new("manual-snippets-preserve");
+    let manual_root = temp.path().join("manual");
+    let original = concat!(
+        "# Examples\n\n```aivi group=subjects\n",
+        "type State = { score: Int }\n",
+        "type State -> Int\nfunc score = .score\n",
+        "type Int -> Text\nfunc label = \"Score: {.}\"\n",
+        "```\n\n```aivi group=subjects\n",
+        "type Int -> Int -> Int\nfunc add = left right => left + right\n",
+        "type Int -> State -> Int\nfunc addScore = amount state { score! }\n",
+        "  |> add amount\n",
+        "value total = addScore 2 { score: 40 }\n```\n",
+    );
+    let page = temp.write("manual/example.md", original);
+    let todo = temp.path().join("todo.json");
+    let check = || {
+        Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("manual-snippets")
+            .arg("--preserve-format")
+            .arg("--root")
+            .arg(&manual_root)
+            .arg("--todo")
+            .arg(&todo)
+            .output()
+            .expect("manual-snippets should run")
+    };
+    let output = check();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(fs::read_to_string(&page).unwrap(), original);
+    let report: Value = serde_json::from_str(&fs::read_to_string(&todo).unwrap()).unwrap();
+    assert_eq!(report["rewritten_blocks"], 0);
+    assert_eq!(report["unresolved_fragments"], 0);
+
+    let invalid = format!("{original}\n```aivi\nvalue wrong : Int = \"text\"\n```\n");
+    fs::write(&page, &invalid).unwrap();
+    assert!(!check().status.success());
+    assert_eq!(fs::read_to_string(&page).unwrap(), invalid);
+    let report: Value = serde_json::from_str(&fs::read_to_string(&todo).unwrap()).unwrap();
+    assert_eq!(report["unresolved_fragments"], 1);
+    assert_eq!(report["entries"][0]["formatting_changed"], false);
+    assert!(
+        report["entries"][0]["suggested_snippet"]
+            .as_str()
+            .unwrap()
+            .contains("value wrong : Int = \"text\"")
+    );
+}
+
+#[test]
+fn manual_snippets_rejects_preserve_and_write_in_either_order() {
+    for flags in [
+        ["--preserve-format", "--write"],
+        ["--write", "--preserve-format"],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("manual-snippets")
+            .args(flags)
+            .output()
+            .expect("manual-snippets should run");
+        assert!(!output.status.success());
+        assert!(String::from_utf8_lossy(&output.stderr).contains("cannot combine"));
+    }
+}
+
+#[test]
 fn manual_snippets_reports_unresolved_diagnostics() {
     let temp = TempDir::new("manual-snippets-diagnostics");
     let manual_root = temp.path().join("manual");

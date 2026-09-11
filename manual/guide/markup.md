@@ -35,7 +35,7 @@ Widget attributes are schema-checked host properties, not an open CSS map. That 
 
 ```aivi
 type Bool -> Float
-func previewOpacity = arg1 => arg1
+func previewOpacity =
  T|> 1.0
  F|> 0.25
 

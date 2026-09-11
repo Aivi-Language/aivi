@@ -46,6 +46,12 @@ target/debug/aivi --version
 
 Run `aivi help <command>` for the complete argument contract.
 
+For documentation, `aivi manual-snippets --preserve-format` checks the examples exactly as
+written, including deliberate shorthand and expanded teaching forms. Without that option,
+the command checks canonically formatted code and fails when formatting changes are needed;
+`--write` applies those changes. `--write` and `--preserve-format` are mutually exclusive.
+All modes write a diagnostic report and check syntax and types, not runtime results.
+
 ## Runnable artifacts
 
 `aivi compile` and `aivi build` are intentionally different:

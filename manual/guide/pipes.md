@@ -78,7 +78,7 @@ func add = left right =>
     left + right
 
 type Int -> Int -> Int
-func addFrom = amount value => value
+func addFrom = amount value!
   |> add amount
 
 value total = addFrom 2 40
@@ -156,7 +156,7 @@ type Status =
   | Archived
 
 type Status -> Text
-func statusLabel = arg1 => arg1
+func statusLabel =
  ||> Draft     -> "draft"
  ||> Published -> "published"
  ||> Archived  -> "archived"
@@ -191,7 +191,7 @@ non-canonical carrier.
 
 ```aivi
 type Bool -> Text
-func availabilityLabel = arg1 => arg1
+func availabilityLabel =
  T|> "ready"
  F|> "waiting"
 
@@ -202,7 +202,7 @@ value shownAvailability = availabilityLabel True
 type User = { name: Text }
 
 type Option User -> Text
-func userNameOrGuest = arg1 => arg1
+func userNameOrGuest =
  T|> .name
  F|> "guest"
 
@@ -216,7 +216,7 @@ value shownUserName =
 
 ```aivi
 type Result Text Int -> Text
-func loadStatus = arg1 => arg1
+func loadStatus =
  T|> "loaded"
  F|> .
 
@@ -334,24 +334,27 @@ interval, not immediately. As with `|> delay`, a newer upstream event replaces a
 
 ## Tap `|`
 
-The tap pipe observes the current subject without changing it. The tap expression runs (useful
-for logging or side effects), but the subject flows through unchanged:
+The tap pipe evaluates an expression and ignores its result. The current subject flows through
+unchanged. A pure tapped expression does not produce a logging or I/O effect:
 
 ```aivi
-type Text -> Text
-func log = message =>
-    message
+use aivi.text (length)
+
+type Text -> Int
+func nameLength = text =>
+    length text
 
 type Text -> Text
 func greet = name =>
     "Hello, {name}"
 
 value result = "Ada"
-  | log "processing"
+  | nameLength
   |> greet
 ```
 
-The log call fires, but the subject remains `"Ada"` for the next stage.
+`nameLength` computes `3`, which is discarded. The next stage still receives `"Ada"`, so
+`result` is `"Hello, Ada"`. Use a source or task boundary for actual logging or I/O.
 
 ## Map / fan-out `*|>`
 
@@ -532,7 +535,7 @@ Pipes must stay on the top-level expression spine. If you need a pipe inside ano
 
 ```aivi
 type Text -> Text
-func normalizeTitle = arg1 => arg1
+func normalizeTitle =
  ||> "Inbox" -> "priority"
  ||> _       -> .
 

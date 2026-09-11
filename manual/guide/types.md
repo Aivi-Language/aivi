@@ -46,8 +46,7 @@ type User = {
 }
 
 type User -> Text
-func userName = arg1 =>
-    arg1.name
+func userName = .name
 
 value shownName =
     userName {
@@ -205,11 +204,11 @@ func addVec = a b => (a, b)
  ||> (Vec2 ax ay, Vec2 bx by) -> Vec2 (ax + bx) (ay + by)
 
 type Cell -> Int
-func cellX = arg1 => arg1
+func cellX =
  ||> Cell x _ -> x
 
 type Cell -> Int
-func cellY = arg1 => arg1
+func cellY =
  ||> Cell _ y -> y
 ```
 
@@ -229,7 +228,7 @@ type LoadState =
   | Failed Text
 
 type LoadState -> Text
-func loadLabel = arg1 => arg1
+func loadLabel =
  ||> NotAsked      -> "idle"
  ||> Loading       -> "loading"
  ||> Loaded name   -> "ready {name}"
@@ -300,7 +299,7 @@ You usually unpack tuples with pattern matching:
 
 ```aivi
 type (Int, Int) -> Int
-func firstInt = arg1 => arg1
+func firstInt =
  ||> (first, _) -> first
 
 value firstValue =

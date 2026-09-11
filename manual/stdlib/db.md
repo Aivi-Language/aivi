@@ -269,7 +269,7 @@ use aivi.db (
 )
 
 type DbError -> Text
-func describeDbError = error => error
+func describeDbError =
  ||> SchemaMismatch msg      -> "schema mismatch: {msg}"
  ||> QueryFailed msg         -> "query failed: {msg}"
  ||> ConstraintViolation msg -> "constraint violation: {msg}"

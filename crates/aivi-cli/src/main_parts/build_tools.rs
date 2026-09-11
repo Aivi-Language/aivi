@@ -1513,7 +1513,7 @@ DESCRIPTION:
 aivi manual-snippets — validate and format manual code blocks
 
 USAGE:
-    aivi manual-snippets [--root <dir>] [--todo <report.json>] [--write]
+    aivi manual-snippets [--root <dir>] [--todo <report.json>] [--write | --preserve-format]
 
 OPTIONS:
     --root <dir>
@@ -1522,18 +1522,23 @@ OPTIONS:
 
     --todo <report.json>
             Path for a JSON report of unresolved or failing code
-            blocks. When omitted, no report file is written.
+            blocks. Defaults to <root>/aivi-snippet-todo.json.
 
     --write
             Rewrite markdown files in place with formatted code
-            blocks. Without this flag, the command is read-only
-            and only reports issues.
+            blocks. Without this flag, markdown files are not changed.
+
+    --preserve-format
+            Validate code exactly as authored, without canonical
+            formatting or formatting failures. Cannot combine with --write.
 
 DESCRIPTION:
     Scans fenced ```aivi code blocks in markdown documentation files,
-    validates that they parse and type-check, formats them canonically,
-    and optionally rewrites the files. Produces a TODO report of blocks
-    that need manual attention.
+    validates that they parse and type-check, and writes a TODO report.
+    By default, validates canonical formatted code and fails if formatting
+    changes are needed. --write applies those changes. --preserve-format
+    checks the original examples, preserving teaching syntax such as . and !.
+    This command does not execute examples or verify their claimed results.
 "
         }
         "init" => {

@@ -48,6 +48,7 @@ watch(
   () => nextTick(labelTableCells)
 )
 onMounted(labelTableCells)
+onContentUpdated(() => nextTick(labelTableCells))
 onContentUpdated(() => nextTick(fixOutlineCodeLabels))
 onMounted(() => nextTick(fixOutlineCodeLabels))
 </script>

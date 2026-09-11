@@ -71,7 +71,7 @@ use aivi.gnome.settings (
 )
 
 type SettingValue -> Text
-func settingKind = value => value
+func settingKind =
  ||> SettingBool b  -> "bool"
  ||> SettingInt n   -> "int"
  ||> SettingFloat x -> "float"

@@ -91,15 +91,18 @@ the corresponding stress/integration coverage and may affect MCP introspection.
 
 ## 4. Check documentation
 
-Every fenced `aivi` block is checked documentation and must format, parse, resolve, and
-type-check. This gate does not execute its effects or verify claimed output:
+Every fenced `aivi` block is checked documentation and must parse, resolve, and type-check
+as written. The gate uses `aivi manual-snippets --preserve-format` so canonical formatting
+cannot replace the `.` and `!` forms an example is teaching. This gate does not execute
+effects or verify claimed output:
 
 ```sh
 ./tooling/check-manual-aivi-snippets.sh
 ```
 
-If the checker reports formatting-only changes, apply them explicitly and then rerun the read-only
-gate:
+Optional canonical formatting is available separately. Review its diff carefully: the current
+formatter can expand unary and projected-subject shorthand into explicit parameter forms.
+Keep teaching examples in the form their prose describes, then rerun the gate:
 
 ```sh
 ./tooling/check-manual-aivi-snippets.sh --write
@@ -114,6 +117,12 @@ pnpm --dir manual test
 pnpm --dir manual check
 pnpm --dir manual build
 ```
+
+With a built `aivi` binary, `pnpm --dir manual test` also executes focused example regressions
+and checks documented execution limits. Browser regressions are opt-in: start `pnpm --dir manual dev`,
+then run `AIVI_MANUAL_BROWSER_MODULE=playwright node --test manual/scripts/table-layout.test.mjs`
+using an installed Playwright module (or its absolute module path). These cover mobile and desktop
+tables and labels after navigation.
 
 Use `node manual/scripts/check-docs.mjs --external` to check HTTP reachability of outbound
 links. Access errors require manual review; external heading fragments are not checked.

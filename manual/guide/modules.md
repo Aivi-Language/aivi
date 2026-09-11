@@ -34,7 +34,7 @@ use aivi.http (
 )
 
 type Response Text -> Bool
-func isSuccess = resp => resp
+func isSuccess =
  ||> Ok _  -> True
  ||> Err _ -> False
 ```
@@ -59,7 +59,7 @@ type Direction =
   | Right
 
 type Direction -> Direction
-func opposite = arg1 => arg1
+func opposite =
  ||> Up    -> Down
  ||> Down  -> Up
  ||> Left  -> Right

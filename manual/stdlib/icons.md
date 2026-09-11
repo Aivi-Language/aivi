@@ -187,7 +187,7 @@ use aivi.gtk.icons (
 )
 
 type Bool -> Text
-func iconFor = arg1 => arg1
+func iconFor =
  T|> checkmarkSymbolic
  F|> errorSymbolic
 ```

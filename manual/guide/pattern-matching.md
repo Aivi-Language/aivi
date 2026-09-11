@@ -21,6 +21,9 @@ value sampleDescription = describeNumber 1
 The `_` pattern matches anything. Arms are tried from top to bottom. Within pipe bodies, `.`
 is the ambient subject; `_` is only a discard pattern or discard binding.
 
+The remaining unary examples use [unary subject sugar](/guide/values-and-functions#unary-subject-sugar):
+`func name =` followed by pipe stages starts from the function's argument, without `arg1 => arg1`.
+
 Today `||>` supports patterns only. Case-stage guard syntax is not implemented end to end yet, so
 the current workaround is to match first and then compute a `Bool` in the arm body or in a named
 helper.
@@ -37,7 +40,7 @@ type Direction =
   | Right
 
 type Direction -> Text
-func directionLabel = arg1 => arg1
+func directionLabel =
  ||> Up    -> "up"
  ||> Down  -> "down"
  ||> Left  -> "left"
@@ -55,7 +58,7 @@ type LoadState =
   | Failed Text
 
 type LoadState -> Text
-func describeLoadState = arg1 => arg1
+func describeLoadState =
  ||> NotAsked      -> "waiting"
  ||> Loaded name   -> "loaded {name}"
  ||> Failed reason -> "error {reason}"
@@ -74,7 +77,7 @@ type Status =
   | Stopped
 
 type Status -> Bool
-func isRunning = arg1 => arg1
+func isRunning =
  ||> Running -> True
  ||> _       -> False
 
@@ -87,7 +90,7 @@ When the choice is really a boolean condition, calculate the condition first and
 
 ```aivi
 type Int -> Text
-func classifyNumber = arg1 => arg1 > 0
+func classifyNumber = . > 0
  T|> "positive"
  F|> "not positive"
 
@@ -107,7 +110,7 @@ type Profile = {
 }
 
 type Profile -> Text
-func profileSummary = arg1 => arg1
+func profileSummary =
  ||> { name, score } -> "{name} scored {score}"
 
 value summaryText =
@@ -117,8 +120,7 @@ value summaryText =
     }
 ```
 
-Because case-stage guards are not implemented end to end yet, combine record destructuring with a
-follow-up boolean check when you need an extra condition:
+For a condition on a single field, project it directly and compute a boolean:
 
 ```aivi
 type Profile = {
@@ -127,8 +129,7 @@ type Profile = {
 }
 
 type Profile -> Bool
-func isTopScore = arg1 =>
-    arg1.score >= 100
+func isTopScore = .score >= 100
 
 value topScore =
     isTopScore {
@@ -151,7 +152,7 @@ type Direction =
   | Right
 
 type (Point, Direction) -> Point
-func step = arg1 => arg1
+func step =
  ||> (Point x y, Up)    -> Point x (y - 1)
  ||> (Point x y, Down)  -> Point x (y + 1)
  ||> (Point x y, Left)  -> Point (x - 1) y
@@ -174,7 +175,7 @@ type Inner = A | B
 type Outer = Outer Inner
 
 type Outer -> Text
-func describeOuter = arg1 => arg1
+func describeOuter =
  ||> Outer A -> "outer A"
  ||> Outer B -> "outer B"
 
@@ -187,7 +188,7 @@ value outerLabel = describeOuter (Outer A)
 
 ```aivi
 type Option Text -> Text
-func displayName = arg1 => arg1
+func displayName =
  ||> Some name -> name
  ||> None      -> "anonymous"
 
@@ -196,7 +197,7 @@ value shownName = displayName (Some "Ada")
 
 ```aivi
 type Result Text Int -> Text
-func handleResult = arg1 => arg1
+func handleResult =
  ||> Ok value    -> "got {value}"
  ||> Err message -> "failed {message}"
 
@@ -212,7 +213,7 @@ outer `Signal (...)`.
 
 ```aivi
 type Bool -> Text
-func statusLabel = arg1 => arg1
+func statusLabel =
  T|> "active"
  F|> "inactive"
 

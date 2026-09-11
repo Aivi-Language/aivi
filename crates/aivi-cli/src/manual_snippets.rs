@@ -37,9 +37,16 @@ struct Replacement {
 }
 
 #[derive(Clone, Debug)]
-struct FormattedBlock {
-    formatted_text: String,
+struct SnippetBlock {
+    text: String,
     formatting_changed: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SnippetMode {
+    CheckCanonical,
+    WriteCanonical,
+    CheckOriginal,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -86,15 +93,23 @@ struct AnalysisResult {
 pub(crate) fn run(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, String> {
     let mut root = PathBuf::from("manual");
     let mut todo_path = None;
-    let mut write = false;
+    let mut mode = SnippetMode::CheckCanonical;
 
     while let Some(argument) = args.next() {
         if argument == "--help" || argument == "-h" {
             return super::print_help(Some(std::ffi::OsStr::new("manual-snippets")));
         }
 
-        if argument == "--write" {
-            write = true;
+        if argument == "--write" || argument == "--preserve-format" {
+            let selected = if argument == "--write" {
+                SnippetMode::WriteCanonical
+            } else {
+                SnippetMode::CheckOriginal
+            };
+            if mode != SnippetMode::CheckCanonical && mode != selected {
+                return Err("cannot combine `--write` and `--preserve-format`".to_owned());
+            }
+            mode = selected;
             continue;
         }
 
@@ -159,7 +174,7 @@ pub(crate) fn run(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, 
             .unwrap_or(document.path.as_path());
         let mut replacements = Vec::new();
 
-        let mut grouped_blocks = BTreeMap::<&str, Vec<(&FencedBlock, FormattedBlock)>>::new();
+        let mut grouped_blocks = BTreeMap::<&str, Vec<(&FencedBlock, SnippetBlock)>>::new();
 
         for block in &document.blocks {
             scanned_blocks += 1;
@@ -169,14 +184,23 @@ pub(crate) fn run(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, 
                 relative_markdown_path,
                 block.index,
             );
-            let formatted = format_block(&mut db, original, synthetic_path.clone());
+            // Teaching examples may deliberately use surface sugar that canonical
+            // formatting expands. Validate the authored code in preservation mode.
+            let formatted = if mode == SnippetMode::CheckOriginal {
+                SnippetBlock {
+                    text: original.to_owned(),
+                    formatting_changed: false,
+                }
+            } else {
+                format_block(&mut db, original, synthetic_path.clone())
+            };
 
             if formatted.formatting_changed {
                 rewritten_blocks += 1;
-                if write {
+                if mode == SnippetMode::WriteCanonical {
                     replacements.push(Replacement {
                         range: block.body_range.clone(),
-                        text: formatted.formatted_text.clone(),
+                        text: formatted.text.clone(),
                     });
                 }
             }
@@ -187,7 +211,7 @@ pub(crate) fn run(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, 
                     .or_default()
                     .push((block, formatted));
             } else if let Some(entry) =
-                analyze_formatted_block(&mut db, formatted, block, &document.path, synthetic_path)
+                analyze_snippet_block(&mut db, formatted, block, &document.path, synthetic_path)
             {
                 entries.push(entry);
             }
@@ -205,7 +229,7 @@ pub(crate) fn run(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, 
             }
         }
 
-        if write && !replacements.is_empty() {
+        if mode == SnippetMode::WriteCanonical && !replacements.is_empty() {
             let updated = apply_replacements(&document.text, &replacements);
             fs::write(&document.path, updated)
                 .map_err(|error| format!("failed to write {}: {error}", document.path.display()))?;
@@ -238,14 +262,16 @@ pub(crate) fn run(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, 
     )
     .map_err(|error| format!("failed to write summary: {error}"))?;
 
-    if (write || (rewritten_blocks == 0)) && count_unresolved_in_report(&todo_path)? == 0 {
+    if (mode == SnippetMode::WriteCanonical || rewritten_blocks == 0)
+        && count_unresolved_in_report(&todo_path)? == 0
+    {
         Ok(ExitCode::SUCCESS)
     } else {
         Ok(ExitCode::FAILURE)
     }
 }
 
-fn format_block(db: &mut RootDatabase, original: &str, synthetic_path: PathBuf) -> FormattedBlock {
+fn format_block(db: &mut RootDatabase, original: &str, synthetic_path: PathBuf) -> SnippetBlock {
     let normalized_original = normalize_block_body(original);
     let file = QuerySourceFile::new(db, synthetic_path, normalized_original.clone());
     let parsed = query_parsed_file(db, file);
@@ -257,20 +283,20 @@ fn format_block(db: &mut RootDatabase, original: &str, synthetic_path: PathBuf) 
         file.set_text(db, formatted.clone());
     }
 
-    FormattedBlock {
-        formatted_text: formatted,
+    SnippetBlock {
+        text: formatted,
         formatting_changed,
     }
 }
 
-fn analyze_formatted_block(
+fn analyze_snippet_block(
     db: &mut RootDatabase,
-    formatted: FormattedBlock,
+    formatted: SnippetBlock,
     block: &FencedBlock,
     markdown_path: &Path,
     synthetic_path: PathBuf,
 ) -> Option<TodoEntry> {
-    let file = QuerySourceFile::new(db, synthetic_path, formatted.formatted_text.clone());
+    let file = QuerySourceFile::new(db, synthetic_path, formatted.text.clone());
     let analysis = analyze_current_file(db, file);
     if analysis.syntax_problem_count > 0
         || analysis.lsp_problem_count > 0
@@ -287,7 +313,7 @@ fn analyze_formatted_block(
             lsp_problem_count: analysis.lsp_problem_count,
             compiler_problem_count: analysis.compiler_problem_count,
             diagnostics: analysis.diagnostics,
-            suggested_snippet: formatted.formatted_text,
+            suggested_snippet: formatted.text,
         })
     } else {
         None
@@ -297,7 +323,7 @@ fn analyze_formatted_block(
 fn analyze_group(
     db: &mut RootDatabase,
     group: &str,
-    blocks: &[(&FencedBlock, FormattedBlock)],
+    blocks: &[(&FencedBlock, SnippetBlock)],
     markdown_path: &Path,
     synthetic_path: PathBuf,
 ) -> Option<TodoEntry> {
@@ -306,7 +332,7 @@ fn analyze_group(
         if !combined.is_empty() && !combined.ends_with("\n\n") {
             combined.push('\n');
         }
-        combined.push_str(&formatted.formatted_text);
+        combined.push_str(&formatted.text);
     }
 
     let file = QuerySourceFile::new(db, synthetic_path, combined.clone());

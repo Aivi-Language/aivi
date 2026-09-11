@@ -199,7 +199,7 @@ use aivi.gnome.onlineAccounts (
 )
 
 type GoaEvent -> Text
-func describeEvent = event => event
+func describeEvent =
  ||> AccountAdded id   -> "Added: {id}"
  ||> AccountRemoved id -> "Removed: {id}"
  ||> AccountChanged id -> "Changed: {id}"

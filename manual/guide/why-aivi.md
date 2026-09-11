@@ -23,7 +23,7 @@ This is not a limitation — it is a simplification. When everything is an expre
 
 ```aivi
 type Int -> Text
-func classify = arg1 => arg1 >= 50
+func classify = . >= 50
  T|> "pass"
  F|> "fail"
 ```
@@ -95,7 +95,7 @@ type LoadState =
   | Failed Text
 
 type LoadState -> Text
-func describe = arg1 => arg1
+func describe =
  ||> Loading      -> "Loading..."
  ||> Ready data   -> "Got: {data}"
  ||> Failed error -> "Error: {error}"

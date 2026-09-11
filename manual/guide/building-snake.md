@@ -90,7 +90,7 @@ Every piece of game logic is a pure function. Let us start with direction:
 
 ```aivi group=snake
 type Direction -> Direction
-func opposite = arg1 => arg1
+func opposite =
  ||> North -> South
  ||> South -> North
  ||> East  -> West
@@ -119,7 +119,7 @@ value boardW = 30
 value boardH = 20
 
 type Cell -> Bool
-func outside = arg1 => arg1
+func outside =
  ||> Cell x y -> x < 0 or x >= boardW or y < 0 or y >= boardH
 ```
 
@@ -408,27 +408,25 @@ Several small functions format the status display using text interpolation:
 
 ```aivi group=snake
 type Direction -> Text
-func dirLabel = arg1 => arg1
+func dirLabel =
  ||> North -> "Up"
  ||> South -> "Down"
  ||> East  -> "Right"
  ||> West  -> "Left"
 
 type Status -> Text
-func statusLineFor = arg1 => arg1
+func statusLineFor =
  ||> Running  -> "Running"
  ||> GameOver -> "Game Over"
 
 type Int -> Text
-func scoreLineFor = arg1 =>
-    "Score: {arg1}"
+func scoreLineFor = "Score: {.}"
 
 type Int -> Text
-func finalScoreLineFor = arg1 =>
-    "Final score: {arg1}"
+func finalScoreLineFor = "Final score: {.}"
 
 type Status -> Bool
-func isGameOver = arg1 => arg1
+func isGameOver =
  ||> Running  -> False
  ||> GameOver -> True
 ```

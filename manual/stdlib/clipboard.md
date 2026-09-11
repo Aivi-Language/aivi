@@ -72,7 +72,7 @@ use aivi.clipboard (
 )
 
 type ClipboardContent -> Text
-func clipboardSummary = content => content
+func clipboardSummary =
  ||> TextContent text    -> text
  ||> UriListContent uris -> "Copied links"
  ||> ImageContent bytes  -> "Copied image"

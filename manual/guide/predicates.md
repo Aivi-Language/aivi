@@ -4,12 +4,18 @@ Predicates are inline filter expressions used inside patch selectors and collect
 
 ## Predicate syntax
 
-A predicate appears inside square brackets and uses dot-prefixed field access:
-
+A predicate appears inside square brackets and uses dot-prefixed field access, for example
+`users[.active].role` selects the `role` field of each active user.
 
 The dot (`.`) refers to the current element being tested. The expression must evaluate to `Bool`.
 
 ## Predicates in patches
+
+::: warning Current execution limit
+The patch functions below pass `aivi check`, but `aivi test` currently rejects their bodies
+during typed-core lowering. These examples show checked syntax and the intended updates;
+they are not yet executable through that command.
+:::
 
 Combine predicates with the `<|` patch operator to update only matching elements:
 
@@ -21,8 +27,14 @@ type User = {
 }
 
 type { users: List User } -> { users: List User }
-func promoteActive = arg1 =>
-    arg1
+func promoteActive = . <| { users[.active].role: "admin" }
+
+value promoted = promoteActive {
+    users: [
+        { name: "Ada", role: "guest", active: True },
+        { name: "Grace", role: "guest", active: False }
+    ]
+}
 ```
 
 This updates the `role` field only for users where `.active` is `True`. Non-matching users are left unchanged.
@@ -48,9 +60,18 @@ type Item = {
 }
 
 type { items: List Item } -> { items: List Item }
-func discountExpensive = arg1 =>
-    arg1
+func discountExpensive = . <| { items[.price >= 100].price: . - 10 }
+
+value discounted = discountExpensive {
+    items: [
+        { name: "Desk", price: 120, inStock: True },
+        { name: "Lamp", price: 40, inStock: True }
+    ]
+}
 ```
+
+The desk's price becomes `110`; the lamp stays at `40`. Inside the predicate, `.price`
+reads the item. In the replacement expression, `.` is the selected price.
 
 ## Selectors
 
@@ -67,8 +88,8 @@ Selectors are the path expressions inside patch braces that determine what to up
 | `[.key == "id"]` | Select `Map` entries matching a predicate |
 | `Constructor` | Focus through a constructor with one payload |
 
-Examples of chaining:
-
+For example, `users[.active].role` combines a record field, a list filter, and another
+record field; `items[*].price` selects every item's price.
 
 ## Optional fields
 

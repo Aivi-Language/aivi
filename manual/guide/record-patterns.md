@@ -13,7 +13,7 @@ type Profile = {
 }
 
 type Profile -> Text
-func greet = arg1 => arg1
+func greet =
  ||> { name } -> "Hello, {name}!"
 ```
 
@@ -21,7 +21,7 @@ You can bind multiple fields in one pattern:
 
 ```aivi
 type Profile -> Text
-func summary = arg1 => arg1
+func summary =
  ||> { name, score } -> "{name} scored {score}"
 ```
 
@@ -59,18 +59,23 @@ value user : User = {
 }
 
 type User -> Text
-func cityName = arg1 => arg1
+func cityName =
  ||> { address.city.name } -> name
 ```
 
 `{ address.city.name }` is sugar for nested patterns:
 
+```aivi group=user-projection
+type User -> Text
+func cityNameExpanded = user => user
+ ||> { address: { city: { name } } } -> name
+```
 
 The leaf segment (`name`) becomes the bound variable. This works at any depth:
 
 ```aivi group=user-projection
 type User -> Text
-func streetName = arg1 => arg1
+func streetName =
  ||> { address.street } -> street
 ```
 
@@ -78,7 +83,7 @@ You can combine dotted paths with ordinary fields:
 
 ```aivi group=user-projection
 type User -> Text
-func userCity = arg1 => arg1
+func userCity =
  ||> { name, address.city.name: cityName } -> "{name} lives in {cityName}"
 ```
 
@@ -95,8 +100,7 @@ type Profile = {
 }
 
 type Profile -> Bool
-func isTopScore = arg1 =>
-    arg1.score >= 100
+func isTopScore = { score: . } >= 100
 ```
 
 This is sugar for:
@@ -115,16 +119,15 @@ Dotted paths combine with the projection form to reach into nested structures:
 
 ```aivi group=user-projection
 type User -> Text
-func getCityName = arg1 =>
-    arg1.address.city.name
+func getCityName = { address.city.name: . }
 ```
 
 This extracts `address.city.name` from the input and makes it available for downstream pipes:
 
 ```aivi group=user-projection
 type User -> Text
-func upperCityName = arg1 =>
-    toUpper (getCityName arg1)
+func upperCityName = user =>
+    toUpper (getCityName user)
 ```
 
 The same dotted-path idea is also available in selected-subject function headers:
@@ -141,7 +144,7 @@ func addOne = value =>
     value + 1
 
 type X -> Int
-func readNested = state => state.x.y.z
+func readNested = state { x.y.z! }
   |> addOne
 ```
 
@@ -158,13 +161,11 @@ value uppercasedCity = user
   |> toUpper
 ```
 
-This is equivalent to the `.field` ambient projection form, but for deeper paths:
+Chained dot projection can select the same path in one stage:
 
 ```aivi group=user-projection
 value uppercasedCityStepwise = user
-  |> .address
-  |> .city
-  |> .name
+  |> .address.city.name
   |> toUpper
 ```
 
@@ -180,11 +181,14 @@ type Full = {
 }
 
 type Full -> { name: Text, email: Text }
-func stripDebug = arg1 =>
-    arg1 <| { debug: - }
+func stripDebug = . <| { debug: - }
 ```
 
 Removal can target nested fields using selectors:
 
+```aivi
+value state = { profile: { name: "Ada", debug: True }, ready: True }
+value cleaned = state <| { profile.debug: - }
+```
 
 See [Values & Functions § Structural patches](/guide/values-and-functions#structural-patches) for more on the `<|` operator and patch selectors.
