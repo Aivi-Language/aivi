@@ -1,0 +1,6 @@
+{"items":[
+  {"sku":"PAPER-A4","name":"Printer paper","onHand":2,"target":12},
+  {"sku":"COFFEE","name":"Coffee beans","onHand":1,"target":4},
+  {"sku":"SOAP","name":"Hand soap","onHand":0,"target":10},
+  {"sku":"PENS","name":"Black pens","onHand":25,"target":20}
+]}

@@ -2146,7 +2146,14 @@ impl<'a> ProgramLowerer<'a> {
             match task {
                 Task::Visit(expr_id, subject, locals) => {
                     let expr = &self.lambda.exprs()[expr_id];
-                    let layout = self.runtime_expr_layout(expr_id)?;
+                    let layout = if matches!(&expr.kind,
+                        core::ExprKind::Reference(core::Reference::Item(item)) if item_env_map.contains_key(item))
+                    {
+                        let ty = self.signal_dependency_payload_type(expr_id);
+                        self.intern_core_type(&ty)?
+                    } else {
+                        self.runtime_expr_layout(expr_id)?
+                    };
                     match &expr.kind {
                         core::ExprKind::AmbientSubject => {
                             let subject =
@@ -3046,7 +3053,7 @@ impl<'a> ProgramLowerer<'a> {
             let Some(&index) = dependency_positions.get(item) else {
                 return Ok(());
             };
-            let ty = self.runtime_expr_type(expr_id);
+            let ty = self.signal_dependency_payload_type(expr_id);
             match &dependency_types[index] {
                 Some(existing) if *existing != ty => consistent = false,
                 Some(_) => {}
@@ -3059,6 +3066,16 @@ impl<'a> ProgramLowerer<'a> {
             return None;
         }
         dependency_types.into_iter().collect()
+    }
+
+    fn signal_dependency_payload_type(&self, expr_id: core::ExprId) -> core::Type {
+        // Each dependency is one committed value, whether the source expression
+        // views it as Signal A or reads A through implicit lifting. Environment
+        // declarations and references must use the same runtime representation.
+        match self.runtime_expr_type(expr_id) {
+            core::Type::Signal(payload) => *payload,
+            other => other,
+        }
     }
 
     fn lower_inline_truthy_falsy_branch_spec(

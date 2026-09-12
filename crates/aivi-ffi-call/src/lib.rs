@@ -612,6 +612,10 @@ pub fn read_bigint_constant_bytes(
 pub fn lookup_runtime_symbol(symbol: &str) -> Option<*const u8> {
     match symbol {
         "aivi_arena_alloc" => Some(aivi_arena_alloc as *const () as *const u8),
+        "aivi_text_trim" => Some(aivi_text_trim as *const () as *const u8),
+        "aivi_text_to_lower" => Some(aivi_text_to_lower as *const () as *const u8),
+        "aivi_text_contains" => Some(aivi_text_contains as *const () as *const u8),
+        "aivi_text_compare" => Some(aivi_text_compare as *const () as *const u8),
         "aivi_text_concat" => Some(aivi_text_concat as *const () as *const u8),
         "aivi_int_to_text" => Some(aivi_int_to_text as *const () as *const u8),
         "aivi_float_to_text" => Some(aivi_float_to_text as *const () as *const u8),
@@ -798,6 +802,70 @@ extern "C" fn aivi_bool_to_text(value: i8) -> *const u8 {
 
 extern "C" fn aivi_unit_to_text(_: i8) -> *const u8 {
     with_current_arena(|arena| arena.store_len_prefixed_bytes(b"()").cast()).unwrap_or(ptr::null())
+}
+
+// Native Text uses the same arena-owned length-prefixed UTF-8 representation
+// as interpolation. Helpers borrow inputs only during the call; new text belongs
+// to the active allocation arena and follows its existing lifetime boundary.
+/// Borrow a native Text argument during a helper call.
+///
+/// # Safety
+/// `value` must be null or point to a readable eight-byte length prefix followed
+/// by that many initialized bytes. The allocation must remain live and immutable
+/// for `'a`; callers must not retain the returned reference beyond the native call.
+unsafe fn read_native_text<'a>(value: *const u8) -> Option<&'a str> {
+    // SAFETY: forwarded from this helper's caller contract.
+    std::str::from_utf8(unsafe { read_len_prefixed_bytes(value) }?).ok()
+}
+
+extern "C" fn aivi_text_trim(value: *const u8) -> *const u8 {
+    with_current_arena(|arena| {
+        // SAFETY: native Text arguments follow the length-prefixed ABI.
+        let Some(text) = (unsafe { read_native_text(value) }) else {
+            return ptr::null();
+        };
+        arena
+            .store_len_prefixed_bytes(text.trim().as_bytes())
+            .cast()
+    })
+    .unwrap_or(ptr::null())
+}
+
+extern "C" fn aivi_text_to_lower(value: *const u8) -> *const u8 {
+    with_current_arena(|arena| {
+        // SAFETY: native Text arguments follow the length-prefixed ABI.
+        let Some(text) = (unsafe { read_native_text(value) }) else {
+            return ptr::null();
+        };
+        arena
+            .store_len_prefixed_bytes(text.to_lowercase().as_bytes())
+            .cast()
+    })
+    .unwrap_or(ptr::null())
+}
+
+extern "C" fn aivi_text_contains(needle: *const u8, haystack: *const u8) -> i8 {
+    // SAFETY: both native Text arguments follow the length-prefixed ABI.
+    let (Some(needle), Some(haystack)) = (unsafe { read_native_text(needle) }, unsafe {
+        read_native_text(haystack)
+    }) else {
+        return 0;
+    };
+    i8::from(haystack.contains(needle))
+}
+
+extern "C" fn aivi_text_compare(left: *const u8, right: *const u8) -> i8 {
+    // SAFETY: both native Text arguments follow the length-prefixed ABI.
+    let (Some(left), Some(right)) = (unsafe { read_native_text(left) }, unsafe {
+        read_native_text(right)
+    }) else {
+        return 0;
+    };
+    match left.cmp(right) {
+        std::cmp::Ordering::Less => -1,
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => 1,
+    }
 }
 
 extern "C" fn aivi_bytes_append(left: *const u8, right: *const u8) -> *const u8 {

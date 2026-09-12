@@ -1729,12 +1729,21 @@ fn spawn_fs_read_worker(
                 },
             },
             Err(error) => {
-                let kind = if error.kind() == std::io::ErrorKind::NotFound {
-                    TextSourceErrorKind::Missing
-                } else {
-                    TextSourceErrorKind::Request
+                let (kind, message) = match error.kind() {
+                    std::io::ErrorKind::NotFound => (
+                        TextSourceErrorKind::Missing,
+                        plan.path.to_string_lossy().into_owned(),
+                    ),
+                    std::io::ErrorKind::PermissionDenied => (
+                        TextSourceErrorKind::Permission,
+                        plan.path.to_string_lossy().into_owned(),
+                    ),
+                    _ => (
+                        TextSourceErrorKind::Request,
+                        format!("{}: {error}", plan.path.display()),
+                    ),
                 };
-                match plan.result.error_value(kind, &error.to_string()) {
+                match plan.result.error_value(kind, &message) {
                     Ok(value) => value,
                     Err(_) => return,
                 }

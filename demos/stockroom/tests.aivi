@@ -1,0 +1,89 @@
+use aivi.list (length)
+
+use inventory (
+    Catalog
+    validateCatalog
+    restockPlan
+    planText
+)
+
+value catalog : Catalog = {
+    items: [
+        {
+            sku: "PAPER",
+            name: "Paper",
+            onHand: 2,
+            target: 12
+        },
+        {
+            sku: "SOAP",
+            name: "Hand soap",
+            onHand: 0,
+            target: 10
+        },
+        {
+            sku: "COFFEE",
+            name: "Coffee",
+            onHand: 1,
+            target: 4
+        },
+        {
+            sku: "PENS",
+            name: "Pens",
+            onHand: 25,
+            target: 20
+        }
+    ]
+}
+
+@test
+value priorityAndTies : Task Text Bool = pure (planText (restockPlan "" catalog) == "PAPER — Paper: order 10\nSOAP — Hand soap: order 10\nCOFFEE — Coffee: order 3")
+
+@test
+value searchNormalizes : Task Text Bool = pure (planText (restockPlan "  sOaP " catalog) == "SOAP — Hand soap: order 10")
+
+@test
+value noMatches : Task Text Bool = pure (length (restockPlan "missing" catalog) == 0)
+
+@test
+value emptyCatalog : Task Text Bool = pure (validateCatalog { items: [] } == Ok { items: [] })
+
+@test
+value negativeStock : Task Text Bool =
+    pure (
+        isErr (
+            validateCatalog {
+                items: [
+                    {
+                        sku: "BAD",
+                        name: "Bad",
+                        onHand: -1,
+                        target: 10
+                    }
+                ]
+            }
+        )
+    )
+
+@test
+value duplicateSku : Task Text Bool =
+    pure (
+        isErr (
+            validateCatalog {
+                items: [
+                    {
+                        sku: "A",
+                        name: "First",
+                        onHand: 1,
+                        target: 2
+                    },
+                    {
+                        sku: "A",
+                        name: "Second",
+                        onHand: 0,
+                        target: 3
+                    }
+                ]
+            }
+        )
+    )

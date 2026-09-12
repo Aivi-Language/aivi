@@ -1856,3 +1856,170 @@ fn check_accepts_request_resource_companion_surface_without_hidden_unused_warnin
         "hidden resource helper names should stay out of unused-symbol output, got stdout: {stdout}"
     );
 }
+
+#[test]
+fn check_underconstrained_collection_comparison_reports_error_without_stack_overflow() {
+    let dir = TempDir::new("check-collection-comparison-inference");
+    let path = dir.write(
+        "main.aivi",
+        concat!(
+            "type Stock = { sku: Text }\n",
+            "type List Stock -> Stock -> Bool\n",
+            "func uniqueSku = items item => length (filter (other => other.sku == item.sku) items) == 1\n",
+            "export uniqueSku\n",
+        ),
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .expect("check command should run");
+    assert!(
+        output.status.code() == Some(1),
+        "an underconstrained collection comparison must report an error without restarting inference: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("hir::invalid-projection"));
+}
+
+#[test]
+fn runnable_check_validates_widget_schema_without_a_display() {
+    let dir = TempDir::new("check-runnable-schema");
+    let path = dir.write("main.aivi", "value main = <Window><ToolbarView><ToolbarView.top><Label text=\"bad slot\" /></ToolbarView.top></ToolbarView></Window>\n");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .args(["check", "--runnable"])
+        .arg(&path)
+        .env_remove("DISPLAY")
+        .env_remove("WAYLAND_DISPLAY")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("topBar") && stderr.contains("ToolbarView.top"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn runnable_check_selects_a_view_and_validates_native_bundle_without_launching() {
+    let dir = TempDir::new("check-runnable-view");
+    let path = dir.write(
+        "main.aivi",
+        "value first = <Window title=\"First\" />\nvalue second = <Window title=\"Second\" />\n",
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .args(["check", "--runnable", "--view", "second"])
+        .arg(&path)
+        .env_remove("DISPLAY")
+        .env_remove("WAYLAND_DISPLAY")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("runnable + native bundle passed"));
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .args(["check", "--runnable"])
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("view"));
+}
+
+#[test]
+fn check_infers_collection_callback_inside_comparison() {
+    let dir = TempDir::new("check-contextual-callback");
+    let path = dir.write(
+        "main.aivi",
+        r#"
+use aivi.list (length, filter)
+type Stock = { sku: Text }
+type List Stock -> Stock -> Bool
+func uniqueSku = items item => length (filter (other => other.sku == item.sku) items) == 1
+export uniqueSku
+"#,
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let valid = fs::read_to_string(&path).unwrap();
+    for invalid in [
+        valid.replace("other.sku", "other.missing"),
+        valid.replace("other.sku == item.sku", "other.sku + 1"),
+    ] {
+        fs::write(&path, invalid).unwrap();
+        let rejected = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("check")
+            .arg(&path)
+            .output()
+            .unwrap();
+        assert_eq!(
+            rejected.status.code(),
+            Some(1),
+            "invalid callbacks must produce diagnostics"
+        );
+    }
+}
+
+#[test]
+fn runnable_check_rejects_native_only_failure_before_packaging() {
+    let dir = TempDir::new("check-native-formatting");
+    let path = dir.write(
+        "main.aivi",
+        r#"
+type Failure = Failed Text
+signal failure : Signal Failure
+signal message : Signal Text = "{failure}"
+value main = <Window><Label text={message} /></Window>
+"#,
+    );
+    let checked = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(
+        checked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&checked.stderr)
+    );
+    let runnable = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .args(["check", "--runnable"])
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(!runnable.status.success());
+    let stderr = String::from_utf8_lossy(&runnable.stderr);
+    assert!(
+        stderr.contains("interpolation") && stderr.contains("main.aivi:4:"),
+        "{stderr}"
+    );
+    assert!(!dir.path().join("main.aivi-run").exists());
+}
+
+#[test]
+fn runnable_check_reports_invalid_options() {
+    for args in [
+        vec!["check", "--view", "main"],
+        vec!["check", "--runnabl"],
+        vec!["check", "--runnable", "--view"],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("does not exist"));
+    }
+}

@@ -398,7 +398,7 @@ impl SourceProviderManager {
                 }
             }
             RuntimeSourceProvider::Builtin(BuiltinSourceProvider::FsRead) => {
-                let plan = FsReadPlan::parse(instance, config)?;
+                let plan = FsReadPlan::parse(instance, &self.context, config)?;
                 let stop = Arc::new(AtomicBool::new(false));
                 if action_kind == SourceLifecycleActionKind::Reconfigure || plan.read_on_start {
                     let handle =

@@ -71,6 +71,10 @@ Two built-in functions underpin all list work and are available everywhere witho
 | `contains` | Check membership |
 | `indexOf` | Find the first matching position |
 
+`any` and `all` support native compiled execution with named predicates and bound prefix
+arguments. `any` returns `False` for an empty list and stops at the first match; `all` returns
+`True` for an empty list and stops at the first non-match.
+
 ### Aggregation
 
 | Function | Use it for |

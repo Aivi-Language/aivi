@@ -350,7 +350,8 @@ struct FrozenRegisteredBackendPayload {
     native_kernels: Box<[RegisteredNativeKernelPayload]>,
 }
 
-struct FrozenPayloadRegistry {
+struct FrozenPayloadRegistry<'a> {
+    sources: Option<&'a SourceDatabase>,
     include_native_kernels: bool,
     freeze_backends: bool,
     handles_by_key: BTreeMap<u64, FrozenBackendHandle>,
@@ -364,9 +365,14 @@ struct FrozenPayloadLoader {
     entries: Vec<FrozenEntryWire>,
 }
 
-impl FrozenPayloadRegistry {
-    fn new_with_mode(include_native_kernels: bool, freeze_backends: bool) -> Self {
+impl<'a> FrozenPayloadRegistry<'a> {
+    fn new_with_mode(
+        include_native_kernels: bool,
+        freeze_backends: bool,
+        sources: Option<&'a SourceDatabase>,
+    ) -> Self {
         Self {
+            sources,
             include_native_kernels,
             freeze_backends,
             handles_by_key: BTreeMap::new(),
@@ -482,6 +488,49 @@ impl FrozenPayloadRegistry {
         self.ensure_kernel_entry_abi(handle, kernel, "entry item")
     }
 
+    fn render_codegen_error(
+        &self,
+        program: &aivi_backend::Program,
+        fallback_kernel: aivi_backend::KernelId,
+        error: &aivi_backend::CodegenError,
+    ) -> String {
+        use aivi_backend::CodegenError;
+        let (kernel_id, expr) = match error {
+            CodegenError::UnsupportedExpression { kernel, expr, .. }
+            | CodegenError::InvalidIntegerLiteral { kernel, expr, .. }
+            | CodegenError::InvalidFloatLiteral { kernel, expr, .. }
+            | CodegenError::InvalidDecimalLiteral { kernel, expr, .. }
+            | CodegenError::InvalidBigIntLiteral { kernel, expr, .. } => (*kernel, Some(*expr)),
+            _ => (fallback_kernel, None),
+        };
+        let Some(kernel) = program.kernels().get(kernel_id) else {
+            return format!("native compilation failed: {error}");
+        };
+        let span = expr
+            .and_then(|expr| kernel.exprs().get(expr))
+            .map(|expr| expr.span)
+            .unwrap_or(kernel.origin.span);
+        let location = self
+            .sources
+            .and_then(|sources| sources.file(span.file()))
+            .map(|file| {
+                let position = file.line_column(span.span().start());
+                format!(
+                    "{}:{}:{}: ",
+                    file.path().display(),
+                    position.line,
+                    position.column
+                )
+            })
+            .unwrap_or_default();
+        let name = program
+            .items()
+            .get(kernel.origin.item)
+            .map(|item| item.name.as_ref())
+            .unwrap_or("<entry>");
+        format!("{location}native compilation of `{name}` failed: {error}")
+    }
+
     fn ensure_kernel_entry_abi(
         &self,
         handle: FrozenBackendHandle,
@@ -519,17 +568,9 @@ impl FrozenPayloadRegistry {
                                     payload.key
                                 )
                             }
-                            Err(error) => format!(
-                                "{context} kernel {} in frozen backend {:016x} fails backend compilation: {error}",
-                                kernel.as_raw(),
-                                payload.key
-                            ),
+                            Err(errors) => errors.errors().iter().map(|error| self.render_codegen_error(program, kernel, error)).collect::<Vec<_>>().join("\n"),
                         },
-                        Err(error) => format!(
-                            "{context} kernel {} in frozen backend {:016x} failed native compilation: {error}",
-                            kernel.as_raw(),
-                            payload.key
-                        ),
+                        Err(errors) => errors.errors().iter().map(|error| self.render_codegen_error(program, kernel, error)).collect::<Vec<_>>().join("\n"),
                     }
                 }
                 _ => format!(
@@ -543,7 +584,9 @@ impl FrozenPayloadRegistry {
                 aivi_runtime::hir_adapter::BackendRuntimePayload::Program(program) => {
                     aivi_backend::BackendRuntimeMeta::from(program.as_ref())
                 }
-                aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => meta.as_ref().clone(),
+                aivi_runtime::hir_adapter::BackendRuntimePayload::Meta(meta) => {
+                    meta.as_ref().clone()
+                }
                 aivi_runtime::hir_adapter::BackendRuntimePayload::FrozenCatalog(catalog) => {
                     catalog.as_ref().to_runtime_meta()
                 }
@@ -883,7 +926,7 @@ fn encode_frozen_run_image_bytes_with_options(
     include_native_kernels: bool,
     freeze_backends: bool,
 ) -> Result<Vec<u8>, String> {
-    let mut payloads = FrozenPayloadRegistry::new_with_mode(include_native_kernels, freeze_backends);
+    let mut payloads = FrozenPayloadRegistry::new_with_mode(include_native_kernels, freeze_backends, artifact.sources.as_ref());
     let serialized = serialize_frozen_run_artifact(artifact, &mut payloads)?;
     let image = FrozenRunImage {
         format: FROZEN_RUN_IMAGE_FORMAT.into(),
@@ -1192,11 +1235,11 @@ fn decode_backend_payload_bytes(
 
 fn freeze_runtime_assembly_native_kernels(
     assembly: &HirRuntimeAssembly,
-    payloads: &mut FrozenPayloadRegistry,
+    payloads: &mut FrozenPayloadRegistry<'_>,
 ) -> Result<HirRuntimeAssembly, String> {
     fn freeze_expr_native_kernels(
         expr: &aivi_runtime::hir_adapter::HirCompiledRuntimeExpr,
-        payloads: &mut FrozenPayloadRegistry,
+        payloads: &mut FrozenPayloadRegistry<'_>,
     ) -> Result<aivi_runtime::hir_adapter::HirCompiledRuntimeExpr, String> {
         let payload = payloads.register_payload(expr.backend.clone(), expr.native_kernels.clone())?;
         if payloads.include_native_kernels && payloads.freeze_backends {
@@ -1227,7 +1270,7 @@ fn freeze_runtime_assembly_native_kernels(
 
 fn serialize_frozen_run_artifact(
     artifact: &RunArtifact,
-    payloads: &mut FrozenPayloadRegistry,
+    payloads: &mut FrozenPayloadRegistry<'_>,
 ) -> Result<FrozenSerializedRunArtifact, String> {
     if let RunArtifactKind::Gtk(surface) = &artifact.kind
         && (!surface.deferred_hydration_inputs.is_empty()
@@ -1408,7 +1451,7 @@ fn deserialize_frozen_run_artifact(
 
 fn frozen_linked_runtime_tables_to_wire(
     tables: &aivi_runtime::BackendLinkedRuntimeTables,
-    payloads: &mut FrozenPayloadRegistry,
+    payloads: &mut FrozenPayloadRegistry<'_>,
 ) -> Result<FrozenLinkedRuntimeTablesWire, String> {
     Ok(FrozenLinkedRuntimeTablesWire {
         signal_items_by_handle: tables
@@ -1475,12 +1518,12 @@ fn frozen_linked_runtime_tables_to_wire(
 }
 
 fn ensure_frozen_runtime_tables_compiled_only(
-    payloads: &mut FrozenPayloadRegistry,
+    payloads: &mut FrozenPayloadRegistry<'_>,
     backend: FrozenBackendHandle,
     tables: &aivi_runtime::BackendLinkedRuntimeTables,
 ) -> Result<(), String> {
     fn ensure_eval_lane(
-        payloads: &FrozenPayloadRegistry,
+        payloads: &FrozenPayloadRegistry<'_>,
         backend: FrozenBackendHandle,
         lane: &aivi_runtime::startup::LinkedEvalLane,
         context: &str,
@@ -1658,7 +1701,7 @@ fn frozen_linked_runtime_tables_from_wire(
 
 fn frozen_linked_reactive_clause_to_wire(
     clause: aivi_runtime::startup::LinkedReactiveClause,
-    payloads: &mut FrozenPayloadRegistry,
+    payloads: &mut FrozenPayloadRegistry<'_>,
 ) -> Result<FrozenLinkedReactiveClauseWire, String> {
     Ok(FrozenLinkedReactiveClauseWire {
         owner: clause.owner,
@@ -2310,7 +2353,7 @@ fn layout_signature(
 
 fn frozen_compiled_run_input_to_wire(
     input: &CompiledRunInput,
-    payloads: &mut FrozenPayloadRegistry,
+    payloads: &mut FrozenPayloadRegistry<'_>,
 ) -> Result<FrozenCompiledRunInputWire, String> {
     match input {
         CompiledRunInput::Expr(fragment) => Ok(FrozenCompiledRunInputWire::Expr(
@@ -2368,7 +2411,7 @@ fn frozen_compiled_run_input_from_wire(
 
 fn frozen_compiled_run_fragment_to_wire(
     fragment: &CompiledRunFragment,
-    payloads: &mut FrozenPayloadRegistry,
+    payloads: &mut FrozenPayloadRegistry<'_>,
 ) -> Result<FrozenCompiledRunFragmentWire, String> {
     let entry = payloads.register_entry(
         fragment.execution.backend.clone(),
@@ -2402,7 +2445,7 @@ fn frozen_compiled_run_fragment_from_wire(
 
 fn frozen_hir_runtime_assembly_to_wire(
     assembly: HirRuntimeAssembly,
-    payloads: &mut FrozenPayloadRegistry,
+    payloads: &mut FrozenPayloadRegistry<'_>,
 ) -> Result<FrozenHirRuntimeAssemblyWire, String> {
     let parts = assembly.into_parts();
     Ok(FrozenHirRuntimeAssemblyWire {
@@ -2451,7 +2494,7 @@ fn frozen_hir_runtime_assembly_from_wire(
 
 fn frozen_hir_signal_binding_to_wire(
     binding: aivi_runtime::HirSignalBinding,
-    payloads: &mut FrozenPayloadRegistry,
+    payloads: &mut FrozenPayloadRegistry<'_>,
 ) -> Result<FrozenHirSignalBindingWire, String> {
     let kind = match binding.kind {
         aivi_runtime::HirSignalBindingKind::Input { signal } => {
@@ -2543,7 +2586,7 @@ fn frozen_hir_signal_binding_from_wire(
 
 fn frozen_hir_reactive_update_binding_to_wire(
     binding: aivi_runtime::HirReactiveUpdateBinding,
-    payloads: &mut FrozenPayloadRegistry,
+    payloads: &mut FrozenPayloadRegistry<'_>,
 ) -> Result<FrozenHirReactiveUpdateBindingWire, String> {
     Ok(FrozenHirReactiveUpdateBindingWire {
         span: binding.span,
@@ -2586,7 +2629,7 @@ fn frozen_hir_reactive_update_binding_from_wire(
 
 fn frozen_hir_compiled_runtime_expr_to_wire(
     expr: aivi_runtime::hir_adapter::HirCompiledRuntimeExpr,
-    payloads: &mut FrozenPayloadRegistry,
+    payloads: &mut FrozenPayloadRegistry<'_>,
 ) -> Result<FrozenHirCompiledRuntimeExprWire, String> {
     Ok(FrozenHirCompiledRuntimeExprWire {
         entry: payloads.register_entry(expr.backend, expr.native_kernels.clone(), expr.entry_item)?,

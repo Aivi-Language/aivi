@@ -29,7 +29,7 @@ use crate::{
         CaseConstructorKey, CaseConstructorShape, CasePatternCoverage, CaseSubjectShape,
         GateRecordField, RecurrenceTargetHint,
     },
-    typecheck::{TypeConstraint, expression_matches},
+    typecheck::{TypeConstraint, expression_signature_evidence_with_typing},
     validate::{ValidationMode, Validator, builtin_type_name},
 };
 

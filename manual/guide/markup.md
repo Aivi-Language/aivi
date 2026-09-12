@@ -296,15 +296,19 @@ value view =
 
 ### `ToolbarView`
 
+Named child groups use catalog spellings such as `ToolbarView.topBar`. Run
+`aivi check --runnable path/to/main.aivi` to validate them before launch; an unknown group
+reports the valid names from the widget catalog.
+
 Adwaita toolbar container with top/bottom bars and content.
 
 ```aivi
 value view =
     <Window title="App">
         <ToolbarView>
-            <ToolbarView.top>
+            <ToolbarView.topBar>
                 <HeaderBar />
-            </ToolbarView.top>
+            </ToolbarView.topBar>
             <Label text="Content" vexpand={True} />
         </ToolbarView>
     </Window>
@@ -825,9 +829,9 @@ value view =
         <NavigationView>
             <NavigationPage title="Profile" tag="profile">
                 <ToolbarView>
-                    <ToolbarView.top>
+                    <ToolbarView.topBar>
                         <HeaderBar />
-                    </ToolbarView.top>
+                    </ToolbarView.topBar>
                     <Label text="Profile content" halign="Center" valign="Center" vexpand={True} />
                 </ToolbarView>
             </NavigationPage>
@@ -1029,9 +1033,9 @@ signal activePage : Signal Text = "home"
 value view =
     <Window title="App">
         <ToolbarView>
-            <ToolbarView.top>
+            <ToolbarView.topBar>
                 <HeaderBar />
-            </ToolbarView.top>
+            </ToolbarView.topBar>
             <ViewStack visibleChildName={activePage}>
                 <ViewStack.pages>
                     <ViewStackPage name="home" title="Home" iconName="go-home-symbolic">

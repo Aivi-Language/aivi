@@ -519,7 +519,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     work.push(argument);
                                 }
                             }
-                            Ok(DirectApplyPlan::Builtin(BuiltinCallPlan::ListAny(plan))) => {
+                            Ok(DirectApplyPlan::Builtin(BuiltinCallPlan::ListQuantified(plan, _))) => {
                                 for argument in plan
                                     .step_prefix_exprs
                                     .iter()
@@ -1421,7 +1421,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     materialized.push(arguments[1]);
                                     materialized
                                 }
-                                DirectApplyPlan::Builtin(BuiltinCallPlan::ListAny(plan)) => {
+                                DirectApplyPlan::Builtin(BuiltinCallPlan::ListQuantified(plan, _)) => {
                                     let mut materialized =
                                         Vec::with_capacity(plan.step_prefix_exprs.len() + 1);
                                     materialized.extend(plan.step_prefix_exprs.iter().copied());
@@ -1839,6 +1839,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
                                 }
+                                NativeCompareKind::Text => self.lower_text_comparison(kernel_id, lhs, rhs, IntCC::SignedGreaterThan, builder)?,
                                 NativeCompareKind::DomainInt => self.lower_domain_int_comparison(
                                     lhs,
                                     rhs,
@@ -1875,6 +1876,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
                                 }
+                                NativeCompareKind::Text => self.lower_text_comparison(kernel_id, lhs, rhs, IntCC::SignedLessThan, builder)?,
                                 NativeCompareKind::DomainInt => self.lower_domain_int_comparison(
                                     lhs,
                                     rhs,
@@ -1913,6 +1915,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
                                 }
+                                NativeCompareKind::Text => self.lower_text_comparison(kernel_id, lhs, rhs, IntCC::SignedGreaterThanOrEqual, builder)?,
                                 NativeCompareKind::DomainInt => self.lower_domain_int_comparison(
                                     lhs,
                                     rhs,
@@ -1949,6 +1952,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
                                 }
+                                NativeCompareKind::Text => self.lower_text_comparison(kernel_id, lhs, rhs, IntCC::SignedLessThanOrEqual, builder)?,
                                 NativeCompareKind::DomainInt => self.lower_domain_int_comparison(
                                     lhs,
                                     rhs,
@@ -3363,20 +3367,25 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     )?,
                 ))
             }
-            "any" | "__aivi_list_any" => {
+            "any" | "__aivi_list_any" | "all" | "__aivi_list_all" => {
                 self.require_bool_expression(
                     kernel_id,
                     expr_id,
                     result_layout,
-                    "list wrapper `any` result",
+                    "list quantifier result",
                 )?;
-                DirectApplyPlan::Builtin(BuiltinCallPlan::ListAny(
+                DirectApplyPlan::Builtin(BuiltinCallPlan::ListQuantified(
                     self.plan_list_predicate_from_callable(
                         kernel_id,
                         *function,
                         *subject,
-                        "list wrapper `any` predicate",
+                        "list quantifier predicate",
                     )?,
+                    if matches!(item_decl.name.as_ref(), "all" | "__aivi_list_all") {
+                        ListQuantifier::All
+                    } else {
+                        ListQuantifier::Any
+                    },
                 ))
             }
             "find" | "__aivi_list_find" => {
@@ -3702,17 +3711,16 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
     ) -> Result<LayoutId, CodegenError> {
         let kernel = &self.program.kernels()[kernel_id];
         let layout = kernel.exprs()[expr_id].layout;
-        let LayoutKind::Signal { element } = &self.program.layouts()[layout].kind else {
-            return Err(self.unsupported_expression(
+        // Dependency environments already contain the committed payload. Other
+        // signal expressions retain their carrier layout until this boundary.
+        // Callable parameter compatibility is checked separately by the caller.
+        self.runtime_payload_layout(layout).ok_or_else(|| {
+            self.unsupported_expression(
                 kernel_id,
                 expr_id,
-                &format!(
-                    "{detail} expects a Signal layout, found `{}`",
-                    self.program.layouts()[layout]
-                ),
-            ));
-        };
-        Ok(*element)
+                &format!("{detail} has a cyclic signal payload layout"),
+            )
+        })
     }
 
     fn is_list_like_layout(&self, layout: LayoutId) -> bool {
@@ -5031,6 +5039,11 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             {
                 Ok(NativeCompareKind::BigInt)
             }
+            BuiltinOrdSubject::Text
+                if matches!(
+                    (&left_layout.kind, &right_layout.kind),
+                    (LayoutKind::Primitive(PrimitiveType::Text), LayoutKind::Primitive(PrimitiveType::Text))
+                ) => Ok(NativeCompareKind::Text),
             BuiltinOrdSubject::Bool
                 if matches!(
                     (&left_layout.kind, &right_layout.kind),
@@ -5108,6 +5121,23 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             self.require_saturated_callable_call(kernel_id, expr_id, callee, arguments, &detail)?;
         let kernel = &self.program.kernels()[kernel_id];
         match intrinsic {
+            IntrinsicValue::TextToLower | IntrinsicValue::TextTrim => {
+                let [text] = arguments else { unreachable!("saturated unary text intrinsic") };
+                self.require_text_expression(kernel_id, *text, kernel.exprs()[*text].layout, &detail)?;
+                self.require_text_expression(kernel_id, expr_id, result_layout, &detail)?;
+                Ok(IntrinsicCallPlan::TextUnary { symbol: match intrinsic {
+                    IntrinsicValue::TextToLower => "aivi_text_to_lower",
+                    IntrinsicValue::TextTrim => "aivi_text_trim",
+                    _ => unreachable!(),
+                } })
+            }
+            IntrinsicValue::TextContains => {
+                for argument in arguments {
+                    self.require_text_expression(kernel_id, *argument, kernel.exprs()[*argument].layout, &detail)?;
+                }
+                self.require_bool_expression(kernel_id, expr_id, result_layout, &detail)?;
+                Ok(IntrinsicCallPlan::TextContains)
+            }
             IntrinsicValue::BytesLength => {
                 let [bytes] = arguments else {
                     unreachable!("saturated `BytesLength` call should keep exactly one argument");
@@ -5716,6 +5746,16 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         to: LayoutId,
         builder: &mut FunctionBuilder<'_>,
     ) -> Result<Value, CodegenError> {
+        let payload_layout = |layout| {
+            self.runtime_payload_layout(layout)
+                .ok_or_else(|| CodegenError::UnsupportedLayout {
+                    kernel: kernel_id,
+                    layout,
+                    detail: "cyclic signal payload layout".into(),
+                })
+        };
+        let from = payload_layout(from)?;
+        let to = payload_layout(to)?;
         if from == to {
             return Ok(value);
         }
@@ -5785,8 +5825,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 true,
                 builder,
             ),
-            (LayoutKind::Tuple(from_fields), LayoutKind::Tuple(to_fields)) => {
-                self.repack_tuple_value(
+            (LayoutKind::Tuple(from_fields), LayoutKind::Tuple(to_fields)) => self
+                .repack_tuple_value(
                     kernel_id,
                     value,
                     RepackShape {
@@ -5796,10 +5836,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         target_fields: to_fields,
                     },
                     builder,
-                )
-            }
-            (LayoutKind::Record(from_fields), LayoutKind::Record(to_fields)) => {
-                self.repack_record_value(
+                ),
+            (LayoutKind::Record(from_fields), LayoutKind::Record(to_fields)) => self
+                .repack_record_value(
                     kernel_id,
                     value,
                     RepackShape {
@@ -5809,8 +5848,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         target_fields: to_fields,
                     },
                     builder,
-                )
-            }
+                ),
             (
                 LayoutKind::Result {
                     error: from_error,
@@ -6602,10 +6640,11 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         Ok(builder.inst_results(call)[0])
     }
 
-    fn lower_list_any(
+    fn lower_list_quantifier(
         &mut self,
         kernel_id: KernelId,
         plan: &ListPredicatePlan,
+        quantifier: ListQuantifier,
         prefix_arguments: &[Value],
         subject: Value,
         builder: &mut FunctionBuilder<'_>,
@@ -6615,7 +6654,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let len_call = builder.ins().call(list_len, &[subject]);
         let len = builder.inst_results(len_call)[0];
         let element_abi =
-            self.field_abi_shape(kernel_id, plan.element_layout, "list any element")?;
+            self.field_abi_shape(kernel_id, plan.element_layout, "list quantifier element")?;
 
         let mut prefix_arguments = prefix_arguments.to_vec();
         for ((from, to), argument) in plan
@@ -6638,10 +6677,10 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         builder.switch_to_block(loop_block);
         let index = builder.block_params(loop_block)[0];
         let at_end = builder.ins().icmp(IntCC::Equal, index, len);
-        let false_value = builder.ins().iconst(types::I8, 0);
+        let exhausted_value = builder.ins().iconst(types::I8, i64::from(quantifier == ListQuantifier::All));
         builder
             .ins()
-            .brif(at_end, done_block, &[BlockArg::Value(false_value)], body_block, &[]);
+            .brif(at_end, done_block, &[BlockArg::Value(exhausted_value)], body_block, &[]);
 
         builder.seal_block(body_block);
         builder.switch_to_block(body_block);
@@ -6663,11 +6702,16 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let predicate =
             self.lower_direct_item_call(kernel_id, plan.step_body, &step_arguments, builder)?;
         let next_index = builder.ins().iadd_imm_s(index, 1);
-        let true_value = builder.ins().iconst(types::I8, 1);
+        let short_circuit_value = builder.ins().iconst(types::I8, i64::from(quantifier == ListQuantifier::Any));
+        let decisive = if quantifier == ListQuantifier::All {
+            builder.ins().icmp_imm_s(IntCC::Equal, predicate, 0)
+        } else {
+            predicate
+        };
         builder.ins().brif(
-            predicate,
+            decisive,
             done_block,
-            &[BlockArg::Value(true_value)],
+            &[BlockArg::Value(short_circuit_value)],
             loop_block,
             &[BlockArg::Value(next_index)],
         );
@@ -7162,6 +7206,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         let cmp = builder.inst_results(call)[0];
                         builder.ins().icmp_imm_s(IntCC::NotEqual, cmp, 0)
                     }
+                    NativeCompareKind::Text => self.lower_text_comparison(kernel_id, *left, *right, IntCC::SignedLessThan, builder)?,
                     NativeCompareKind::DomainInt => {
                         return Err(self.unsupported_expression(
                             kernel_id,
@@ -7187,6 +7232,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         let cmp = builder.inst_results(call)[0];
                         builder.ins().icmp_imm_s(IntCC::NotEqual, cmp, 0)
                     }
+                    NativeCompareKind::Text => self.lower_text_comparison(kernel_id, *left, *right, IntCC::Equal, builder)?,
                     NativeCompareKind::DomainInt => unreachable!(),
                 };
                 let less_tag = builder.ins().iconst(types::I64, less_tag);
@@ -7270,20 +7316,20 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 };
                 self.lower_list_filter(kernel_id, &plan, prefix_arguments, *subject, builder)
             }
-            DirectApplyPlan::Builtin(BuiltinCallPlan::ListAny(plan)) => {
+            DirectApplyPlan::Builtin(BuiltinCallPlan::ListQuantified(plan, quantifier)) => {
                 let prefix_count = plan.step_prefix_layouts.len();
                 if arguments.len() != prefix_count + 1 {
                     return Err(self.unsupported_expression(
                         kernel_id,
                         expr_id,
-                        "direct list any lowering expected prefix arguments followed by subject",
+                        "direct list quantifier lowering expected prefix arguments followed by subject",
                     ));
                 }
                 let (prefix_arguments, trailing_arguments) = arguments.split_at(prefix_count);
                 let [subject] = trailing_arguments else {
-                    unreachable!("direct list any lowering keeps subject trailing");
+                    unreachable!("direct list quantifier lowering keeps subject trailing");
                 };
-                self.lower_list_any(kernel_id, &plan, prefix_arguments, *subject, builder)
+                self.lower_list_quantifier(kernel_id, &plan, quantifier, prefix_arguments, *subject, builder)
             }
             DirectApplyPlan::Builtin(BuiltinCallPlan::ListFind(plan)) => {
                 let prefix_count = plan.predicate.step_prefix_layouts.len();
@@ -7383,6 +7429,18 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     ));
                 };
                 Ok(self.lower_bytes_to_text_option(*argument, builder))
+            }
+            DirectApplyPlan::Intrinsic(IntrinsicCallPlan::TextUnary { symbol }) => {
+                let [text] = arguments else { unreachable!("validated unary text call") };
+                let function = self.declare_ptr_unop_func(symbol, kernel_id, builder)?;
+                let call = builder.ins().call(function, &[*text]);
+                Ok(builder.inst_results(call)[0])
+            }
+            DirectApplyPlan::Intrinsic(IntrinsicCallPlan::TextContains) => {
+                let [needle, haystack] = arguments else { unreachable!("validated binary text call") };
+                let function = self.declare_ptr_cmp_func("aivi_text_contains", kernel_id, builder)?;
+                let call = builder.ins().call(function, &[*needle, *haystack]);
+                Ok(builder.inst_results(call)[0])
             }
             DirectApplyPlan::Intrinsic(IntrinsicCallPlan::BytesAppend) => {
                 let [left, right] = arguments else {
@@ -7525,7 +7583,25 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         ))
     }
 
+    fn runtime_payload_layout(&self, mut layout: LayoutId) -> Option<LayoutId> {
+        // Native kernels receive committed values. Signal has the ABI of its
+        // payload here. Bound traversal so malformed cycles cannot spin forever.
+        for _ in 0..self.program.layouts().len() {
+            match &self.program.layouts()[layout].kind {
+                LayoutKind::Signal { element } => layout = *element,
+                _ => return Some(layout),
+            }
+        }
+        None
+    }
+
     fn layouts_call_compatible(&self, expected: LayoutId, found: LayoutId) -> bool {
+        let (Some(expected), Some(found)) = (
+            self.runtime_payload_layout(expected),
+            self.runtime_payload_layout(found),
+        ) else {
+            return false;
+        };
         if expected == found {
             return true;
         }
@@ -7535,10 +7611,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             (&expected_layout.kind, &found_layout.kind),
             (LayoutKind::Domain { .. }, _) | (_, LayoutKind::Domain { .. })
         ) {
-            return !matches!(
-                (&expected_layout.kind, &found_layout.kind),
-                (LayoutKind::Signal { .. }, _) | (_, LayoutKind::Signal { .. })
-            );
+            return true;
         }
         if expected_layout.abi != found_layout.abi {
             return false;
@@ -7577,8 +7650,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             }
             (LayoutKind::List { element: left }, LayoutKind::List { element: right })
             | (LayoutKind::Set { element: left }, LayoutKind::Set { element: right })
-            | (LayoutKind::Option { element: left }, LayoutKind::Option { element: right })
-            | (LayoutKind::Signal { element: left }, LayoutKind::Signal { element: right }) => {
+            | (LayoutKind::Option { element: left }, LayoutKind::Option { element: right }) => {
                 self.layouts_call_compatible(*left, *right)
             }
             (
@@ -7882,39 +7954,33 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
 
     fn runtime_text_interpolation_support(
         &self,
-        layout: LayoutId,
+        mut layout: LayoutId,
     ) -> Option<RuntimeTextInterpolationSupport> {
-        match &self.program.layouts()[layout].kind {
-            LayoutKind::Primitive(PrimitiveType::Text) => Some(RuntimeTextInterpolationSupport::Text),
-            LayoutKind::Primitive(PrimitiveType::Int)
-                if self.program.layouts()[layout].abi == AbiPassMode::ByValue =>
-            {
-                Some(RuntimeTextInterpolationSupport::Int)
+        // Kernel arguments carry committed signal payloads using the payload ABI.
+        // Follow transparent carriers iteratively so deeply nested types cannot
+        // overflow the compiler stack; invalid cyclic layouts have no support.
+        for _ in 0..self.program.layouts().len() {
+            let descriptor = &self.program.layouts()[layout];
+            match &descriptor.kind {
+                LayoutKind::Signal { element } => layout = *element,
+                LayoutKind::AnonymousDomain { carrier, .. } => layout = *carrier,
+                LayoutKind::Domain { .. } => layout = self.program.named_domain_carrier(layout)?,
+                LayoutKind::Primitive(PrimitiveType::Text) => {
+                    return Some(RuntimeTextInterpolationSupport::Text);
+                }
+                LayoutKind::Primitive(primitive) if descriptor.abi == AbiPassMode::ByValue => {
+                    return match primitive {
+                        PrimitiveType::Int => Some(RuntimeTextInterpolationSupport::Int),
+                        PrimitiveType::Float => Some(RuntimeTextInterpolationSupport::Float),
+                        PrimitiveType::Bool => Some(RuntimeTextInterpolationSupport::Bool),
+                        PrimitiveType::Unit => Some(RuntimeTextInterpolationSupport::Unit),
+                        _ => None,
+                    };
+                }
+                _ => return None,
             }
-            LayoutKind::Primitive(PrimitiveType::Float)
-                if self.program.layouts()[layout].abi == AbiPassMode::ByValue =>
-            {
-                Some(RuntimeTextInterpolationSupport::Float)
-            }
-            LayoutKind::Primitive(PrimitiveType::Bool)
-                if self.program.layouts()[layout].abi == AbiPassMode::ByValue =>
-            {
-                Some(RuntimeTextInterpolationSupport::Bool)
-            }
-            LayoutKind::Primitive(PrimitiveType::Unit)
-                if self.program.layouts()[layout].abi == AbiPassMode::ByValue =>
-            {
-                Some(RuntimeTextInterpolationSupport::Unit)
-            }
-            LayoutKind::AnonymousDomain { carrier, .. } => {
-                self.runtime_text_interpolation_support(*carrier)
-            }
-            LayoutKind::Domain { .. } => self
-                .program
-                .named_domain_carrier(layout)
-                .and_then(|carrier| self.runtime_text_interpolation_support(carrier)),
-            _ => None,
         }
+        None
     }
 
     fn emit_runtime_text_interpolation_segment(
@@ -8246,13 +8312,14 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 LayoutKind::Primitive(PrimitiveType::BigInt),
                 LayoutKind::Primitive(PrimitiveType::BigInt),
             ) => NativeCompareKind::BigInt,
+            (LayoutKind::Primitive(PrimitiveType::Text), LayoutKind::Primitive(PrimitiveType::Text)) => NativeCompareKind::Text,
             (LayoutKind::Domain { .. }, LayoutKind::Domain { .. }) => NativeCompareKind::DomainInt,
             _ => {
                 return Err(self.unsupported_expression(
                     kernel_id,
                     expr_id,
                     &format!(
-                        "comparison expects matching Int/Float/Decimal/BigInt operands, found layout{left_layout_id}=`{left_layout}` and layout{right_layout_id}=`{right_layout}`"
+                        "comparison expects matching Int/Float/Decimal/BigInt/Text operands, found layout{left_layout_id}=`{left_layout}` and layout{right_layout_id}=`{right_layout}`"
                     ),
                 ));
             }
@@ -9761,8 +9828,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
     }
 
     /// Declare an imported runtime function with signature `(ptr) -> ptr`.
-    /// Used for Decimal/BigInt unary negate.
-    #[allow(dead_code)]
+    /// Used by native text transformations.
     fn declare_ptr_unop_func(
         &mut self,
         sym: &str,
@@ -9790,8 +9856,22 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         Ok(self.module.declare_func_in_func(func_id, builder.func))
     }
 
-    /// Declare an imported runtime function with signature `(ptr, ptr) -> i8`.
-    /// Used for Decimal/BigInt comparison (eq, lt).
+    /// Compare native text lexicographically using a signed ordering result.
+    fn lower_text_comparison(
+        &mut self,
+        kernel_id: KernelId,
+        left: cranelift_codegen::ir::Value,
+        right: cranelift_codegen::ir::Value,
+        condition: IntCC,
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<cranelift_codegen::ir::Value, CodegenError> {
+        let function = self.declare_ptr_cmp_func("aivi_text_compare", kernel_id, builder)?;
+        let call = builder.ins().call(function, &[left, right]);
+        let ordering = builder.inst_results(call)[0];
+        Ok(builder.ins().icmp_imm_s(condition, ordering, 0))
+    }
+
+    /// Declare a native numeric/text predicate with signature `(ptr, ptr) -> i8`.
     fn declare_ptr_cmp_func(
         &mut self,
         sym: &str,

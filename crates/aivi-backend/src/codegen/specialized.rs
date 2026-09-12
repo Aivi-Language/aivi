@@ -912,6 +912,10 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
                 sig.params.push(AbiParam::new(types::I8));
                 sig.returns.push(AbiParam::new(self.pointer_type()));
             }
+            "aivi_text_trim" | "aivi_text_to_lower" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
             "aivi_bytes_append" => {
                 sig.params.push(AbiParam::new(self.pointer_type()));
                 sig.params.push(AbiParam::new(self.pointer_type()));
@@ -985,7 +989,7 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
             }
             "aivi_decimal_eq" | "aivi_decimal_gt" | "aivi_decimal_lt" | "aivi_decimal_gte"
             | "aivi_decimal_lte" | "aivi_bigint_eq" | "aivi_bigint_gt" | "aivi_bigint_lt"
-            | "aivi_bigint_gte" | "aivi_bigint_lte" => {
+            | "aivi_bigint_gte" | "aivi_bigint_lte" | "aivi_text_compare" | "aivi_text_contains" => {
                 sig.params.push(AbiParam::new(self.pointer_type()));
                 sig.params.push(AbiParam::new(self.pointer_type()));
                 sig.returns.push(AbiParam::new(types::I8));
@@ -1140,10 +1144,23 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
     fn jit_abi_value_kind_for_pass(
         &self,
         kernel_id: KernelId,
-        layout: LayoutId,
-        pass: AbiPassMode,
+        mut layout: LayoutId,
+        mut pass: AbiPassMode,
         detail: &str,
     ) -> Result<AbiValueKind, CodegenError> {
+        // Match code generation and marshaling: signal arguments carry their
+        // committed payload, including the payload's scalar/reference ABI.
+        let payload =
+            self.runtime_payload_layout(layout)
+                .ok_or_else(|| CodegenError::UnsupportedLayout {
+                    kernel: kernel_id,
+                    layout,
+                    detail: "cyclic signal payload layout".into(),
+                })?;
+        if payload != layout {
+            layout = payload;
+            pass = self.program.layouts()[payload].abi;
+        }
         match pass {
             AbiPassMode::ByReference => Ok(AbiValueKind::Pointer),
             AbiPassMode::ByValue => {
@@ -1790,10 +1807,26 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
         &self,
         meta: &BackendRuntimeMeta,
         kernel_id: KernelId,
-        layout: LayoutId,
-        pass: AbiPassMode,
+        mut layout: LayoutId,
+        mut pass: AbiPassMode,
         detail: &str,
     ) -> Result<AbiValueKind, CodegenError> {
+        // Match code generation and marshaling: signal arguments carry their
+        // committed payload, including the payload's scalar/reference ABI.
+        for _ in 0..meta.layouts().len() {
+            let LayoutKind::Signal { element } = &meta.layouts()[layout].kind else {
+                break;
+            };
+            layout = *element;
+            pass = meta.layouts()[layout].abi;
+        }
+        if matches!(meta.layouts()[layout].kind, LayoutKind::Signal { .. }) {
+            return Err(CodegenError::UnsupportedLayout {
+                kernel: kernel_id,
+                layout,
+                detail: "cyclic signal payload layout".into(),
+            });
+        }
         match pass {
             AbiPassMode::ByReference => Ok(AbiValueKind::Pointer),
             AbiPassMode::ByValue => {

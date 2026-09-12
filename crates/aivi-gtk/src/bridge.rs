@@ -281,6 +281,11 @@ impl GtkBridgeGraphBuilder {
                 group: node.plan,
                 widget: schema.markup_name.into(),
                 child_group: group.group.text().to_owned().into_boxed_str(),
+                available: schema
+                    .child_groups
+                    .iter()
+                    .map(|group| group.name.to_owned())
+                    .collect(),
             });
             return &INVALID_WIDGET_CHILD_GROUP;
         };
@@ -1235,6 +1240,7 @@ pub enum GtkBridgeLoweringError {
         group: PlanNodeId,
         widget: Box<str>,
         child_group: Box<str>,
+        available: Vec<String>,
     },
     RootHasParent {
         root: PlanNodeId,
@@ -1297,9 +1303,15 @@ impl fmt::Display for GtkBridgeLoweringError {
                 group,
                 widget,
                 child_group,
+                available,
             } => write!(
                 f,
-                "runtime assembly group node {group} references unknown child group `{child_group}` on widget `{widget}`"
+                "runtime assembly group node {group} references unknown child group `{child_group}` on widget `{widget}`; available groups: {}",
+                if available.is_empty() {
+                    "none".to_owned()
+                } else {
+                    available.join(", ")
+                }
             ),
             Self::RootHasParent { root, parent } => write!(
                 f,

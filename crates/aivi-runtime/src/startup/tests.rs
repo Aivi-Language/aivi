@@ -3352,3 +3352,52 @@ signal game : Signal Int =
         "the next wakeup should apply the latest direction"
     );
 }
+
+#[test]
+fn linked_runtime_defers_source_activation_until_configuration_commits() {
+    let lowered = lower_text(
+        "source-startup-chain.aivi",
+        r#"
+@source http.get "/host"
+signal host : Signal Text
+signal endpoint : Signal Text = "{host}/inventory"
+signal reload : Signal Unit
+@source http.get endpoint with { refreshOn: reload }
+signal inventory : Signal Text
+"#,
+    );
+    let assembly = crate::assemble_hir_runtime(lowered.hir.module()).unwrap();
+    let mut linked = link_backend_runtime(
+        assembly,
+        &lowered.core,
+        std::sync::Arc::new(lowered.backend.clone()),
+    )
+    .unwrap();
+    let first = linked
+        .tick_with_source_lifecycle()
+        .expect("waiting for configuration is ordinary startup");
+    assert_eq!(first.source_actions().len(), 1);
+    let LinkedSourceLifecycleAction::Activate { port, .. } = &first.source_actions()[0] else {
+        panic!("host should activate")
+    };
+    assert!(
+        linked
+            .tick_with_source_lifecycle()
+            .unwrap()
+            .source_actions()
+            .is_empty()
+    );
+    port.publish(DetachedRuntimeValue::from_runtime_owned(
+        RuntimeValue::Text("https://example.test".into()),
+    ))
+    .unwrap();
+    let next = linked.tick_with_source_lifecycle().unwrap();
+    assert_eq!(next.source_actions().len(), 1);
+    let LinkedSourceLifecycleAction::Activate { config, .. } = &next.source_actions()[0] else {
+        panic!("inventory should activate after host commits")
+    };
+    assert_eq!(
+        config.arguments[0].as_runtime(),
+        &RuntimeValue::Text("https://example.test/inventory".into())
+    );
+}

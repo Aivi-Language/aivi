@@ -34,6 +34,7 @@ target/debug/aivi --version
 | Command | Result |
 | --- | --- |
 | `aivi check [path]` | Parses, resolves, and type-checks a file, directory, or manifest entries. No executable artifact is produced. |
+| `aivi check --runnable [path] [--view name]` | Checks the selected app through runnable lowering, the GTK catalog, and native bundle serialization in memory. Does not launch or activate sources. |
 | `aivi compile <path> [-o object]` | Emits a native object file. It does not link a runnable GTK application. |
 | `aivi build <path> -o <executable>` | Produces one directly runnable executable containing a source-free application bundle. |
 | `aivi run [path]` | Compiles and launches a GTK application, or launches a compatible serialized run image. |
@@ -53,6 +54,17 @@ the command checks canonically formatted code and fails when formatting changes 
 All modes write a diagnostic report and check syntax and types, not runtime results.
 
 ## Runnable artifacts
+
+Use `aivi check --runnable demos/stockroom/main.aivi` before packaging an application. This
+uses the same eager run preparation and native frozen bundle encoder as `build`, without
+creating an executable or opening a display. `--view name` selects an entry when the module
+contains multiple views. With no path, manifest apps are checked; recursive directories are
+only supported by ordinary `check`, since they also contain library modules.
+
+A successful runnable check verifies compilation and serialization for the current target.
+It does not promise that external files exist, servers are reachable, or another machine has
+the required desktop libraries. Ordinary `check` still checks syntax and types for libraries;
+it does not claim native-backend coverage.
 
 `aivi compile` and `aivi build` are intentionally different:
 

@@ -406,3 +406,23 @@ fn build_accepts_snake_and_reversi_demos() {
         assert_executable_launches(&executable_path);
     }
 }
+
+#[test]
+fn build_accepts_stockroom_reactive_imported_error_type() {
+    let output_root = TempDir::new("build-stockroom");
+    let executable = output_root.path().join("stockroom");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .args(["build", "demos/stockroom/main.aivi", "-o"])
+        .arg(&executable)
+        .current_dir(repo_path(""))
+        .output()
+        .expect("stockroom build should run");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(read_embedded_bundle_entries(&executable).contains_key("frozen-run-image.bin"));
+    #[cfg(unix)]
+    assert_executable_launches(&executable);
+}

@@ -529,7 +529,8 @@ impl McpHostState {
             };
         let session = self.require_session()?;
         match args.event.as_str() {
-            "click" | "activate" => emit_activate_event(widget.as_ref().expect("widget required"))?,
+            "click" => emit_click_event(widget.as_ref().expect("widget required"))?,
+            "activate" => emit_activate_event(widget.as_ref().expect("widget required"))?,
             "set_text" => {
                 let text = args
                     .text
@@ -561,8 +562,8 @@ impl McpHostState {
             }
             "double_click" => {
                 let w = widget.as_ref().expect("widget required");
-                emit_activate_event(w)?;
-                emit_activate_event(w)?;
+                emit_click_event(w)?;
+                emit_click_event(w)?;
             }
             "scroll" => {
                 let delta_x = args.delta_x.unwrap_or(0.0);
@@ -2973,6 +2974,16 @@ fn collect_widget_matches(
     }
 }
 
+// GTK button activation includes an animation timeout and may coalesce repeated
+// activations. A synthetic click must dispatch its event before MCP settles.
+fn emit_click_event(widget: &gtk::Widget) -> Result<(), String> {
+    if let Some(button) = widget.downcast_ref::<gtk::Button>() {
+        button.emit_clicked();
+        return Ok(());
+    }
+    emit_activate_event(widget)
+}
+
 fn emit_activate_event(widget: &gtk::Widget) -> Result<(), String> {
     if widget.activate() {
         return Ok(());
@@ -4466,6 +4477,21 @@ value main =
         );
 
         host.stop_session();
+    }
+
+    #[gtk::test]
+    fn synthetic_button_clicks_dispatch_each_event_before_settling() {
+        let _guard = crate::gtk_test_lock().lock().expect("gtk test lock");
+        use gtk::prelude::{ButtonExt, Cast};
+
+        let button = gtk::Button::with_label("Reload");
+        let clicks = std::rc::Rc::new(std::cell::Cell::new(0));
+        let received = clicks.clone();
+        button.connect_clicked(move |_| received.set(received.get() + 1));
+        for expected in 1..=3 {
+            super::emit_click_event(button.upcast_ref()).expect("button click should dispatch");
+            assert_eq!(clicks.get(), expected);
+        }
     }
 
     #[gtk::test]

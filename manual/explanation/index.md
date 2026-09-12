@@ -9,6 +9,7 @@ act as a reference dictionary; instead, they answer the *why* questions behind A
 | --- | --- |
 | Why does AIVI exist at all? | [Why AIVI?](/guide/why-aivi) |
 | What changes if I come from imperative code? | [If you are new to functional programming](/explanation/functional-programming-bridge) |
+| What happened when a real tool was built in AIVI? | [Stockroom language audit](/explanation/stockroom-language-audit) |
 | How should I approach real AIVI code? | [Thinking in AIVI](/guide/thinking-in-aivi) |
 
 ## What explanation pages should give you

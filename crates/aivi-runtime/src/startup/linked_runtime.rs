@@ -366,6 +366,19 @@ impl BackendLinkedRuntime {
             }
 
             if !self.runtime.is_source_active(instance) {
+                // Configuration may itself depend on another source's first
+                // publication. Explicit triggers need no initial value, but
+                // configuration dependencies must commit before activation.
+                let mut config_ready = true;
+                for &dependency in &spec.reconfiguration_dependencies {
+                    if self.runtime.current_value(dependency)?.is_none() {
+                        config_ready = false;
+                        break;
+                    }
+                }
+                if !config_ready {
+                    continue;
+                }
                 let config = self.evaluate_source_config(instance)?;
                 let port = DetachedRuntimePublicationPort {
                     inner: self.runtime.activate_source(instance)?,

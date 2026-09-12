@@ -1894,3 +1894,66 @@ signal missing : Signal Text
     linked.tick().unwrap();
     assert_eq!(linked.runtime().current_value(signal).unwrap(), None);
 }
+
+#[test]
+fn fs_read_uses_context_cwd_and_publishes_standard_errors() {
+    let root = temp_path("fs-read-standard-errors");
+    fs::create_dir(&root).unwrap();
+    fs::write(root.join("valid.json"), "{\"quantity\":3}").unwrap();
+    fs::write(root.join("invalid.json"), "{\"quantity\":\"three\"}").unwrap();
+    fs::create_dir(root.join("directory.json")).unwrap();
+
+    for (relative, expected_variant) in [
+        ("valid.json", None),
+        ("missing.json", Some("NotFound")),
+        ("invalid.json", Some("FsProtocolError")),
+        ("directory.json", Some("ReadFailed")),
+    ] {
+        let lowered = lower_text(
+            "fs-standard-errors.aivi",
+            &format!(
+                "{}\n@source fs.read \"{relative}\"\nsignal stock : Signal (Result FsError {{ quantity: Int }})\n",
+                include_str!("../../../../stdlib/aivi/fs.aivi"),
+            ),
+        );
+        let assembly = assemble_hir_runtime(lowered.hir.module()).unwrap();
+        let mut linked =
+            link_backend_runtime(assembly, &lowered.core, Arc::new(lowered.backend.clone()))
+                .unwrap();
+        let actions = linked.tick_with_source_lifecycle().unwrap();
+        let mut providers = SourceProviderManager::with_context(SourceProviderContext::new(
+            Vec::new(),
+            root.clone(),
+            BTreeMap::new(),
+        ));
+        providers.apply_actions(actions.source_actions()).unwrap();
+        let signal = linked
+            .assembly()
+            .signal(item_id(lowered.hir.module(), "stock"))
+            .unwrap()
+            .signal();
+        let value = spin_until(&mut linked, signal, Duration::from_secs(2)).unwrap_or_else(|| {
+            panic!("{relative} must publish a result instead of remaining loading")
+        });
+        match (expected_variant, value) {
+            (None, RuntimeValue::ResultOk(value)) => {
+                let RuntimeValue::Record(fields) = *value else {
+                    panic!("expected a decoded record")
+                };
+                assert_eq!(fields[0].value, RuntimeValue::Int(3));
+            }
+            (Some(expected), RuntimeValue::ResultErr(value)) => {
+                let RuntimeValue::Sum(error) = *value else {
+                    panic!("expected FsError")
+                };
+                assert_eq!(error.variant_name.as_ref(), expected);
+                assert!(
+                    !error.fields.is_empty(),
+                    "filesystem errors must preserve their detail"
+                );
+            }
+            (expected, actual) => panic!("{relative}: expected {expected:?}, found {actual:?}"),
+        }
+    }
+    fs::remove_dir_all(root).unwrap();
+}

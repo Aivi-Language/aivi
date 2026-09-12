@@ -1807,9 +1807,13 @@ impl<'a> GeneralExprElaborator<'a> {
                                     .control_nodes()
                                     .get(*case)
                                     .and_then(|case_node| match case_node {
-                                        crate::ControlNode::Case(case_node) => Some(
-                                            self.case_branch_env(&env, case_node.pattern, &subject),
-                                        ),
+                                        crate::ControlNode::Case(case_node) => {
+                                            Some(self.case_branch_env(
+                                                &env,
+                                                case_node.pattern,
+                                                subject.gate_payload(),
+                                            ))
+                                        }
                                         _ => None,
                                     })
                                     .unwrap_or_else(|| env.clone());
@@ -3213,13 +3217,40 @@ impl<'a> GeneralExprElaborator<'a> {
     ) -> Result<GateRuntimeExprKind, Vec<GeneralExprBlocker>> {
         let constructor_expectations = self.argument_expectations_from_result(callee, result_ty);
         let inferred_callee_ty = self.visible_callee_type_for_apply(callee, env, ambient);
+        // Signal lifting belongs to the application, not the pure callee's
+        // polymorphic signature. Specializing A to Signal Text would turn
+        // getOrElse into Signal Text -> Option (Signal Text) -> Signal Text.
+        let lifted = matches!(result_ty, GateType::Signal(_))
+            && inferred_callee_ty
+                .as_ref()
+                .and_then(|ty| self.function_signature(ty, arguments.len()))
+                .is_some_and(|(parameters, result)| {
+                    !result.is_signal()
+                        && arguments
+                            .iter()
+                            .zip(parameters)
+                            .any(|(argument, parameter)| {
+                                !parameter.is_signal()
+                                    && self
+                                        .typing
+                                        .infer_expr(*argument, env, None)
+                                        .ty
+                                        .is_some_and(|ty| ty.is_signal())
+                            })
+                });
+        let call_result_ty = match (lifted, result_ty) {
+            (true, GateType::Signal(payload)) => payload.as_ref(),
+            _ => result_ty,
+        };
         let inferred_parameter_types = inferred_callee_ty.as_ref().and_then(|ty| {
             let (parameters, inferred_result) = self.function_signature(ty, arguments.len())?;
             // When the callee is polymorphic but the concrete result type is known,
             // pre-substitute TypeParameters so argument expectations are concrete.
-            if !result_ty.has_type_params() && inferred_result.has_type_params() {
-                let subs =
-                    collect_type_param_subs(&[inferred_result], std::slice::from_ref(result_ty));
+            if !call_result_ty.has_type_params() && inferred_result.has_type_params() {
+                let subs = collect_type_param_subs(
+                    &[inferred_result],
+                    std::slice::from_ref(call_result_ty),
+                );
                 if !subs.is_empty() {
                     return Some(
                         parameters
@@ -3258,8 +3289,21 @@ impl<'a> GeneralExprElaborator<'a> {
                 .or_else(|| inferred_argument.actual_gate_type())
                 .or_else(|| inferred_argument.ty.clone())
                 .unwrap_or_else(|| lowered.ty.clone());
-            // After lowering each argument, collect type-parameter bindings from the observed
-            // concrete type so that remaining argument expectations can be specialized.
+            let reads_payload = lifted
+                && inferred_parameter_types
+                    .as_ref()
+                    .and_then(|parameters| parameters.get(index))
+                    .is_none_or(|parameter| !parameter.is_signal());
+            let observed_ty = if reads_payload {
+                match observed_ty {
+                    GateType::Signal(payload) => *payload,
+                    other => other,
+                }
+            } else {
+                observed_ty
+            };
+            // Bind the same payload type that the pure parameter receives. An
+            // explicitly Signal-typed parameter retains its declared carrier.
             if let Some(param_types) = &inferred_parameter_types
                 && let Some(param_ty) = param_types.get(index)
             {
@@ -3277,16 +3321,16 @@ impl<'a> GeneralExprElaborator<'a> {
             .and_then(|ty| self.function_signature(ty, arguments.len()))
         {
             let mut subs = collect_type_param_subs(&parameters, &argument_types);
-            collect_type_param_subs_inner(&inferred_result, result_ty, &mut subs);
+            collect_type_param_subs_inner(&inferred_result, call_result_ty, &mut subs);
             self.arrow_type(
                 parameters
                     .iter()
                     .map(|parameter| substitute_gate_type(parameter, &subs))
                     .collect(),
-                result_ty.clone(),
+                call_result_ty.clone(),
             )
         } else {
-            self.arrow_type(argument_types.clone(), result_ty.clone())
+            self.arrow_type(argument_types.clone(), call_result_ty.clone())
         };
         let lowered_callee = if let ExprKind::Name(reference) = &self.module.exprs()[callee].kind {
             if matches!(
@@ -5345,6 +5389,48 @@ mod tests {
         typecheck::resolve_class_member_dispatch,
         validate::{GateExprEnv, GateType, GateTypeContext, gate_env_for_function},
     };
+
+    #[test]
+    fn markup_match_binds_signal_payload_fields() {
+        for (declarations, pattern) in [
+            (
+                "type Screen = Failed Text\nsignal screen : Signal Screen = Failed \"offline\"",
+                "Failed reason",
+            ),
+            (
+                "signal screen : Signal (Option Text) = Some \"offline\"",
+                "Some reason",
+            ),
+            (
+                "signal screen : Signal { reason: Text } = { reason: \"offline\" }",
+                "{ reason }",
+            ),
+        ] {
+            let source = format!(
+                "{declarations}\nvalue main = <Window><match on={{screen}}><case pattern={{{pattern}}}><Label text={{reason}} /></case></match></Window>\n"
+            );
+            let lowered = lower_text("main.aivi", &source);
+            let module = lowered.module();
+            let body = module
+                .items()
+                .iter()
+                .find_map(|(_, item)| match item {
+                    Item::Value(value) if value.name.text() == "main" => Some(value.body),
+                    _ => None,
+                })
+                .unwrap();
+            let sites = super::collect_markup_runtime_expr_sites(module, body)
+                .expect("markup patterns must bind fields of the signal payload");
+            assert!(sites.sites().values().any(|site| {
+                site.parameters.iter().any(|parameter| {
+                    parameter.name.as_ref() == "reason"
+                        && parameter
+                            .ty
+                            .same_shape(&GateType::Primitive(BuiltinType::Text))
+                })
+            }));
+        }
+    }
 
     fn item_name(module: &crate::Module, item: crate::ItemId) -> Option<&str> {
         match &module.items()[item] {

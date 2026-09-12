@@ -210,6 +210,8 @@ fn resolve_command_entrypoint(
 fn run_check(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, String> {
     let mut requested_path = None;
     let mut timings = false;
+    let mut runnable = false;
+    let mut view = None;
 
     while let Some(argument) = args.next() {
         if argument == "--help" || argument == "-h" {
@@ -217,6 +219,21 @@ fn run_check(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Strin
         }
         if argument == "--timings" {
             timings = true;
+            continue;
+        }
+        if argument == "--runnable" {
+            runnable = true;
+            continue;
+        }
+        if argument == "--view" {
+            let name = args
+                .next()
+                .and_then(|value| value.into_string().ok())
+                .ok_or_else(|| "expected a view name after `--view` for `check`".to_owned())?;
+            validate_module_name(&name)?;
+            if view.replace(name).is_some() {
+                return Err("check view was provided more than once".to_owned());
+            }
             continue;
         }
         if argument == "--path" {
@@ -229,16 +246,37 @@ fn run_check(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Strin
             }
             continue;
         }
+        if argument.to_string_lossy().starts_with('-') {
+            return Err(format!(
+                "unknown check option `{}`",
+                argument.to_string_lossy()
+            ));
+        }
         if requested_path.replace(PathBuf::from(&argument)).is_some() {
             return Err("check path was provided more than once".to_owned());
         }
     }
 
+    if view.is_some() && !runnable {
+        return Err("`check --view` requires `--runnable`".to_owned());
+    }
+    let target = if runnable {
+        CheckTarget::Runnable {
+            view: view.as_deref(),
+        }
+    } else {
+        CheckTarget::Hir
+    };
+
     // Directory: check every .aivi file found recursively inside it.
     if let Some(ref dir) = requested_path
-        && dir.is_dir() {
-            return check_directory(dir, timings);
+        && dir.is_dir()
+    {
+        if runnable {
+            return Err("`check --runnable` requires an app entry file; omit the path to check manifest apps".to_owned());
         }
+        return check_directory(dir, timings);
+    }
 
     // No path given and the manifest declares multiple apps: check them all.
     if requested_path.is_none() {
@@ -249,12 +287,12 @@ fn run_check(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, Strin
         let manifest = parse_manifest(&workspace_root)
             .map_err(|message| format!("failed to parse aivi.toml: {message}"))?;
         if manifest.apps.len() > 1 {
-            return check_all_apps(&manifest.apps, &workspace_root, timings);
+            return check_all_apps(&manifest.apps, &workspace_root, timings, target);
         }
     }
 
     let path = resolve_command_entrypoint("check", requested_path.as_deref())?;
-    check_file(&path, timings)
+    check_file_with_target(&path, timings, target)
 }
 
 fn run_compile(mut args: impl Iterator<Item = OsString>) -> Result<ExitCode, String> {

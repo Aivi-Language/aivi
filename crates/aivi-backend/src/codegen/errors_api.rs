@@ -420,7 +420,7 @@ enum BuiltinCallPlan {
     ListAppend { element_layout: LayoutId },
     ListMap(ListMapPlan),
     ListFilter(ListPredicatePlan),
-    ListAny(ListPredicatePlan),
+    ListQuantified(ListPredicatePlan, ListQuantifier),
     ListFind(ListFindPlan),
     ListFlatMap(ListFlatMapPlan),
     ListReduce(ListReducePlan),
@@ -490,7 +490,15 @@ struct ListReducePlan {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ListQuantifier {
+    Any,
+    All,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum IntrinsicCallPlan {
+    TextUnary { symbol: &'static str },
+    TextContains,
     BytesLength,
     BytesGet,
     BytesFromText,
@@ -555,6 +563,7 @@ impl KernelLinkage {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NativeCompareKind {
+    Text,
     Integer,
     Float,
     Decimal,

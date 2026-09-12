@@ -399,7 +399,7 @@ fn truthy_falsy_payload(
 
 pub fn coerce_runtime_value(
     program: &Program,
-    value: RuntimeValue,
+    mut value: RuntimeValue,
     layout: LayoutId,
 ) -> Result<RuntimeValue, RuntimeValue> {
     let Some(layout_def) = program.layouts().get(layout) else {
@@ -414,6 +414,14 @@ pub fn coerce_runtime_value(
             .map(|inner| RuntimeValue::Signal(Box::new(inner)));
     }
     if value_matches_layout(program, &value, layout) {
+        // Decoded/imported sums may carry an ItemId from a different module's
+        // arena. Name, variant, and payload have passed the destination layout's
+        // checks; use that layout's identity for subsequent constructor dispatch.
+        if let (LayoutKind::Opaque { item: Some(item), .. }, RuntimeValue::Sum(sum)) =
+            (&layout_def.kind, &mut value)
+        {
+            sum.item = *item;
+        }
         return Ok(value);
     }
     if let RuntimeValue::Signal(inner) = &value {

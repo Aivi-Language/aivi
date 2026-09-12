@@ -218,3 +218,22 @@ fn test_command_selects_one_exact_test_from_the_requested_file() {
         String::from_utf8_lossy(&missing.stderr)
     );
 }
+
+#[test]
+fn test_command_runs_stockroom_domain_scenarios() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../demos/stockroom/tests.aivi");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("test")
+        .arg(path)
+        .output()
+        .expect("stockroom tests should run");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .contains("test result: ok. 6 passed; 0 failed; 6 total")
+    );
+}

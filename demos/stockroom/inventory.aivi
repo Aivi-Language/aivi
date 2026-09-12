@@ -1,0 +1,86 @@
+use aivi.text (
+    contains as textContains
+    toLower
+    trim
+    join
+)
+
+use aivi.list (
+    sortBy
+    filter
+    length
+)
+
+type Stock = {
+    sku: Text,
+    name: Text,
+    onHand: Int,
+    target: Int
+}
+
+type Catalog = {
+    items: List Stock
+}
+
+type Restock = {
+    sku: Text,
+    name: Text,
+    quantity: Int
+}
+
+type Stock -> Bool
+func validStock = item =>
+    trim item.sku != "" and trim item.name != "" and item.onHand >= 0 and item.target >= 0
+
+type List Stock -> Stock -> Bool
+func uniqueSku = items item =>
+    length (filter (other => other.sku == item.sku) items) == 1
+
+type Catalog -> Result Text Catalog
+func validateUnique = catalog => all (uniqueSku catalog.items) catalog.items
+ T|> Ok catalog
+ F|> Err "Duplicate SKU: each item needs a unique identifier."
+
+type Catalog -> Result Text Catalog
+func validateCatalog = catalog => all validStock catalog.items
+ T|> validateUnique catalog
+ F|> Err "Every item needs a SKU, a name, and nonnegative quantities."
+
+type Stock -> Bool
+func needsRestock = item =>
+    item.onHand < item.target
+
+type Stock -> Restock
+func restock = item =>
+    {
+        sku: item.sku,
+        name: item.name,
+        quantity: item.target - item.onHand
+    }
+
+type Restock -> Restock -> Bool
+func priority = left right => left.quantity == right.quantity
+ T|> left.sku < right.sku
+ F|> left.quantity > right.quantity
+
+type Text -> Stock -> Bool
+func matchesSearch = query item =>
+    textContains (toLower (trim query)) (toLower "{item.sku} {item.name}")
+
+type Text -> Catalog -> List Restock
+func restockPlan = query catalog => catalog.items
+  |> filter needsRestock
+  |> filter (matchesSearch query)
+  |> map restock
+  |> sortBy priority
+
+type Restock -> Text
+func rowText = item =>
+    "{item.sku} — {item.name}: order {item.quantity}"
+
+type List Restock -> Text
+func planText = items => items
+  |> map rowText
+  |> join "\n"
+
+export (Stock, Catalog, Restock, validateCatalog, restockPlan, rowText, planText)

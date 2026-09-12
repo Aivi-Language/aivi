@@ -585,6 +585,7 @@ enum TextSourceErrorKind {
     Timeout,
     Decode,
     Missing,
+    Permission,
     Request,
     Query,
     Connect,
@@ -607,6 +608,7 @@ impl TextSourceErrorKind {
             Self::Timeout => &TIMEOUT_ERROR_CANDIDATES,
             Self::Decode => &DECODE_ERROR_CANDIDATES,
             Self::Missing => &MISSING_ERROR_CANDIDATES,
+            Self::Permission => &PERMISSION_ERROR_CANDIDATES,
             Self::Request => &REQUEST_ERROR_CANDIDATES,
             Self::Query => &QUERY_ERROR_CANDIDATES,
             Self::Connect => &CONNECT_ERROR_CANDIDATES,
@@ -621,6 +623,7 @@ impl fmt::Display for TextSourceErrorKind {
             Self::Timeout => f.write_str("timeout"),
             Self::Decode => f.write_str("decode"),
             Self::Missing => f.write_str("missing-file"),
+            Self::Permission => f.write_str("permission-denied"),
             Self::Request => f.write_str("request"),
             Self::Query => f.write_str("query"),
             Self::Connect => f.write_str("connect"),
@@ -662,19 +665,29 @@ const TIMEOUT_ERROR_CANDIDATES: [ErrorCandidate; 5] = [
     ErrorCandidate::text("Error"),
 ];
 
-const DECODE_ERROR_CANDIDATES: [ErrorCandidate; 3] = [
+const DECODE_ERROR_CANDIDATES: [ErrorCandidate; 4] = [
+    ErrorCandidate::text("FsProtocolError"),
     ErrorCandidate::text("DecodeFailure"),
     ErrorCandidate::text("RequestFailure"),
     ErrorCandidate::text("Error"),
 ];
 
-const MISSING_ERROR_CANDIDATES: [ErrorCandidate; 3] = [
+const MISSING_ERROR_CANDIDATES: [ErrorCandidate; 4] = [
+    ErrorCandidate::text("NotFound"),
     ErrorCandidate::none("Missing"),
     ErrorCandidate::none("NotFound"),
     ErrorCandidate::text("Error"),
 ];
 
-const REQUEST_ERROR_CANDIDATES: [ErrorCandidate; 4] = [
+const PERMISSION_ERROR_CANDIDATES: [ErrorCandidate; 4] = [
+    ErrorCandidate::text("PermissionDenied"),
+    ErrorCandidate::text("ReadFailed"),
+    ErrorCandidate::text("RequestFailure"),
+    ErrorCandidate::text("Error"),
+];
+
+const REQUEST_ERROR_CANDIDATES: [ErrorCandidate; 5] = [
+    ErrorCandidate::text("ReadFailed"),
     ErrorCandidate::text("RequestFailure"),
     ErrorCandidate::text("NetworkFailure"),
     ErrorCandidate::text("TransportFailure"),
@@ -1049,6 +1062,7 @@ struct FsReadPlan {
 impl FsReadPlan {
     fn parse(
         instance: SourceInstanceId,
+        context: &SourceProviderContext,
         config: &EvaluatedSourceConfig,
     ) -> Result<Self, SourceProviderExecutionError> {
         let provider = BuiltinSourceProvider::FsRead;
@@ -1088,7 +1102,7 @@ impl FsReadPlan {
             }
         }
         Ok(Self {
-            path: PathBuf::from(path.as_ref()),
+            path: context.cwd.join(path.as_ref()),
             debounce,
             read_on_start,
             result: RequestResultPlan::parse(instance, provider, config)?,

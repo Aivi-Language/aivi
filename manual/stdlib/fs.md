@@ -72,3 +72,10 @@ on handle members. The manual uses `read`, `writeText`, and `delete` as the cano
 `NotFound path`, `PermissionDenied path`, `ReadFailed message`, `WriteFailed message`, and
 `FsProtocolError message` construct `FsError` values while preserving the relevant path or provider
 detail.
+
+For `@source fs.read`, relative paths resolve against the application's working directory.
+With `Result FsError A`, a missing file publishes `Err (NotFound path)`, a permission
+failure publishes `Err (PermissionDenied path)`, other read failures publish
+`Err (ReadFailed message)`, and payload decoding failures publish
+`Err (FsProtocolError message)`. A later `reloadOn` event retries the read, including
+after an error. These reads run on workers; error results return through the scheduler.

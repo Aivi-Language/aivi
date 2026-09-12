@@ -12,7 +12,8 @@ use aivi_backend::{
 };
 use aivi_base::SourceSpan;
 use aivi_core::{
-    RuntimeFragmentSpec, lower_runtime_fragment, runtime_workspace_item_origin_offsets,
+    RuntimeFragmentSpec, lower_runtime_fragment, lower_runtime_fragment_with_workspace,
+    runtime_workspace_item_origin_offsets,
 };
 use aivi_hir as hir;
 use aivi_lambda::lower_module as lower_lambda_module;
@@ -577,6 +578,7 @@ impl<'a> HirRuntimeAssemblyBuilder<'a> {
                             |(offset, update): (usize, &hir::ReactiveUpdateClause)| {
                                 compile_reactive_clause_fragments(
                                     module,
+                                    self.workspace_hirs,
                                     &module_state.public_signals,
                                     binding.item,
                                     chunk_start + offset,
@@ -2789,6 +2791,7 @@ fn fragment_thread_pool() -> Option<&'static rayon::ThreadPool> {
 
 fn compile_reactive_clause_fragments(
     module: &hir::Module,
+    workspace_hirs: &[(&str, &hir::Module)],
     public_signals: &BTreeMap<hir::ItemId, SignalHandle>,
     owner: hir::ItemId,
     clause_index: usize,
@@ -2846,6 +2849,7 @@ fn compile_reactive_clause_fragments(
         let signal_bool_type = hir::GateType::Signal(Box::new(bool_type.clone()));
         compile_runtime_expr_fragment(RuntimeFragmentCompileRequest {
             module,
+            workspace_hirs,
             owner,
             clause_span: update.span,
             expr: update.guard,
@@ -2858,6 +2862,7 @@ fn compile_reactive_clause_fragments(
         .or_else(|_| {
             compile_runtime_expr_fragment(RuntimeFragmentCompileRequest {
                 module,
+                workspace_hirs,
                 owner,
                 clause_span: update.span,
                 expr: update.guard,
@@ -2871,6 +2876,7 @@ fn compile_reactive_clause_fragments(
     } else {
         compile_runtime_expr_fragment(RuntimeFragmentCompileRequest {
             module,
+            workspace_hirs,
             owner,
             clause_span: update.span,
             expr: update.guard,
@@ -2899,6 +2905,7 @@ fn compile_reactive_clause_fragments(
         let signal_body_type = hir::GateType::Signal(Box::new(body_type.clone()));
         compile_runtime_expr_fragment(RuntimeFragmentCompileRequest {
             module,
+            workspace_hirs,
             owner,
             clause_span: update.span,
             expr: update.body,
@@ -2911,6 +2918,7 @@ fn compile_reactive_clause_fragments(
         .or_else(|_| {
             compile_runtime_expr_fragment(RuntimeFragmentCompileRequest {
                 module,
+                workspace_hirs,
                 owner,
                 clause_span: update.span,
                 expr: update.body,
@@ -2924,6 +2932,7 @@ fn compile_reactive_clause_fragments(
     } else {
         compile_runtime_expr_fragment(RuntimeFragmentCompileRequest {
             module,
+            workspace_hirs,
             owner,
             clause_span: update.span,
             expr: update.body,
@@ -2960,6 +2969,7 @@ fn compile_reactive_clause_fragments(
 
 struct RuntimeFragmentCompileRequest<'a> {
     module: &'a hir::Module,
+    workspace_hirs: &'a [(&'a str, &'a hir::Module)],
     owner: hir::ItemId,
     clause_span: SourceSpan,
     expr: hir::ExprId,
@@ -2975,6 +2985,7 @@ fn compile_runtime_expr_fragment(
 ) -> Result<HirCompiledRuntimeExpr, HirRuntimeAdapterError> {
     let RuntimeFragmentCompileRequest {
         module,
+        workspace_hirs,
         owner,
         clause_span,
         expr,
@@ -3018,15 +3029,28 @@ fn compile_runtime_expr_fragment(
         parameters,
         body,
     };
-    let lowered = lower_runtime_fragment(module, &fragment).map_err(|error| {
-        HirRuntimeAdapterError::ReactiveUpdateFragmentLowering {
+    // Reactive fragments need the same imported type origins and function bodies
+    // as the complete program. A workspace signal's own module is already the
+    // fragment entry, so do not compile it twice as a dependency.
+    let dependencies = workspace_hirs
+        .iter()
+        .copied()
+        .filter(|(_, dependency)| dependency.file() != module.file())
+        .collect::<Vec<_>>();
+    let lowered = if dependencies.is_empty() {
+        lower_runtime_fragment(module, &fragment)
+    } else {
+        lower_runtime_fragment_with_workspace(module, &dependencies, &fragment)
+    }
+    .map_err(
+        |error| HirRuntimeAdapterError::ReactiveUpdateFragmentLowering {
             owner,
             clause_span,
             role: role.label(),
             stage: "typed core",
             message: error.to_string().into_boxed_str(),
-        }
-    })?;
+        },
+    )?;
     let lambda = lower_lambda_module(&lowered.module).map_err(|error| {
         HirRuntimeAdapterError::ReactiveUpdateFragmentLowering {
             owner,

@@ -87,7 +87,15 @@ where
             let plan = lower_markup_expr_with_workspace(module, workspace_hirs, selected.value.body)
                 .map_err(|error| {
                 format!(
-                    "failed to lower run view `{}` into GTK markup: {error}",
+                    "{}failed to lower run view `{}` into GTK markup: {error}",
+                    match &error {
+                        aivi_gtk::LoweringError::UnknownWidgetChildGroup { span, .. }
+                        | aivi_gtk::LoweringError::UnknownWidget { span, .. }
+                        | aivi_gtk::LoweringError::MismatchedChildGroupOwner { span, .. } => {
+                            format!("{}: ", source_location(sources, *span))
+                        }
+                        _ => String::new(),
+                    },
                     selected.value.name.text()
                 )
             })?;
@@ -1978,7 +1986,11 @@ fn collect_run_markup_expr_sites(
                 continue;
             }
             let collected = collect_markup_runtime_expr_sites(module, value.body).map_err(|error| {
-                let span = module.exprs()[value.body].span;
+                let span = match &error {
+                    aivi_hir::MarkupRuntimeExprSiteError::UnknownExprType { span, .. }
+                    | aivi_hir::MarkupRuntimeExprSiteError::RootNotMarkup { span, .. } => *span,
+                    _ => module.exprs()[value.body].span,
+                };
                 format!(
                     "failed to collect runtime expression environments for run view at {}: {error}",
                     source_location(sources, span)

@@ -94,11 +94,12 @@ fn check_all_apps(
     apps: &[aivi_query::AppConfig],
     workspace_root: &Path,
     timings: bool,
+    target: CheckTarget<'_>,
 ) -> Result<ExitCode, String> {
     let mut any_failed = false;
     for app in apps {
         let entry_path = workspace_root.join(&app.entry);
-        match check_file(&entry_path, timings)? {
+        match check_file_with_target(&entry_path, timings, target)? {
             ExitCode::SUCCESS => {}
             _ => any_failed = true,
         }
@@ -135,7 +136,21 @@ fn include_project_workspace_file(
     true
 }
 
+#[derive(Clone, Copy)]
+enum CheckTarget<'a> {
+    Hir,
+    Runnable { view: Option<&'a str> },
+}
+
 fn check_file(path: &Path, timings: bool) -> Result<ExitCode, String> {
+    check_file_with_target(path, timings, CheckTarget::Hir)
+}
+
+fn check_file_with_target(
+    path: &Path,
+    timings: bool,
+    target: CheckTarget<'_>,
+) -> Result<ExitCode, String> {
     let total_start = Instant::now();
     require_file_exists(path)?;
 
@@ -162,6 +177,33 @@ fn check_file(path: &Path, timings: bool) -> Result<ExitCode, String> {
     if lowering_failed || validation_failed {
         return Ok(ExitCode::FAILURE);
     }
+
+    let runnable_started = Instant::now();
+    if let CheckTarget::Runnable { view } = target {
+        let lowered = snapshot.entry_hir();
+        let workspace_hir_arcs = collect_workspace_hirs_sorted(&snapshot);
+        let workspace_hirs: Vec<(&str, &HirModule)> = workspace_hir_arcs
+            .iter()
+            .map(|(name, arc)| (name.as_str(), arc.module()))
+            .collect();
+        let validation = prepare_run_artifact_with_query_context(
+            &snapshot.sources,
+            lowered.module(),
+            &workspace_hirs,
+            view,
+            Some(snapshot.backend_query_context()),
+        )
+        .and_then(|artifact| {
+            // Exercise the exact source-free native serialization used by build.
+            // No providers, task entry points, or GTK widgets are started here.
+            encode_frozen_run_image_bytes_with_options(&artifact, true, true).map(|_| ())
+        });
+        if let Err(message) = validation {
+            eprintln!("{message}");
+            return Ok(ExitCode::FAILURE);
+        }
+    }
+    let runnable_duration = runnable_started.elapsed();
 
     // After HIR passes, collect LSP-level unused-symbol warnings for each file.
     let t0 = Instant::now();
@@ -212,6 +254,10 @@ fn check_file(path: &Path, timings: bool) -> Result<ExitCode, String> {
         }
     );
 
+    if matches!(target, CheckTarget::Runnable { .. }) {
+        println!("runnable + native bundle passed: {}", path.display());
+    }
+
     if timings {
         let total = total_start.elapsed();
         eprintln!("timings for `aivi check` ({}):", path.display());
@@ -219,6 +265,9 @@ fn check_file(path: &Path, timings: bool) -> Result<ExitCode, String> {
         eprintln!("  syntax check:  {:>8.2?}", syntax_duration);
         eprintln!("  HIR lowering:  {:>8.2?}", hir_duration);
         eprintln!("  unused check:  {:>8.2?}", unused_duration);
+        if matches!(target, CheckTarget::Runnable { .. }) {
+            eprintln!("  runnable:      {:>8.2?}", runnable_duration);
+        }
         eprintln!("  total:         {:>8.2?}", total);
     }
 

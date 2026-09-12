@@ -1,0 +1,116 @@
+use inventory (
+    Catalog
+    Restock
+    validateCatalog
+    restockPlan
+    rowText
+)
+
+use aivi.fs (
+    FsError
+    NotFound
+    PermissionDenied
+    ReadFailed
+    WriteFailed
+    FsProtocolError
+)
+
+use aivi.list (length)
+
+use aivi.option (getOrElse)
+
+type Screen =
+  | Loading
+  | Ready Catalog
+  | Failed Text
+
+type FsError -> Text
+func fileError = error => error
+ ||> NotFound path          -> "Inventory file not found: {path}"
+ ||> PermissionDenied path  -> "Permission denied reading inventory: {path}"
+ ||> ReadFailed detail      -> "Could not read inventory: {detail}"
+ ||> WriteFailed detail     -> "Filesystem failure: {detail}"
+ ||> FsProtocolError detail -> "Invalid inventory data: {detail}"
+
+type Result Text Catalog -> Screen
+func validatedScreen = result => result
+ ||> Ok valid   -> Ready valid
+ ||> Err reason -> Failed reason
+
+type Result FsError Catalog -> Screen
+func receive = result => result
+ ||> Err error  -> Failed (fileError error)
+ ||> Ok catalog -> validatedScreen (validateCatalog catalog)
+
+type Text -> Screen -> List Restock
+func visiblePlan = query screen => screen
+ ||> Ready catalog -> restockPlan query catalog
+ ||> Loading       -> []
+ ||> Failed _      -> []
+
+type List Restock -> Text
+func summary = items =>
+    "Showing {length items} replenishment items"
+
+type Text -> Text -> Text
+func replaceQuery = text previous =>
+    text
+
+type Result FsError Catalog -> Screen -> Screen
+func replaceScreen = result previous =>
+    receive result
+
+signal reload : Signal Unit
+signal searchChanged : Signal Text
+
+signal query : Signal Text = searchChanged
+ +|> "" replaceQuery
+
+@source env.get "AIVI_STOCKROOM_FILE"
+signal configuredPath : Signal (Option Text)
+
+signal inventoryPath : Signal Text = getOrElse "inventory.json" configuredPath
+
+@source fs.read inventoryPath with {
+    reloadOn: reload
+}
+signal inventory : Signal (Result FsError Catalog)
+
+signal screen : Signal Screen = inventory
+ +|> Loading replaceScreen
+
+signal plan : Signal (List Restock) = visiblePlan query screen
+signal status : Signal Text = summary plan
+
+value main =
+    <Window title="Stockroom" defaultWidth={640} defaultHeight={480}>
+        <Box orientation="vertical" spacing={12} marginTop={16} marginBottom={16} marginStart={16} marginEnd={16}>
+            <Box orientation="horizontal" spacing={8}>
+                <SearchEntry placeholder="Search SKU or name" onChange={searchChanged} hexpand={True} />
+                <Button label="Reload" onClick={reload} />
+            </Box>
+            <match on={screen}>
+                <case pattern={Loading}>
+                    <Label text="Loading inventory…" />
+                </case>
+                <case pattern={Failed reason}>
+                    <Label text={reason} wrap={True} xalign={0.0} />
+                </case>
+                <case pattern={Ready catalog}>
+                    <Label text={status} xalign={0.0} />
+                    <ScrolledWindow vexpand={True}>
+                        <Box orientation="vertical" spacing={8}>
+                            <each of={plan} as={item} key={item.sku}>
+                                <Label text={rowText item} xalign={0.0} wrap={True} />
+                                <empty>
+                                    <Label text="No replenishment items match the current search." wrap={True} />
+                                </empty>
+                            </each>
+                        </Box>
+                    </ScrolledWindow>
+                </case>
+            </match>
+        </Box>
+    </Window>
+
+export main

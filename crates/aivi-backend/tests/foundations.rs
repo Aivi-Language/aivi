@@ -47,3 +47,5 @@ include!("foundations_parts/codegen_core.rs");
 include!("foundations_parts/codegen_equality.rs");
 include!("foundations_parts/db_numeric_misc.rs");
 include!("foundations_parts/patterns_recurrence.rs");
+
+include!("foundations_parts/codegen_bytes.rs");

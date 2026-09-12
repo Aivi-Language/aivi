@@ -107,6 +107,7 @@ pub enum LoweringError {
     UnknownWidgetChildGroup {
         widget: String,
         group: String,
+        available: Vec<String>,
         span: aivi_base::SourceSpan,
     },
     UnknownWidget {
@@ -177,9 +178,19 @@ impl fmt::Display for LoweringError {
                 f,
                 "GTK child-group wrapper `{group}` must appear directly under `<{parent_widget}>`"
             ),
-            Self::UnknownWidgetChildGroup { widget, group, .. } => write!(
+            Self::UnknownWidgetChildGroup {
+                widget,
+                group,
+                available,
+                ..
+            } => write!(
                 f,
-                "GTK widget `{widget}` does not declare child group `{group}`"
+                "GTK widget `{widget}` does not declare child group `{group}`; available groups: {}",
+                if available.is_empty() {
+                    "none".to_owned()
+                } else {
+                    available.join(", ")
+                }
             ),
             Self::UnknownWidget { name, .. } => {
                 write!(f, "widget `{name}` is not known to the GTK schema registry")
@@ -940,6 +951,11 @@ impl<'module> Lowering<'module> {
                         return Err(LoweringError::UnknownWidgetChildGroup {
                             widget: parent_widget.to_string(),
                             group: group_label,
+                            available: schema
+                                .child_groups
+                                .iter()
+                                .map(|group| group.name.to_owned())
+                                .collect(),
                             span: *span,
                         });
                     }

@@ -49,6 +49,12 @@ use aivi.text (
 | `parseBool` | `Text -> Option Bool` | Parse text as a boolean |
 | `concat` | `List Text -> Text` | Concatenate several text values |
 
+`trim` removes Unicode whitespace from both ends. `toLower` performs Unicode lowercase
+conversion; it is not locale-sensitive case folding or Unicode normalization.
+`contains needle haystack` searches for an exact substring and accepts the empty needle.
+These three operations are supported in native compiled execution as well as the development
+runtime. Text ordering is lexicographic and does not apply locale-specific collation.
+
 ## Stdlib helpers
 
 | Name | Type | Description |
@@ -99,3 +105,8 @@ value rows : List Text = lines "a\nb\nc"
 - no richer text domain with structured patch/algebra support
 - no dedicated interpolation, formatting, or template surface here
 - no explicit grapheme-aware or locale-aware text model in the public stdlib page yet
+
+Text interpolation in native kernels reads the committed payload of a `Signal Text`,
+`Signal Int`, `Signal Float`, `Signal Bool`, or `Signal Unit`, using the same formatting as
+development execution. Arbitrary ADTs and aggregate interpolation still require an explicit
+formatter; `aivi check --runnable` checks this before packaging an application.

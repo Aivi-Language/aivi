@@ -258,6 +258,10 @@ signal petstore : ApiSource
 **Notes**
 
 - `fs.read` is the snapshot-reading companion to `fs.watch`.
+- Relative paths resolve against the application's working directory.
+- With `Result FsError A`, read and decode failures publish typed errors rather than
+  leaving the source without a result. See the [filesystem error reference](../stdlib/fs.md#additional-error-constructors).
+  A later `reloadOn` event retries after either success or failure.
 - `debounce` and `readOnStart` affect runtime reads; `reloadOn` remains the explicit trigger mechanism.
 
 ## Streams and messaging

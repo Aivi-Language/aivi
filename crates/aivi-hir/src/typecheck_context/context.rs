@@ -57,6 +57,33 @@ impl<'a> GateTypeContext<'a> {
             .get_or_insert_with(|| infer_same_module_function_types(self.module))
     }
 
+    fn expression_matches(&self, expr_id: ExprId, env: &GateExprEnv, expected: &GateType) -> bool {
+        self.expression_signature_evidence(expr_id, env, expected)
+            .is_some()
+    }
+
+    fn expression_signature_evidence(
+        &self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        expected: &GateType,
+    ) -> Option<Vec<FunctionSignatureEvidence>> {
+        // A contextual probe belongs to the current inference pass. Preserve its
+        // seeds, in-progress item markers, and inference policy: a fresh context
+        // could restart same-module inference while that inference is running.
+        // Probe evidence stays local until the caller selects a concrete contract.
+        let typing = Self {
+            module: self.module,
+            item_types: self.item_types.clone(),
+            item_actuals: self.item_actuals.clone(),
+            inferred_function_types: self.inferred_function_types.clone(),
+            function_call_evidence: Vec::new(),
+            function_signature_evidence: Vec::new(),
+            allow_function_inference: self.allow_function_inference,
+        };
+        expression_signature_evidence_with_typing(self.module, expr_id, env, expected, typing)
+    }
+
     pub(crate) fn record_function_call_evidence(&mut self, evidence: FunctionCallEvidence) {
         self.function_call_evidence.push(evidence);
     }
@@ -4672,7 +4699,7 @@ impl<'a> GateTypeContext<'a> {
         if matches!(expr.kind, ExprKind::SuffixedInteger(_)) {
             return Some(self.infer_expr_with_expected(expr_id, env, ambient, peer));
         }
-        if expression_matches(self.module, expr_id, env, peer) {
+        if self.expression_matches(expr_id, env, peer) {
             let mut info = self.infer_expr(expr_id, env, ambient);
             info.ty = Some(peer.clone());
             info.actual = None;
@@ -5929,7 +5956,7 @@ impl<'a> GateTypeContext<'a> {
                                             if payload.same_shape(expected_parameter)
                                     ))
                         })
-                        || expression_matches(self.module, *argument, env, expected_parameter)
+                        || self.expression_matches(*argument, env, expected_parameter)
                 });
             if !explicit_arguments_match {
                 continue;
@@ -6180,6 +6207,23 @@ impl<'a> GateTypeContext<'a> {
         if function.type_parameters.is_empty() {
             return None;
         }
+        if let Some(signature) = self.item_value_type(*item_id)
+            && Self::arrow_parameter_types(&signature, arguments.len()).is_some_and(|parameters| {
+                parameters
+                    .iter()
+                    .any(|ty| matches!(ty, GateType::Arrow { .. }))
+            })
+        {
+            let contextual = self.infer_contextual_function_arguments(signature, arguments, env);
+            if contextual.issues.is_empty()
+                && contextual
+                    .ty
+                    .as_ref()
+                    .is_some_and(|ty| !ty.has_type_params())
+            {
+                return Some(contextual);
+            }
+        }
         let mut info = GateExprInfo::default();
         let mut argument_types = Vec::with_capacity(arguments.len());
         for argument in arguments.iter() {
@@ -6220,18 +6264,67 @@ impl<'a> GateTypeContext<'a> {
         if !matches!(import_ty, GateType::Arrow { .. }) {
             return None;
         }
+        Some(self.infer_contextual_function_arguments(import_ty, arguments, env))
+    }
+
+    fn infer_contextual_function_arguments(
+        &mut self,
+        signature: GateType,
+        arguments: &crate::NonEmpty<ExprId>,
+        env: &GateExprEnv,
+    ) -> GateExprInfo {
+        // Solve open parameters from the whole argument list before checking callbacks.
+        // In `filter callback items`, the collection supplies the callback's element
+        // type even though it occurs later. These probes supply bindings only: their
+        // diagnostics are speculative until the resolved context is available.
+        let mut bindings = HashMap::new();
+        let mut parameter = &signature;
+        for argument in arguments.iter() {
+            let GateType::Arrow {
+                parameter: expected,
+                result,
+            } = parameter
+            else {
+                break;
+            };
+            if expected.has_type_params() && !matches!(expected.as_ref(), GateType::Arrow { .. }) {
+                let observed = self.infer_expr(*argument, env, None);
+                if let Some(actual) = observed.actual_gate_type().or(observed.ty)
+                    && !actual.has_type_params()
+                {
+                    let mut candidate = bindings.clone();
+                    if actual.unify_type_params(expected, &mut candidate) {
+                        bindings = candidate;
+                    }
+                }
+            }
+            parameter = result;
+        }
         let mut info = GateExprInfo::default();
-        let mut current = import_ty;
+        let mut current = signature.substitute_type_parameters(&bindings);
         for argument in arguments.iter() {
             // Extract parameter type from current Arrow for use as context
             let (param, fallback_result) = match &current {
                 GateType::Arrow { parameter, result } => {
                     (parameter.as_ref().clone(), result.as_ref().clone())
                 }
-                _ => return Some(info),
+                _ => return info,
             };
             // Infer argument using the Arrow parameter as context
-            let arg_info = self.infer_expr(*argument, env, Some(&param));
+            let arg_info = if matches!(param, GateType::Arrow { .. })
+                && !param.has_type_params()
+                && let Some(evidence) = self.expression_signature_evidence(*argument, env, &param)
+            {
+                // This is a resolved call with a concrete callback contract, not
+                // an overload candidate probe. Preserve only successful evidence.
+                self.function_signature_evidence.extend(evidence);
+                GateExprInfo {
+                    ty: Some(param.clone()),
+                    ..GateExprInfo::default()
+                }
+            } else {
+                self.infer_expr(*argument, env, Some(&param))
+            };
             // Use inferred type, falling back to the parameter type when unknown.
             // This is safe because HIR type-checking has already validated the call.
             let arg_ty = arg_info
@@ -6247,7 +6340,7 @@ impl<'a> GateTypeContext<'a> {
         if info.issues.is_empty() {
             info.ty = Some(current);
         }
-        Some(info)
+        info
     }
 
     pub(crate) fn infer_class_member_apply_expr(
@@ -6831,7 +6924,7 @@ impl<'a> GateTypeContext<'a> {
             }) || argument_annot
                 .as_ref()
                 .is_some_and(|ty| ty.same_shape(expected))
-                || expression_matches(self.module, *argument, env, expected);
+                || self.expression_matches(*argument, env, expected);
             if !matches_expected {
                 return Some(info);
             }

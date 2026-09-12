@@ -1234,7 +1234,7 @@ fn format_subcommand_help(name: &str) -> Option<String> {
 aivi check — type-check a module through HIR
 
 USAGE:
-    aivi check [<path>] [--timings]
+    aivi check [<path>] [--runnable [--view <name>]] [--timings]
 
 ARGS:
     <path>              Path to an .aivi source file, or a directory to check
@@ -1243,7 +1243,11 @@ ARGS:
                         entry) is defined, that single entry is checked.
 
 OPTIONS:
-    --timings           Print frontend stage timings to stderr.
+    --runnable          Validate app lowering, GTK schema, and native packaging
+                        in memory, without launching the app. Requires an entry
+                        file or manifest app, rather than a recursive directory.
+    --view <name>       Select the app view; requires --runnable.
+    --timings           Print validation stage timings to stderr.
 
 DESCRIPTION:
     Lexes, parses, lowers, and validates one or more modules through the full

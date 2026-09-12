@@ -186,10 +186,31 @@ pub(crate) fn expression_matches(
     env: &GateExprEnv,
     expected: &GateType,
 ) -> bool {
-    let mut checker = TypeChecker::new(module);
+    expression_matches_with_typing(module, expr_id, env, expected, GateTypeContext::new(module))
+}
+
+pub(crate) fn expression_matches_with_typing<'a>(
+    module: &'a Module,
+    expr_id: ExprId,
+    env: &GateExprEnv,
+    expected: &GateType,
+    typing: GateTypeContext<'a>,
+) -> bool {
+    expression_signature_evidence_with_typing(module, expr_id, env, expected, typing).is_some()
+}
+
+pub(crate) fn expression_signature_evidence_with_typing<'a>(
+    module: &'a Module,
+    expr_id: ExprId,
+    env: &GateExprEnv,
+    expected: &GateType,
+    typing: GateTypeContext<'a>,
+) -> Option<Vec<FunctionSignatureEvidence>> {
+    let mut checker = TypeChecker::with_typing(module, typing);
     let matched = checker.check_expr(expr_id, env, Some(expected), &mut Vec::new());
     checker.solve_pending_eq_constraints();
-    matched && checker.diagnostics.is_empty()
+    (matched && checker.diagnostics.is_empty())
+        .then(|| checker.typing.take_function_signature_evidence())
 }
 
 fn signal_name_payload_type<'a>(
