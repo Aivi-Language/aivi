@@ -16,7 +16,7 @@ aivi-runtime = { path = "../crates/aivi-runtime" }
 aivi-syntax = { path = "../crates/aivi-syntax" }
 aivi-typing = { path = "../crates/aivi-typing" }
 arbitrary = "1.4.2"
-libfuzzer-sys = "0.4.12"
+libfuzzer-sys = "0.4.13"
 
 [[bin]]
 name = "parser_lossless"

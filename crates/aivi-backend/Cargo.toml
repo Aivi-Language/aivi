@@ -23,7 +23,7 @@ indexmap = { version = "2", features = ["serde"] }
 num-bigint = { workspace = true, features = ["serde"] }
 num-traits = "0.2"
 rayon = "1"
-rust_decimal = { version = "1.40.0", features = ["serde"] }
+rust_decimal = { version = "1.43.0", features = ["serde"] }
 rustc-hash.workspace = true
 serde.workspace = true
 serde_json.workspace = true
