@@ -140,8 +140,7 @@ type Y = { y: Z }
 type X = { x: Y }
 
 type Int -> Int
-func addOne = value =>
-    value + 1
+func addOne = . + 1
 
 type X -> Int
 func readNested = state { x.y.z! }

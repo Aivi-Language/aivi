@@ -43,7 +43,7 @@ use aivi.api (
 )
 
 type ApiError -> Text
-func describeApiError = error => error
+func describeApiError =
  ||> ApiTimeout                -> "Timed out"
  ||> ApiDecodeFailure message  -> "Decode failed: " + message
  ||> ApiRequestFailure message -> "Request failed: " + message

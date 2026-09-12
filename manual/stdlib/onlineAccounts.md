@@ -101,8 +101,7 @@ use aivi.gnome.onlineAccounts (
 )
 
 type GoaAccount -> GoaAccountId
-func accountId = account =>
-    account.id
+func accountId = .id
 ```
 
 ### AccessToken

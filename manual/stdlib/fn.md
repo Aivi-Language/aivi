@@ -35,8 +35,8 @@ Returns its argument unchanged. Useful as a no-op transformer in pipelines.
 use aivi.core.fn (identity)
 
 type Int -> Int
-func keepAsIs = n =>
-    identity n
+func keepAsIs =
+  |> identity
 ```
 
 ---
@@ -50,8 +50,8 @@ Returns a function that always returns its first argument, ignoring the second. 
 use aivi.core.fn (const)
 
 type Text -> Int
-func alwaysForty = ignored =>
-    const 42 ignored
+func alwaysFortyTwo =
+  |> const 42
 ```
 
 ---
@@ -87,8 +87,8 @@ use aivi.math (
 )
 
 type Int -> Int
-func negAbs = n =>
-    compose negate abs n
+func negAbs =
+  |> compose negate abs
 ```
 
 ---
@@ -107,8 +107,8 @@ use aivi.math (
 )
 
 type Int -> Int
-func absNeg = n =>
-    andThen abs negate n
+func absNeg =
+  |> andThen abs negate
 ```
 
 ---

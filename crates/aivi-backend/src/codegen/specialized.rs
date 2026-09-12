@@ -886,136 +886,6 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
         }
     }
 
-    fn ensure_named_external_func_declared(
-        &mut self,
-        symbol: &str,
-    ) -> Result<FuncId, CodegenError> {
-        if let Some(&func_id) = self.declared_external_funcs.get(symbol) {
-            return Ok(func_id);
-        }
-        let mut sig = self.module.make_signature();
-        match symbol {
-            "aivi_text_concat" => {
-                sig.params.push(AbiParam::new(types::I64));
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_int_to_text" => {
-                sig.params.push(AbiParam::new(types::I64));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_float_to_text" => {
-                sig.params.push(AbiParam::new(types::F64));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_bool_to_text" | "aivi_unit_to_text" => {
-                sig.params.push(AbiParam::new(types::I8));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_text_trim" | "aivi_text_to_lower" => {
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_bytes_append" => {
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_path_join" => {
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_bytes_repeat" => {
-                sig.params.push(AbiParam::new(types::I64));
-                sig.params.push(AbiParam::new(types::I64));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_matrix_indices" => {
-                sig.params.push(AbiParam::new(types::I64));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_bytes_slice" => {
-                sig.params.push(AbiParam::new(types::I64));
-                sig.params.push(AbiParam::new(types::I64));
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_list_append" => {
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.params.push(AbiParam::new(types::I64));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_arena_alloc" => {
-                sig.params.push(AbiParam::new(types::I64));
-                sig.params.push(AbiParam::new(types::I64));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_list_new" | "aivi_set_new" => {
-                sig.params.push(AbiParam::new(types::I64));
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.params.push(AbiParam::new(types::I64));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_map_new" => {
-                sig.params.push(AbiParam::new(types::I64));
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.params.push(AbiParam::new(types::I64));
-                sig.params.push(AbiParam::new(types::I64));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_list_len" => {
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.returns.push(AbiParam::new(types::I64));
-            }
-            "aivi_list_get" => {
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.params.push(AbiParam::new(types::I64));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_list_slice" => {
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.params.push(AbiParam::new(types::I64));
-                sig.params.push(AbiParam::new(types::I64));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_decimal_add" | "aivi_decimal_sub" | "aivi_decimal_mul" | "aivi_decimal_div"
-            | "aivi_decimal_mod" | "aivi_bigint_add" | "aivi_bigint_sub" | "aivi_bigint_mul"
-            | "aivi_bigint_div" | "aivi_bigint_mod" => {
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.returns.push(AbiParam::new(self.pointer_type()));
-            }
-            "aivi_decimal_eq" | "aivi_decimal_gt" | "aivi_decimal_lt" | "aivi_decimal_gte"
-            | "aivi_decimal_lte" | "aivi_bigint_eq" | "aivi_bigint_gt" | "aivi_bigint_lt"
-            | "aivi_bigint_gte" | "aivi_bigint_lte" | "aivi_text_compare" | "aivi_text_contains" => {
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.params.push(AbiParam::new(self.pointer_type()));
-                sig.returns.push(AbiParam::new(types::I8));
-            }
-            _ => {
-                return Err(CodegenError::CraneliftModule {
-                    kernel: None,
-                    message: format!(
-                        "cached JIT artifact references external symbol `{symbol}` without a known lazy-JIT signature"
-                    )
-                    .into(),
-                });
-            }
-        }
-        let func_id = self
-            .module
-            .declare_function(symbol, Linkage::Import, &sig)
-            .map_err(|error| CodegenError::CraneliftModule {
-                kernel: None,
-                message: error.to_string().into_boxed_str(),
-            })?;
-        self.declared_external_funcs
-            .insert(symbol.to_owned().into_boxed_str(), func_id);
-        Ok(func_id)
-    }
-
     fn define_cached_literal_data(
         &mut self,
         symbol: &str,
@@ -1369,10 +1239,7 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
         Ok(signature)
     }
 
-    fn materialize_frozen_signature_type(
-        &self,
-        kind: AbiValueKind,
-    ) -> cranelift_codegen::ir::Type {
+    fn materialize_frozen_signature_type(&self, kind: AbiValueKind) -> cranelift_codegen::ir::Type {
         match kind {
             AbiValueKind::Pointer => self.pointer_type(),
             AbiValueKind::I8 => types::I8,

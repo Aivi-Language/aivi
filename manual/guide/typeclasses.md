@@ -132,12 +132,11 @@ the required method evidence to the function, including through nested and impor
 
 ```aivi
 type Functor F => (A -> B) -> F A -> F B
-func transform = f values => values
+func transform = f values!
   |> map f
 
 type Int -> Int
-func increment = n =>
-    n + 1
+func increment = . + 1
 
 value optional : Option Int = transform increment (Some 2)
 

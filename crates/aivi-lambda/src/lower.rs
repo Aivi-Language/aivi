@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use aivi_base::SourceSpan;
 use aivi_core::{self as core, ArenaOverflow, alloc_or_diag};
@@ -91,17 +91,26 @@ impl std::fmt::Display for LoweringError {
 impl std::error::Error for LoweringError {}
 
 pub fn lower_module(core_module: &core::Module) -> Result<Module, LoweringErrors> {
-    if let Err(errors) = core::validate_module(core_module) {
-        return Err(LoweringErrors::new(
+    validate_core_for_lowering(core_module)?;
+    ModuleLowerer::new(&Arc::new(core_module.clone())).build()
+}
+
+/// Lower an immutable core snapshot without duplicating its expression and type arenas.
+pub fn lower_shared_module(core_module: Arc<core::Module>) -> Result<Module, LoweringErrors> {
+    validate_core_for_lowering(&core_module)?;
+    ModuleLowerer::new(&core_module).build()
+}
+
+fn validate_core_for_lowering(core_module: &core::Module) -> Result<(), LoweringErrors> {
+    core::validate_module(core_module).map_err(|errors| {
+        LoweringErrors::new(
             errors
                 .into_errors()
                 .into_iter()
                 .map(LoweringError::InvalidCoreModule)
                 .collect(),
-        ));
-    }
-
-    ModuleLowerer::new(core_module).build()
+        )
+    })
 }
 
 struct ModuleLowerer<'a> {
@@ -120,10 +129,10 @@ struct ClosureLoweringRequest {
 }
 
 impl<'a> ModuleLowerer<'a> {
-    fn new(core: &'a core::Module) -> Self {
+    fn new(core: &'a Arc<core::Module>) -> Self {
         Self {
             core,
-            module: Module::new(core.clone()),
+            module: Module::new(Arc::clone(core)),
             errors: Vec::new(),
         }
     }

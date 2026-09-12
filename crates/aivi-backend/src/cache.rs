@@ -254,7 +254,7 @@ const JIT_KERNEL_CACHE_MAGIC_V2: &[u8; 5] = b"AIVJ\x02";
 
 const COMPILER_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Bump when backend machine-code semantics change without a Cargo package-version change.
-const CODEGEN_NAMESPACE_REVISION: &str = "7";
+const CODEGEN_NAMESPACE_REVISION: &str = "8";
 const SHARED_CODEGEN_SETTINGS: &[(&str, &str)] =
     &[("enable_llvm_abi_extensions", "1"), ("opt_level", "speed")];
 
@@ -1633,6 +1633,57 @@ value rendered:List Text = __aivi_list_flatMap labels (__aivi_list_range 3)
             let fingerprint = compute_kernel_fingerprint(&backend, rendered);
             let artifact = load_cached_jit_kernel_artifact_from(cache_root, &backend, fingerprint)
                 .expect("compiled list flatMap text kernel should write a disk artifact");
+            let replayed = instantiate_cached_jit_kernel(&backend, rendered, &artifact)
+                .expect("serialized list flatMap text artifact should replay into a live kernel");
+
+            assert_eq!(
+                call_text_sequence(&compiled, &[]),
+                vec!["L", "R", "L", "R", "L", "R"]
+            );
+            assert_eq!(
+                call_text_sequence(&replayed, &[]),
+                vec!["L", "R", "L", "R", "L", "R"]
+            );
+        });
+    }
+
+    #[test]
+    fn cached_jit_nested_list_flat_map_artifact_replays_after_disk_roundtrip() {
+        let backend = lower_text(
+            "cache-jit-nested-flat-map.aivi",
+            r#"
+type Int -> List Text
+func labels = value => ["L", "R"]
+
+type Int -> List Text
+func nested = n => __aivi_list_flatMap labels (__aivi_list_range n)
+
+value rendered:List Text = __aivi_list_flatMap nested (__aivi_list_range 3)
+"#,
+        );
+        let rendered = backend.items()[find_item(&backend, "rendered")]
+            .body
+            .expect("rendered should lower into a body kernel");
+
+        with_temp_cache_dir(|cache_root| {
+            let compiled = compile_kernel_jit_cached_in_dir(cache_root, &backend, rendered).expect(
+                "list flatMap text kernel should compile and persist a replayable artifact",
+            );
+            let fingerprint = compute_kernel_fingerprint(&backend, rendered);
+            let artifact = load_cached_jit_kernel_artifact_from(cache_root, &backend, fingerprint)
+                .expect("compiled list flatMap text kernel should write a disk artifact");
+            for helper in [
+                "aivi_list_builder_new",
+                "aivi_list_builder_push",
+                "aivi_list_builder_finish",
+            ] {
+                assert!(
+                    artifact
+                        .external_funcs
+                        .iter()
+                        .any(|symbol| symbol.as_ref() == helper)
+                );
+            }
             let replayed = instantiate_cached_jit_kernel(&backend, rendered, &artifact)
                 .expect("serialized list flatMap text artifact should replay into a live kernel");
 

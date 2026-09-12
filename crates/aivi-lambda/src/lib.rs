@@ -27,7 +27,7 @@ pub use aivi_core::{
 };
 pub use aivi_typing::{NonSourceWakeupCause, RecurrencePlan, RecurrenceWakeupPlan};
 pub use ids::{CaptureId, ClosureId};
-pub use lower::{LoweringError, LoweringErrors, lower_module};
+pub use lower::{LoweringError, LoweringErrors, lower_module, lower_shared_module};
 pub use module::{
     Capture, Closure, ClosureKind, FanoutFilter, FanoutJoin, FanoutStage, GateStage, Item, Module,
     NonSourceWakeup, Parameter, Pipe, PipeRecurrence, RecurrenceStage, Stage, StageKind,

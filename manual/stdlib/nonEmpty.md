@@ -76,8 +76,8 @@ use aivi.nonEmpty (
 )
 
 type Text -> (NonEmptyList Text)
-func wrapOne = label =>
-    singleton label
+func wrapOne =
+  |> singleton
 ```
 
 ---
@@ -116,8 +116,8 @@ use aivi.nonEmpty (
 )
 
 type NonEmptyList Int -> Int
-func firstOf = nel =>
-    head nel
+func firstOf =
+  |> head
 ```
 
 ---
@@ -136,8 +136,8 @@ use aivi.nonEmpty (
 )
 
 type NonEmptyList Int -> Int
-func finalItem = nel =>
-    last nel
+func finalItem =
+  |> last
 ```
 
 ---
@@ -157,8 +157,8 @@ use aivi.nonEmpty (
 )
 
 type NonEmptyList Int -> Int
-func countItems = nel =>
-    length nel
+func countItems =
+  |> length
 ```
 
 ---
@@ -177,8 +177,8 @@ use aivi.nonEmpty (
 )
 
 type NonEmptyList Int -> (List Int)
-func asRegularList = nel =>
-    toList nel
+func asRegularList =
+  |> toList
 ```
 
 ---
@@ -196,12 +196,11 @@ use aivi.nonEmpty (
 )
 
 type Int -> Int
-func double = n =>
-    n * 2
+func double = . * 2
 
 type NonEmptyList Int -> (NonEmptyList Int)
-func doubleAll = nel =>
-    mapNel double nel
+func doubleAll =
+  |> mapNel double
 ```
 
 ---
@@ -219,8 +218,8 @@ use aivi.nonEmpty (
 )
 
 type List Int -> (Option (NonEmptyList Int))
-func safeFromList = items =>
-    fromList items
+func safeFromList =
+  |> fromList
 ```
 
 Use this when constructing a `NonEmptyList` from data whose size is not statically known, then handle the `None` case for empty input.

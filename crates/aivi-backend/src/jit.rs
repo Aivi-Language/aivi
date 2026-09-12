@@ -356,11 +356,11 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, EvaluationError> {
         let started_at = self.jit_profile.as_ref().map(|_| Instant::now());
-        let kernel = self
+        let result_layout = self
             .program
             .kernels()
             .get(kernel_id)
-            .cloned()
+            .map(|kernel| kernel.result_layout)
             .ok_or(EvaluationError::UnknownKernel { kernel: kernel_id })?;
         if let Some((cached_result, cached_layout)) =
             self.last_kernel_call.as_ref().and_then(|last| {
@@ -375,10 +375,10 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
                 started_at.map_or(Duration::ZERO, |started| started.elapsed()),
                 true,
             );
-            if cached_layout != kernel.result_layout {
+            if cached_layout != result_layout {
                 return Err(EvaluationError::KernelResultLayoutMismatch {
                     kernel: kernel_id,
-                    expected: kernel.result_layout,
+                    expected: result_layout,
                     found: Box::new(cached_result),
                 });
             }
@@ -437,7 +437,7 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
             input_subject: input_subject.cloned(),
             environment: environment.to_vec().into_boxed_slice(),
             result: result.clone(),
-            result_layout: kernel.result_layout,
+            result_layout,
         });
         Ok(result)
     }
@@ -449,11 +449,11 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
         globals: &BTreeMap<ItemId, RuntimeValue>,
     ) -> Result<RuntimeValue, EvaluationError> {
         let started_at = self.jit_profile.as_ref().map(|_| Instant::now());
-        let kernel = self
+        let result_layout = self
             .program
             .kernels()
             .get(kernel_id)
-            .cloned()
+            .map(|kernel| kernel.result_layout)
             .ok_or(EvaluationError::UnknownKernel { kernel: kernel_id })?;
         if let Some((cached_result, cached_layout)) =
             self.last_kernel_call.as_ref().and_then(|last| {
@@ -468,10 +468,10 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
                 started_at.map_or(Duration::ZERO, |started| started.elapsed()),
                 true,
             );
-            if cached_layout != kernel.result_layout {
+            if cached_layout != result_layout {
                 return Err(EvaluationError::KernelResultLayoutMismatch {
                     kernel: kernel_id,
-                    expected: kernel.result_layout,
+                    expected: result_layout,
                     found: Box::new(cached_result),
                 });
             }
@@ -519,14 +519,14 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
             self.program,
             kernel_id,
             raw_result,
-            kernel.result_layout,
+            result_layout,
         )?;
         self.last_kernel_call = Some(LastKernelCall {
             kernel_id,
             input_subject: None,
             environment: environment.to_vec().into_boxed_slice(),
             result: result.clone(),
-            result_layout: kernel.result_layout,
+            result_layout,
         });
         Ok(result)
     }

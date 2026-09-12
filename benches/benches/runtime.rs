@@ -1,5 +1,6 @@
 use std::{fmt::Write as _, hint::black_box, path::PathBuf, sync::Arc, time::Duration};
 
+use aivi_backend::{CommittedValueStore, MovingRuntimeValueStore, RuntimeValue};
 use aivi_query::{RootDatabase, SourceFile, whole_program_backend_unit};
 use aivi_runtime::{
     DependencyValues, InputHandle, Publication, Scheduler, SignalGraphBuilder,
@@ -146,6 +147,69 @@ fn bench_scheduler(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_committed_values(c: &mut Criterion) {
+    let mut group = c.benchmark_group("committed_values");
+    for count in [1_000, 10_000] {
+        let mut store = MovingRuntimeValueStore::default();
+        let mut slot = None;
+        store.replace(
+            &mut slot,
+            RuntimeValue::List(
+                (0..count)
+                    .map(|i| RuntimeValue::Text(format!("item-{i}").into()))
+                    .collect(),
+            ),
+        );
+        group.bench_function(format!("collect_text_list_{count}"), |b| {
+            b.iter(|| {
+                store.collect(black_box(&[&slot]));
+                black_box(store.get(&slot).unwrap());
+            });
+        });
+    }
+    group.finish();
+}
+
+fn bench_sparse_ticks(c: &mut Criterion) {
+    let mut group = c.benchmark_group("sparse_ticks");
+    for count in [256, 4096, 16384] {
+        let mut builder = SignalGraphBuilder::new();
+        let input = builder.add_input("changed", None).unwrap();
+        let output = builder.add_derived("output", None).unwrap();
+        builder.define_derived(output, [input.as_signal()]).unwrap();
+        for index in 0..count {
+            builder
+                .add_input(format!("unrelated{index}"), None)
+                .unwrap();
+        }
+        let mut scheduler = Scheduler::<i64>::new(builder.build().unwrap());
+        let mut evaluator = |_, inputs: DependencyValues<'_, i64>| inputs.value(0).copied();
+        scheduler.tick(&mut evaluator);
+        let stamp = scheduler.current_stamp(input).unwrap();
+        let mut value = 0;
+        group.bench_function(format!("one_edge_{count}_unrelated"), |b| {
+            b.iter(|| {
+                value += 1;
+                scheduler
+                    .queue_publication(Publication::new(stamp, value))
+                    .unwrap();
+                let result = scheduler.tick(&mut evaluator);
+                assert_eq!(
+                    scheduler.current_value(output.as_signal()).unwrap(),
+                    Some(&value)
+                );
+                black_box(result);
+            })
+        });
+        group.bench_function(format!("idle_{count}_unrelated"), |b| {
+            b.iter(|| {
+                black_box(scheduler.tick(&mut evaluator));
+            })
+        });
+    }
+    group.finish();
+}
+
 fn bench_runtime_startup(c: &mut Criterion) {
     let (db, file) = open_runtime_link_program();
     let unit = whole_program_backend_unit(&db, file)
@@ -206,6 +270,6 @@ criterion_group! {
         .sample_size(40)
         .warm_up_time(Duration::from_secs(2))
         .measurement_time(Duration::from_secs(5));
-    targets = bench_scheduler, bench_runtime_startup
+    targets = bench_sparse_ticks, bench_scheduler, bench_runtime_startup, bench_committed_values
 }
 criterion_main!(runtime);

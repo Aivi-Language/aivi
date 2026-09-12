@@ -126,11 +126,13 @@ fn removing_a_file_invalidates_registered_reverse_dependents() {
         "value answer = 42".to_owned(),
     );
     let before = hir_module(&db, importer);
+    let parsed_before = parsed_file(&db, importer);
     db.register_file_deps(importer, &[dependency]);
 
     db.remove_file(dependency);
 
     let after = hir_module(&db, importer);
+    assert!(Arc::ptr_eq(&parsed_before, &parsed_file(&db, importer)));
     assert!(
         !Arc::ptr_eq(&before, &after),
         "removing a dependency must evict cached HIR for its reverse dependents",
@@ -781,6 +783,7 @@ fn changing_an_imported_file_invalidates_transitive_hir_dependents() {
     );
 
     let first = hir_module(&db, main);
+    let parsed_before = parsed_file(&db, main);
     assert!(
         first.hir_diagnostics().is_empty(),
         "initial workspace should lower cleanly: {:?}",
@@ -793,6 +796,10 @@ fn changing_an_imported_file_invalidates_transitive_hir_dependents() {
     ));
 
     let second = hir_module(&db, main);
+    assert!(
+        Arc::ptr_eq(&parsed_before, &parsed_file(&db, main)),
+        "a dependency edit must preserve the unchanged importer's syntax snapshot"
+    );
     assert!(
         !Arc::ptr_eq(&first, &second),
         "changing an imported file should invalidate dependent HIR"

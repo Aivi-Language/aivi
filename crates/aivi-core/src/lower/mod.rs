@@ -14,9 +14,6 @@ use aivi_hir::{
     ResolvedClassMemberDispatch, SourceDecodeProgram, SourceDecodeProgramOutcome,
     SourceLifecycleNodeOutcome, SumConstructorHandle, TemporalStageOutcome, TermResolution,
     TruthyFalsyStageOutcome, TypeBinding, TypeConstructorHead, TypeItemBody,
-    elaborate_ambient_items, elaborate_fanouts, elaborate_gates, elaborate_general_expressions,
-    elaborate_recurrences, elaborate_source_lifecycles, elaborate_temporal_stages,
-    elaborate_truthy_falsy, generate_source_decode_programs,
 };
 
 use crate::{

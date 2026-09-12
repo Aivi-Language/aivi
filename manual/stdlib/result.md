@@ -50,8 +50,8 @@ Returns `True` if the result is `Ok`.
 use aivi.result (isOk)
 
 type Result Text Int -> Bool
-func succeeded = result =>
-    isOk result
+func succeeded =
+  |> isOk
 ```
 
 ---
@@ -66,8 +66,8 @@ Returns `True` if the result is `Err`.
 use aivi.result (isErr)
 
 type Result Text Int -> Bool
-func failed = result =>
-    isErr result
+func failed =
+  |> isErr
 ```
 
 ---
@@ -102,8 +102,8 @@ Extracts the value from `Ok`, or returns the fallback if `Err`.
 use aivi.result (withDefault)
 
 type Result Text Int -> Int
-func safeScore = result =>
-    withDefault 0 result
+func safeScore =
+  |> withDefault 0
 ```
 
 ---
@@ -155,8 +155,8 @@ Removes one layer of nesting from a `Result E (Result E A)`.
 use aivi.result (flatten)
 
 type Result Text (Result Text Int) -> (Result Text Int)
-func unwrapNested = r =>
-    flatten r
+func unwrapNested =
+  |> flatten
 ```
 
 ---
@@ -171,8 +171,8 @@ Converts a `Result` to an `Option`, discarding the error. `Ok value` becomes `So
 use aivi.result (toOption)
 
 type Result Text Int -> (Option Int)
-func justValue = result =>
-    toOption result
+func justValue =
+  |> toOption
 ```
 
 ---
@@ -187,8 +187,8 @@ Converts `Ok value` to a one-element list, or `Err` to an empty list.
 use aivi.result (toList)
 
 type Result Text Int -> (List Int)
-func resultItems = result =>
-    toList result
+func resultItems =
+  |> toList
 ```
 
 ---
@@ -203,8 +203,7 @@ Transforms the value inside `Ok` using a function, leaving `Err` untouched.
 use aivi.result (map)
 
 type Int -> Int
-func double = n =>
-    n * 2
+func double = . * 2
 
 type Result Text Int -> (Result Text Int)
 func doubleResult =
@@ -227,12 +226,11 @@ func toCode = message =>
     500
 
 type Int -> Int
-func double = n =>
-    n * 2
+func double = . * 2
 
 type Result Text Int -> (Result Int Int)
-func normalise = result =>
-    mapBoth toCode double result
+func normalise =
+  |> mapBoth toCode double
 ```
 
 ---
@@ -251,12 +249,11 @@ func zero = ignored =>
     0
 
 type Int -> Int
-func identity = n =>
-    n
+func identity = .
 
 type Result Text Int -> Int
-func resultToInt = result =>
-    fold zero identity result
+func resultToInt =
+  |> fold zero identity
 ```
 
 ---

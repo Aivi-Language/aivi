@@ -9,8 +9,8 @@ AIVI performance work is measurement-driven. The repository keeps Criterion suit
 | --- | --- |
 | `parser` | Snake/Reversi parsing and a larger lexer workload |
 | `typecheck` | Frontend type checking, including a repeated large input |
-| `pipeline` | Query reuse, incremental invalidation, workspace reachability, lowering, fingerprints, AOT, and cold/warm JIT |
-| `runtime` | Signal graph construction, propagation, derivation, and linking |
+| `pipeline` | Query reuse, incremental invalidation, workspace reachability, lowering, fingerprints, AOT, cold/warm JIT, and native list construction |
+| `runtime` | Signal graph construction, sparse/idle ticks, propagation, committed-value collection, derivation, and linking |
 | `lsp` | Diagnostics, formatting, semantic-token full/range/delta, references, and UTF-16 edits |
 
 Run one suite from the repository root:
@@ -32,6 +32,21 @@ cargo bench -p aivi-benches
 ```
 
 Criterion writes reports below `target/criterion`. Do not commit generated reports.
+
+The `native_flat_map_input` group executes native kernels with alternating, prebuilt input
+lists to bypass last-call result caching. It measures marshalling, list construction, and result
+unmarshalling at 256, 1,024, and 4,096 elements. `native_flat_map` additionally constructs its
+input with the ambient range helper; that helper has its own repeated-append cost. The `sparse_ticks` group holds the changed subgraph at one edge
+while increasing unrelated inputs from 256 to 16,384; it measures both publication and idle
+ticks after initialization. These expose scaling costs that a small dense graph can hide.
+The `committed_values` group forces collection of retained text lists; it measures collector
+work separately from evaluation and publication. `cold_full_lowering` exercises HIR preparation
+and every lowering layer through backend IR. `hir_elaboration` compares separate preparation
+for each pass with shared preparation in the same executable.
+
+When changing scheduler traversal, also run `propagate_chain_256` and `propagate_fanout_256`
+so sparse improvements do not conceal a dense-propagation regression.
+
 
 ## Compare a change
 

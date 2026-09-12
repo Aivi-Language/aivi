@@ -36,9 +36,8 @@ Negates a boolean value.
 ```aivi
 use aivi.bool (not)
 
-type Bool -> Bool
-func isInactive = active =>
-    not active
+value inactive = not True
+// False
 ```
 
 ---
@@ -127,6 +126,6 @@ Converts an integer to a boolean: `0` becomes `False`, any other value becomes `
 use aivi.bool (fromInt)
 
 type Int -> Bool
-func hasFlags = flagBits =>
-    fromInt flagBits
+func hasFlags =
+  |> fromInt
 ```

@@ -98,8 +98,7 @@ patch the enclosing record:
 
 ```aivi
 type Int -> Int
-func increment = value =>
-    value + 1
+func increment = . + 1
 
 type Config = {
     retries: Option Int,
@@ -120,8 +119,7 @@ Use `:=` to store a function value as data instead of applying it:
 
 ```aivi
 type Int -> Int
-func increment = value =>
-    value + 1
+func increment = . + 1
 
 type Counter = {
     step: Int -> Int

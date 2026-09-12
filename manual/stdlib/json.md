@@ -42,8 +42,8 @@ use aivi.data.json (
 )
 
 type Json -> Bool
-func payloadIsObject = payload =>
-    isObject payload
+func payloadIsObject =
+  |> isObject
 ```
 
 The module also exports `JsonError` and `JsonPath`:

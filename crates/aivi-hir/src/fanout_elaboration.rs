@@ -157,8 +157,10 @@ pub enum FanoutFilterBlocker {
 }
 
 pub fn elaborate_fanouts(module: &Module) -> FanoutElaborationReport {
-    let module = crate::typecheck::elaborate_default_record_fields(module);
-    let module = &module;
+    crate::ElaborationSession::new(module).elaborate_fanouts()
+}
+
+pub(crate) fn elaborate_fanouts_prepared(module: &Module) -> FanoutElaborationReport {
     let items = module
         .items()
         .iter()

@@ -12,7 +12,7 @@ type Screen A =
   | Failed Text
 
 type List Text -> Text
-func readyHeadline = tasks => tasks
+func readyHeadline =
   |> length
   |> "{.} tasks ready"
 

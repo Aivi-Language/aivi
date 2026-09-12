@@ -9,6 +9,8 @@ mod custom_source_capabilities;
 mod decode_elaboration;
 mod decode_generation;
 mod domain_operator_elaboration;
+mod elaboration_session;
+pub use elaboration_session::ElaborationSession;
 pub mod exports;
 mod fanout_elaboration;
 mod function_inference;

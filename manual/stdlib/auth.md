@@ -146,7 +146,7 @@ use aivi.auth (
 )
 
 type PkceError -> Text
-func describePkceError = error => error
+func describePkceError =
  ||> UserCancelled       -> "sign-in cancelled"
  ||> NetworkError msg    -> "network error: {msg}"
  ||> InvalidResponse msg -> "invalid response: {msg}"

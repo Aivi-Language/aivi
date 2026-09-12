@@ -160,7 +160,7 @@ use aivi.smtp (
 )
 
 type SmtpError -> Text
-func describeSmtpError = error => error
+func describeSmtpError =
  ||> SmtpAuthFailed           -> "authentication failed"
  ||> SmtpConnectionFailed msg -> "connection failed: {msg}"
  ||> RecipientRejected addr   -> "recipient rejected: {addr}"

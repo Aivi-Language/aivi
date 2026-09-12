@@ -149,8 +149,7 @@ Full image payload.
 use aivi.image (ImageData)
 
 type ImageData -> Int
-func imageWidth = image =>
-    image.size.width
+func imageWidth = .size.width
 ```
 
 ## Format constructors and task alias

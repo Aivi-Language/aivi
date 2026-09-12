@@ -63,6 +63,10 @@ fn whole_program_backend_unit_reuses_cached_result_until_entry_text_changes() {
         .expect("unchanged whole-program lowering should reuse the cached backend unit");
 
     assert!(Arc::ptr_eq(&first, &second));
+    assert!(
+        std::ptr::eq(first.core(), first.lambda().core()),
+        "the lambda unit must share its immutable core arenas with the query result"
+    );
     assert_eq!(
         whole_program_backend_fingerprint(&db, file).expect("fingerprint query should succeed"),
         first.fingerprint()

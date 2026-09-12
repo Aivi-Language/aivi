@@ -61,8 +61,7 @@ use aivi.core.either (
 )
 
 type Int -> Int
-func increment = n =>
-    n + 1
+func increment = . + 1
 
 value optional : Option Int = map increment (Some 2)
 value right : Either Text Int = Right 2

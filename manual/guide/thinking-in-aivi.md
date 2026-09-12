@@ -84,8 +84,7 @@ Or decompose into named helpers:
 
 ```aivi
 type Int -> Bool
-func isGold = score =>
-    score >= 90
+func isGold = . >= 90
 
 type Int -> Text
 func tier = score => (isGold score, score >= 50)
@@ -109,29 +108,23 @@ const total = numbers.reduce((sum, n) => sum + n, 0);
 AIVI uses the same ideas, but as pipes:
 
 ```aivi
-type Int -> Int
-func double = . * 2
-
-type Int -> Bool
-func isEven = . % 2 == 0
-
-type Int -> Int -> Int
-func add = total value =>
-    total + value
-
 value numbers = [1, 2, 3, 4, 5]
 
 value doubled = numbers
-  |> map double
+  |> map (. * 2)
 
 value evens = numbers
-  |> filter isEven
+  |> filter (. % 2 == 0)
+
+type Int -> Int -> Int
+func add = total item => total + item
 
 value total = numbers
   |> reduce add 0
 ```
 
-Notice that each transformation is a named function. This makes the code self-documenting and each piece independently testable.
+Keep small transformations inline. Extract a named helper when the logic is reused or its name
+explains a domain rule.
 
 ### Common patterns
 
@@ -164,13 +157,13 @@ pipe directly and use `.` for the current subject:
 type User = { name: Text }
 
 type User -> Text
-func process = user => user.name
+func process = .name
   |> trim
   |> "Hello, {.}!"
 ```
 
-Use a top-level helper when the step should be reusable. Use `#name` only when a later stage truly
-needs an earlier value and a plain `.` would stop being clear.
+Use a top-level helper when the step should be reusable. For retaining earlier values, see
+[pipe memos](/guide/pipes#remembering-stage-values-with-name).
 
 Or break the work into named helpers:
 
@@ -178,15 +171,15 @@ Or break the work into named helpers:
 type User = { name: Text }
 
 type Text -> Text
-func greet = name =>
-    "Hello, {name}!"
+func greet = "Hello, {.}!"
 
 type User -> Text
-func process = user =>
-    greet (trim user.name)
+func process = .name
+  |> trim (.)
+  |> greet
 ```
 
-Both approaches are valid. The pipe style reads top-to-bottom; the helper style gives each step a reusable name.
+Both versions read top-to-bottom. The second makes the greeting reusable.
 
 ## State that changes over time → signals
 
@@ -210,6 +203,9 @@ signal label = count
   |> "Count: {.}"
 ```
 
+This fragment shows the label derivation only; it has no click input, so `count` stays at zero.
+The accumulation example below shows how events change state.
+
 The connection between `count` and `label` is **declared, not wired up manually**. The runtime handles the updates. You never write "when X changes, update Y" — you write "Y is derived from X."
 
 ### Accumulating state with `+|>`
@@ -223,7 +219,7 @@ type Event =
   | Reset
 
 type Event -> Int -> Int
-func step = event count => event
+func step = event! count
  ||> Increment -> count + 1
  ||> Decrement -> count - 1
  ||> Reset     -> 0

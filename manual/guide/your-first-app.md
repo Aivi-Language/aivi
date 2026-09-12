@@ -85,12 +85,11 @@ type Event =
   | ClearDone
 
 type Todo -> Bool
-func isOpen = todo => todo.done
- T|> False
- F|> True
+func isOpen =
+  |> not .done
 
 type Filter -> Todo -> Bool
-func matchesFilter = current todo => current
+func matchesFilter = current! todo
  ||> All    -> True
  ||> Active -> isOpen todo
  ||> Done   -> todo.done
@@ -101,26 +100,21 @@ func todoLabel = todo => todo.done
  F|> "[ ] {todo.text}"
 
 type Int -> Todo -> Todo
-func toggleItem = target todo => (todo.id == target, todo.done)
- ||> (True, True)  -> todo <| { done: False }
- ||> (True, False) -> todo <| { done: True }
- ||> (False, _)    -> todo
+func toggleItem = target todo => todo.id == target
+ T|> todo <| { done: not (todo.done) }
+ F|> todo
 
 type State -> State
 func addItem = state => trim state.draft == ""
  T|> state
  F|> state <| { nextId: state.nextId + 1, draft: "", items: append state.items [{ id: state.nextId, text: trim state.draft, done: False }] }
 
-type Todo -> Bool
-func keepActive = todo =>
-    isOpen todo
-
 type State -> State
 func clearCompleted = state =>
-    state <| { items: filter keepActive state.items }
+    state <| { items: filter isOpen state.items }
 
 type Event -> State -> State
-func step = event state => event
+func step = event! state
  ||> DraftChanged text -> state <| { draft: text }
  ||> AddTodo           -> addItem state
  ||> ToggleTodo id     -> state <| { items: map (toggleItem id) state.items }
@@ -128,8 +122,8 @@ func step = event state => event
  ||> ClearDone         -> clearCompleted state
 ```
 
-The important part is the `step` function. It is the same idea you would use in Elm, Redux, or a
-state machine: one closed event type in, one new state out.
+The `step` function consumes an event and the current state, then returns the next state.
+The signal accumulation below applies it when an event arrives.
 
 ## Step 3: Turn UI events into domain events
 
@@ -167,7 +161,9 @@ state directly; they emit values, and the signal graph folds those values into s
 
 ## Step 4: Derive the state the UI needs
 
-Once `event` exists, accumulation gives us the live application state:
+Once `event` exists, accumulation gives us the live application state. This isolated example
+only handles draft and filter changes; Add, Toggle, and Clear are deliberately omitted here.
+The complete Step 5 example includes all handlers.
 
 ```aivi
 type Filter =
@@ -203,18 +199,17 @@ value initial : State = {
 }
 
 type Todo -> Bool
-func isOpen = todo => todo.done
- T|> False
- F|> True
+func isOpen =
+  |> not .done
 
 type Filter -> Todo -> Bool
-func matchesFilter = current todo => current
+func matchesFilter = current! todo
  ||> All    -> True
  ||> Active -> isOpen todo
  ||> Done   -> todo.done
 
 type Event -> State -> State
-func step = event state => event
+func step = event! state
  ||> DraftChanged text -> state <| { draft: text }
  ||> AddTodo           -> state
  ||> ToggleTodo _      -> state
@@ -230,7 +225,7 @@ func hasDraft = state =>
     trim state.draft != ""
 
 type State -> Text
-func footer = state => state.items
+func footer = .items
   |> length
   |> "{.} total tasks"
 
@@ -294,12 +289,11 @@ value initial : State = {
 }
 
 type Todo -> Bool
-func isOpen = todo => todo.done
- T|> False
- F|> True
+func isOpen =
+  |> not .done
 
 type Filter -> Todo -> Bool
-func matchesFilter = current todo => current
+func matchesFilter = current! todo
  ||> All    -> True
  ||> Active -> isOpen todo
  ||> Done   -> todo.done
@@ -310,26 +304,21 @@ func todoLabel = todo => todo.done
  F|> "[ ] {todo.text}"
 
 type Int -> Todo -> Todo
-func toggleItem = target todo => (todo.id == target, todo.done)
- ||> (True, True)  -> todo <| { done: False }
- ||> (True, False) -> todo <| { done: True }
- ||> (False, _)    -> todo
+func toggleItem = target todo => todo.id == target
+ T|> todo <| { done: not (todo.done) }
+ F|> todo
 
 type State -> State
 func addItem = state => trim state.draft == ""
  T|> state
  F|> state <| { nextId: state.nextId + 1, draft: "", items: append state.items [{ id: state.nextId, text: trim state.draft, done: False }] }
 
-type Todo -> Bool
-func keepActive = todo =>
-    isOpen todo
-
 type State -> State
 func clearCompleted = state =>
-    state <| { items: filter keepActive state.items }
+    state <| { items: filter isOpen state.items }
 
 type Event -> State -> State
-func step = event state => event
+func step = event! state
  ||> DraftChanged text -> state <| { draft: text }
  ||> AddTodo           -> addItem state
  ||> ToggleTodo id     -> state <| { items: map (toggleItem id) state.items }
@@ -345,7 +334,7 @@ func hasDraft = state =>
     trim state.draft != ""
 
 type State -> Text
-func footer = state => state.items
+func footer = .items
   |> length
   |> "{.} total tasks"
 

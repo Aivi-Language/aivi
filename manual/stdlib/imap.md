@@ -257,7 +257,7 @@ use aivi.imap (
 )
 
 type ImapError -> Text
-func describeImapError = error => error
+func describeImapError =
  ||> ImapAuthFailed           -> "authentication failed"
  ||> ImapConnectionFailed msg -> "connection failed: {msg}"
  ||> FolderNotFound name      -> "folder not found: {name}"

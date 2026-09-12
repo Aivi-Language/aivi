@@ -206,12 +206,128 @@ fn bench_lowering_and_codegen(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_hir_elaboration(c: &mut Criterion) {
+    let (db, file) = open_program(PROGRAM);
+    let hir = hir_module(&db, file);
+    let module = hir.module();
+    let mut group = c.benchmark_group("hir_elaboration");
+    group.bench_function("prepare_each_pass", |b| {
+        b.iter(|| {
+            black_box(aivi_hir::elaborate_general_expressions(module));
+            black_box(aivi_hir::elaborate_ambient_items(module));
+            black_box(aivi_hir::elaborate_gates(module));
+            black_box(aivi_hir::elaborate_truthy_falsy(module));
+            black_box(aivi_hir::elaborate_fanouts(module));
+            black_box(aivi_hir::elaborate_temporal_stages(module));
+            black_box(aivi_hir::elaborate_recurrences(module));
+            black_box(aivi_hir::elaborate_source_lifecycles(module));
+            black_box(aivi_hir::generate_source_decode_programs(module));
+        })
+    });
+    group.bench_function("shared_preparation", |b| {
+        b.iter(|| {
+            let session = aivi_hir::ElaborationSession::new(module);
+            black_box(session.elaborate_general_expressions());
+            black_box(session.elaborate_ambient_items());
+            black_box(session.elaborate_gates());
+            black_box(session.elaborate_truthy_falsy());
+            black_box(session.elaborate_fanouts());
+            black_box(session.elaborate_temporal_stages());
+            black_box(session.elaborate_recurrences());
+            black_box(session.elaborate_source_lifecycles());
+            black_box(session.generate_source_decode_programs());
+        })
+    });
+    group.finish();
+}
+
+fn bench_native_flat_map_input(c: &mut Criterion) {
+    let (db, file) = open_program(
+        "type Int -> List Int\nfunc singleton = x => [x]\ntype List Int -> List Int\nfunc expand = xs => __aivi_list_flatMap singleton xs\n",
+    );
+    let unit = whole_program_backend_unit(&db, file).expect("flatMap input benchmark must lower");
+    let program = unit.backend();
+    let kernel = program.items()[find_item(program, "expand")].body.unwrap();
+    aivi_backend::compile_native_kernel_artifact(program, kernel)
+        .expect("native compilation must succeed")
+        .expect("flatMap must produce a native artifact");
+    let executable = BackendExecutableProgram::interpreted(program);
+    let mut engine = executable.create_engine();
+    let globals = BTreeMap::new();
+    let mut group = c.benchmark_group("native_flat_map_input");
+    for count in [256_i64, 1024, 4096] {
+        let environments = [0, 1].map(|extra| {
+            [RuntimeValue::List(
+                (0..count + extra).map(RuntimeValue::Int).collect(),
+            )]
+        });
+        let value = engine
+            .evaluate_kernel(kernel, None, &environments[0], &globals)
+            .unwrap();
+        assert_eq!(value, environments[0][0]);
+        let mut iteration = 0;
+        group.bench_function(format!("singleton_{count}"), |b| {
+            b.iter(|| {
+                iteration ^= 1;
+                black_box(
+                    engine
+                        .evaluate_kernel(kernel, None, &environments[iteration], &globals)
+                        .unwrap(),
+                );
+            })
+        });
+    }
+    group.finish();
+}
+
+fn bench_native_flat_map(c: &mut Criterion) {
+    let (db, file) = open_program(
+        "type Int -> List Int\nfunc singleton = x => [x]\ntype Int -> List Int\nfunc expand = n => __aivi_list_flatMap singleton (__aivi_list_range n)\n",
+    );
+    let unit = whole_program_backend_unit(&db, file).expect("flatMap benchmark must lower");
+    let program = unit.backend();
+    let kernel = program.items()[find_item(program, "expand")].body.unwrap();
+    let executable = BackendExecutableProgram::interpreted(program);
+    let mut engine = executable.create_engine();
+    let globals = BTreeMap::new();
+    let mut group = c.benchmark_group("native_flat_map");
+    for count in [256_i64, 1024, 4096] {
+        let mut iteration = 0;
+        let value = engine
+            .evaluate_kernel(kernel, None, &[RuntimeValue::Int(count)], &globals)
+            .unwrap();
+        let RuntimeValue::List(values) = value else {
+            panic!("expected list")
+        };
+        assert_eq!(
+            values,
+            (0..count).map(RuntimeValue::Int).collect::<Vec<_>>()
+        );
+        group.bench_function(format!("singleton_{count}"), |b| {
+            b.iter(|| {
+                iteration ^= 1;
+                black_box(
+                    engine
+                        .evaluate_kernel(
+                            kernel,
+                            None,
+                            &[RuntimeValue::Int(count + iteration)],
+                            &globals,
+                        )
+                        .unwrap(),
+                );
+            })
+        });
+    }
+    group.finish();
+}
+
 criterion_group! {
     name = pipeline;
     config = Criterion::default()
         .sample_size(30)
         .warm_up_time(Duration::from_secs(2))
         .measurement_time(Duration::from_secs(5));
-    targets = bench_incremental_queries, bench_lowering_and_codegen
+    targets = bench_native_flat_map_input, bench_hir_elaboration, bench_native_flat_map, bench_incremental_queries, bench_lowering_and_codegen
 }
 criterion_main!(pipeline);

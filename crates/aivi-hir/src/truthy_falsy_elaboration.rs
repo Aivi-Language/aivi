@@ -122,8 +122,10 @@ struct TruthyFalsyPipeLocation {
 }
 
 pub fn elaborate_truthy_falsy(module: &Module) -> TruthyFalsyElaborationReport {
-    let module = crate::typecheck::elaborate_default_record_fields(module);
-    let module = &module;
+    crate::ElaborationSession::new(module).elaborate_truthy_falsy()
+}
+
+pub(crate) fn elaborate_truthy_falsy_prepared(module: &Module) -> TruthyFalsyElaborationReport {
     let items = module
         .items()
         .iter()

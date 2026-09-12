@@ -310,8 +310,7 @@ Applies a function to every element, returning a new list of the results.
 use aivi.list (map)
 
 type Int -> Int
-func double = n =>
-    n * 2
+func double = . * 2
 
 value result : List Int = [1, 2, 3]
   |> map double
@@ -349,8 +348,7 @@ Returns only the elements that satisfy a predicate.
 use aivi.list (filter)
 
 type Int -> Bool
-func isPositive = n =>
-    n > 0
+func isPositive = . > 0
 
 value result : List Int =
     filter isPositive [
@@ -536,8 +534,7 @@ Returns the longest prefix of elements that all satisfy the predicate. Stops at 
 use aivi.list (takeWhile)
 
 type Int -> Bool
-func isSmall = n =>
-    n < 10
+func isSmall = . < 10
 
 value result : List Int = [2, 5, 8, 11, 3]
   |> takeWhile isSmall
@@ -554,8 +551,7 @@ Drops elements from the front as long as they satisfy the predicate, then return
 use aivi.list (dropWhile)
 
 type Int -> Bool
-func isSmall = n =>
-    n < 10
+func isSmall = . < 10
 
 value result : List Int = [2, 5, 8, 11, 3]
   |> dropWhile isSmall
@@ -595,8 +591,7 @@ Returns `True` if at least one element satisfies the predicate.
 use aivi.list (any)
 
 type Int -> Bool
-func isNegative = n =>
-    n < 0
+func isNegative = . < 0
 
 value result : Bool =
     any isNegative [
@@ -617,8 +612,7 @@ Returns `True` if every element satisfies the predicate.
 use aivi.list (all)
 
 type Int -> Bool
-func isPositive = n =>
-    n > 0
+func isPositive = . > 0
 
 value allPositive : Bool =
     all isPositive [
@@ -646,8 +640,7 @@ Returns the number of elements that satisfy the predicate.
 use aivi.list (count)
 
 type Int -> Bool
-func isPositive = n =>
-    n > 0
+func isPositive = . > 0
 
 value n : Int =
     count isPositive [
@@ -747,8 +740,7 @@ Returns the index of the first element satisfying the predicate, or `None`.
 use aivi.list (indexOf)
 
 type Int -> Bool
-func isThirty = n =>
-    n == 30
+func isThirty = . == 30
 
 value idx : Option Int =
     indexOf isThirty [
@@ -761,7 +753,7 @@ value idx : Option Int =
 
 ---
 
-## Aggregation
+### Aggregation
 
 Functions that reduce a list to a single value.
 
@@ -936,8 +928,7 @@ use aivi.list (
 )
 
 type Int -> Bool
-func isPositive = n =>
-    n > 0
+func isPositive = . > 0
 
 value groups : (Partition Int) =
     partition isPositive [

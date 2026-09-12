@@ -129,8 +129,8 @@ func outside =
 value seed0 = 2463534242
 
 type Int -> Int
-func nextSeed = s =>
-    (s * 1103515245 + 12345) % 2147483647
+func nextSeed = . * 1103515245 + 12345
+  |> . % 2147483647
 
 type Int -> Cell
 func spawnFood = s =>
@@ -229,7 +229,7 @@ The heart of the game is a single pure function that takes an event and a state,
 
 ```aivi group=snake
 type Event -> GameState -> GameState
-func step = ev st => ev
+func step = ev! st
  ||> Restart -> initial
  ||> Turn d  -> handleTurn d st
  ||> Tick    -> handleTick st

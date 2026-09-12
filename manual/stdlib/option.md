@@ -53,9 +53,8 @@ Returns `True` if the option holds a value.
 ```aivi
 use aivi.option (isSome)
 
-type Option Int -> Bool
-func hasValue = opt =>
-    isSome opt
+value present = isSome (Some 42)
+// True
 ```
 
 ---
@@ -70,8 +69,8 @@ Returns `True` if the option is empty.
 use aivi.option (isNone)
 
 type Option Text -> Bool
-func isMissing = opt =>
-    isNone opt
+func isMissing =
+  |> isNone
 ```
 
 ---
@@ -120,8 +119,7 @@ Maps a `Some` value or returns a fallback directly when the option is `None`.
 use aivi.option (mapOr)
 
 type Int -> Int
-func double = n =>
-    n * 2
+func double = . * 2
 
 value total : Int = mapOr 0 double (Some 21)
 ```
@@ -138,8 +136,7 @@ Returns `True` only when the option is `Some` and the payload satisfies the pred
 use aivi.option (isSomeAnd)
 
 type Int -> Bool
-func isSmall = n =>
-    n < 10
+func isSmall = . < 10
 
 value ok : Bool = isSomeAnd isSmall (Some 3)
 value missing : Bool = isSomeAnd isSmall None
@@ -173,13 +170,13 @@ Chains an `Option`-returning function over a `Some` value. Returns `None` when t
 use aivi.option (flatMap)
 
 type Int -> (Option Int)
-func parsePositive = n => n > 0
+func keepPositive = n => n > 0
  T|> Some n
  F|> None
 
 type Option Int -> (Option Int)
-func parseAndFilter =
-  |> flatMap parsePositive
+func keepPositiveValue =
+  |> flatMap keepPositive
 ```
 
 ---
@@ -194,8 +191,8 @@ Removes one layer of nesting from an `Option (Option A)`.
 use aivi.option (flatten)
 
 type Option (Option Int) -> (Option Int)
-func unwrapNested = opt =>
-    flatten opt
+func unwrapNested =
+  |> flatten
 ```
 
 ---
@@ -210,8 +207,8 @@ Converts `Some value` to a one-element list, or `None` to an empty list.
 use aivi.option (toList)
 
 type Option Int -> (List Int)
-func optionItems = opt =>
-    toList opt
+func optionItems =
+  |> toList
 ```
 
 ---
@@ -242,8 +239,7 @@ Transforms the value inside `Some` using a function, leaving `None` untouched.
 use aivi.option (map)
 
 type Int -> Int
-func double = n =>
-    n * 2
+func double = . * 2
 
 type Option Int -> (Option Int)
 func doubleOpt =
@@ -262,8 +258,7 @@ Keeps the `Some` value only if it satisfies the predicate; otherwise returns `No
 use aivi.option (filter)
 
 type Int -> Bool
-func isPositive = n =>
-    n > 0
+func isPositive = . > 0
 
 type Option Int -> (Option Int)
 func keepPositive =

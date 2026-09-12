@@ -42,11 +42,7 @@ enum RuntimeTextInterpolationSupport {
 }
 
 impl<'a, M: Module> CraneliftCompiler<'a, M> {
-    fn with_module(
-        program: &'a Program,
-        module: M,
-        jit_symbols: Option<JitSymbolTable>,
-    ) -> Self {
+    fn with_module(program: &'a Program, module: M, jit_symbols: Option<JitSymbolTable>) -> Self {
         Self {
             program,
             module,
@@ -230,14 +226,17 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 expr: interp_expr, ..
                             } = segment
                             {
-                                let static_value =
-                                    match self.evaluate_static_value(kernel_id, kernel, *interp_expr) {
-                                        Ok(value) => value,
-                                        Err(error) => {
-                                            errors.push(error);
-                                            None
-                                        }
-                                    };
+                                let static_value = match self.evaluate_static_value(
+                                    kernel_id,
+                                    kernel,
+                                    *interp_expr,
+                                ) {
+                                    Ok(value) => value,
+                                    Err(error) => {
+                                        errors.push(error);
+                                        None
+                                    }
+                                };
                                 if static_value.is_none() {
                                     if self
                                         .runtime_text_interpolation_support(
@@ -377,7 +376,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 }
                             }
                             current_layout = self
-                                .inline_pipe_stage_result_layout(kernel_id, kernel, expr_id, stage_index)
+                                .inline_pipe_stage_result_layout(
+                                    kernel_id,
+                                    kernel,
+                                    expr_id,
+                                    stage_index,
+                                )
                                 .unwrap_or(stage.result_layout);
                         }
                         if let Err(error) = self.require_layout_match(
@@ -519,7 +523,10 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     work.push(argument);
                                 }
                             }
-                            Ok(DirectApplyPlan::Builtin(BuiltinCallPlan::ListQuantified(plan, _))) => {
+                            Ok(DirectApplyPlan::Builtin(BuiltinCallPlan::ListQuantified(
+                                plan,
+                                _,
+                            ))) => {
                                 for argument in plan
                                     .step_prefix_exprs
                                     .iter()
@@ -1248,30 +1255,30 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                             self.program.layouts()[layout]
                                         ),
                                     ));
+                                    }
+                                    static_interpolations.push(None);
                                 }
-                                static_interpolations.push(None);
-                            }
-                            // Dynamic: visit interpolation sub-expressions in reverse
-                            let static_interpolations =
-                                static_interpolations.into_boxed_slice();
-                            tasks.push(Task::BuildRuntimeText {
-                                expr_id,
-                                static_interpolations: static_interpolations.clone(),
-                            });
-                            let mut interp_index = static_interpolations.len();
-                            for segment in text.segments.iter().rev() {
-                                if let crate::TextSegment::Interpolation {
-                                    expr: interp_expr,
-                                    ..
-                                } = segment
-                                {
+                                // Dynamic: visit interpolation sub-expressions in reverse
+                                let static_interpolations =
+                                    static_interpolations.into_boxed_slice();
+                                tasks.push(Task::BuildRuntimeText {
+                                    expr_id,
+                                    static_interpolations: static_interpolations.clone(),
+                                });
+                                let mut interp_index = static_interpolations.len();
+                                for segment in text.segments.iter().rev() {
+                                    if let crate::TextSegment::Interpolation {
+                                        expr: interp_expr,
+                                        ..
+                                    } = segment
+                                    {
                                         interp_index -= 1;
                                         if static_interpolations[interp_index].is_none() {
                                             tasks.push(Task::Visit(*interp_expr));
                                         }
+                                    }
                                 }
                             }
-                        }
                         }
                         KernelExprKind::Tuple(elements) => {
                             // Try static materialization first; fall back to runtime aggregate
@@ -1421,7 +1428,10 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     materialized.push(arguments[1]);
                                     materialized
                                 }
-                                DirectApplyPlan::Builtin(BuiltinCallPlan::ListQuantified(plan, _)) => {
+                                DirectApplyPlan::Builtin(BuiltinCallPlan::ListQuantified(
+                                    plan,
+                                    _,
+                                )) => {
                                     let mut materialized =
                                         Vec::with_capacity(plan.step_prefix_exprs.len() + 1);
                                     materialized.extend(plan.step_prefix_exprs.iter().copied());
@@ -1429,8 +1439,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     materialized
                                 }
                                 DirectApplyPlan::Builtin(BuiltinCallPlan::ListFind(plan)) => {
-                                    let mut materialized =
-                                        Vec::with_capacity(plan.predicate.step_prefix_exprs.len() + 1);
+                                    let mut materialized = Vec::with_capacity(
+                                        plan.predicate.step_prefix_exprs.len() + 1,
+                                    );
                                     materialized
                                         .extend(plan.predicate.step_prefix_exprs.iter().copied());
                                     materialized.push(arguments[1]);
@@ -1459,11 +1470,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     materialized.extend(arguments.iter().copied());
                                     materialized
                                 }
-                                _ => self.flatten_direct_apply_arguments(
-                                    kernel,
-                                    *callee,
-                                    arguments,
-                                ),
+                                _ => {
+                                    self.flatten_direct_apply_arguments(kernel, *callee, arguments)
+                                }
                             };
                             tasks.push(Task::BuildDirectApply {
                                 expr: expr_id,
@@ -1839,7 +1848,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
                                 }
-                                NativeCompareKind::Text => self.lower_text_comparison(kernel_id, lhs, rhs, IntCC::SignedGreaterThan, builder)?,
+                                NativeCompareKind::Text => self.lower_text_comparison(
+                                    kernel_id,
+                                    lhs,
+                                    rhs,
+                                    IntCC::SignedGreaterThan,
+                                    builder,
+                                )?,
                                 NativeCompareKind::DomainInt => self.lower_domain_int_comparison(
                                     lhs,
                                     rhs,
@@ -1876,7 +1891,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
                                 }
-                                NativeCompareKind::Text => self.lower_text_comparison(kernel_id, lhs, rhs, IntCC::SignedLessThan, builder)?,
+                                NativeCompareKind::Text => self.lower_text_comparison(
+                                    kernel_id,
+                                    lhs,
+                                    rhs,
+                                    IntCC::SignedLessThan,
+                                    builder,
+                                )?,
                                 NativeCompareKind::DomainInt => self.lower_domain_int_comparison(
                                     lhs,
                                     rhs,
@@ -1915,7 +1936,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
                                 }
-                                NativeCompareKind::Text => self.lower_text_comparison(kernel_id, lhs, rhs, IntCC::SignedGreaterThanOrEqual, builder)?,
+                                NativeCompareKind::Text => self.lower_text_comparison(
+                                    kernel_id,
+                                    lhs,
+                                    rhs,
+                                    IntCC::SignedGreaterThanOrEqual,
+                                    builder,
+                                )?,
                                 NativeCompareKind::DomainInt => self.lower_domain_int_comparison(
                                     lhs,
                                     rhs,
@@ -1952,7 +1979,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     let call = builder.ins().call(func_ref, &[lhs, rhs]);
                                     builder.inst_results(call)[0]
                                 }
-                                NativeCompareKind::Text => self.lower_text_comparison(kernel_id, lhs, rhs, IntCC::SignedLessThanOrEqual, builder)?,
+                                NativeCompareKind::Text => self.lower_text_comparison(
+                                    kernel_id,
+                                    lhs,
+                                    rhs,
+                                    IntCC::SignedLessThanOrEqual,
+                                    builder,
+                                )?,
                                 NativeCompareKind::DomainInt => self.lower_domain_int_comparison(
                                     lhs,
                                     rhs,
@@ -2442,8 +2475,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             "transform continuation must only be queued for transform stages"
                         );
                     };
-                    let expected_layout =
-                        self.inline_pipe_stage_result_layout(kernel_id, kernel, pipe_expr, stage_index)?;
+                    let expected_layout = self.inline_pipe_stage_result_layout(
+                        kernel_id,
+                        kernel,
+                        pipe_expr,
+                        stage_index,
+                    )?;
                     self.require_layout_match(
                         kernel_id,
                         pipe_expr,
@@ -2476,8 +2513,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     let crate::InlinePipeStageKind::Tap { .. } = &stage.kind else {
                         unreachable!("tap continuation must only be queued for tap stages");
                     };
-                    let expected_layout =
-                        self.inline_pipe_stage_result_layout(kernel_id, kernel, pipe_expr, stage_index)?;
+                    let expected_layout = self.inline_pipe_stage_result_layout(
+                        kernel_id,
+                        kernel,
+                        pipe_expr,
+                        stage_index,
+                    )?;
                     self.require_layout_match(
                         kernel_id,
                         pipe_expr,
@@ -2628,10 +2669,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 self.materialize_text_constant(kernel_id, raw.as_ref(), builder)?
                             }
                             crate::TextSegment::Interpolation { expr, .. } => {
-                                match static_interp_iter
-                                    .next()
-                                    .expect("static interpolation metadata should align with text segments")
-                                {
+                                match static_interp_iter.next().expect(
+                                    "static interpolation metadata should align with text segments",
+                                ) {
                                     Some(rendered) => self.materialize_text_constant(
                                         kernel_id,
                                         rendered.as_ref(),
@@ -2660,9 +2700,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         ));
                     let array_ptr = builder.ins().stack_addr(self.pointer_type(), array_slot, 0);
                     for (i, seg_val) in seg_values.iter().enumerate() {
-                        builder
-                            .ins()
-                            .store(MemFlagsData::new(), *seg_val, array_ptr, (i * 8) as i32);
+                        builder.ins().store(
+                            MemFlagsData::new(),
+                            *seg_val,
+                            array_ptr,
+                            (i * 8) as i32,
+                        );
                     }
 
                     let concat_func = self.declare_text_concat_func(kernel_id, builder)?;
@@ -2702,11 +2745,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     self.program.layouts()[layout]
                                 ),
                             };
-                            return Err(self.unsupported_expression(
-                                kernel_id,
-                                expr_id,
-                                &detail,
-                            ));
+                            return Err(self.unsupported_expression(kernel_id, expr_id, &detail));
                         };
                         self.field_abi_shape(kernel_id, element, "list element")?
                     };
@@ -2957,12 +2996,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         } else {
                             arms[0].body
                         };
-                        (
-                            arms_len,
-                            body,
-                            stage.result_memo,
-                            pipe.stages.len(),
-                        )
+                        (arms_len, body, stage.result_memo, pipe.stages.len())
                     };
 
                     let next_arm_index = arm_index + 1;
@@ -3357,16 +3391,14 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     "list wrapper `map`",
                 )?,
             )),
-            "filter" | "__aivi_list_filter" => {
-                DirectApplyPlan::Builtin(BuiltinCallPlan::ListFilter(
-                    self.plan_list_predicate_from_callable(
-                        kernel_id,
-                        *function,
-                        *subject,
-                        "list wrapper `filter` predicate",
-                    )?,
-                ))
-            }
+            "filter" | "__aivi_list_filter" => DirectApplyPlan::Builtin(
+                BuiltinCallPlan::ListFilter(self.plan_list_predicate_from_callable(
+                    kernel_id,
+                    *function,
+                    *subject,
+                    "list wrapper `filter` predicate",
+                )?),
+            ),
             "any" | "__aivi_list_any" | "all" | "__aivi_list_all" => {
                 self.require_bool_expression(
                     kernel_id,
@@ -3404,8 +3436,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     result_layout,
                     "list wrapper `find` result",
                 )?;
-                let LayoutKind::Option { element: found_element } =
-                    &self.program.layouts()[result_layout].kind
+                let LayoutKind::Option {
+                    element: found_element,
+                } = &self.program.layouts()[result_layout].kind
                 else {
                     unreachable!("option contract validation keeps the result layout as Option");
                 };
@@ -3436,8 +3469,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     *subject,
                     result_layout,
                     "list wrapper `flatMap`",
-                )?,
-            )),
+                )?),
+            ),
             _ => return Ok(None),
         };
         Ok(Some(plan))
@@ -3731,9 +3764,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             LayoutKind::Domain { name, arguments } if name.as_ref() == "NonEmptyList" => {
                 arguments.len() == 1
             }
-            LayoutKind::Opaque { name, arguments, .. } if name.as_ref() == "NonEmptyList" => {
-                arguments.len() == 1
-            }
+            LayoutKind::Opaque {
+                name, arguments, ..
+            } if name.as_ref() == "NonEmptyList" => arguments.len() == 1,
             _ => false,
         }
     }
@@ -4550,9 +4583,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         arguments: &[KernelExprId],
     ) -> Result<BuiltinCallPlan, CodegenError> {
         match intrinsic {
-            crate::BuiltinClassMemberIntrinsic::Pure(
-                crate::BuiltinApplicativeCarrier::Signal,
-            ) => {
+            crate::BuiltinClassMemberIntrinsic::Pure(crate::BuiltinApplicativeCarrier::Signal) => {
                 let detail = format!("builtin class member `{intrinsic:?}`");
                 let (_parameters, result_layout) = self.require_saturated_callable_call(
                     kernel_id, expr_id, callee, arguments, &detail,
@@ -4625,8 +4656,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         ),
                     ));
                 }
-                let LayoutKind::Signal { element: result_element } =
-                    &self.program.layouts()[result_layout].kind
+                let LayoutKind::Signal {
+                    element: result_element,
+                } = &self.program.layouts()[result_layout].kind
                 else {
                     return Err(self.unsupported_expression(
                         kernel_id,
@@ -4702,7 +4734,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         "list append result must stay a List layout",
                     ));
                 };
-                self.require_layout_match(kernel_id, *left, result_layout, left_layout, "list append left")?;
+                self.require_layout_match(
+                    kernel_id,
+                    *left,
+                    result_layout,
+                    left_layout,
+                    "list append left",
+                )?;
                 self.require_layout_match(
                     kernel_id,
                     *right,
@@ -6086,10 +6124,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         for ((from_field, source_offset, source_abi), (to_field, target_offset, _)) in
             source_fields.into_iter().zip(target_fields)
         {
-            let field =
-                builder
-                    .ins()
-                    .load(source_abi.ty, MemFlagsData::new(), value, source_offset as i32);
+            let field = builder.ins().load(
+                source_abi.ty,
+                MemFlagsData::new(),
+                value,
+                source_offset as i32,
+            );
             let adapted = self.repack_value(kernel_id, field, from_field, to_field, builder)?;
             builder
                 .ins()
@@ -6164,10 +6204,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         for ((from_field, source_offset, source_abi), (to_field, target_offset, _)) in
             source_fields.into_iter().zip(target_fields)
         {
-            let field =
-                builder
-                    .ins()
-                    .load(source_abi.ty, MemFlagsData::new(), value, source_offset as i32);
+            let field = builder.ins().load(
+                source_abi.ty,
+                MemFlagsData::new(),
+                value,
+                source_offset as i32,
+            );
             let adapted = self.repack_value(kernel_id, field, from_field, to_field, builder)?;
             builder
                 .ins()
@@ -6395,12 +6437,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         step_arguments.extend(prefix_arguments.iter().copied());
         step_arguments.push(step_acc);
         step_arguments.push(step_element);
-        let next = self.lower_direct_item_call(
-            kernel_id,
-            plan.step_body,
-            &step_arguments,
-            builder,
-        )?;
+        let next =
+            self.lower_direct_item_call(kernel_id, plan.step_body, &step_arguments, builder)?;
         let next = self.repack_value(
             kernel_id,
             next,
@@ -6564,9 +6602,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let index = builder.block_params(loop_block)[0];
         let kept = builder.block_params(loop_block)[1];
         let at_end = builder.ins().icmp(IntCC::Equal, index, len);
-        builder
-            .ins()
-            .brif(at_end, done_block, &[BlockArg::Value(kept)], body_block, &[]);
+        builder.ins().brif(
+            at_end,
+            done_block,
+            &[BlockArg::Value(kept)],
+            body_block,
+            &[],
+        );
 
         builder.seal_block(body_block);
         builder.switch_to_block(body_block);
@@ -6604,39 +6646,18 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         builder.seal_block(skip_block);
         builder.switch_to_block(skip_block);
         let next_index = builder.ins().iadd_imm_s(index, 1);
-        builder
-            .ins()
-            .jump(loop_block, &[BlockArg::Value(next_index), BlockArg::Value(kept)]);
+        builder.ins().jump(
+            loop_block,
+            &[BlockArg::Value(next_index), BlockArg::Value(kept)],
+        );
 
         builder.seal_block(done_block);
         builder.switch_to_block(done_block);
         let kept_len = builder.block_params(done_block)[0];
         let list_new = self.declare_list_new_func(kernel_id, builder)?;
-        let call = builder.ins().call(list_new, &[kept_len, output_ptr, stride_value]);
-        Ok(builder.inst_results(call)[0])
-    }
-
-    fn emit_empty_list(
-        &mut self,
-        kernel_id: KernelId,
-        element_layout: LayoutId,
-        builder: &mut FunctionBuilder<'_>,
-    ) -> Result<Value, CodegenError> {
-        let element_abi =
-            self.field_abi_shape(kernel_id, element_layout, "empty list element")?;
-        let dummy_slot =
-            builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-                cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-                element_abi.size.max(8),
-                element_abi.align.max(1).ilog2() as u8,
-            ));
-        let dummy_ptr = builder.ins().stack_addr(self.pointer_type(), dummy_slot, 0);
-        let list_new = self.declare_list_new_func(kernel_id, builder)?;
-        let zero = builder.ins().iconst(types::I64, 0);
-        let stride = builder
+        let call = builder
             .ins()
-            .iconst(types::I64, i64::from(element_abi.size.max(1)));
-        let call = builder.ins().call(list_new, &[zero, dummy_ptr, stride]);
+            .call(list_new, &[kept_len, output_ptr, stride_value]);
         Ok(builder.inst_results(call)[0])
     }
 
@@ -6677,10 +6698,16 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         builder.switch_to_block(loop_block);
         let index = builder.block_params(loop_block)[0];
         let at_end = builder.ins().icmp(IntCC::Equal, index, len);
-        let exhausted_value = builder.ins().iconst(types::I8, i64::from(quantifier == ListQuantifier::All));
-        builder
+        let exhausted_value = builder
             .ins()
-            .brif(at_end, done_block, &[BlockArg::Value(exhausted_value)], body_block, &[]);
+            .iconst(types::I8, i64::from(quantifier == ListQuantifier::All));
+        builder.ins().brif(
+            at_end,
+            done_block,
+            &[BlockArg::Value(exhausted_value)],
+            body_block,
+            &[],
+        );
 
         builder.seal_block(body_block);
         builder.switch_to_block(body_block);
@@ -6763,14 +6790,16 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let index = builder.block_params(loop_block)[0];
         let at_end = builder.ins().icmp(IntCC::Equal, index, len);
         let none = match plan.option_contract {
-            OptionCodegenContract::NicheReference => {
-                builder.ins().iconst(self.pointer_type(), 0)
-            }
+            OptionCodegenContract::NicheReference => builder.ins().iconst(self.pointer_type(), 0),
             OptionCodegenContract::InlineScalar(_) => self.lower_inline_scalar_option_none(builder),
         };
-        builder
-            .ins()
-            .brif(at_end, done_block, &[BlockArg::Value(none)], body_block, &[]);
+        builder.ins().brif(
+            at_end,
+            done_block,
+            &[BlockArg::Value(none)],
+            body_block,
+            &[],
+        );
 
         builder.seal_block(body_block);
         builder.switch_to_block(body_block);
@@ -6821,7 +6850,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
     ) -> Result<Value, CodegenError> {
         let list_len = self.declare_list_len_func(kernel_id, builder)?;
         let list_get = self.declare_list_get_func(kernel_id, builder)?;
-        let list_append = self.declare_list_append_func(kernel_id, builder)?;
+        let new_id = self.ensure_named_external_func_declared("aivi_list_builder_new")?;
+        let push_id = self.ensure_named_external_func_declared("aivi_list_builder_push")?;
+        let finish_id = self.ensure_named_external_func_declared("aivi_list_builder_finish")?;
+        let new = self.module.declare_func_in_func(new_id, builder.func);
+        let push = self.module.declare_func_in_func(push_id, builder.func);
+        let finish = self.module.declare_func_in_func(finish_id, builder.func);
         let len_call = builder.ins().call(list_len, &[subject]);
         let len = builder.inst_results(len_call)[0];
         let input_element_abi = self.field_abi_shape(
@@ -6830,7 +6864,11 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             "list flatMap input element",
         )?;
         let element_size = self
-            .field_abi_shape(kernel_id, plan.output_element_layout, "list flatMap output element")?
+            .field_abi_shape(
+                kernel_id,
+                plan.output_element_layout,
+                "list flatMap output element",
+            )?
             .size
             .max(1);
         let element_size = builder.ins().iconst(types::I64, i64::from(element_size));
@@ -6848,20 +6886,16 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         let body_block = builder.create_block();
         let done_block = builder.create_block();
         builder.append_block_param(loop_block, types::I64);
-        builder.append_block_param(loop_block, self.pointer_type());
-        builder.append_block_param(done_block, self.pointer_type());
 
         let zero = builder.ins().iconst(types::I64, 0);
-        let empty = self.emit_empty_list(kernel_id, plan.output_element_layout, builder)?;
-        builder
-            .ins()
-            .jump(loop_block, &[BlockArg::Value(zero), BlockArg::Value(empty)]);
+        let new_call = builder.ins().call(new, &[element_size]);
+        let accumulator = builder.inst_results(new_call)[0];
+        builder.ins().jump(loop_block, &[BlockArg::Value(zero)]);
 
         builder.switch_to_block(loop_block);
         let index = builder.block_params(loop_block)[0];
-        let acc = builder.block_params(loop_block)[1];
         let at_end = builder.ins().icmp(IntCC::Equal, index, len);
-        builder.ins().brif(at_end, done_block, &[BlockArg::Value(acc)], body_block, &[]);
+        builder.ins().brif(at_end, done_block, &[], body_block, &[]);
 
         builder.seal_block(body_block);
         builder.switch_to_block(body_block);
@@ -6889,17 +6923,16 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             plan.output_list_layout,
             builder,
         )?;
-        let append_call = builder.ins().call(list_append, &[acc, mapped, element_size]);
-        let next_acc = builder.inst_results(append_call)[0];
+        builder.ins().call(push, &[accumulator, mapped]);
         let next_index = builder.ins().iadd_imm_s(index, 1);
-        builder.ins().jump(
-            loop_block,
-            &[BlockArg::Value(next_index), BlockArg::Value(next_acc)],
-        );
+        builder
+            .ins()
+            .jump(loop_block, &[BlockArg::Value(next_index)]);
 
         builder.seal_block(done_block);
         builder.switch_to_block(done_block);
-        Ok(builder.block_params(done_block)[0])
+        let finish_call = builder.ins().call(finish, &[accumulator]);
+        Ok(builder.inst_results(finish_call)[0])
     }
 
     fn materialize_callable_signature(
@@ -7206,7 +7239,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         let cmp = builder.inst_results(call)[0];
                         builder.ins().icmp_imm_s(IntCC::NotEqual, cmp, 0)
                     }
-                    NativeCompareKind::Text => self.lower_text_comparison(kernel_id, *left, *right, IntCC::SignedLessThan, builder)?,
+                    NativeCompareKind::Text => self.lower_text_comparison(
+                        kernel_id,
+                        *left,
+                        *right,
+                        IntCC::SignedLessThan,
+                        builder,
+                    )?,
                     NativeCompareKind::DomainInt => {
                         return Err(self.unsupported_expression(
                             kernel_id,
@@ -7232,7 +7271,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         let cmp = builder.inst_results(call)[0];
                         builder.ins().icmp_imm_s(IntCC::NotEqual, cmp, 0)
                     }
-                    NativeCompareKind::Text => self.lower_text_comparison(kernel_id, *left, *right, IntCC::Equal, builder)?,
+                    NativeCompareKind::Text => {
+                        self.lower_text_comparison(kernel_id, *left, *right, IntCC::Equal, builder)?
+                    }
                     NativeCompareKind::DomainInt => unreachable!(),
                 };
                 let less_tag = builder.ins().iconst(types::I64, less_tag);
@@ -7329,7 +7370,14 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 let [subject] = trailing_arguments else {
                     unreachable!("direct list quantifier lowering keeps subject trailing");
                 };
-                self.lower_list_quantifier(kernel_id, &plan, quantifier, prefix_arguments, *subject, builder)
+                self.lower_list_quantifier(
+                    kernel_id,
+                    &plan,
+                    quantifier,
+                    prefix_arguments,
+                    *subject,
+                    builder,
+                )
             }
             DirectApplyPlan::Builtin(BuiltinCallPlan::ListFind(plan)) => {
                 let prefix_count = plan.predicate.step_prefix_layouts.len();
@@ -7374,14 +7422,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 let [seed, subject] = trailing_arguments else {
                     unreachable!("direct list reduce lowering keeps seed and subject trailing");
                 };
-                self.lower_list_reduce(
-                    kernel_id,
-                    &plan,
-                    prefix_arguments,
-                    *seed,
-                    *subject,
-                    builder,
-                )
+                self.lower_list_reduce(kernel_id, &plan, prefix_arguments, *seed, *subject, builder)
             }
             DirectApplyPlan::Builtin(BuiltinCallPlan::OptionSome(contract)) => {
                 let [argument] = arguments else {
@@ -8312,7 +8353,10 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 LayoutKind::Primitive(PrimitiveType::BigInt),
                 LayoutKind::Primitive(PrimitiveType::BigInt),
             ) => NativeCompareKind::BigInt,
-            (LayoutKind::Primitive(PrimitiveType::Text), LayoutKind::Primitive(PrimitiveType::Text)) => NativeCompareKind::Text,
+            (
+                LayoutKind::Primitive(PrimitiveType::Text),
+                LayoutKind::Primitive(PrimitiveType::Text),
+            ) => NativeCompareKind::Text,
             (LayoutKind::Domain { .. }, LayoutKind::Domain { .. }) => NativeCompareKind::DomainInt,
             _ => {
                 return Err(self.unsupported_expression(
@@ -8702,13 +8746,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 builder.append_block_param(merge_block, bool_ty);
 
                 let mut dispatch_block = builder.create_block();
-                builder.ins().brif(
-                    tags_equal,
-                    dispatch_block,
-                    &[],
-                    mismatch_block,
-                    &[],
-                );
+                builder
+                    .ins()
+                    .brif(tags_equal, dispatch_block, &[], mismatch_block, &[]);
 
                 builder.switch_to_block(mismatch_block);
                 builder.ins().jump(merge_block, &[BlockArg::Value(false_value)]);
@@ -8728,13 +8768,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             .ins()
                             .brif(is_match, body_block, &[], next_block, &[]);
                     } else {
-                        builder.ins().brif(
-                            is_match,
-                            body_block,
-                            &[],
-                            mismatch_block,
-                            &[],
-                        );
+                        builder
+                            .ins()
+                            .brif(is_match, body_block, &[], mismatch_block, &[]);
                     }
                     builder.seal_block(dispatch_block);
 
@@ -10100,6 +10136,149 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         Ok(self.module.declare_func_in_func(func_id, builder.func))
     }
 
+    fn ensure_named_external_func_declared(
+        &mut self,
+        symbol: &str,
+    ) -> Result<FuncId, CodegenError> {
+        if let Some(&func_id) = self.declared_external_funcs.get(symbol) {
+            return Ok(func_id);
+        }
+        let mut sig = self.module.make_signature();
+        match symbol {
+            "aivi_text_concat" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_int_to_text" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_float_to_text" => {
+                sig.params.push(AbiParam::new(types::F64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_bool_to_text" | "aivi_unit_to_text" => {
+                sig.params.push(AbiParam::new(types::I8));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_text_trim" | "aivi_text_to_lower" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_bytes_append" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_path_join" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_bytes_repeat" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_matrix_indices" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_bytes_slice" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_list_builder_new" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(types::I64));
+            }
+            "aivi_list_builder_push" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_list_builder_finish" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_list_append" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_arena_alloc" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_list_new" | "aivi_set_new" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_map_new" => {
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_list_len" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(types::I64));
+            }
+            "aivi_list_get" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_list_slice" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.params.push(AbiParam::new(types::I64));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_decimal_add" | "aivi_decimal_sub" | "aivi_decimal_mul" | "aivi_decimal_div"
+            | "aivi_decimal_mod" | "aivi_bigint_add" | "aivi_bigint_sub" | "aivi_bigint_mul"
+            | "aivi_bigint_div" | "aivi_bigint_mod" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(self.pointer_type()));
+            }
+            "aivi_decimal_eq" | "aivi_decimal_gt" | "aivi_decimal_lt" | "aivi_decimal_gte"
+            | "aivi_decimal_lte" | "aivi_bigint_eq" | "aivi_bigint_gt" | "aivi_bigint_lt"
+            | "aivi_bigint_gte" | "aivi_bigint_lte" | "aivi_text_compare"
+            | "aivi_text_contains" => {
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.params.push(AbiParam::new(self.pointer_type()));
+                sig.returns.push(AbiParam::new(types::I8));
+            }
+            _ => {
+                return Err(CodegenError::CraneliftModule {
+                    kernel: None,
+                    message: format!(
+                        "cached JIT artifact references external symbol `{symbol}` without a known lazy-JIT signature"
+                    )
+                    .into(),
+                });
+            }
+        }
+        let func_id = self
+            .module
+            .declare_function(symbol, Linkage::Import, &sig)
+            .map_err(|error| CodegenError::CraneliftModule {
+                kernel: None,
+                message: error.to_string().into_boxed_str(),
+            })?;
+        self.declared_external_funcs
+            .insert(symbol.to_owned().into_boxed_str(), func_id);
+        Ok(func_id)
+    }
+
     /// `aivi_list_append(left: ptr, right: ptr, element_size: i64) -> ptr`
     fn declare_list_append_func(
         &mut self,
@@ -10246,10 +10425,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         self.program
             .layouts()
             .get(signal_layout)
-            .is_some_and(|layout| matches!(
-                &layout.kind,
-                crate::LayoutKind::Signal { element } if *element == payload_layout
-            ))
+            .is_some_and(|layout| {
+                matches!(
+                    &layout.kind,
+                    crate::LayoutKind::Signal { element } if *element == payload_layout
+                )
+            })
     }
 
     fn extract_truthy_falsy_payload(
@@ -10359,11 +10540,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     text.as_ref(),
                                     builder,
                                 )?;
-                                tests.push(
-                                    self.lower_native_byte_sequence_equality(
-                                        current, literal, builder,
-                                    ),
-                                );
+                                tests.push(self.lower_native_byte_sequence_equality(
+                                    current, literal, builder,
+                                ));
                             }
                             _ => {
                                 return Err(CodegenError::UnsupportedLayout {
@@ -10604,39 +10783,37 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             | crate::BuiltinTerm::Valid
                             | crate::BuiltinTerm::Invalid,
                         ) => {
-                            let tag = match (
-                                constructor,
-                                &self.program.layouts()[input_layout].kind,
-                            ) {
-                                (
-                                    crate::InlinePipeConstructor::Builtin(
-                                        crate::BuiltinTerm::Ok,
-                                    ),
-                                    LayoutKind::Result { .. },
-                                )
-                                | (
-                                    crate::InlinePipeConstructor::Builtin(
-                                        crate::BuiltinTerm::Valid,
-                                    ),
-                                    LayoutKind::Validation { .. },
-                                ) => 0,
-                                (
-                                    crate::InlinePipeConstructor::Builtin(
-                                        crate::BuiltinTerm::Err,
-                                    ),
-                                    LayoutKind::Result { .. },
-                                )
-                                | (
-                                    crate::InlinePipeConstructor::Builtin(
-                                        crate::BuiltinTerm::Invalid,
-                                    ),
-                                    LayoutKind::Validation { .. },
-                                ) => 1,
-                                _ => {
-                                    tests.push(builder.ins().iconst(types::I8, 1));
-                                    continue;
-                                }
-                            };
+                            let tag =
+                                match (constructor, &self.program.layouts()[input_layout].kind) {
+                                    (
+                                        crate::InlinePipeConstructor::Builtin(
+                                            crate::BuiltinTerm::Ok,
+                                        ),
+                                        LayoutKind::Result { .. },
+                                    )
+                                    | (
+                                        crate::InlinePipeConstructor::Builtin(
+                                            crate::BuiltinTerm::Valid,
+                                        ),
+                                        LayoutKind::Validation { .. },
+                                    ) => 0,
+                                    (
+                                        crate::InlinePipeConstructor::Builtin(
+                                            crate::BuiltinTerm::Err,
+                                        ),
+                                        LayoutKind::Result { .. },
+                                    )
+                                    | (
+                                        crate::InlinePipeConstructor::Builtin(
+                                            crate::BuiltinTerm::Invalid,
+                                        ),
+                                        LayoutKind::Validation { .. },
+                                    ) => 1,
+                                    _ => {
+                                        tests.push(builder.ins().iconst(types::I8, 1));
+                                        continue;
+                                    }
+                                };
                             let loaded_tag =
                                 builder.ins().load(types::I64, MemFlagsData::new(), current, 0);
                             let tag_test =
@@ -10675,11 +10852,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         for (sub_pattern, element_layout) in
                             sub_patterns.iter().zip(element_layouts)
                         {
-                            let abi = self.field_abi_shape(
-                                kernel_id,
-                                element_layout,
-                                "tuple element",
-                            )?;
+                            let abi =
+                                self.field_abi_shape(kernel_id, element_layout, "tuple element")?;
                             offset = align_to(offset, abi.align);
                             let element = builder.ins().load(
                                 abi.ty,
@@ -11017,12 +11191,10 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             break;
                         };
                         offset = align_to(offset, abi.align);
-                        let element = builder.ins().load(
-                            abi.ty,
-                            MemFlagsData::new(),
-                            current,
-                            offset as i32,
-                        );
+                        let element =
+                            builder
+                                .ins()
+                                .load(abi.ty, MemFlagsData::new(), current, offset as i32);
                         children.push((element, sub_pattern, element_layout));
                         offset += abi.size;
                     }
@@ -11043,12 +11215,10 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         else {
                             continue;
                         };
-                        let field = builder.ins().load(
-                            abi.ty,
-                            MemFlagsData::new(),
-                            current,
-                            offset as i32,
-                        );
+                        let field =
+                            builder
+                                .ins()
+                                .load(abi.ty, MemFlagsData::new(), current, offset as i32);
                         children.push((field, &field_pattern.pattern, field_layout));
                     }
                     work.extend(children.into_iter().rev());
@@ -11060,11 +11230,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         continue;
                     };
                     let element_layout = *element;
-                    let Ok(element_abi) = self.field_abi_shape(
-                        kernel_id,
-                        element_layout,
-                        "list binding element",
-                    ) else {
+                    let Ok(element_abi) =
+                        self.field_abi_shape(kernel_id, element_layout, "list binding element")
+                    else {
                         continue;
                     };
                     let mut children = Vec::with_capacity(elements.len() + usize::from(rest.is_some()));

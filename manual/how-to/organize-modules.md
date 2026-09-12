@@ -13,8 +13,8 @@ type Todo = {
 }
 
 type Todo -> Bool
-func isOpen = todo =>
-    todo.done == False
+func isOpen =
+  |> not .done
 
 export (Todo, isOpen)
 ```

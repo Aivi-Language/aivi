@@ -195,7 +195,13 @@ pub struct DomainDecodeSurfaceCandidate {
 }
 
 pub fn generate_source_decode_programs(module: &Module) -> SourceDecodeProgramReport {
-    let decode_report = elaborate_source_decodes(module);
+    generate_source_decode_programs_from_report(module, elaborate_source_decodes(module))
+}
+
+pub(crate) fn generate_source_decode_programs_from_report(
+    module: &Module,
+    decode_report: crate::SourceDecodeElaborationReport,
+) -> SourceDecodeProgramReport {
     let mut nodes = Vec::with_capacity(decode_report.nodes().len());
 
     for node in decode_report.into_nodes() {

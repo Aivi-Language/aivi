@@ -410,8 +410,10 @@ impl GateRuntimeExpr {
 }
 
 pub fn elaborate_gates(module: &Module) -> GateElaborationReport {
-    let module = crate::typecheck::elaborate_default_record_fields(module);
-    let module = &module;
+    crate::ElaborationSession::new(module).elaborate_gates()
+}
+
+pub(crate) fn elaborate_gates_prepared(module: &Module) -> GateElaborationReport {
     let class_evidence = ClassEvidenceCatalog::new(module);
     let items = module
         .items()

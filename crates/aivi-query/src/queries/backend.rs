@@ -440,7 +440,9 @@ fn lower_whole_program_backend_unit(
     .map_err(BackendUnitError::CoreLowering)?;
     validate_core_module(&core).map_err(BackendUnitError::CoreValidation)?;
 
-    let lambda = lower_lambda_module(&core).map_err(BackendUnitError::LambdaLowering)?;
+    let core = Arc::new(core);
+    let lambda =
+        lambda::lower_shared_module(Arc::clone(&core)).map_err(BackendUnitError::LambdaLowering)?;
     validate_lambda_module(&lambda).map_err(BackendUnitError::LambdaValidation)?;
 
     let backend = lower_backend_module(&lambda, entry_hir.module())
@@ -453,7 +455,7 @@ fn lower_whole_program_backend_unit(
         entry_hir,
         workspace_modules,
         included_items: normalized_included_items,
-        core: Arc::new(core),
+        core,
         lambda: Arc::new(lambda),
         backend: Arc::new(backend),
         fingerprint,

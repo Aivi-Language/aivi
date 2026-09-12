@@ -270,7 +270,7 @@ use aivi.dbus (
 )
 
 type DbusError -> Text
-func describeBusError = error => error
+func describeBusError =
  ||> NameNotOwned name     -> "name not owned: {name}"
  ||> ServiceUnknown name   -> "service not found: {name}"
  ||> NoReply               -> "service did not reply"

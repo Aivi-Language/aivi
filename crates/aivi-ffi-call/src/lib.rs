@@ -22,6 +22,17 @@ thread_local! {
 #[derive(Debug, Default)]
 pub struct AllocationArena {
     allocations: Vec<ArenaAllocation>,
+    // Opaque integer handles avoid exposing a reallocating Rust Vec to generated code.
+    // A finished handle is never reused. Abandoned builders are dropped with this arena.
+    list_builders: Vec<Option<ListBuilder>>,
+}
+
+#[derive(Debug)]
+struct ListBuilder {
+    element_size: usize,
+    count: usize,
+    bytes: Vec<u8>,
+    failed: bool,
 }
 
 #[derive(Debug)]
@@ -116,13 +127,13 @@ pub struct ReadableMemory<'a> {
 
 impl<'a> ReadableMemory<'a> {
     pub fn from_arena(arena: &'a AllocationArena) -> Self {
-        Self {
-            regions: arena
+        Self::from_regions(
+            arena
                 .allocations
                 .iter()
                 .map(ArenaAllocation::readable)
                 .collect(),
-        }
+        )
     }
 
     pub fn with_jit_data(
@@ -149,7 +160,26 @@ impl<'a> ReadableMemory<'a> {
             // valid until `module` is freed. `ReadableMemory` cannot outlive the borrowed module.
             regions.push(unsafe { slice::from_raw_parts(pointer, len) });
         }
-        Some(Self { regions })
+        Some(Self::from_regions(regions))
+    }
+
+    fn from_regions(mut regions: Vec<&'a [u8]>) -> Self {
+        // Endpoints become strictly increasing after removing contained regions. The
+        // latest starting region is then the only possible whole-read container.
+        // Overlapping regions are never joined: a read must fit one actual allocation.
+        regions.sort_unstable_by_key(|region| {
+            (region.as_ptr() as usize, std::cmp::Reverse(region.len()))
+        });
+        let mut greatest_end = 0;
+        regions.retain(|region| {
+            let end = region.as_ptr() as usize + region.len();
+            if end <= greatest_end {
+                return false;
+            }
+            greatest_end = end;
+            true
+        });
+        Self { regions }
     }
 
     fn read(&self, pointer: *const u8, len: usize) -> Option<&'a [u8]> {
@@ -157,16 +187,13 @@ impl<'a> ReadableMemory<'a> {
             return None;
         }
         let start = pointer as usize;
-        let end = start.checked_add(len)?;
-        self.regions.iter().find_map(|region| {
-            let region_start = region.as_ptr() as usize;
-            let region_end = region_start.checked_add(region.len())?;
-            if start < region_start || end > region_end {
-                return None;
-            }
-            let offset = start - region_start;
-            region.get(offset..offset.checked_add(len)?)
-        })
+        start.checked_add(len)?;
+        let next = self
+            .regions
+            .partition_point(|region| region.as_ptr() as usize <= start);
+        let region = self.regions.get(next.checked_sub(1)?)?;
+        let offset = start - region.as_ptr() as usize;
+        region.get(offset..offset.checked_add(len)?)
     }
 }
 
@@ -633,6 +660,9 @@ pub fn lookup_runtime_symbol(symbol: &str) -> Option<*const u8> {
         "aivi_list_get" => Some(aivi_list_get as *const () as *const u8),
         "aivi_list_slice" => Some(aivi_list_slice as *const () as *const u8),
         "aivi_list_append" => Some(aivi_list_append as *const () as *const u8),
+        "aivi_list_builder_new" => Some(aivi_list_builder_new as *const () as *const u8),
+        "aivi_list_builder_push" => Some(aivi_list_builder_push as *const () as *const u8),
+        "aivi_list_builder_finish" => Some(aivi_list_builder_finish as *const () as *const u8),
         "aivi_decimal_add" => Some(aivi_decimal_add as *const () as *const u8),
         "aivi_decimal_sub" => Some(aivi_decimal_sub as *const () as *const u8),
         "aivi_decimal_mul" => Some(aivi_decimal_mul as *const () as *const u8),
@@ -1073,6 +1103,73 @@ extern "C" fn aivi_list_slice(list_ptr: *const u8, start: i64, element_size: i64
     .unwrap_or(ptr::null())
 }
 
+// Generated flatMap calls the mapper once per input and appends its output in order.
+// All builder state and pointer-bearing element bytes live within the active call arena.
+extern "C" fn aivi_list_builder_new(element_size: i64) -> i64 {
+    with_current_arena(|arena| {
+        let element_size = non_negative_usize(element_size)?;
+        let handle = i64::try_from(arena.list_builders.len()).ok()?;
+        arena.list_builders.try_reserve(1).ok()?;
+        arena.list_builders.push(Some(ListBuilder {
+            element_size,
+            count: 0,
+            bytes: Vec::new(),
+            failed: false,
+        }));
+        Some(handle)
+    })
+    .flatten()
+    .unwrap_or(-1)
+}
+
+extern "C" fn aivi_list_builder_push(handle: i64, list_ptr: *const u8) {
+    with_current_arena(|arena| {
+        let Some(builder) = non_negative_usize(handle)
+            .and_then(|index| arena.list_builders.get_mut(index))
+            .and_then(Option::as_mut)
+        else {
+            return;
+        };
+        if builder.failed {
+            return;
+        }
+        // SAFETY: generated code supplies a live marshalled list returned by its mapper.
+        // Its storage (and any referenced element storage) outlives this active arena call.
+        let view = unsafe { read_marshaled_sequence_view(list_ptr) };
+        let Some(view) = view else {
+            builder.failed = true;
+            return;
+        };
+        let Some(count) = builder.count.checked_add(view.count) else {
+            builder.failed = true;
+            return;
+        };
+        if view.element_size != builder.element_size
+            || builder.bytes.try_reserve(view.data.len()).is_err()
+        {
+            builder.failed = true;
+            return;
+        }
+        builder.bytes.extend_from_slice(view.data);
+        builder.count = count;
+    });
+}
+
+extern "C" fn aivi_list_builder_finish(handle: i64) -> *const u8 {
+    with_current_arena(|arena| {
+        let builder = non_negative_usize(handle)
+            .and_then(|index| arena.list_builders.get_mut(index))
+            .and_then(Option::take)?;
+        if builder.failed {
+            return None;
+        }
+        encode_marshaled_sequence(builder.count, builder.element_size, &builder.bytes, arena)
+            .map(|pointer| pointer.cast())
+    })
+    .flatten()
+    .unwrap_or(ptr::null())
+}
+
 extern "C" fn aivi_list_append(
     left_ptr: *const u8,
     right_ptr: *const u8,
@@ -1100,12 +1197,18 @@ extern "C" fn aivi_list_append(
         let Some(total_bytes) = total_count.checked_mul(element_size) else {
             return ptr::null();
         };
-        let mut bytes = Vec::with_capacity(total_bytes);
-        bytes.extend_from_slice(left.data.as_ref());
-        bytes.extend_from_slice(right.data.as_ref());
-        encode_marshaled_sequence(total_count, element_size, &bytes, arena)
-            .map(|pointer| pointer.cast())
-            .unwrap_or(ptr::null())
+        if total_bytes != left.data.len().saturating_add(right.data.len()) {
+            return ptr::null();
+        }
+        encode_marshaled_sequence_parts(
+            total_count,
+            element_size,
+            &[left.data, right.data],
+            sequence_alignment_for_element_size(element_size),
+            arena,
+        )
+        .map(|pointer| pointer.cast())
+        .unwrap_or(ptr::null())
     })
     .unwrap_or(ptr::null())
 }
@@ -1224,16 +1327,45 @@ fn encode_marshaled_sequence_with_align(
     align: usize,
     arena: &mut AllocationArena,
 ) -> Option<*const c_void> {
+    encode_marshaled_sequence_parts(count, element_size, &[bytes], align, arena)
+}
+
+fn encode_marshaled_sequence_parts(
+    count: usize,
+    element_size: usize,
+    parts: &[&[u8]],
+    align: usize,
+    arena: &mut AllocationArena,
+) -> Option<*const c_void> {
     let expected = count.checked_mul(element_size)?;
-    if expected != bytes.len() {
+    let actual = parts
+        .iter()
+        .try_fold(0usize, |len, part| len.checked_add(part.len()))?;
+    if expected != actual {
         return None;
     }
-    let mut encoded = Vec::with_capacity(SEQUENCE_HEADER_BYTES + bytes.len());
-    encoded.extend_from_slice(&(count as u64).to_le_bytes());
-    encoded.extend_from_slice(&(element_size as u64).to_le_bytes());
-    encoded.extend_from_slice(bytes);
-    let pointer = arena.store_raw_bytes_aligned(&encoded, align.max(LEN_PREFIX_BYTES));
-    (!pointer.is_null()).then_some(pointer)
+    let len = SEQUENCE_HEADER_BYTES.checked_add(actual)?;
+    let align = align.max(LEN_PREFIX_BYTES).checked_next_power_of_two()?;
+    let (bytes, _) = aligned_zeroed_storage(len, align)?;
+    // Finalize the allocation before computing its alignment offset or publishing a pointer.
+    let mut storage = bytes.into_boxed_slice();
+    let base = storage.as_ptr() as usize;
+    let offset = (base.checked_add(align - 1)? & !(align - 1)) - base;
+    let output = &mut storage[offset..offset + len];
+    output[..8].copy_from_slice(&(count as u64).to_le_bytes());
+    output[8..16].copy_from_slice(&(element_size as u64).to_le_bytes());
+    let mut position = SEQUENCE_HEADER_BYTES;
+    for part in parts {
+        output[position..position + part.len()].copy_from_slice(part);
+        position += part.len();
+    }
+    let pointer = storage.as_ptr().wrapping_add(offset);
+    arena.allocations.push(ArenaAllocation {
+        storage,
+        offset,
+        len,
+    });
+    Some(pointer.cast())
 }
 
 fn decimal_binop(
@@ -1483,6 +1615,85 @@ mod tests {
     use super::*;
     use cranelift_jit::JITBuilder;
     use cranelift_module::{DataDescription, Linkage, default_libcall_names};
+
+    #[test]
+    fn readable_memory_index_preserves_overlap_and_whole_region_bounds() {
+        let bytes = [3_u8; 32];
+        let regions = vec![&bytes[8..16], &bytes[4..8], &bytes[..12], &bytes[24..28]];
+        let memory = ReadableMemory::from_regions(regions.clone());
+        for start in 0..=32 {
+            for len in 0..=33 {
+                let pointer = bytes.as_ptr().wrapping_add(start);
+                let expected = regions.iter().find_map(|region| {
+                    let offset = (pointer as usize).checked_sub(region.as_ptr() as usize)?;
+                    region.get(offset..offset.checked_add(len)?)
+                });
+                assert_eq!(
+                    memory.read(pointer, len),
+                    expected,
+                    "start={start}, len={len}"
+                );
+            }
+        }
+        assert!(memory.read(std::ptr::null(), 0).is_none());
+        assert!(memory.read(bytes.as_ptr(), usize::MAX).is_none());
+    }
+
+    #[test]
+    fn list_builder_is_linear_nested_and_consumed_once() {
+        let arena = Rc::new(RefCell::new(AllocationArena::new()));
+        with_active_arena(Rc::clone(&arena), || {
+            let element = 7_i64.to_le_bytes();
+            let singleton = aivi_list_new(1, element.as_ptr(), 8);
+            let outer = aivi_list_builder_new(8);
+            for _ in 0..4096 {
+                aivi_list_builder_push(outer, singleton);
+            }
+            let inner = aivi_list_builder_new(8);
+            aivi_list_builder_push(inner, singleton);
+            let inner_list = aivi_list_builder_finish(inner);
+            aivi_list_builder_push(outer, inner_list);
+            let result = aivi_list_builder_finish(outer);
+            assert_eq!(aivi_list_len(result), 4097);
+            assert!(aivi_list_builder_finish(outer).is_null());
+            assert!(aivi_list_builder_finish(inner).is_null());
+            // SAFETY: result is a live list allocated in `arena`, retained throughout the test.
+            let view = unsafe { read_marshaled_sequence_view(result) }.unwrap();
+            assert!(
+                view.data
+                    .as_chunks::<8>()
+                    .0
+                    .iter()
+                    .all(|bytes| *bytes == element)
+            );
+            // One input allocation, the inner result and the outer result: no prefix copies.
+            assert_eq!(arena.borrow().allocations.len(), 3);
+            assert!(arena.borrow().list_builders.iter().all(Option::is_none));
+        });
+    }
+
+    #[test]
+    fn list_builder_rejects_invalid_inputs_and_finishes_empty_lists() {
+        assert_eq!(aivi_list_builder_new(8), -1);
+        let arena = Rc::new(RefCell::new(AllocationArena::new()));
+        with_active_arena(Rc::clone(&arena), || {
+            assert_eq!(aivi_list_builder_new(-1), -1);
+            assert!(aivi_list_builder_finish(-1).is_null());
+            let empty = aivi_list_builder_new(16);
+            let result = aivi_list_builder_finish(empty);
+            assert!(!result.is_null());
+            assert_eq!(result as usize % 16, 0);
+            assert_eq!(aivi_list_len(result), 0);
+            let invalid = aivi_list_builder_new(8);
+            aivi_list_builder_push(invalid, ptr::null());
+            assert!(aivi_list_builder_finish(invalid).is_null());
+            let wrong_size = aivi_list_builder_new(16);
+            let singleton = aivi_list_new(1, 1_i64.to_le_bytes().as_ptr(), 8);
+            aivi_list_builder_push(wrong_size, singleton);
+            assert!(aivi_list_builder_finish(wrong_size).is_null());
+        });
+        assert!(arena.borrow().list_builders.iter().all(Option::is_none));
+    }
 
     extern "C" fn rotate_i128_words(value: u128) -> u128 {
         value.rotate_left(17)

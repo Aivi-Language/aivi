@@ -149,8 +149,7 @@ use aivi.matrix (
 )
 
 type Int -> Int
-func double = n =>
-    n * 2
+func double = . * 2
 
 type Int -> Int -> Int
 func add = total item =>
@@ -208,12 +207,10 @@ func sumWithOffset = total x y item =>
     total + item + x + y
 
 type Int -> Bool
-func isEvenValue = n =>
-    n % 2 == 0
+func isEvenValue = . % 2 == 0
 
 type Int -> Int
-func addHundred = n =>
-    n + 100
+func addHundred = . + 100
 
 value board : Result MatrixError (Matrix Int) = init 3 2 cell
 

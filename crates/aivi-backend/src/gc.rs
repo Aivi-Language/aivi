@@ -16,6 +16,11 @@ pub trait CommittedValueStore<V> {
 
     fn clear(&mut self, slot: &mut Self::Slot) -> bool;
 
+    /// Whether a scheduler safe point needs a root scan. Explicit `collect` still forces it.
+    fn needs_collection(&self) -> bool {
+        true
+    }
+
     fn collect(&mut self, roots: &[&Self::Slot]);
 }
 
@@ -48,6 +53,10 @@ impl<V> CommittedValueStore<V> for InlineCommittedValueStore<V> {
     }
 
     fn collect(&mut self, _roots: &[&Self::Slot]) {}
+
+    fn needs_collection(&self) -> bool {
+        false
+    }
 }
 
 /// Stable root handle for scheduler-owned runtime values.
@@ -70,12 +79,13 @@ impl RuntimeGcHandle {
     }
 }
 
-/// Copying store for committed `RuntimeValue` snapshots.
+/// Moving store for committed `RuntimeValue` snapshots.
 ///
 /// This initial moving slice is intentionally narrow: the store owns only committed scheduler
-/// values. Each live scheduler slot holds one stable root handle; collections clone reachable
-/// values into a fresh space and rewrite root slots, proving relocation without yet widening
-/// evaluator-temporary or codegen stack-map contracts.
+/// values. Each live scheduler slot holds one stable root handle. Collections move owned values
+/// into a fresh space and rewrite root slots. Nested buffers transfer ownership without copying;
+/// their addresses are not part of the public contract. Evaluator temporaries remain outside
+/// this store, and no value can contain a collector object ID.
 ///
 /// # Thread safety
 ///
@@ -88,7 +98,7 @@ pub struct MovingRuntimeValueStore {
     to_space: RuntimeGcSpace,
     roots: Vec<RuntimeGcRootSlot>,
     free_roots: Vec<u32>,
-    root_worklist: Vec<RuntimeGcHandle>,
+    root_worklist: Vec<(RuntimeGcHandle, RuntimeGcObjectId)>,
     collections: u64,
     live_roots: usize,
 }
@@ -214,22 +224,32 @@ impl CommittedValueStore<RuntimeValue> for MovingRuntimeValueStore {
 
     fn collect(&mut self, roots: &[&Self::Slot]) {
         self.root_worklist.clear();
-        self.root_worklist
-            .extend(roots.iter().filter_map(|slot| slot.as_ref().copied()));
+        // Detach object IDs before relocating anything. Repeated roots are harmless:
+        // only the first occurrence takes the ID. Exclusive access hides this transient state.
+        for handle in roots.iter().filter_map(|slot| slot.as_ref().copied()) {
+            if let Some(object) = self.root_slot_mut(handle).object.take() {
+                self.root_worklist.push((handle, object));
+            }
+        }
         self.to_space.values.clear();
         self.to_space.values.reserve(self.root_worklist.len());
-        let worklist = self.root_worklist.clone();
-        for handle in worklist {
-            let relocated = {
-                let value = self.resolve_handle(handle).clone();
-                self.to_space.push(value)
-            };
+        for index in 0..self.root_worklist.len() {
+            let (handle, object) = self.root_worklist[index];
+            let value = std::mem::replace(
+                &mut self.from_space.values[object.0 as usize],
+                RuntimeValue::Unit,
+            );
+            let relocated = self.to_space.push(value);
             self.root_slot_mut(handle).object = Some(relocated);
         }
 
         std::mem::swap(&mut self.from_space, &mut self.to_space);
         self.to_space.values.clear();
         self.collections = self.collections.wrapping_add(1);
+    }
+
+    fn needs_collection(&self) -> bool {
+        self.from_space.values.len() > self.live_roots
     }
 }
 
@@ -313,11 +333,59 @@ mod tests {
             before_value, after as *const RuntimeValue,
             "moving collection must relocate the committed value object"
         );
-        assert_ne!(
+        assert_eq!(
             before_text,
             text_ptr(after),
-            "moving collection must relocate nested text storage too"
+            "compaction must transfer nested buffer ownership without copying"
         );
+    }
+
+    #[test]
+    fn compaction_preserves_lists_and_accepts_repeated_roots() {
+        let mut store = MovingRuntimeValueStore::default();
+        let mut slot = None;
+        let values = vec![RuntimeValue::Text("kept".into()); 1024];
+        let allocation = values.as_ptr();
+        store.replace(&mut slot, RuntimeValue::List(values));
+        assert!(!store.needs_collection());
+        store.collect(&[&slot, &slot]);
+        let Some(RuntimeValue::List(values)) = store.get(&slot) else {
+            panic!("list root lost")
+        };
+        assert_eq!(values.as_ptr(), allocation);
+        assert_eq!(values.len(), 1024);
+        assert_eq!(values[1023], RuntimeValue::Text("kept".into()));
+        assert_eq!(store.allocated_value_count(), 1);
+        store.clear(&mut slot);
+        assert!(store.needs_collection());
+        store.collect(&[]);
+        assert_eq!(store.allocated_value_count(), 0);
+        assert!(!store.needs_collection());
+    }
+
+    #[test]
+    fn compaction_preserves_reordered_roots_around_dead_objects() {
+        let mut store = MovingRuntimeValueStore::default();
+        let mut slots = [None; 4];
+        for (index, slot) in slots.iter_mut().enumerate() {
+            store.replace(slot, RuntimeValue::Int(index as i64));
+        }
+        store.clear(&mut slots[1]);
+        let handles = slots;
+        store.collect(&[&slots[3], &slots[0], &slots[2], &slots[0]]);
+        assert_eq!(slots, handles);
+        assert_eq!(store.allocated_value_count(), 3);
+        for index in [0, 2, 3] {
+            assert_eq!(
+                store.get(&slots[index]),
+                Some(&RuntimeValue::Int(index as i64))
+            );
+        }
+        store.replace(&mut slots[1], RuntimeValue::Int(10));
+        store.collect(&slots.iter().collect::<Vec<_>>());
+        assert_eq!(store.get(&slots[1]), Some(&RuntimeValue::Int(10)));
+        assert_eq!(store.get(&slots[3]), Some(&RuntimeValue::Int(3)));
+        assert_eq!(store.allocated_value_count(), 4);
     }
 
     #[test]

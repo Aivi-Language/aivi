@@ -119,8 +119,10 @@ pub enum TemporalElaborationBlocker {
 }
 
 pub fn elaborate_temporal_stages(module: &Module) -> TemporalElaborationReport {
-    let module = crate::typecheck::elaborate_default_record_fields(module);
-    let module = &module;
+    crate::ElaborationSession::new(module).elaborate_temporal_stages()
+}
+
+pub(crate) fn elaborate_temporal_stages_prepared(module: &Module) -> TemporalElaborationReport {
     let items = module
         .items()
         .iter()

@@ -138,8 +138,8 @@ Constrains an `Ord` value to the inclusive range `[low, high]`. If the value is 
 use aivi.order (clamp)
 
 type Int -> Int
-func clampScore = score =>
-    clamp 0 100 score
+func clampScore =
+  |> clamp 0 100
 ```
 
 ---
@@ -216,8 +216,7 @@ func byInt = a b =>
     a < b
 
 type Person -> Int
-func ageOf = person =>
-    person.age
+func ageOf = .age
 
 type Person -> Person -> Bool
 func youngerFirst = p1 p2 =>

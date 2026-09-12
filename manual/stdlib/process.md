@@ -150,7 +150,7 @@ use aivi.process (
 )
 
 type ProcessError -> Text
-func describeFailure = error => error
+func describeFailure =
  ||> SpawnFailed message         -> "could not start process: {message}"
  ||> ProcessTimeout              -> "process timed out"
  ||> NonZeroExit code            -> "process exited with code {code}"

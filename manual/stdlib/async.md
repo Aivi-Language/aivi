@@ -119,8 +119,8 @@ use aivi.async (
 )
 
 type AsyncTracker Text Int -> Bool
-func checkPending = tracker =>
-    isPending tracker
+func checkPending =
+  |> isPending
 ```
 
 ---
@@ -138,8 +138,8 @@ use aivi.async (
 )
 
 type AsyncTracker Text Int -> Bool
-func checkDone = tracker =>
-    isDone tracker
+func checkDone =
+  |> isDone
 ```
 
 ---
@@ -157,8 +157,8 @@ use aivi.async (
 )
 
 type AsyncTracker Text Int -> Bool
-func checkFailed = tracker =>
-    isFailed tracker
+func checkFailed =
+  |> isFailed
 ```
 
 ---
@@ -248,9 +248,8 @@ signal users : Signal (AsyncTracker HttpError (List User)) = rawUsers
  +|> initialUsers step
 
 type Option (List User) -> Bool -> Bool
-func trackFirstLoad = newDone hasFired => hasFired
- T|> True
- F|> isSome newDone
+func trackFirstLoad = newDone hasFired =>
+    hasFired or isSome newDone
 
 signal firstLoadDone : Signal Bool = users.done
  +|> False trackFirstLoad

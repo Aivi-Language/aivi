@@ -172,12 +172,10 @@ For other names shared by hoisted modules, the compiler uses type context to dis
 
 ```aivi
 type Int -> Int
-func double = value =>
-    value * 2
+func double = . * 2
 
 type Text -> Text
-func greet = name =>
-    "Hello, {name}"
+func greet = "Hello, {.}"
 
 value numbers = [1, 2, 3]
 value doubled : List Int = map double numbers

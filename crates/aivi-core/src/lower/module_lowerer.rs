@@ -1,5 +1,6 @@
 struct ModuleLowerer<'a> {
     hir: &'a aivi_hir::Module,
+    elaboration: aivi_hir::ElaborationSession<'a>,
     included_items: Option<HashSet<HirItemId>>,
     debug_items: HashSet<HirItemId>,
     mock_overrides: HashMap<HirItemId, HashMap<ImportId, MockImportTarget>>,
@@ -139,7 +140,9 @@ fn workspace_instance_subject_label(
     let type_node = module.types().get(ty)?;
     match &type_node.kind {
         aivi_hir::TypeKind::Name(reference) => Some(reference.path.segments().last().text().into()),
-        aivi_hir::TypeKind::Apply { callee, .. } => workspace_instance_subject_label(module, *callee),
+        aivi_hir::TypeKind::Apply { callee, .. } => {
+            workspace_instance_subject_label(module, *callee)
+        }
         _ => None,
     }
 }
@@ -326,6 +329,10 @@ impl<'a> ModuleLowerer<'a> {
 
         // ── Save all HIR-specific state ──────────────────────────────────────
         let saved_hir = self.hir;
+        let saved_elaboration = std::mem::replace(
+            &mut self.elaboration,
+            aivi_hir::ElaborationSession::new(ws_hir),
+        );
         let saved_included_items = self.included_items.take();
         let saved_item_map = std::mem::take(&mut self.item_map);
         let saved_import_item_map = std::mem::take(&mut self.import_item_map);
@@ -354,8 +361,16 @@ impl<'a> ModuleLowerer<'a> {
         let ws_non_markup: HashSet<HirItemId> = ws_hir
             .items()
             .iter()
-            .filter(|(item_id, item)| selected.is_none_or(|items| items.contains(item_id)) && !is_markup_value(ws_hir, *item_id)
-                && !item.decorators().iter().any(|id| matches!(ws_hir.decorators().get(*id).map(|d| &d.payload), Some(DecoratorPayload::Test(_)))))
+            .filter(|(item_id, item)| {
+                selected.is_none_or(|items| items.contains(item_id))
+                    && !is_markup_value(ws_hir, *item_id)
+                    && !item.decorators().iter().any(|id| {
+                        matches!(
+                            ws_hir.decorators().get(*id).map(|d| &d.payload),
+                            Some(DecoratorPayload::Test(_))
+                        )
+                    })
+            })
             .map(|(item_id, _)| item_id)
             .collect();
         self.included_items = Some(ws_non_markup);
@@ -591,6 +606,7 @@ impl<'a> ModuleLowerer<'a> {
 
         // ── Restore entry module state ───────────────────────────────────────
         self.hir = saved_hir;
+        self.elaboration = saved_elaboration;
         self.included_items = saved_included_items;
         self.item_map = saved_item_map;
         self.import_item_map = saved_import_item_map;
@@ -626,6 +642,7 @@ impl<'a> ModuleLowerer<'a> {
             .expect("HIR binding count should fit in u32");
         Self {
             hir,
+            elaboration: aivi_hir::ElaborationSession::new(hir),
             included_items,
             debug_items,
             mock_overrides,
@@ -659,8 +676,12 @@ impl<'a> ModuleLowerer<'a> {
                     *item = HirItemId::from_raw(item.as_raw() + self.item_origin_offset);
                     work.extend(arguments);
                 }
-                Type::OpaqueImport { arguments, .. } | Type::TypeApplication { arguments, .. } => work.extend(arguments),
-                Type::Domain { arguments, carrier, .. } => {
+                Type::OpaqueImport { arguments, .. } | Type::TypeApplication { arguments, .. } => {
+                    work.extend(arguments)
+                }
+                Type::Domain {
+                    arguments, carrier, ..
+                } => {
                     work.extend(arguments);
                     if let Some(carrier) = carrier { work.push(carrier); }
                 }
@@ -954,7 +975,7 @@ impl<'a> ModuleLowerer<'a> {
     }
 
     fn lower_general_exprs(&mut self) {
-        let report = elaborate_general_expressions(self.hir);
+        let report = self.elaboration.elaborate_general_expressions();
         self.errors
             .extend(validate_general_expr_report_completeness(
                 self.hir,
@@ -1027,8 +1048,9 @@ impl<'a> ModuleLowerer<'a> {
         // types are acceptable at the runtime level (type parameters are erased to Domain layouts
         // by the backend).  Errors from blocked ambient items are suppressed — see
         // `lower_general_expr_body`.
-        let ambient_report = elaborate_ambient_items(self.hir);
-        let (ambient_items, ambient_domain_members, ambient_instance_members) = ambient_report.into_parts();
+        let ambient_report = self.elaboration.elaborate_ambient_items();
+        let (ambient_items, ambient_domain_members, ambient_instance_members) =
+            ambient_report.into_parts();
         for item in ambient_items {
             if !self.includes_item(item.owner) {
                 continue;
@@ -1064,10 +1086,23 @@ impl<'a> ModuleLowerer<'a> {
             );
         }
         for member in ambient_instance_members {
-            if !self.includes_item(member.instance_owner) { continue; }
-            let key = InstanceMemberKey { instance: member.instance_owner, member_index: member.member_index };
-            let Some(owner) = self.instance_member_item_map.get(&key).copied() else { continue; };
-            self.lower_general_expr_body(member.instance_owner, owner, member.body_expr, member.parameters, member.outcome);
+            if !self.includes_item(member.instance_owner) {
+                continue;
+            }
+            let key = InstanceMemberKey {
+                instance: member.instance_owner,
+                member_index: member.member_index,
+            };
+            let Some(owner) = self.instance_member_item_map.get(&key).copied() else {
+                continue;
+            };
+            self.lower_general_expr_body(
+                member.instance_owner,
+                owner,
+                member.body_expr,
+                member.parameters,
+                member.outcome,
+            );
         }
     }
 
@@ -1189,7 +1224,7 @@ impl<'a> ModuleLowerer<'a> {
     }
 
     fn lower_gate_stages(&mut self) {
-        for stage in elaborate_gates(self.hir).into_stages() {
+        for stage in self.elaboration.elaborate_gates().into_stages() {
             if !self.includes_item(stage.owner) {
                 continue;
             }
@@ -1307,7 +1342,7 @@ impl<'a> ModuleLowerer<'a> {
     }
 
     fn lower_truthy_falsy_stages(&mut self) {
-        for stage in elaborate_truthy_falsy(self.hir).into_stages() {
+        for stage in self.elaboration.elaborate_truthy_falsy().into_stages() {
             if !self.includes_item(stage.owner) {
                 continue;
             }
@@ -1387,7 +1422,7 @@ impl<'a> ModuleLowerer<'a> {
     }
 
     fn lower_fanout_stages(&mut self) {
-        for segment in elaborate_fanouts(self.hir).into_segments() {
+        for segment in self.elaboration.elaborate_fanouts().into_segments() {
             if !self.includes_item(segment.owner) {
                 continue;
             }
@@ -1497,7 +1532,7 @@ impl<'a> ModuleLowerer<'a> {
     }
 
     fn lower_temporal_stages(&mut self) {
-        for stage in elaborate_temporal_stages(self.hir).into_stages() {
+        for stage in self.elaboration.elaborate_temporal_stages().into_stages() {
             if !self.includes_item(stage.owner) {
                 continue;
             }
@@ -1623,7 +1658,7 @@ impl<'a> ModuleLowerer<'a> {
     }
 
     fn lower_recurrences(&mut self) {
-        for node in elaborate_recurrences(self.hir).into_nodes() {
+        for node in self.elaboration.elaborate_recurrences().into_nodes() {
             if !self.includes_item(node.owner) {
                 continue;
             }
@@ -1796,7 +1831,7 @@ impl<'a> ModuleLowerer<'a> {
     }
 
     fn lower_sources(&mut self) -> Result<(), LoweringErrors> {
-        for node in elaborate_source_lifecycles(self.hir).into_nodes() {
+        for node in self.elaboration.elaborate_source_lifecycles().into_nodes() {
             if !self.includes_item(node.owner) {
                 continue;
             }
@@ -1914,7 +1949,11 @@ impl<'a> ModuleLowerer<'a> {
     }
 
     fn lower_decode_programs(&mut self) -> Result<(), LoweringErrors> {
-        for node in generate_source_decode_programs(self.hir).into_nodes() {
+        for node in self
+            .elaboration
+            .generate_source_decode_programs()
+            .into_nodes()
+        {
             let Some(owner) = self.item_map.get(&node.owner).copied() else {
                 self.errors
                     .push(LoweringError::UnknownOwner { owner: node.owner });
@@ -2186,9 +2225,7 @@ impl<'a> ModuleLowerer<'a> {
                         }
                         aivi_hir::PatternKind::Record(fields) => {
                             let subject_fields = match &subject {
-                                Some(aivi_hir::GateType::Record(fields)) => {
-                                    Some(fields.as_slice())
-                                }
+                                Some(aivi_hir::GateType::Record(fields)) => Some(fields.as_slice()),
                                 _ => None,
                             };
                             let labels = fields
@@ -2264,10 +2301,8 @@ impl<'a> ModuleLowerer<'a> {
                             element_count,
                             has_rest,
                         } => {
-                            let mut children = take_children(
-                                &mut lowered,
-                                element_count + usize::from(has_rest),
-                            );
+                            let mut children =
+                                take_children(&mut lowered, element_count + usize::from(has_rest));
                             let rest = has_rest.then(|| {
                                 Box::new(
                                     children
@@ -2315,7 +2350,12 @@ impl<'a> ModuleLowerer<'a> {
     ) -> Option<Vec<Type>> {
         subject
             .and_then(|subject| aivi_hir::case_pattern_field_types(self.hir, callee, subject))
-            .map(|field_types| field_types.into_iter().map(|ty| self.lower_type(&ty)).collect())
+            .map(|field_types| {
+                field_types
+                    .into_iter()
+                    .map(|ty| self.lower_type(&ty))
+                    .collect()
+            })
     }
 
     fn lower_term_reference(&mut self, reference: &aivi_hir::TermReference) -> Reference {
@@ -2642,7 +2682,9 @@ impl<'a> ModuleLowerer<'a> {
             TypeBinding::Type(ty) => ty.to_string(),
             TypeBinding::Constructor(binding) => {
                 let head = match binding.head() {
-                    TypeConstructorHead::Parameter { parameter, .. } => format!("F{}", parameter.as_raw()),
+                    TypeConstructorHead::Parameter { parameter, .. } => {
+                        format!("F{}", parameter.as_raw())
+                    }
                     TypeConstructorHead::Builtin(builtin) => format!("{builtin:?}"),
                     TypeConstructorHead::Item(item_id) => match &self.hir.items()[item_id] {
                         aivi_hir::Item::Type(item) => item.name.text().to_owned(),
@@ -3060,13 +3102,12 @@ impl<'a> ModuleLowerer<'a> {
         // builder can independently derive the same HirItemId for the same import without
         // coordination: signal import N gets item_origin_offset + hir_item_count + N.
         let origin = if matches!(kind, ItemKind::Signal(_)) {
-            let local_origin =
-                self.hir_item_count
-                    .checked_add(import.as_raw())
-                    .ok_or(LoweringError::ArenaOverflow {
-                        arena: "deterministic signal import origins",
-                        attempted_len: usize::MAX,
-                    })?;
+            let local_origin = self.hir_item_count.checked_add(import.as_raw()).ok_or(
+                LoweringError::ArenaOverflow {
+                    arena: "deterministic signal import origins",
+                    attempted_len: usize::MAX,
+                },
+            )?;
             HirItemId::from_raw(self.item_origin_offset.saturating_add(local_origin))
         } else {
             self.next_synthetic_item_origin()?
@@ -3095,11 +3136,7 @@ impl<'a> ModuleLowerer<'a> {
     /// Resolve a DomainSuffix import to the core item for the matching domain member.
     /// Works in flattened HIR (no workspace modules) by scanning the current HIR for a
     /// domain with the given name and a Literal member with the given suffix name.
-    fn find_domain_suffix_member(
-        &self,
-        domain_name: &str,
-        suffix_name: &str,
-    ) -> Option<ItemId> {
+    fn find_domain_suffix_member(&self, domain_name: &str, suffix_name: &str) -> Option<ItemId> {
         for (hir_id, item) in self.hir.items().iter() {
             let HirItem::Domain(domain) = item else {
                 continue;

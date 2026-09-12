@@ -4,12 +4,10 @@ In most languages, you nest function calls: `addOne(double(5))`. The deeper the 
 
 ```aivi
 type Int -> Int
-func double = n =>
-    n * 2
+func double = . * 2
 
 type Int -> Int
-func addOne = n =>
-    n + 1
+func addOne = . + 1
 
 value result = 5
   |> double
@@ -38,12 +36,10 @@ surface meaning is really elimination or scheduler behavior instead of generic c
 
 ```aivi
 type Int -> Int
-func double = n =>
-    n * 2
+func double = . * 2
 
 type Int -> Int
-func addOne = n =>
-    n + 1
+func addOne = . + 1
 
 value result = 5
   |> double
@@ -103,11 +99,11 @@ value summary : Text = "  Ada  "
   |> "{clean} (started as {raw})"
 ```
 
-Here `raw` only exists while the trimming stage runs. `clean` is available to the rest of the pipe.
+`raw` names the stage input and `clean` names its result. Both are used in the following stage.
 That makes the memo worthwhile: the later stage needs both versions.
 
-Branching stages support the same pattern. When you want the merged branch result later, write the
-same result memo on each arm:
+Branching stages can also name their merged result. This example demonstrates placement;
+its final stage could simply use `.`. Write the same result memo on each arm:
 
 ```aivi
 type StageChoice =
@@ -341,12 +337,11 @@ unchanged. A pure tapped expression does not produce a logging or I/O effect:
 use aivi.text (length)
 
 type Text -> Int
-func nameLength = text =>
-    length text
+func nameLength =
+  |> length (.)
 
 type Text -> Text
-func greet = name =>
-    "Hello, {name}"
+func greet = "Hello, {.}"
 
 value result = "Ada"
   | nameLength
@@ -444,30 +439,41 @@ must share the same outer wrapper — `Option`, `Result`, `Validation`, `Signal`
 A typical use is combining several validations:
 
 ```aivi
-type ValidatedUser =
-  ValidatedUser Text Text Int
+use aivi.nonEmpty (singleton as oneError, cons as prependError)
 
-type Text -> Validation (List Text) Text
-func validateName = name =>
-    Valid name
+type ValidatedUser = ValidatedUser Text Int
 
-type Text -> Validation (List Text) Text
-func validateEmail = email =>
-    Valid email
+type Text -> Validation (NonEmptyList Text) Text
+func validateName = name => trim name == ""
+ T|> Invalid (oneError "name is required")
+ F|> Valid (trim name)
 
-type Text -> Validation (List Text) Int
-func validateAge = ageText =>
-    Valid 30
+type Int -> Validation (NonEmptyList Text) Int
+func validateAge = age => age >= 18
+ T|> Valid age
+ F|> Invalid (oneError "must be at least 18")
 
 value draft =
  &|> validateName "Ada"
- &|> validateEmail "ada@example.com"
- &|> validateAge "30"
+ &|> validateAge 30
+  |> ValidatedUser
+
+value rejected =
+ &|> validateName ""
+ &|> validateAge 16
   |> ValidatedUser
 ```
 
-If all three succeed, the finalizer (`ValidatedUser`) receives their unwrapped values. If any fail,
-the errors accumulate (because `Validation` is applicative, not monadic).
+`draft` contains `Valid (ValidatedUser "Ada" 30)`. The intended result of `rejected` is
+`Invalid (prependError "name is required" (oneError "must be at least 18"))`, containing both errors.
+The finalizer receives the unwrapped values only when every validation succeeds.
+
+::: warning Current execution limitation
+This example passes checking, and the successful `draft` executes. Evaluating `rejected`
+with `aivi test` currently fails with “Validation apply only accumulates Invalid payloads
+shaped as `NonEmpty`/`NonEmptyList`”, even though its errors use `NonEmptyList Text`.
+The accumulated result above describes the language rule; it is not yet a working execution example.
+:::
 
 When no explicit finalizer appears, the cluster defaults to a tuple.
 
@@ -507,7 +513,7 @@ type Event =
   | Reset
 
 type Event -> Int -> Int
-func step = event count => event
+func step = event! count
  ||> Increment -> count + 1
  ||> Decrement -> count - 1
  ||> Reset     -> 0
@@ -541,7 +547,7 @@ func normalizeTitle =
 
 type Text -> Text
 func displayTitle = title =>
-    normalizeTitle title
+    "Title: {normalizeTitle title}"
 ```
 
 That keeps pipe flow explicit and matches the compiler's current nesting rule.

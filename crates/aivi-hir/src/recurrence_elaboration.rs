@@ -197,8 +197,10 @@ struct LocalRecurrenceRootHints {
 }
 
 pub fn elaborate_recurrences(module: &Module) -> RecurrenceElaborationReport {
-    let module = crate::typecheck::elaborate_default_record_fields(module);
-    let module = &module;
+    crate::ElaborationSession::new(module).elaborate_recurrences()
+}
+
+pub(crate) fn elaborate_recurrences_prepared(module: &Module) -> RecurrenceElaborationReport {
     let items = module
         .items()
         .iter()

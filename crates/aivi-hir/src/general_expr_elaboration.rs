@@ -381,16 +381,24 @@ impl fmt::Display for GeneralExprBlocker {
 }
 
 pub fn elaborate_general_expressions(module: &Module) -> GeneralExprElaborationReport {
-    let module = crate::typecheck::elaborate_default_record_fields(module);
-    GeneralExprElaborator::new(&module).build()
+    crate::ElaborationSession::new(module).elaborate_general_expressions()
+}
+
+pub(crate) fn elaborate_general_expressions_prepared(
+    module: &Module,
+) -> GeneralExprElaborationReport {
+    GeneralExprElaborator::new(module).build()
 }
 
 /// Elaborate only the ambient-prelude items in `module`, returning a report that contains
 /// solely those items.  Ambient items are excluded from [`elaborate_general_expressions`] so
 /// that call sites that only care about user items are not affected.
 pub fn elaborate_ambient_items(module: &Module) -> GeneralExprElaborationReport {
-    let module = crate::typecheck::elaborate_default_record_fields(module);
-    GeneralExprElaborator::new(&module).build_ambient()
+    crate::ElaborationSession::new(module).elaborate_ambient_items()
+}
+
+pub(crate) fn elaborate_ambient_items_prepared(module: &Module) -> GeneralExprElaborationReport {
+    GeneralExprElaborator::new(module).build_ambient()
 }
 
 pub fn collect_markup_runtime_expr_sites(

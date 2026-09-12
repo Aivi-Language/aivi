@@ -4,6 +4,8 @@ Pure helpers for `Validation E A`. Use `Validation` when several independent che
 their errors together. The `&|>` applicative pipe performs that accumulation; dependent checks use
 `!|>` and stop after a failure.
 
+Accumulating two failures currently has an [execution limitation](/guide/pipes#applicative-cluster).
+
 ```aivi
 use aivi.validation (
     Errors
@@ -42,8 +44,7 @@ use aivi.validation (
 )
 
 type Int -> Int
-func increment = n =>
-    n + 1
+func increment = . + 1
 
 value checked : Validation Text Int = Valid 2
 value next : Validation Text Int = map increment checked

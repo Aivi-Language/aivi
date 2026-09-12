@@ -67,8 +67,9 @@ func greeting =
   |> "Hello, {.}!"
 ```
 
-Reach for `#name` only when a later stage truly needs an earlier value or when two versions of the
-same value would otherwise become confusing.
+Here `.` carries the trimmed text into the greeting; no temporary name is needed.
+For a case that needs both the original and transformed values, see
+[remembering stage values](/guide/pipes#remembering-stage-values-with-name).
 
 ## What to read next
 

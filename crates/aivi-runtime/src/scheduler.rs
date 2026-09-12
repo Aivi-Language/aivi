@@ -498,6 +498,10 @@ where
     queue: VecDeque<SchedulerMessage<V>>,
     queued_messages_scratch: Vec<SchedulerMessage<V>>,
     dirty_scratch: Vec<bool>,
+    dirty_signals_scratch: Vec<SignalHandle>,
+    touched_scratch: Vec<SignalHandle>,
+    publication_indices_scratch: Vec<usize>,
+    graph_order: Vec<usize>,
     publications_scratch: Vec<Option<Publication<V>>>,
     dropped_scratch: Vec<DroppedPublication>,
     committed_scratch: Vec<SignalHandle>,
@@ -541,6 +545,16 @@ where
             )
             .collect();
 
+        let mut graph_order = vec![0; signal_count];
+        for (rank, signal) in graph
+            .batches()
+            .iter()
+            .flat_map(|batch| batch.signals())
+            .enumerate()
+        {
+            graph_order[signal.index()] = rank;
+        }
+
         Self {
             graph,
             storage,
@@ -549,8 +563,12 @@ where
             slots: SlotStore::new(signal_count),
             queue: VecDeque::new(),
             queued_messages_scratch: Vec::new(),
-            dirty_scratch: Vec::new(),
-            publications_scratch: Vec::new(),
+            dirty_scratch: vec![false; signal_count],
+            dirty_signals_scratch: Vec::new(),
+            touched_scratch: Vec::new(),
+            publication_indices_scratch: Vec::new(),
+            graph_order,
+            publications_scratch: (0..signal_count).map(|_| None).collect(),
             dropped_scratch: Vec::new(),
             committed_scratch: Vec::with_capacity(signal_count),
             worker_publication_tx,
@@ -717,20 +735,20 @@ where
         self.next_tick = self.next_tick.wrapping_add(1);
 
         let mut pending = std::mem::take(&mut self.slots.pending);
-        pending.clear();
-        pending.resize_with(self.slots.committed.len(), || PendingSlot::Unchanged);
+        // Pending and publication slots are empty between ticks. Only touched entries
+        // are reset, including on evaluator failure; unrelated graph size is irrelevant.
+        let mut touched = std::mem::take(&mut self.touched_scratch);
 
         let mut messages = std::mem::take(&mut self.queued_messages_scratch);
         messages.clear();
         messages.extend(self.queue.drain(..));
         let disposed = self.collect_disposed_owners(&messages);
-        self.apply_owner_disposals(&disposed, &mut pending);
+        let disposal_undo = self.apply_owner_disposals(&disposed, &mut pending, &mut touched);
 
         let mut dropped = std::mem::take(&mut self.dropped_scratch);
         dropped.clear();
         let mut publications = std::mem::take(&mut self.publications_scratch);
-        publications.clear();
-        publications.resize_with(self.slots.committed.len(), || None::<Publication<V>>);
+        let mut publication_indices = std::mem::take(&mut self.publication_indices_scratch);
 
         for message in messages.drain(..) {
             let SchedulerMessage::Publish(publication) = message else {
@@ -762,38 +780,107 @@ where
                 continue;
             }
 
+            if publications[input.index()].is_none() {
+                publication_indices.push(input.index());
+            }
             publications[input.index()] = Some(publication);
         }
         self.queued_messages_scratch = messages;
 
-        for publication in publications.drain(..).flatten() {
-            let (stamp, value) = publication.into_parts();
+        for index in publication_indices.drain(..) {
+            let (stamp, value) = publications[index].take().unwrap().into_parts();
+            if pending[stamp.input.index()].is_unchanged() {
+                touched.push(stamp.input.as_signal());
+            }
             pending[stamp.input.index()] = PendingSlot::NextStored(value);
         }
         self.publications_scratch = publications;
+        self.publication_indices_scratch = publication_indices;
 
         let mut dirty = std::mem::take(&mut self.dirty_scratch);
-        dirty.clear();
-        dirty.resize(self.slots.committed.len(), false);
+        let mut dirty_signals = std::mem::take(&mut self.dirty_signals_scratch);
         if self.initialized {
-            self.mark_dirty_dependents(&pending, &mut dirty);
+            self.mark_dirty_dependents(&pending, &touched, &mut dirty, &mut dirty_signals);
         } else {
             for batch in self.graph.batches() {
                 for &signal in batch.signals() {
                     if self.signal_active(signal) {
                         dirty[signal.index()] = true;
+                        dirty_signals.push(signal);
                     }
                 }
             }
         }
-
-        self.evaluate_dirty_signals(order, evaluator, &mut pending, &dirty)?;
+        // Dense ticks use a linear order scan; sparse ticks sort only affected handles.
+        // This bounds traversal by the cheaper of graph size and affected-subgraph sorting.
+        let dense = dirty_signals.len() > self.graph.signal_count() / 4;
+        match order {
+            TickEvaluationOrder::GraphBatches if dense => {
+                dirty_signals.clear();
+                dirty_signals.extend(
+                    self.graph
+                        .batches()
+                        .iter()
+                        .flat_map(|batch| batch.signals())
+                        .copied()
+                        .filter(|signal| dirty[signal.index()]),
+                );
+            }
+            TickEvaluationOrder::GraphBatches => {
+                dirty_signals.sort_unstable_by_key(|signal| self.graph_order[signal.index()]);
+            }
+            TickEvaluationOrder::ReactiveProgram(program) => {
+                debug_assert_eq!(program.signal_count(), self.graph.signal_count());
+                if dense {
+                    dirty_signals.clear();
+                    dirty_signals.extend(
+                        program
+                            .topo_order()
+                            .iter()
+                            .copied()
+                            .filter(|signal| dirty[signal.index()]),
+                    );
+                } else {
+                    // Topo indices concatenate partitions in their evaluation order.
+                    dirty_signals.sort_unstable_by_key(|signal| {
+                        program
+                            .signal(*signal)
+                            .expect("signal belongs to reactive program")
+                            .topo_index()
+                    });
+                }
+            }
+        }
+        let evaluated =
+            self.evaluate_dirty_signals(evaluator, &mut pending, &dirty_signals, &mut touched);
+        for signal in dirty_signals.drain(..) {
+            dirty[signal.index()] = false;
+        }
         self.dirty_scratch = dirty;
+        self.dirty_signals_scratch = dirty_signals;
+        if let Err(error) = evaluated {
+            for undo in disposal_undo {
+                self.owners[undo.owner.index()].active = true;
+                for (index, generation) in undo.generations {
+                    self.inputs[index].as_mut().unwrap().generation = generation;
+                }
+            }
+            for signal in touched.drain(..) {
+                pending[signal.index()] = PendingSlot::Unchanged;
+            }
+            self.slots.pending = pending;
+            self.touched_scratch = touched;
+            self.dropped_scratch = dropped;
+            return Err(error);
+        }
 
         let mut committed = std::mem::take(&mut self.committed_scratch);
         committed.clear();
-        for (index, pending_value) in pending.drain(..).enumerate() {
-            let handle = SignalHandle::from_raw(index as u32);
+        // Public commit ordering remains graph-handle order, independent of enqueue order.
+        touched.sort_unstable();
+        for handle in touched.drain(..) {
+            let index = handle.index();
+            let pending_value = std::mem::replace(&mut pending[index], PendingSlot::Unchanged);
             if commit_pending_slot(
                 &mut self.storage,
                 &mut self.slots.committed[index],
@@ -802,6 +889,7 @@ where
                 committed.push(handle);
             }
         }
+        self.touched_scratch = touched;
         self.slots.pending = pending;
         self.collect_committed_values();
 
@@ -822,6 +910,9 @@ where
     }
 
     fn collect_committed_values(&mut self) {
+        if !self.storage.needs_collection() {
+            return;
+        }
         let roots = self
             .slots
             .committed
@@ -836,93 +927,28 @@ where
 
     fn evaluate_dirty_signals<E>(
         &self,
-        order: TickEvaluationOrder<'_>,
         evaluator: &mut E,
         pending: &mut [PendingSlot<V>],
-        dirty: &[bool],
-    ) -> Result<(), E::Error>
-    where
-        E: TryDerivedNodeEvaluator<V>,
-    {
-        let committed_values = self
-            .slots
-            .committed
-            .iter()
-            .map(|slot| slot.current_value(&self.storage))
-            .collect::<Vec<_>>();
-        match order {
-            TickEvaluationOrder::GraphBatches => {
-                for batch in self.graph.batches() {
-                    self.evaluate_signals(
-                        batch.signals(),
-                        evaluator,
-                        pending,
-                        dirty,
-                        &committed_values,
-                    )?;
-                }
-            }
-            TickEvaluationOrder::ReactiveProgram(program) => {
-                debug_assert_eq!(
-                    program.signal_count(),
-                    self.graph.signal_count(),
-                    "reactive program and signal graph must describe the same scheduler graph",
-                );
-                for partition in self.dirty_partitions(program, dirty) {
-                    self.evaluate_signals(
-                        partition.signals(),
-                        evaluator,
-                        pending,
-                        dirty,
-                        &committed_values,
-                    )?;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn dirty_partitions<'a>(
-        &self,
-        program: &'a ReactiveProgram,
-        dirty: &[bool],
-    ) -> Vec<&'a crate::ReactivePartition> {
-        program
-            .partitions()
-            .iter()
-            .filter(|partition| {
-                partition.signals().iter().copied().any(|signal| {
-                    dirty[signal.index()]
-                        && self.signal_active(signal)
-                        && self
-                            .graph
-                            .signal(signal)
-                            .is_some_and(|spec| !spec.is_input())
-                })
-            })
-            .collect()
-    }
-
-    fn evaluate_signals<E>(
-        &self,
         signals: &[SignalHandle],
-        evaluator: &mut E,
-        pending: &mut [PendingSlot<V>],
-        dirty: &[bool],
-        committed_values: &[Option<&V>],
+        touched: &mut Vec<SignalHandle>,
     ) -> Result<(), E::Error>
     where
         E: TryDerivedNodeEvaluator<V>,
     {
+        // Resolve committed values on demand. Constructing a graph-sized reference table
+        // would make an idle tick linear even when no evaluator runs.
+        let committed = CommittedValues {
+            slots: &self.slots.committed,
+            storage: &self.storage,
+        };
         for &signal in signals {
-            if !dirty[signal.index()] || !self.signal_active(signal) {
+            if !self.signal_active(signal) {
                 continue;
             }
-
             let next = match self
                 .graph
                 .signal(signal)
-                .expect("scheduled signals must exist in the graph")
+                .expect("scheduled signal exists")
                 .kind()
             {
                 crate::graph::SignalKind::Input => continue,
@@ -930,18 +956,17 @@ where
                     let inputs = DependencyValues {
                         dependencies: spec.dependencies(),
                         pending,
-                        committed: committed_values,
+                        committed: &committed,
                     };
                     pending_slot_from_update(evaluator.try_evaluate(signal.as_derived(), inputs)?)
                 }
-                crate::graph::SignalKind::Reactive(spec) => self.evaluate_reactive_signal(
-                    evaluator,
-                    signal,
-                    spec,
-                    committed_values,
-                    pending,
-                )?,
+                crate::graph::SignalKind::Reactive(spec) => {
+                    self.evaluate_reactive_signal(evaluator, signal, spec, &committed, pending)?
+                }
             };
+            if pending[signal.index()].is_unchanged() && !next.is_unchanged() {
+                touched.push(signal);
+            }
             pending[signal.index()] = next;
         }
         Ok(())
@@ -984,63 +1009,66 @@ where
         &mut self,
         disposed: &BTreeSet<OwnerHandle>,
         pending: &mut [PendingSlot<V>],
-    ) {
+        touched: &mut Vec<SignalHandle>,
+    ) -> Vec<OwnerDisposalUndo> {
+        let mut undo = Vec::new();
         for &owner in disposed {
             let state = &mut self.owners[owner.index()];
             if !state.active {
                 continue;
             }
             state.active = false;
+            let mut generations = Vec::new();
 
             let spec = self
                 .graph
                 .owner(owner)
                 .expect("disposed owners are validated on enqueue");
             for &signal in spec.signals() {
+                if pending[signal.index()].is_unchanged() {
+                    touched.push(signal);
+                }
                 pending[signal.index()] = PendingSlot::Clear;
                 if let Some(input) = self.inputs[signal.index()].as_mut() {
+                    generations.push((signal.index(), input.generation));
                     input.generation = input.generation.advance();
                 }
             }
+            undo.push(OwnerDisposalUndo { owner, generations });
         }
+        undo
     }
 
-    fn mark_dirty_dependents(&self, pending: &[PendingSlot<V>], dirty: &mut [bool]) {
-        let mut worklist = pending
-            .iter()
-            .enumerate()
-            .filter_map(|(index, pending)| {
-                if pending.is_unchanged() {
-                    None
-                } else {
-                    Some(SignalHandle::from_raw(index as u32))
-                }
-            })
-            .flat_map(|signal| {
-                self.graph
-                    .dependents(signal)
-                    .expect("pending slots are indexed by graph signals")
-                    .iter()
-                    .copied()
-            })
-            .collect::<VecDeque<_>>();
-
-        while let Some(signal) = worklist.pop_front() {
-            if dirty[signal.index()] {
-                continue;
-            }
-            if !self.signal_active(signal) && pending[signal.index()].is_unchanged() {
-                continue;
-            }
-
-            dirty[signal.index()] = true;
+    fn mark_dirty_dependents(
+        &self,
+        pending: &[PendingSlot<V>],
+        touched: &[SignalHandle],
+        dirty: &mut [bool],
+        worklist: &mut Vec<SignalHandle>,
+    ) {
+        let enqueue_dependents = |signal, dirty: &mut [bool], worklist: &mut Vec<SignalHandle>| {
             for &dependent in self
                 .graph
                 .dependents(signal)
-                .expect("dirty worklist only contains graph signals")
+                .expect("signal belongs to graph")
             {
-                worklist.push_back(dependent);
+                if dirty[dependent.index()] {
+                    continue;
+                }
+                if !self.signal_active(dependent) && pending[dependent.index()].is_unchanged() {
+                    continue;
+                }
+                dirty[dependent.index()] = true;
+                worklist.push(dependent);
             }
+        };
+        for &signal in touched {
+            enqueue_dependents(signal, dirty, worklist);
+        }
+        let mut index = 0;
+        while index < worklist.len() {
+            enqueue_dependents(worklist[index], dirty, worklist);
+            index += 1;
         }
     }
 
@@ -1121,7 +1149,7 @@ where
         evaluator: &mut E,
         signal: SignalHandle,
         spec: &crate::graph::ReactiveSignalSpec,
-        committed: &[Option<&V>],
+        committed: &dyn CommittedValueLookup<V>,
         pending: &[PendingSlot<V>],
     ) -> Result<PendingSlot<V>, E::Error>
     where
@@ -1194,10 +1222,32 @@ fn pending_slot_from_update<V>(update: DerivedSignalUpdate<V>) -> PendingSlot<V>
 /// falling back to the previous committed snapshot. That guarantees topological, glitch-free reads:
 /// downstream evaluators observe the newest stable upstream values for the current tick, never a
 /// mixed intermediate state.
+trait CommittedValueLookup<V> {
+    fn get(&self, signal: SignalHandle) -> Option<&V>;
+}
+
+struct CommittedValues<'a, V, S: CommittedValueStore<V>> {
+    slots: &'a [CommittedSlot<V, S::Slot>],
+    storage: &'a S,
+}
+
+impl<V, S: CommittedValueStore<V>> CommittedValueLookup<V> for CommittedValues<'_, V, S> {
+    fn get(&self, signal: SignalHandle) -> Option<&V> {
+        self.slots[signal.index()].current_value(self.storage)
+    }
+}
+
+#[cfg(test)]
+impl<V, const N: usize> CommittedValueLookup<V> for [Option<&V>; N] {
+    fn get(&self, signal: SignalHandle) -> Option<&V> {
+        self[signal.index()]
+    }
+}
+
 pub struct DependencyValues<'a, V> {
     dependencies: &'a [SignalHandle],
     pending: &'a [PendingSlot<V>],
-    committed: &'a [Option<&'a V>],
+    committed: &'a dyn CommittedValueLookup<V>,
 }
 
 impl<'a, V> DependencyValues<'a, V> {
@@ -1254,7 +1304,7 @@ impl<'a, V> DependencyValues<'a, V> {
 
     fn resolve(&self, signal: SignalHandle) -> Option<&'a V> {
         match &self.pending[signal.index()] {
-            PendingSlot::Unchanged => self.committed[signal.index()],
+            PendingSlot::Unchanged => self.committed.get(signal),
             PendingSlot::Clear => None,
             PendingSlot::NextRaw(value) => Some(value.value()),
             PendingSlot::NextStored(value) => Some(value),
@@ -1276,6 +1326,11 @@ impl<'a, V> DependencyValue<'a, V> {
     pub fn value(self) -> Option<&'a V> {
         self.value
     }
+}
+
+struct OwnerDisposalUndo {
+    owner: OwnerHandle,
+    generations: Vec<(usize, Generation)>,
 }
 
 struct OwnerRuntimeState {
@@ -1599,6 +1654,99 @@ mod tests {
                 .copied(),
             Some(9)
         );
+    }
+
+    #[test]
+    fn sparse_tick_failure_discards_partial_updates_and_recovers() {
+        let mut builder = SignalGraphBuilder::new();
+        let input = builder.add_input("input", None).unwrap();
+        let first = builder.add_derived("first", None).unwrap();
+        let last = builder.add_derived("last", None).unwrap();
+        builder.define_derived(first, [input.as_signal()]).unwrap();
+        builder.define_derived(last, [first.as_signal()]).unwrap();
+        for i in 0..1024 {
+            builder.add_input(format!("idle{i}"), None).unwrap();
+        }
+        let mut scheduler = Scheduler::<i32>::new(builder.build().unwrap());
+        let stamp = scheduler.current_stamp(input).unwrap();
+        let mut copy = |_, values: DependencyValues<'_, i32>| values.value(0).copied();
+        scheduler
+            .queue_publication(Publication::new(stamp, 1))
+            .unwrap();
+        scheduler.tick(&mut copy);
+        scheduler
+            .queue_publication(Publication::new(stamp, 5))
+            .unwrap();
+        assert_eq!(
+            scheduler.try_tick(&mut |signal, values: DependencyValues<'_, i32>| {
+                if signal == last {
+                    Err("stop")
+                } else {
+                    Ok(values.value(0).copied())
+                }
+            }),
+            Err("stop")
+        );
+        for signal in [input.as_signal(), first.as_signal(), last.as_signal()] {
+            assert_eq!(scheduler.current_value(signal).unwrap(), Some(&1));
+        }
+        assert!(
+            scheduler
+                .slots
+                .pending
+                .iter()
+                .all(PendingSlot::is_unchanged)
+        );
+        assert!(scheduler.dirty_scratch.iter().all(|dirty| !dirty));
+        assert!(scheduler.touched_scratch.is_empty());
+        assert!(scheduler.tick(&mut copy).is_empty());
+        scheduler
+            .queue_publication(Publication::new(stamp, 7))
+            .unwrap();
+        let outcome = scheduler.tick(&mut copy);
+        assert_eq!(
+            outcome.committed(),
+            &[input.as_signal(), first.as_signal(), last.as_signal()]
+        );
+        assert_eq!(scheduler.current_value(last.as_signal()).unwrap(), Some(&7));
+    }
+
+    #[test]
+    fn failed_tick_rolls_back_owner_disposal_and_input_generation() {
+        let mut builder = SignalGraphBuilder::new();
+        let owner = builder.add_owner("owner", None).unwrap();
+        let input = builder.add_input("input", Some(owner)).unwrap();
+        let mirror = builder.add_derived("mirror", None).unwrap();
+        builder.define_derived(mirror, [input.as_signal()]).unwrap();
+        let mut scheduler = Scheduler::<i32>::new(builder.build().unwrap());
+        let stamp = scheduler.current_stamp(input).unwrap();
+        let mut copy = |_, inputs: DependencyValues<'_, i32>| inputs.value(0).copied();
+        scheduler
+            .queue_publication(Publication::new(stamp, 1))
+            .unwrap();
+        scheduler.tick(&mut copy);
+        scheduler.queue_dispose_owner(owner).unwrap();
+        let failed = scheduler.try_tick(&mut |_,
+                                              _: DependencyValues<'_, i32>|
+         -> Result<Option<i32>, ()> { Err(()) });
+        assert!(failed.is_err());
+        assert_eq!(scheduler.current_stamp(input).unwrap(), stamp);
+        assert_eq!(
+            scheduler.current_value(input.as_signal()).unwrap(),
+            Some(&1)
+        );
+        scheduler
+            .queue_publication(Publication::new(stamp, 2))
+            .unwrap();
+        scheduler.tick(&mut copy);
+        assert_eq!(
+            scheduler.current_value(mirror.as_signal()).unwrap(),
+            Some(&2)
+        );
+        scheduler.queue_dispose_owner(owner).unwrap();
+        scheduler.tick(&mut copy);
+        assert_eq!(scheduler.current_value(input.as_signal()).unwrap(), None);
+        assert_eq!(scheduler.current_value(mirror.as_signal()).unwrap(), None);
     }
 
     #[test]
@@ -2137,7 +2285,7 @@ mod tests {
     }
 
     #[test]
-    fn moving_store_relocates_live_values_and_collects_disposed_owner_roots() {
+    fn moving_store_skips_idle_collection_and_collects_disposed_owner_roots() {
         let mut builder = SignalGraphBuilder::new();
         let owner = builder.add_owner("owner", None).unwrap();
         let input = builder.add_input("input", Some(owner)).unwrap();
@@ -2189,6 +2337,7 @@ mod tests {
             "empty ticks should still be valid GC safe points"
         );
         assert_eq!(scheduler.storage.live_root_count(), 2);
+        assert_eq!(scheduler.storage.collection_count(), 0);
         assert_eq!(
             scheduler
                 .slots
@@ -2212,7 +2361,7 @@ mod tests {
             Some(first_mirror_handle),
             "stable GC handles must survive relocation for derived signals too"
         );
-        assert_ne!(
+        assert_eq!(
             first_input_ptr,
             text_ptr(
                 scheduler
@@ -2220,9 +2369,9 @@ mod tests {
                     .unwrap()
                     .expect("relocated input value should stay readable"),
             ),
-            "moving collection must relocate committed input payloads"
+            "an idle tick must not copy the committed input payload"
         );
-        assert_ne!(
+        assert_eq!(
             first_mirror_ptr,
             text_ptr(
                 scheduler
@@ -2230,7 +2379,7 @@ mod tests {
                     .unwrap()
                     .expect("relocated derived value should stay readable"),
             ),
-            "moving collection must relocate derived payloads too"
+            "an idle tick must not copy the committed derived payload"
         );
 
         scheduler.queue_dispose_owner(owner).unwrap();
@@ -2310,7 +2459,7 @@ mod tests {
             )),
             PendingSlot::NextStored(9_i32),
         ];
-        let committed = vec![Some(&raw_committed), Some(&stored_committed)];
+        let committed = [Some(&raw_committed), Some(&stored_committed)];
         let inputs = DependencyValues {
             dependencies: &[raw_signal, stored_signal],
             pending: &pending,

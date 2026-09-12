@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt};
+use std::{collections::BTreeMap, fmt, sync::Arc};
 
 use aivi_base::SourceSpan;
 use aivi_core::{self as core, Arena};
@@ -42,7 +42,7 @@ impl HasBindingName for core::ItemParameter {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Module {
-    core: core::Module,
+    core: Arc<core::Module>,
     items: Arena<core::ItemId, Item>,
     pipes: Arena<core::PipeId, Pipe>,
     stages: Arena<core::StageId, Stage>,
@@ -51,9 +51,9 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn new(core: core::Module) -> Self {
+    pub fn new(core: impl Into<Arc<core::Module>>) -> Self {
         Self {
-            core,
+            core: core.into(),
             items: Arena::new(),
             pipes: Arena::new(),
             stages: Arena::new(),

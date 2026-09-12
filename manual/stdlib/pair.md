@@ -37,9 +37,8 @@ use aivi.pair (
 Extracts the first element of a pair.
 
 ```aivi
-type (Text, Int) -> Text
-func getKey = entry =>
-    first entry
+value key : Text = first ("Ada", 42)
+// "Ada"
 ```
 
 ---
@@ -50,8 +49,8 @@ Extracts the second element of a pair.
 
 ```aivi
 type (Text, Int) -> Int
-func getValue = entry =>
-    second entry
+func getValue =
+  |> second
 ```
 
 ---
@@ -64,8 +63,8 @@ Swaps the two elements of a pair, returning `(B, A)` from `(A, B)`.
 use aivi.pair (swap)
 
 type (Text, Int) -> (Int, Text)
-func flipEntry = entry =>
-    swap entry
+func flipEntry =
+  |> swap
 ```
 
 ---
@@ -78,8 +77,8 @@ Applies a function to the first element, leaving the second unchanged.
 use aivi.math (square)
 
 type (Int, Text) -> (Int, Text)
-func squareFst = pair =>
-    mapFirst square pair
+func squareFst =
+  |> mapFirst square
 ```
 
 ---
@@ -92,8 +91,8 @@ Applies a function to the second element, leaving the first unchanged.
 use aivi.math (abs)
 
 type (Text, Int) -> (Text, Int)
-func absValue = entry =>
-    mapSecond abs entry
+func absValue =
+  |> mapSecond abs
 ```
 
 ---
@@ -111,8 +110,8 @@ use aivi.math (
 )
 
 type (Int, Int) -> (Int, Int)
-func normalizePair = pair =>
-    mapBoth abs negate pair
+func normalizePair =
+  |> mapBoth abs negate
 ```
 
 ---
@@ -139,6 +138,6 @@ Creates a pair where both elements are the same value.
 use aivi.pair (duplicate)
 
 type Int -> (Int, Int)
-func mirror = n =>
-    duplicate n
+func mirror =
+  |> duplicate
 ```

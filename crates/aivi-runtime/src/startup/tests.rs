@@ -996,7 +996,7 @@ signal chosen : Signal Text =
 }
 
 #[test]
-fn linked_runtime_relocates_committed_signal_values_between_ticks() {
+fn linked_runtime_preserves_committed_payloads_on_idle_ticks() {
     let lowered = lower_text(
         "runtime-startup-moving-gc.aivi",
         r#"
@@ -1038,12 +1038,12 @@ signal label = "Ada"
         .runtime()
         .current_value(label_signal)
         .unwrap()
-        .expect("label signal should stay committed after relocation");
+        .expect("label signal should stay committed after an idle tick");
     assert_eq!(second, &RuntimeValue::Text("Ada".into()));
-    assert_ne!(
+    assert_eq!(
         first_ptr,
         text_ptr(second),
-        "linked runtime must expose relocated committed text storage on the next tick"
+        "an idle linked-runtime tick must not copy committed text storage"
     );
 }
 

@@ -154,9 +154,14 @@ impl DbState {
 
 fn invalidate_file_caches(state: &mut DbState, file_id: u32) {
     state.parsed.remove(&file_id);
+    state.workspace_hoists.clear();
+    invalidate_semantic_caches(state, file_id);
+}
+
+// Import changes affect meaning, not the unchanged importer's source text.
+fn invalidate_semantic_caches(state: &mut DbState, file_id: u32) {
     state.hir.remove(&file_id);
     state.workspace_modules.remove(&file_id);
-    state.workspace_hoists.clear();
     state
         .whole_program_units
         .retain(|key, _| key.file_id != file_id);
@@ -253,7 +258,7 @@ impl RootDatabase {
                 // indirectly) import this file (M6).
                 let rdeps = state.file_deps.transitive_rdeps(file.id);
                 for rdep in rdeps {
-                    invalidate_file_caches(&mut state, rdep);
+                    invalidate_semantic_caches(&mut state, rdep);
                 }
             }
             return file;
@@ -277,7 +282,7 @@ impl RootDatabase {
         let affected = state.file_deps.transitive_rdeps(file.id);
         invalidate_file_caches(&mut state, file.id);
         for f in &affected {
-            invalidate_file_caches(&mut state, *f);
+            invalidate_semantic_caches(&mut state, *f);
         }
         file
     }
@@ -343,7 +348,7 @@ impl RootDatabase {
             // Transitively invalidate all files that import this file (M6).
             let rdeps = state.file_deps.transitive_rdeps(file.id);
             for rdep in rdeps {
-                invalidate_file_caches(&mut state, rdep);
+                invalidate_semantic_caches(&mut state, rdep);
             }
         }
         changed
@@ -463,7 +468,7 @@ impl RootDatabase {
         state.paths.retain(|_, v| v.id != file.id);
         invalidate_file_caches(&mut state, file.id);
         for dependent in affected {
-            invalidate_file_caches(&mut state, dependent);
+            invalidate_semantic_caches(&mut state, dependent);
         }
         state.file_deps.remove_file(file.id);
         if removed {

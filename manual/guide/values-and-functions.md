@@ -116,10 +116,10 @@ just to simulate a local binding. If a stage only needs its current subject once
 keep the pipe simple.
 
 ```aivi
-type Int -> Int
-func compareWithPrevious = value => value
-  |> #before before + 1 #after
-  |> after - before
+type Text -> Text
+func explainNormalization =
+  |> #original trim original #clean
+  |> "{original} becomes {clean}"
 ```
 
 ## Unary subject sugar
@@ -147,8 +147,7 @@ operator, you can omit the explicit `.` head and start directly with the stages:
 ```aivi
 type Text -> Text
 func trimStatus =
- ||> " ready " -> "ready"
- ||> _         -> .
+  |> trim (.)
 ```
 
 If the unary input is intentionally ignored, give it an explicit descriptive name:
@@ -211,8 +210,7 @@ type Y = { y: Z }
 type X = { x: Y }
 
 type Int -> Int
-func addOne = value =>
-    value + 1
+func addOne = . + 1
 
 type X -> Int
 func readNested = state { x.y.z! }
@@ -304,7 +302,7 @@ value highScore : Score -> Bool = .score >= 10
 ```
 
 That shorthand is always unary and only applies to **composed** dot-rooted expressions such as
-`. == cell` or `.score >= 10`. Bare `.` and `.field` keep their established ambient-subject meaning
+`. == threshold` or `.score >= 10`. Bare `.` and `.field` keep their established ambient-subject meaning
 so existing pipe, patch, and unary-subject code keeps reading the same way.
 
 ## Named helpers and inline lambdas
@@ -315,8 +313,7 @@ stable name:
 ```aivi
 type Text -> Text
 func trimStatus =
- ||> " ready " -> "ready"
- ||> _         -> .
+  |> trim (.)
 
 type Text -> Text
 func decorateStatus = "[{.}]"
@@ -386,8 +383,7 @@ The current checked slice also accepts constructor focus through `Some`, `Ok`, `
 
 ```aivi
 type Int -> Int
-func increment = n =>
-    n + 1
+func increment = . + 1
 
 type Counter = {
     step: Int -> Int

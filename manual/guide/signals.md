@@ -25,8 +25,7 @@ Signals are often defined from earlier signals with pipes:
 
 ```aivi
 type Int -> Int
-func double = n =>
-    n * 2
+func double = . * 2
 
 signal count = 21
 
@@ -116,13 +115,14 @@ When a signal's value is driven by events from one or more source signals, use *
 ### Single-source merge
 
 ```aivi
-signal left = 20
-signal right = 22
-signal ready = True
+type Key = Key Text
 
-signal total : Signal Int = ready
- T|> left + right
- F|> 0
+@source window.keyDown
+signal keyDown : Signal Key
+
+signal action : Signal Text = keyDown
+ ||> Key "Space" => "reset"
+ ||> _ => "waiting"
 ```
 
 ### Multi-source merge
@@ -161,20 +161,16 @@ Use signal merge when you want event-shaped reactive commits. Use pipes when you
 
 Self-reference: the declaring signal cannot read itself from its own arm bodies.
 
-### A practical example: form validation
+### Merging form events
 
-Signal merge shines when several user inputs feed one "form state" signal:
+Merge field changes and submission into one event signal. Accumulating form state and
+validating its contents are separate downstream steps:
 
 ```aivi
-type Key = Key Text
-
 type FormField =
   | Name Text
   | Email Text
   | Submit
-
-@source window.keyDown
-signal keyDown : Signal Key
 
 signal nameInput : Signal Text = "Ada"
 signal emailInput : Signal Text = "ada@example.com"
@@ -273,19 +269,15 @@ signal event : Signal Event = tick | keyDown
   ||> _ => Tick
 
 type Event -> Int -> Int
-func step = event count => event
+func step = event! count
  ||> Tick  -> count + 1
  ||> Reset -> 0
 
 signal elapsed = event
  +|> 0 step
 
-type Int -> Text
-func formatInt = value =>
-    "{value}"
-
 signal label = elapsed
-  |> formatInt
+  |> "{.}"
 
 value main =
     <Window title="Timer">
@@ -372,9 +364,8 @@ syntax:
 ```aivi
 // A Bool that becomes True on the first success and never resets
 type Option Text -> Bool -> Bool
-func trackFirstDone = newDone hasFired => hasFired
- T|> True
- F|> isSome newDone
+func trackFirstDone = newDone hasFired =>
+    hasFired or isSome newDone
 
 @source http.get "https://api.example.com/users"
 signal usersResult : Signal (Result HttpError Text)
