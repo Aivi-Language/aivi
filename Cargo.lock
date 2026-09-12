@@ -30,7 +30,7 @@ dependencies = [
 
 [[package]]
 name = "aivi-backend"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aivi-base",
  "aivi-core",
@@ -60,14 +60,14 @@ dependencies = [
 
 [[package]]
 name = "aivi-base"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "aivi-benches"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aivi-backend",
  "aivi-base",
@@ -82,7 +82,7 @@ dependencies = [
 
 [[package]]
 name = "aivi-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aivi-backend",
  "aivi-base",
@@ -109,7 +109,7 @@ dependencies = [
 
 [[package]]
 name = "aivi-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aivi-base",
  "aivi-hir",
@@ -121,7 +121,7 @@ dependencies = [
 
 [[package]]
 name = "aivi-ffi-call"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "cranelift-codegen",
  "cranelift-jit",
@@ -133,7 +133,7 @@ dependencies = [
 
 [[package]]
 name = "aivi-gtk"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aivi-base",
  "aivi-hir",
@@ -148,7 +148,7 @@ dependencies = [
 
 [[package]]
 name = "aivi-hir"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aivi-base",
  "aivi-openapi",
@@ -161,7 +161,7 @@ dependencies = [
 
 [[package]]
 name = "aivi-lambda"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aivi-base",
  "aivi-core",
@@ -174,7 +174,7 @@ dependencies = [
 
 [[package]]
 name = "aivi-lsp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aivi-base",
  "aivi-hir",
@@ -195,7 +195,7 @@ dependencies = [
 
 [[package]]
 name = "aivi-openapi"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "indexmap",
  "insta",
@@ -206,7 +206,7 @@ dependencies = [
 
 [[package]]
 name = "aivi-query"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aivi-backend",
  "aivi-base",
@@ -223,7 +223,7 @@ dependencies = [
 
 [[package]]
 name = "aivi-runtime"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aivi-backend",
  "aivi-base",
@@ -251,7 +251,7 @@ dependencies = [
 
 [[package]]
 name = "aivi-syntax"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aivi-base",
  "insta",
@@ -260,7 +260,7 @@ dependencies = [
 
 [[package]]
 name = "aivi-typing"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
 ]

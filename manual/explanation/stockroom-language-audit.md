@@ -1,6 +1,7 @@
 # Writing a stockroom application in AIVI
 
-This audit used the working application in [`demos/stockroom`](../../demos/stockroom/README.md).
+This audit used the working application in
+[`demos/stockroom`](https://github.com/Aivi-Language/aivi/tree/main/demos/stockroom#readme).
 It was conducted on 12 September 2026, starting from revision
 `e2cec71446d129491f9ef39c36183de52777b7f0`. The fixes described below are in the accompanying change.
 The original experiment and recommendations are retained below. The [implementation follow-up](#implementation-follow-up) records the subsequent consistency improvements. Remaining syntax and schema proposals are not implemented semantics.
@@ -253,7 +254,8 @@ The remaining work is:
 
 ## Reproducing the audit
 
-Follow the [example README](../../demos/stockroom/README.md) to check, test, run, package, and
+Follow the [example README](https://github.com/Aivi-Language/aivi/tree/main/demos/stockroom#readme)
+to check, test, run, package, and
 exercise the app. The smoke test verifies initial ordering, normalized search, retained search on
 reload, empty results, wrong field types, unexpected and missing fields, domain rejection, a
 missing file, recovery, and a 360-pixel-wide launch. Screenshots are written under `out/`.
