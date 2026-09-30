@@ -110,7 +110,7 @@ impl<'a> GateTypeContext<'a> {
         }
     }
 
-    fn type_bindings_match(&self, left: &TypeBinding, right: &TypeBinding) -> bool {
+    pub(crate) fn type_bindings_match(&self, left: &TypeBinding, right: &TypeBinding) -> bool {
         match (left, right) {
             (TypeBinding::Type(left), TypeBinding::Type(right)) => self.types_match(left, right),
             (TypeBinding::Constructor(left), TypeBinding::Constructor(right)) => {
@@ -126,7 +126,7 @@ impl<'a> GateTypeContext<'a> {
         }
     }
 
-    fn import_type_identities_match(&self, left: ImportId, right: ImportId) -> bool {
+    pub(crate) fn import_type_identities_match(&self, left: ImportId, right: ImportId) -> bool {
         if left == right {
             return true;
         }
@@ -4901,6 +4901,10 @@ impl<'a> GateTypeContext<'a> {
 
                 let mut info = left_info;
                 info.merge(right_info);
+                // Operand evidence belongs to the operands, including when the
+                // binary result cannot yet be inferred. Never expose it as the
+                // actual type of this expression.
+                info.actual = None;
                 info.ty = if let (Some(left), Some(right)) = (left_ty.as_ref(), right_ty.as_ref()) {
                     match select_domain_binary_operator(self.module, self, operator, left, right) {
                         Ok(maybe_matched) => maybe_matched.map(|matched| matched.result_type),

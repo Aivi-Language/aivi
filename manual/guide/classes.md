@@ -221,9 +221,12 @@ cycle cannot supply evidence by itself. The compiler limits a proof search to
 diagnostic when either limit is exceeded. These are compiler resource limits;
 there is no rule requiring every prerequisite to have a smaller type expression.
 
-Checking an instance context and passing its executable evidence are separate
-compiler obligations. Conditional authored member execution is still subject
-to the [authored evidence boundary](/guide/typeclasses#execution-boundary-builtin-carriers-vs-authored-instances).
+The compiler passes executable prerequisite evidence to conditional authored
+members before their visible arguments. A member-local context, such as
+`Applicative G` on `Traversable.traverse`, adds its own evidence parameters.
+These callables also work across imports and through generic constrained
+functions. See the [authored evidence boundary](/guide/typeclasses#execution-boundary-builtin-carriers-vs-authored-instances)
+for the builtin traversal and native compilation limits.
 
 ## Ord constraints and domain ordering
 

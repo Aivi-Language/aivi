@@ -3952,8 +3952,13 @@ impl<'a> TypeChecker<'a> {
         let class_bindings = HashMap::from([(*class.parameters.first(), subject.clone())]);
         let expected =
             typing.instantiate_poly_hir_type_partially(member.annotation, &class_bindings)?;
+        // Member-local binders have module-owned identities. Compare the
+        // contract modulo alpha-renaming across the portable import boundary.
         expected
-            .fits_template(&typing.lower_import_value_type(ty))
+            .same_shape_with_import_identity(
+                &typing.instantiate_import_member_type(ty, &bindings)?,
+                |left, right| typing.import_type_identities_match(left, right),
+            )
             .then_some(bindings)
     }
 

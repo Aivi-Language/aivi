@@ -208,8 +208,12 @@ pub(crate) fn expression_signature_evidence_with_typing<'a>(
     typing: GateTypeContext<'a>,
 ) -> Option<Vec<FunctionSignatureEvidence>> {
     let mut checker = TypeChecker::with_typing(module, typing);
-    let matched = checker.check_expr(expr_id, env, Some(expected), &mut Vec::new());
-    checker.solve_pending_eq_constraints();
+    let constraints = evidence_scope_constraints(env);
+    let matched = checker.with_class_constraint_scope(constraints, |checker| {
+        let matched = checker.check_expr(expr_id, env, Some(expected), &mut Vec::new());
+        checker.solve_pending_eq_constraints();
+        matched
+    });
     (matched && checker.diagnostics.is_empty())
         .then(|| checker.typing.take_function_signature_evidence())
 }
@@ -247,57 +251,91 @@ pub fn signal_payload_type(module: &Module, item: &SignalItem) -> Option<GateTyp
         })
 }
 
+fn evidence_scope_constraints(env: &GateExprEnv) -> Vec<ClassConstraintBinding> {
+    let mut constraints = Vec::new();
+    for evidence in &env.class_evidence {
+        let binding = ClassConstraintBinding {
+            class_item: evidence.member.class,
+            subject: evidence.subject.clone(),
+        };
+        if !constraints.contains(&binding) {
+            constraints.push(binding);
+        }
+    }
+    constraints
+}
+
+#[cfg(test)]
 pub(crate) fn resolve_class_member_dispatch(
     module: &Module,
     reference: &TermReference,
     argument_types: &[GateType],
     expected_result: Option<&GateType>,
 ) -> Option<ResolvedClassMemberDispatch> {
-    let mut checker = TypeChecker::new(module);
-    match checker
-        .typing
-        .select_class_member_call(reference, argument_types, expected_result)?
-    {
-        DomainMemberSelection::Unique(matched) => checker
-            .solve_class_constraint_bindings(
-                reference.span(),
-                &matched.evidence,
-                &matched.constraints,
-            )
-            .ok()
-            .and_then(|()| checker.class_member_dispatch(&matched)),
-        DomainMemberSelection::Ambiguous | DomainMemberSelection::NoMatch => None,
-    }
+    resolve_class_member_dispatch_in_scope(
+        module,
+        reference,
+        argument_types,
+        expected_result,
+        &GateExprEnv::default(),
+    )
 }
 
-pub(crate) fn resolve_class_member_dispatch_for_subject(
+pub(crate) fn resolve_class_member_dispatch_in_scope(
     module: &Module,
-    member: ClassMemberResolution,
-    subject: &GateType,
+    reference: &TermReference,
+    argument_types: &[GateType],
+    expected_result: Option<&GateType>,
+    env: &GateExprEnv,
 ) -> Option<ResolvedClassMemberDispatch> {
     let mut checker = TypeChecker::new(module);
-    let subject = checker
-        .typing
-        .class_member_subject_binding(member, subject)?;
-    checker
-        .require_class_binding(&ClassConstraintBinding {
-            class_item: member.class,
-            subject: subject.clone(),
-        })
-        .ok()?;
-    let implementation = checker.class_member_implementation(member, &subject)?;
-    Some(ResolvedClassMemberDispatch {
-        member,
-        subject,
-        implementation,
+    checker.with_class_constraint_scope(evidence_scope_constraints(env), |checker| {
+        match checker
+            .typing
+            .select_class_member_call(reference, argument_types, expected_result)?
+        {
+            DomainMemberSelection::Unique(matched) => checker
+                .solve_class_constraint_bindings(
+                    reference.span(),
+                    &matched.evidence,
+                    &matched.constraints,
+                )
+                .ok()
+                .and_then(|()| checker.class_member_dispatch(&matched)),
+            DomainMemberSelection::Ambiguous | DomainMemberSelection::NoMatch => None,
+        }
     })
 }
 
-fn resolve_named_class_member_dispatch_for_subject(
+pub(crate) fn resolve_class_member_dispatch_for_binding(
+    module: &Module,
+    member: ClassMemberResolution,
+    subject: &TypeBinding,
+    env: &GateExprEnv,
+) -> Option<ResolvedClassMemberDispatch> {
+    let mut checker = TypeChecker::new(module);
+    checker.with_class_constraint_scope(evidence_scope_constraints(env), |checker| {
+        checker
+            .require_class_binding(&ClassConstraintBinding {
+                class_item: member.class,
+                subject: subject.clone(),
+            })
+            .ok()?;
+        let implementation = checker.class_member_implementation(member, subject)?;
+        Some(ResolvedClassMemberDispatch {
+            member,
+            subject: subject.clone(),
+            implementation,
+        })
+    })
+}
+
+fn resolve_named_class_member_dispatch_in_scope(
     module: &Module,
     subject: &GateType,
     class_name: &str,
     member_name: &str,
+    env: &GateExprEnv,
 ) -> Option<ResolvedClassMemberDispatch> {
     let checker = TypeChecker::new(module);
     let class = checker.class_item_id_by_name(class_name)?;
@@ -308,20 +346,28 @@ fn resolve_named_class_member_dispatch_for_subject(
         .members
         .iter()
         .position(|member| member.name.text() == member_name)?;
-    let member = ClassMemberResolution { class, member_index };
-    resolve_class_member_dispatch_for_subject(module, member, subject)
+    let member = ClassMemberResolution {
+        class,
+        member_index,
+    };
+    let subject = checker
+        .typing
+        .class_member_subject_binding(member, subject)?;
+    resolve_class_member_dispatch_for_binding(module, member, &subject, env)
 }
 
-pub(crate) fn resolve_equality_dispatch(
+pub(crate) fn resolve_equality_dispatch_in_scope(
     module: &Module,
     subject: &GateType,
+    env: &GateExprEnv,
 ) -> Option<ResolvedClassMemberDispatch> {
     for (class_name, member_name) in [("Eq", "=="), ("Setoid", "equals")] {
-        if let Some(dispatch) = resolve_named_class_member_dispatch_for_subject(
+        if let Some(dispatch) = resolve_named_class_member_dispatch_in_scope(
             module,
             subject,
             class_name,
             member_name,
+            env,
         ) {
             return Some(dispatch);
         }
@@ -333,5 +379,13 @@ pub(crate) fn resolve_ordering_dispatch(
     module: &Module,
     subject: &GateType,
 ) -> Option<ResolvedClassMemberDispatch> {
-    resolve_named_class_member_dispatch_for_subject(module, subject, "Ord", "compare")
+    resolve_ordering_dispatch_in_scope(module, subject, &GateExprEnv::default())
+}
+
+pub(crate) fn resolve_ordering_dispatch_in_scope(
+    module: &Module,
+    subject: &GateType,
+    env: &GateExprEnv,
+) -> Option<ResolvedClassMemberDispatch> {
+    resolve_named_class_member_dispatch_in_scope(module, subject, "Ord", "compare", env)
 }

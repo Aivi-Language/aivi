@@ -86,6 +86,26 @@ impl GateTypeContext<'_> {
         })
     }
 
+    pub(crate) fn lower_import_type_binding(
+        &self,
+        template: &crate::ImportedTypeBinding,
+    ) -> Option<TypeBinding> {
+        Some(match template {
+            crate::ImportedTypeBinding::Type(ty) => {
+                TypeBinding::Type(self.lower_import_value_type(ty))
+            }
+            crate::ImportedTypeBinding::Constructor { head, arguments } => {
+                TypeBinding::Constructor(TypeConstructorBinding::new(
+                    self.imported_constructor_head(head)?,
+                    arguments
+                        .iter()
+                        .map(|ty| self.lower_import_value_type(ty))
+                        .collect(),
+                ))
+            }
+        })
+    }
+
     /// Infer one shared substitution environment from a portable instance head.
     pub(crate) fn match_import_type_binding(
         &self,
@@ -203,6 +223,67 @@ impl GateTypeContext<'_> {
                 TypeBinding::Constructor(TypeConstructorBinding::new(head, fixed))
             }
         })
+    }
+
+    /// Instantiate the instance-head quantifiers while keeping member-local
+    /// quantifiers open for comparison with the receiving class contract.
+    pub(crate) fn instantiate_import_member_type(
+        &mut self,
+        ty: &ImportValueType,
+        head_bindings: &PolyTypeBindings,
+    ) -> Option<GateType> {
+        let mut bindings = head_bindings.clone();
+        let mut pending = vec![ty];
+        while let Some(ty) = pending.pop() {
+            match ty {
+                ImportValueType::TypeVariable { index, name } => {
+                    let parameter = TypeParameterId::from_raw(u32::MAX - *index as u32);
+                    bindings.entry(parameter).or_insert_with(|| {
+                        TypeBinding::Type(GateType::TypeParameter {
+                            parameter,
+                            name: name.clone(),
+                        })
+                    });
+                }
+                ImportValueType::TypeApplication {
+                    index, arguments, ..
+                } => {
+                    let parameter = TypeParameterId::from_raw(u32::MAX - *index as u32);
+                    bindings.entry(parameter).or_insert_with(|| {
+                        TypeBinding::Constructor(TypeConstructorBinding::new(
+                            TypeConstructorHead::Parameter {
+                                parameter,
+                                arity: arguments.len(),
+                            },
+                            Vec::new(),
+                        ))
+                    });
+                    pending.extend(arguments);
+                }
+                ImportValueType::Arrow { parameter, result } => {
+                    pending.extend([parameter.as_ref(), result.as_ref()])
+                }
+                ImportValueType::Tuple(elements) => pending.extend(elements),
+                ImportValueType::Record(fields) => {
+                    pending.extend(fields.iter().map(|field| &field.ty))
+                }
+                ImportValueType::List(element)
+                | ImportValueType::Set(element)
+                | ImportValueType::Option(element)
+                | ImportValueType::Signal(element) => pending.push(element),
+                ImportValueType::Map { key, value } => {
+                    pending.extend([key.as_ref(), value.as_ref()])
+                }
+                ImportValueType::Result { error, value }
+                | ImportValueType::Validation { error, value }
+                | ImportValueType::Task { error, value } => {
+                    pending.extend([error.as_ref(), value.as_ref()])
+                }
+                ImportValueType::Named { arguments, .. } => pending.extend(arguments),
+                ImportValueType::Primitive(_) => {}
+            }
+        }
+        self.instantiate_import_value_type(ty, &bindings)
     }
 
     fn instantiate_import_value_type(

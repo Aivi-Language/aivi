@@ -1001,3 +1001,93 @@ value folded : Int = reduce accumulate 0 (append (fromHeadTail 1 [2, 3]) (fromHe
         RuntimeValue::Int(12345)
     );
 }
+
+#[test]
+fn runtime_executes_authored_method_local_applicative_evidence() {
+    let backend = lower_text(
+        "method-local-evidence.aivi",
+        r#"
+type Box A = Box A
+instance Functor Box = { map = f box => box ||> Box a -> Box (f a) }
+instance Foldable Box = { reduce = f seed box => box ||> Box a -> f seed a }
+instance Traversable Box = { traverse = f box => box ||> Box a -> map Box (f a) }
+type Int -> Option Int
+func increment = n => Some (n + 1)
+type Int -> List Int
+func expand = n => [n, n + 1]
+type Traversable F => F Int -> Option (F Int)
+func advance = box => traverse increment box
+type Traversable F => F Int -> Option (F Int)
+func forwarded = box => advance box
+type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)
+func advanceWith = f box => traverse f box
+value partial : Box Int -> Option (Box Int) = traverse increment
+value checked : Bool = traverse increment (Box 2) == Some (Box 3)
+value generic : Bool = forwarded (Box 2) == Some (Box 3)
+value genericApplicative : Bool = advanceWith increment (Box 2) == Some (Box 3)
+value genericList : Bool = advanceWith expand (Box 2) == [Box 2, Box 3]
+value partiallyApplied : Bool = partial (Box 2) == Some (Box 3)
+value differentApplicative : Bool = traverse expand (Box 2) == [Box 2, Box 3]
+value piped : Bool = (Box 2 |> traverse increment) == Some (Box 3)
+"#,
+    );
+    let mut interpreter = KernelEvaluator::new(&backend);
+    let executable = aivi_backend::BackendExecutableProgram::interpreted(&backend);
+    assert_eq!(
+        executable.engine_kind(),
+        aivi_backend::BackendExecutionEngineKind::Jit
+    );
+    let mut engine = executable.create_engine();
+    for name in [
+        "checked",
+        "generic",
+        "genericApplicative",
+        "genericList",
+        "partiallyApplied",
+        "differentApplicative",
+        "piped",
+    ] {
+        let item = find_item(&backend, name);
+        assert_eq!(
+            interpreter.evaluate_item(item, &BTreeMap::new()).unwrap(),
+            RuntimeValue::Bool(true),
+            "{name}"
+        );
+        assert_eq!(
+            engine.evaluate_item(item, &BTreeMap::new()).unwrap(),
+            RuntimeValue::Bool(true),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn runtime_passes_conditional_equality_evidence_to_authored_members() {
+    let backend = lower_text(
+        "conditional-equality-evidence.aivi",
+        r#"
+type Box A = { item: A }
+instance Eq A => Eq (Box A) = {
+    (==) = left right => left.item == right.item
+    (!=) = left right => left.item != right.item
+}
+instance Ord A => Ord (Box A) = { compare = left right => compare left.item right.item }
+type Ord A => Box A -> Box A -> Bool
+func before = left right => left < right
+type Eq A => Box A -> Box A -> Bool
+func same = left right => left == right
+type Eq A => Box A -> Box A -> Bool
+func forwarded = left right => same left right
+value leftBox : Box Int = { item: 1 }
+value rightBox : Box Int = { item: 2 }
+value equal : Bool = forwarded leftBox leftBox
+value unequal : Bool = leftBox != rightBox
+value ordered : Bool = before leftBox rightBox
+value directOrder : Bool = rightBox > leftBox
+"#,
+    );
+    let mut interpreter = KernelEvaluator::new(&backend);
+    for name in ["equal", "unequal", "ordered", "directOrder"] {
+        assert_eq!(interpreter.evaluate_item(find_item(&backend, name), &BTreeMap::new()).unwrap(), RuntimeValue::Bool(true), "{name}");
+    }
+}

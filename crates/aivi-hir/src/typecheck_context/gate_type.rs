@@ -201,7 +201,14 @@ impl GateType {
     pub fn same_shape(&self, other: &Self) -> bool {
         let mut left_to_right = HashMap::new();
         let mut right_to_left = HashMap::new();
-        Self::same_shape_inner(self, other, &mut left_to_right, &mut right_to_left, &[])
+        Self::same_shape_inner(
+            self,
+            other,
+            &mut left_to_right,
+            &mut right_to_left,
+            &[],
+            &|left, right| left == right,
+        )
     }
 
     /// Definition quantifiers denote fixed, independent types. Other signature
@@ -213,7 +220,31 @@ impl GateType {
     ) -> bool {
         let mut left_to_right = HashMap::new();
         let mut right_to_left = HashMap::new();
-        Self::same_shape_inner(self, other, &mut left_to_right, &mut right_to_left, rigid)
+        Self::same_shape_inner(
+            self,
+            other,
+            &mut left_to_right,
+            &mut right_to_left,
+            rigid,
+            &|left, right| left == right,
+        )
+    }
+
+    /// Compare portable member quantifiers while retaining the source identity
+    /// of nominal imports, including multiple aliases of the same declaration.
+    pub(crate) fn same_shape_with_import_identity(
+        &self,
+        other: &Self,
+        imports_equal: impl Fn(ImportId, ImportId) -> bool,
+    ) -> bool {
+        Self::same_shape_inner(
+            self,
+            other,
+            &mut HashMap::new(),
+            &mut HashMap::new(),
+            &[],
+            &imports_equal,
+        )
     }
 
     /// Substitute every occurrence of `param` with `replacement` throughout this type.
@@ -611,6 +642,7 @@ impl GateType {
         left_to_right: &mut HashMap<TypeParameterId, TypeParameterId>,
         right_to_left: &mut HashMap<TypeParameterId, TypeParameterId>,
         rigid: &[TypeParameterId],
+        imports_equal: &impl Fn(ImportId, ImportId) -> bool,
     ) -> bool {
         let same_named_constructor = matches!((left.named_type_parts(), right.named_type_parts()), (Some((left, _)), Some((right, _))) if left == right);
         if !same_named_constructor {
@@ -630,6 +662,7 @@ impl GateType {
                     left_to_right,
                     right_to_left,
                     rigid,
+                    imports_equal,
                 );
             }
             if let Self::OpaqueImport {
@@ -646,6 +679,7 @@ impl GateType {
                     left_to_right,
                     right_to_left,
                     rigid,
+                    imports_equal,
                 );
             }
         }
@@ -674,9 +708,17 @@ impl GateType {
                     left_to_right,
                     right_to_left,
                     rigid,
+                    imports_equal,
                 ) && la.len() == ra.len()
                     && la.iter().zip(ra).all(|(l, r)| {
-                        Self::same_shape_inner(l, r, left_to_right, right_to_left, rigid)
+                        Self::same_shape_inner(
+                            l,
+                            r,
+                            left_to_right,
+                            right_to_left,
+                            rigid,
+                            imports_equal,
+                        )
                     })
             }
             (Self::Primitive(left), Self::Primitive(right)) => left == right,
@@ -718,7 +760,14 @@ impl GateType {
             (Self::Tuple(left), Self::Tuple(right)) => {
                 left.len() == right.len()
                     && left.iter().zip(right.iter()).all(|(left, right)| {
-                        Self::same_shape_inner(left, right, left_to_right, right_to_left, rigid)
+                        Self::same_shape_inner(
+                            left,
+                            right,
+                            left_to_right,
+                            right_to_left,
+                            rigid,
+                            imports_equal,
+                        )
                     })
             }
             (Self::Record(left), Self::Record(right)) => {
@@ -731,6 +780,7 @@ impl GateType {
                                 left_to_right,
                                 right_to_left,
                                 rigid,
+                                imports_equal,
                             )
                     })
             }
@@ -750,20 +800,27 @@ impl GateType {
                     left_to_right,
                     right_to_left,
                     rigid,
+                    imports_equal,
                 ) && Self::same_shape_inner(
                     left_result,
                     right_result,
                     left_to_right,
                     right_to_left,
                     rigid,
+                    imports_equal,
                 )
             }
             (Self::List(left), Self::List(right))
             | (Self::Set(left), Self::Set(right))
             | (Self::Option(left), Self::Option(right))
-            | (Self::Signal(left), Self::Signal(right)) => {
-                Self::same_shape_inner(left, right, left_to_right, right_to_left, rigid)
-            }
+            | (Self::Signal(left), Self::Signal(right)) => Self::same_shape_inner(
+                left,
+                right,
+                left_to_right,
+                right_to_left,
+                rigid,
+                imports_equal,
+            ),
             (
                 Self::Map {
                     key: left_key,
@@ -774,14 +831,21 @@ impl GateType {
                     value: right_value,
                 },
             ) => {
-                Self::same_shape_inner(left_key, right_key, left_to_right, right_to_left, rigid)
-                    && Self::same_shape_inner(
-                        left_value,
-                        right_value,
-                        left_to_right,
-                        right_to_left,
-                        rigid,
-                    )
+                Self::same_shape_inner(
+                    left_key,
+                    right_key,
+                    left_to_right,
+                    right_to_left,
+                    rigid,
+                    imports_equal,
+                ) && Self::same_shape_inner(
+                    left_value,
+                    right_value,
+                    left_to_right,
+                    right_to_left,
+                    rigid,
+                    imports_equal,
+                )
             }
             (
                 Self::Result {
@@ -813,14 +877,21 @@ impl GateType {
                     value: right_value,
                 },
             ) => {
-                Self::same_shape_inner(left_error, right_error, left_to_right, right_to_left, rigid)
-                    && Self::same_shape_inner(
-                        left_value,
-                        right_value,
-                        left_to_right,
-                        right_to_left,
-                        rigid,
-                    )
+                Self::same_shape_inner(
+                    left_error,
+                    right_error,
+                    left_to_right,
+                    right_to_left,
+                    rigid,
+                    imports_equal,
+                ) && Self::same_shape_inner(
+                    left_value,
+                    right_value,
+                    left_to_right,
+                    right_to_left,
+                    rigid,
+                    imports_equal,
+                )
             }
             (
                 Self::Domain {
@@ -840,7 +911,14 @@ impl GateType {
                         .iter()
                         .zip(right_arguments.iter())
                         .all(|(left, right)| {
-                            Self::same_shape_inner(left, right, left_to_right, right_to_left, rigid)
+                            Self::same_shape_inner(
+                                left,
+                                right,
+                                left_to_right,
+                                right_to_left,
+                                rigid,
+                                imports_equal,
+                            )
                         })
             }
             (
@@ -861,7 +939,14 @@ impl GateType {
                         .iter()
                         .zip(right_arguments.iter())
                         .all(|(left, right)| {
-                            Self::same_shape_inner(left, right, left_to_right, right_to_left, rigid)
+                            Self::same_shape_inner(
+                                left,
+                                right,
+                                left_to_right,
+                                right_to_left,
+                                rigid,
+                                imports_equal,
+                            )
                         })
             }
             (
@@ -882,7 +967,7 @@ impl GateType {
                 // (u32::MAX), which is used when expanding type aliases without
                 // full module context (e.g. Named references in expand_import_alias_type).
                 let sentinel = ImportId::from_raw(u32::MAX);
-                let ids_match = left_import == right_import
+                let ids_match = imports_equal(*left_import, *right_import)
                     || *left_import == sentinel
                     || *right_import == sentinel;
                 ids_match
@@ -892,7 +977,14 @@ impl GateType {
                         .iter()
                         .zip(right_arguments.iter())
                         .all(|(left, right)| {
-                            Self::same_shape_inner(left, right, left_to_right, right_to_left, rigid)
+                            Self::same_shape_inner(
+                                left,
+                                right,
+                                left_to_right,
+                                right_to_left,
+                                rigid,
+                                imports_equal,
+                            )
                         })
             }
             // Cross-variant name-based equivalence: Domain, OpaqueItem, and
@@ -900,11 +992,19 @@ impl GateType {
             // names and argument shapes agree.  This covers ambient-prelude types
             // versus stdlib-imported types across all variant combinations.
             _ => {
-                if let (Some((ln, la)), Some((rn, ra))) = (left.named_type_parts(), right.named_type_parts())
+                if let (Some((ln, la)), Some((rn, ra))) =
+                    (left.named_type_parts(), right.named_type_parts())
                     && ln == rn
                     && la.len() == ra.len()
                     && la.iter().zip(ra.iter()).all(|(l, r)| {
-                        Self::same_shape_inner(l, r, left_to_right, right_to_left, rigid)
+                        Self::same_shape_inner(
+                            l,
+                            r,
+                            left_to_right,
+                            right_to_left,
+                            rigid,
+                            imports_equal,
+                        )
                     })
                 {
                     return true;

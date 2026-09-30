@@ -822,6 +822,17 @@ Typed core lowers the builtin runtime-supported class-member surface to intrinsi
 
 Instance members lower into first-class executable evidence per `(instance, member)`. Builtin carriers use builtin executable evidence intrinsics, while authored instances use authored executable evidence that points at hidden lowered item bodies, including imported unary higher-kinded uses when evidence selection is concrete enough.
 
+Authored member callables receive an explicit hidden prefix: instance prerequisites, then
+member-local requirements, then visible arguments. Import metadata preserves constructor kinds
+and shared quantifier indices across the visible signature and this prefix. Dictionary references
+retain their polymorphic parameter contract; each application carries its instantiated result type.
+The same evidence construction applies to direct and partial calls, pipes, equality, ordering, and
+applicative clusters. Generic constrained functions can receive authored member dictionaries with
+method-local requirements. Builtin traversal dictionaries whose result applicative is still abstract
+remain outside the executable slice; direct builtin traversal with a known result applicative is
+unchanged. Native support remains subject to the pipeline matrix below.
+
+
 ### 7.2 Core instances
 
 - The canonical builtin executable class/carrier registry lives in `aivi_core::builtin_executable_class_support` and is mirrored in `manual/guide/typeclasses.md#canonical-builtin-executable-support`; other docs should reference that section instead of copying support matrices.

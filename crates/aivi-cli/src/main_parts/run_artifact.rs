@@ -5,9 +5,9 @@ const BACKEND_PAYLOAD_FORMAT: &str = "aivi.backend-payload";
 const BACKEND_PAYLOAD_VERSION: u32 = 4;
 const SOURCE_RUN_CACHE_FORMAT: &str = "aivi.source-run-cache";
 const SOURCE_RUN_CACHE_VERSION: u32 = 5;
-// Revision 12 rechecks sources after conditional instance prerequisites became
-// mandatory for local and imported class dispatch.
-const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "12";
+// Revision 13 rebuilds sources with the per-member hidden evidence ABI,
+// including instance prerequisites and method-local class requirements.
+const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "13";
 const SOURCE_RUN_CACHE_DIR: &str = "run-cache";
 const SOURCE_RUN_CACHE_METADATA_FILE_NAME: &str = "source-run-cache.json";
 const MAX_BINARY_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;

@@ -97,9 +97,10 @@ type Int -> Result Text Int
 func incrementOkForTest = n =>
     Ok (n + 1)
 
-type Text -> Text
-func keepErrorForTest = text =>
-    text
+type Text -> Int
+func errorValueForTest = text => text == "bad"
+ T|> 3
+ F|> 0
 
 @test
 value result_isOk : Task Text Bool = pure (isOk (Ok 2))
@@ -135,7 +136,7 @@ value result_map : Task Text Bool = pure (map incrementForTest (Ok 2) == Ok 3)
 value result_mapBoth : Task Text Bool = pure (mapBoth prefixForTest incrementForTest (Ok 2) == Ok 3)
 
 @test
-value result_fold : Task Text Bool = pure (fold keepErrorForTest incrementForTest (Ok 2) == 3)
+value result_fold : Task Text Bool = pure ((fold errorValueForTest incrementForTest (Ok 2) == 3) and (fold errorValueForTest incrementForTest (Err "bad") == 3))
 
 @test
 value result_fromOption : Task Text Bool = pure (fromOption "bad" (Some 2) == Ok 2)

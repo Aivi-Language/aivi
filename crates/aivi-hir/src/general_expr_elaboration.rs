@@ -16,12 +16,13 @@ use crate::{
     ImportBindingMetadata, ImportId, InstanceItem, InstanceMember, IntrinsicValue, Item, ItemId,
     Module, Name, NamePath, PatchInstructionKind, PatchSelectorSegment, PipeExpr, PipeStageKind,
     PipeTransformMode, ProjectionBase, ResolutionState, SignalItem, TermReference, TermResolution,
-    TypeItemBody, TypeParameterId, TypeResolution, UnaryOperator, ValueItem,
+    TypeBinding, TypeConstructorBinding, TypeConstructorHead, TypeItemBody, TypeParameterId,
+    TypeResolution, UnaryOperator, ValueItem,
     gate_elaboration::{GateElaborationBlocker, GateRuntimeMapEntry},
     typecheck::{
-        expression_matches, resolve_class_member_dispatch,
-        resolve_class_member_dispatch_for_subject, resolve_equality_dispatch,
-        resolve_ordering_dispatch, signal_payload_type,
+        expression_matches, resolve_class_member_dispatch_for_binding,
+        resolve_class_member_dispatch_in_scope, resolve_equality_dispatch_in_scope,
+        resolve_ordering_dispatch_in_scope, signal_payload_type,
     },
     validate::{
         GateClassEvidence, GateExprEnv, GateIssue, GateProjectionStep, GateRecordField, GateType,
@@ -138,7 +139,7 @@ pub struct GeneralExprParameter {
 pub enum GeneralExprParameterKind {
     Ordinary,
     ClassEvidence {
-        subject: GateType,
+        subject: TypeBinding,
         member: ClassMemberResolution,
         priority: u8,
     },
@@ -785,18 +786,42 @@ struct ClassEvidenceRequirement {
     span: SourceSpan,
     name: Box<str>,
     ty: GateType,
-    subject: GateType,
+    visible_ty: GateType,
+    subject: TypeBinding,
     member: ClassMemberResolution,
     priority: u8,
+}
+
+#[derive(Clone, Debug)]
+struct InstanceMemberEvidence {
+    visible_ty: GateType,
+    requirements: Vec<ClassEvidenceRequirement>,
+    instance_requirement_count: usize,
 }
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ClassEvidenceCatalog {
     requirements: BTreeMap<ItemId, Vec<ClassEvidenceRequirement>>,
+    invalid_owners: HashSet<ItemId>,
+    instance_members: BTreeMap<(ItemId, usize), InstanceMemberEvidence>,
 }
 
 impl ClassEvidenceCatalog {
     pub(crate) fn new(module: &Module) -> Self {
+        Self::from_items(module, module.items().iter())
+    }
+
+    pub(crate) fn for_instance_exports(module: &Module) -> Self {
+        Self::from_items(
+            module,
+            module.root_items().iter().filter_map(|owner| {
+                let item = module.items().get(*owner)?;
+                matches!(item, Item::Instance(_)).then_some((*owner, item))
+            }),
+        )
+    }
+
+    fn from_items<'a>(module: &'a Module, items: impl Iterator<Item = (ItemId, &'a Item)>) -> Self {
         let mut typing = GateTypeContext::new(module);
         let mut next_binding_raw = module
             .bindings()
@@ -805,28 +830,114 @@ impl ClassEvidenceCatalog {
             .max()
             .map_or(0, |raw| raw.saturating_add(1));
         let mut requirements = BTreeMap::new();
-        for (owner, item) in module.items().iter() {
-            let (span, constraints) = match item {
+        let mut invalid_owners = HashSet::new();
+        let mut instance_members = BTreeMap::new();
+        for (owner, item) in items {
+            match item {
                 Item::Function(function) if !function.context.is_empty() => {
-                    (function.header.span, function.context.as_slice())
+                    let Some(owner_requirements) = collect_owner_class_requirements(
+                        module,
+                        &mut typing,
+                        &function.context,
+                        &PolyTypeBindings::new(),
+                        function.header.span,
+                        &mut next_binding_raw,
+                    ) else {
+                        invalid_owners.insert(owner);
+                        continue;
+                    };
+                    if !owner_requirements.is_empty() {
+                        requirements.insert(owner, owner_requirements);
+                    }
                 }
-                Item::Instance(instance) if !instance.context.is_empty() => {
-                    (instance.header.span, instance.context.as_slice())
+                Item::Instance(instance) => {
+                    let ResolutionState::Resolved(TypeResolution::Item(class)) =
+                        instance.class.resolution.as_ref()
+                    else {
+                        continue;
+                    };
+                    let Item::Class(class) = &module.items()[*class] else {
+                        continue;
+                    };
+                    let Some(substitutions) = class
+                        .parameters
+                        .iter()
+                        .copied()
+                        .zip(instance.arguments.iter())
+                        .map(|(parameter, annotation)| {
+                            Some((
+                                parameter,
+                                typing.open_poly_type_binding(
+                                    *annotation,
+                                    &PolyTypeBindings::new(),
+                                )?,
+                            ))
+                        })
+                        .collect::<Option<PolyTypeBindings>>()
+                    else {
+                        continue;
+                    };
+                    for (member_index, member) in instance.members.iter().enumerate() {
+                        let Some(signature) = class
+                            .members
+                            .iter()
+                            .find(|signature| signature.name.text() == member.name.text())
+                        else {
+                            continue;
+                        };
+                        let Some(visible_ty) = typing.instantiate_poly_hir_type_partially(
+                            signature.annotation,
+                            &substitutions,
+                        ) else {
+                            continue;
+                        };
+                        let Some(mut member_requirements) = collect_owner_class_requirements(
+                            module,
+                            &mut typing,
+                            &instance.context,
+                            &PolyTypeBindings::new(),
+                            instance.header.span,
+                            &mut next_binding_raw,
+                        ) else {
+                            continue;
+                        };
+                        let instance_requirement_count = member_requirements.len();
+                        let Some(method_requirements) = collect_owner_class_requirements(
+                            module,
+                            &mut typing,
+                            &signature.context,
+                            &substitutions,
+                            member.span,
+                            &mut next_binding_raw,
+                        ) else {
+                            continue;
+                        };
+                        for requirement in method_requirements {
+                            if !member_requirements.iter().any(|existing| {
+                                existing.member == requirement.member
+                                    && existing.subject == requirement.subject
+                            }) {
+                                member_requirements.push(requirement);
+                            }
+                        }
+                        instance_members.insert(
+                            (owner, member_index),
+                            InstanceMemberEvidence {
+                                visible_ty,
+                                requirements: member_requirements,
+                                instance_requirement_count,
+                            },
+                        );
+                    }
                 }
-                _ => continue,
-            };
-            let owner_requirements = collect_owner_class_requirements(
-                module,
-                &mut typing,
-                constraints,
-                span,
-                &mut next_binding_raw,
-            );
-            if !owner_requirements.is_empty() {
-                requirements.insert(owner, owner_requirements);
+                _ => {}
             }
         }
-        Self { requirements }
+        Self {
+            requirements,
+            invalid_owners,
+            instance_members,
+        }
     }
 
     fn requirements_for(&self, owner: ItemId) -> &[ClassEvidenceRequirement] {
@@ -836,9 +947,69 @@ impl ClassEvidenceCatalog {
             .unwrap_or(&[])
     }
 
+    fn instance_member(
+        &self,
+        owner: ItemId,
+        member_index: usize,
+    ) -> Option<&InstanceMemberEvidence> {
+        self.instance_members.get(&(owner, member_index))
+    }
+
+    pub(crate) fn instance_evidence_count(
+        &self,
+        owner: ItemId,
+        member_index: usize,
+    ) -> Option<usize> {
+        Some(
+            self.instance_member(owner, member_index)?
+                .instance_requirement_count,
+        )
+    }
+
     pub(crate) fn has_requirements_for(&self, owner: ItemId) -> bool {
         self.requirements.contains_key(&owner)
     }
+
+    pub(crate) fn export_instance_member_evidence(
+        &self,
+        module: &Module,
+        owner: ItemId,
+        member_index: usize,
+        parameters: &HashMap<TypeParameterId, usize>,
+    ) -> Option<Vec<crate::ImportedClassEvidence>> {
+        export_class_requirements(
+            module,
+            &self.instance_member(owner, member_index)?.requirements,
+            parameters,
+        )
+    }
+}
+
+fn export_class_requirements(
+    module: &Module,
+    requirements: &[ClassEvidenceRequirement],
+    parameters: &HashMap<TypeParameterId, usize>,
+) -> Option<Vec<crate::ImportedClassEvidence>> {
+    requirements
+        .iter()
+        .map(|requirement| {
+            let Item::Class(class) = &module.items()[requirement.member.class] else {
+                return None;
+            };
+            Some(crate::ImportedClassEvidence {
+                class_name: class.name.text().into(),
+                member_name: class.members[requirement.member.member_index]
+                    .name
+                    .text()
+                    .into(),
+                subject: crate::exports::export_type_binding(
+                    module,
+                    &requirement.subject,
+                    parameters,
+                )?,
+            })
+        })
+        .collect()
 }
 
 pub(crate) fn export_function_evidence(
@@ -852,60 +1023,28 @@ pub(crate) fn export_function_evidence(
         .enumerate()
         .map(|(index, parameter)| (*parameter, index))
         .collect();
-    collect_owner_class_requirements(
+    let requirements = collect_owner_class_requirements(
         module,
         &mut typing,
         &function.context,
+        &PolyTypeBindings::new(),
         function.header.span,
         &mut 0,
-    )
-    .into_iter()
-    .map(|requirement| {
-        let Item::Class(class) = &module.items()[requirement.member.class] else {
-            return None;
-        };
-        Some(crate::ImportedClassEvidence {
-            class_name: class.name.text().into(),
-            member_name: class.members[requirement.member.member_index]
-                .name
-                .text()
-                .into(),
-            subject: crate::exports::poly_gate_type_import_value_type(
-                &requirement.subject,
-                &parameters,
-            )?,
-        })
-    })
-    .collect()
+    )?;
+    export_class_requirements(module, &requirements, &parameters)
 }
 
 fn collect_owner_class_requirements(
     module: &Module,
     typing: &mut GateTypeContext<'_>,
     constraints: &[crate::TypeId],
+    substitutions: &PolyTypeBindings,
     span: SourceSpan,
     next_binding_raw: &mut u32,
-) -> Vec<ClassEvidenceRequirement> {
+) -> Option<Vec<ClassEvidenceRequirement>> {
     let mut requirements: Vec<ClassEvidenceRequirement> = Vec::new();
-    for binding in expanded_class_constraint_bindings(module, typing, constraints) {
-        let subject = match binding.subject.clone() {
-            crate::validate::TypeBinding::Type(subject) => subject,
-            crate::validate::TypeBinding::Constructor(constructor) => {
-                let crate::validate::TypeConstructorHead::Parameter { parameter, .. } =
-                    constructor.head()
-                else {
-                    continue;
-                };
-                GateType::TypeParameter {
-                    parameter,
-                    name: module
-                        .type_parameters()
-                        .get(parameter)
-                        .map(|p| p.name.text().to_owned())
-                        .unwrap_or_else(|| format!("F{}", parameter.as_raw())),
-                }
-            }
-        };
+    for binding in expanded_class_constraint_bindings(module, typing, constraints, substitutions)? {
+        let subject = binding.subject.clone();
         for (member, priority) in supported_evidence_members(module, binding.class_item) {
             if requirements
                 .iter()
@@ -913,9 +1052,9 @@ fn collect_owner_class_requirements(
             {
                 continue;
             }
-            let Some(ty) = instantiate_class_member_type(module, typing, member, &subject) else {
-                continue;
-            };
+            let visible_ty =
+                instantiate_class_member_type_for_binding(module, typing, member, &subject)?;
+            let ty = dictionary_callable_type(module, typing, member, &subject)?;
             let binding_id = BindingId::from_raw(*next_binding_raw);
             *next_binding_raw = (*next_binding_raw).saturating_add(1);
             let prefix = if is_ordering_member(module, member) {
@@ -931,6 +1070,7 @@ fn collect_owner_class_requirements(
                 span,
                 name: format!("{prefix}{}", binding_id.as_raw()).into_boxed_str(),
                 ty,
+                visible_ty,
                 subject: subject.clone(),
                 member,
                 priority,
@@ -938,20 +1078,24 @@ fn collect_owner_class_requirements(
         }
     }
     requirements.sort_by_key(|requirement| (requirement.priority, requirement.binding.as_raw()));
-    requirements
+    Some(requirements)
 }
 
 fn expanded_class_constraint_bindings(
     module: &Module,
     typing: &mut GateTypeContext<'_>,
     constraints: &[crate::TypeId],
-) -> Vec<crate::validate::ClassConstraintBinding> {
+    substitutions: &PolyTypeBindings,
+) -> Option<Vec<crate::validate::ClassConstraintBinding>> {
     let mut expanded = Vec::new();
     let mut pending = constraints
         .iter()
-        .filter_map(|constraint| typing.open_class_constraint_binding(*constraint, &HashMap::new()))
-        .collect::<Vec<_>>();
+        .map(|constraint| typing.open_class_constraint_binding(*constraint, substitutions))
+        .collect::<Option<Vec<_>>>()?;
     while let Some(binding) = pending.pop() {
+        if expanded.len() >= 256 || pending.len() > 4096 {
+            return None;
+        }
         if expanded.contains(&binding) {
             continue;
         }
@@ -975,7 +1119,7 @@ fn expanded_class_constraint_bindings(
         }
         expanded.push(binding);
     }
-    expanded
+    Some(expanded)
 }
 
 fn supported_evidence_members(
@@ -1054,23 +1198,88 @@ fn is_equality_member(module: &Module, member: ClassMemberResolution) -> bool {
     }
 }
 
-fn instantiate_class_member_type(
+fn instantiate_class_member_type_for_binding(
     module: &Module,
     typing: &mut GateTypeContext<'_>,
     member: ClassMemberResolution,
-    subject: &GateType,
+    subject: &TypeBinding,
 ) -> Option<GateType> {
-    let Item::Class(class_item) = &module.items()[member.class] else {
+    let Item::Class(class) = &module.items()[member.class] else {
         return None;
     };
-    let resolution = member;
-    let member = class_item.members.get(member.member_index)?;
-    let mut substitutions = HashMap::new();
-    substitutions.insert(
-        *class_item.parameters.first(),
-        typing.class_member_subject_binding(resolution, subject)?,
-    );
-    typing.instantiate_poly_hir_type_partially(member.annotation, &substitutions)
+    typing.instantiate_poly_hir_type_partially(
+        class.members.get(member.member_index)?.annotation,
+        &HashMap::from([(*class.parameters.first(), subject.clone())]),
+    )
+}
+
+fn member_context_requirements(
+    module: &Module,
+    typing: &mut GateTypeContext<'_>,
+    member: ClassMemberResolution,
+    subject: &TypeBinding,
+) -> Option<Vec<(ClassMemberResolution, TypeBinding)>> {
+    let Item::Class(class) = &module.items()[member.class] else {
+        return None;
+    };
+    let signature = class.members.get(member.member_index)?;
+    let substitutions = HashMap::from([(*class.parameters.first(), subject.clone())]);
+    Some(
+        expanded_class_constraint_bindings(module, typing, &signature.context, &substitutions)?
+            .into_iter()
+            .flat_map(|binding| {
+                supported_evidence_members(module, binding.class_item)
+                    .into_iter()
+                    .map(move |(member, _)| (member, binding.subject.clone()))
+            })
+            .collect(),
+    )
+}
+
+fn dictionary_callable_type(
+    module: &Module,
+    typing: &mut GateTypeContext<'_>,
+    member: ClassMemberResolution,
+    subject: &TypeBinding,
+) -> Option<GateType> {
+    enum Step {
+        Visit(ClassMemberResolution, TypeBinding),
+        Complete(GateType, usize),
+    }
+    let mut work = vec![Step::Visit(member, subject.clone())];
+    let mut results = Vec::new();
+    let mut active = Vec::new();
+    let mut steps = 0usize;
+    while let Some(step) = work.pop() {
+        match step {
+            Step::Visit(member, subject) => {
+                steps += 1;
+                if steps > 4096
+                    || active.len() >= 256
+                    || active.contains(&(member, subject.clone()))
+                {
+                    return None;
+                }
+                let visible_ty =
+                    instantiate_class_member_type_for_binding(module, typing, member, &subject)?;
+                let requirements = member_context_requirements(module, typing, member, &subject)?;
+                active.push((member, subject));
+                work.push(Step::Complete(visible_ty, requirements.len()));
+                work.extend(
+                    requirements
+                        .into_iter()
+                        .rev()
+                        .map(|(member, subject)| Step::Visit(member, subject)),
+                );
+            }
+            Step::Complete(visible_ty, count) => {
+                active.pop()?;
+                let prefix = results.split_off(results.len().checked_sub(count)?);
+                results.push(prepend_callable_parameters(visible_ty, prefix));
+            }
+        }
+    }
+    (results.len() == 1).then(|| results.pop().unwrap())
 }
 
 fn arrow_type(parameters: Vec<GateType>, result: GateType) -> GateType {
@@ -1152,7 +1361,8 @@ fn in_scope_equality_evidence<'a>(
     env.class_evidence
         .iter()
         .filter(|candidate| {
-            candidate.subject == *subject && is_equality_member(module, candidate.member)
+            candidate.subject == TypeBinding::Type(subject.clone())
+                && is_equality_member(module, candidate.member)
         })
         .min_by_key(|candidate| candidate.priority)
 }
@@ -1165,7 +1375,8 @@ fn in_scope_ordering_evidence<'a>(
     env.class_evidence
         .iter()
         .filter(|candidate| {
-            candidate.subject == *subject && is_ordering_member(module, candidate.member)
+            candidate.subject == TypeBinding::Type(subject.clone())
+                && is_ordering_member(module, candidate.member)
         })
         .min_by_key(|candidate| candidate.priority)
 }
@@ -1173,62 +1384,410 @@ fn in_scope_ordering_evidence<'a>(
 fn in_scope_class_evidence_by_member<'a>(
     env: &'a GateExprEnv,
     member: ClassMemberResolution,
-    subject: &GateType,
+    subject: &TypeBinding,
 ) -> Option<&'a GateClassEvidence> {
-    if let Some(exact) = env
-        .class_evidence
-        .iter()
-        .find(|candidate| candidate.member == member && candidate.subject == *subject)
-    {
-        return Some(exact);
-    }
     let mut matches = env
         .class_evidence
         .iter()
-        .filter(|candidate| candidate.member == member && candidate.subject.same_shape(subject));
+        .filter(|candidate| candidate.member == member && candidate.subject == *subject);
     let first = matches.next()?;
     matches.next().is_none().then_some(first)
 }
 
+fn substitute_evidence_subject(
+    subject: &TypeBinding,
+    substitutions: &HashMap<TypeParameterId, GateType>,
+) -> Option<TypeBinding> {
+    Some(match subject {
+        TypeBinding::Type(ty) => TypeBinding::Type(substitute_gate_type(ty, substitutions)),
+        TypeBinding::Constructor(binding) => {
+            let (head, mut arguments) = match binding.head() {
+                TypeConstructorHead::Parameter { parameter, arity } => {
+                    match substitutions.get(&parameter) {
+                        Some(GateType::TypeParameter { parameter, .. }) => (
+                            TypeConstructorHead::Parameter {
+                                parameter: *parameter,
+                                arity,
+                            },
+                            Vec::new(),
+                        ),
+                        Some(witness) => {
+                            let (head, mut arguments) = witness.constructor_view()?;
+                            let prefix_len = arguments.len().checked_sub(arity)?;
+                            arguments.truncate(prefix_len);
+                            (head, arguments)
+                        }
+                        None => (binding.head(), Vec::new()),
+                    }
+                }
+                head => (head, Vec::new()),
+            };
+            arguments.extend(
+                binding
+                    .arguments()
+                    .iter()
+                    .map(|ty| substitute_gate_type(ty, substitutions)),
+            );
+            TypeBinding::Constructor(TypeConstructorBinding::new(head, arguments))
+        }
+    })
+}
+
+fn imported_evidence_requirements(
+    module: &Module,
+    typing: &mut GateTypeContext<'_>,
+    evidence: &[crate::ImportedClassEvidence],
+    span: SourceSpan,
+) -> Option<Vec<ClassEvidenceRequirement>> {
+    evidence
+        .iter()
+        .map(|required| {
+            let (class_id, class) = module.items().iter().find_map(|(id, item)| match item {
+                Item::Class(class) if class.name.text() == required.class_name.as_ref() => {
+                    Some((id, class))
+                }
+                _ => None,
+            })?;
+            let member_index = class
+                .members
+                .iter()
+                .position(|member| member.name.text() == required.member_name.as_ref())?;
+            let member = ClassMemberResolution {
+                class: class_id,
+                member_index,
+            };
+            let subject = typing.lower_import_type_binding(&required.subject)?;
+            Some(ClassEvidenceRequirement {
+                binding: BindingId::from_raw(0),
+                span,
+                name: required.member_name.clone(),
+                ty: dictionary_callable_type(module, typing, member, &subject)?,
+                visible_ty: instantiate_class_member_type_for_binding(
+                    module, typing, member, &subject,
+                )?,
+                subject,
+                member,
+                priority: 0,
+            })
+        })
+        .collect()
+}
+
+fn instantiated_dispatch_requirements(
+    module: &Module,
+    typing: &mut GateTypeContext<'_>,
+    catalog: &ClassEvidenceCatalog,
+    dispatch: &crate::ResolvedClassMemberDispatch,
+    visible_ty: &GateType,
+    span: SourceSpan,
+) -> Option<Vec<ClassEvidenceRequirement>> {
+    let (template, requirements) = match dispatch.implementation {
+        crate::ClassMemberImplementation::Builtin => return Some(Vec::new()),
+        crate::ClassMemberImplementation::SameModuleInstance {
+            instance,
+            member_index,
+        } => {
+            let layout = catalog.instance_member(instance, member_index)?;
+            (layout.visible_ty.clone(), layout.requirements.clone())
+        }
+        crate::ClassMemberImplementation::ImportedInstance { import } => {
+            let ImportBindingMetadata::InstanceMember { ty, evidence, .. } =
+                &module.imports()[import].metadata
+            else {
+                return None;
+            };
+            (
+                typing.lower_import_value_type(ty),
+                imported_evidence_requirements(module, typing, evidence, span)?,
+            )
+        }
+    };
+    let substitutions = collect_type_param_subs(
+        std::slice::from_ref(&template),
+        std::slice::from_ref(visible_ty),
+    );
+    requirements
+        .into_iter()
+        .map(|mut requirement| {
+            requirement.subject =
+                substitute_evidence_subject(&requirement.subject, &substitutions)?;
+            requirement.ty = substitute_gate_type(&requirement.ty, &substitutions);
+            requirement.visible_ty = substitute_gate_type(&requirement.visible_ty, &substitutions);
+            Some(requirement)
+        })
+        .collect()
+}
+
+/// Build explicit evidence applications with bounded worklists. The reference
+/// names the full hidden ABI; applying its prefix yields the surface callable.
+pub(crate) fn lower_class_dispatch_with_evidence(
+    module: &Module,
+    typing: &mut GateTypeContext<'_>,
+    catalog: &ClassEvidenceCatalog,
+    env: &GateExprEnv,
+    span: SourceSpan,
+    dispatch: crate::ResolvedClassMemberDispatch,
+    visible_ty: GateType,
+) -> Option<GateRuntimeExpr> {
+    lower_evidence_expression(
+        module,
+        typing,
+        catalog,
+        env,
+        span,
+        EvidenceExpressionInput {
+            dispatch,
+            visible_ty,
+            dictionary: false,
+        },
+    )
+}
+
+struct EvidenceExpressionInput {
+    dispatch: crate::ResolvedClassMemberDispatch,
+    visible_ty: GateType,
+    dictionary: bool,
+}
+
+fn lower_evidence_expression(
+    module: &Module,
+    typing: &mut GateTypeContext<'_>,
+    catalog: &ClassEvidenceCatalog,
+    env: &GateExprEnv,
+    span: SourceSpan,
+    input: EvidenceExpressionInput,
+) -> Option<GateRuntimeExpr> {
+    let EvidenceExpressionInput {
+        dispatch,
+        visible_ty,
+        dictionary,
+    } = input;
+    enum Step {
+        Resolve {
+            member: ClassMemberResolution,
+            subject: TypeBinding,
+            ty: GateType,
+            dispatch: Option<crate::ResolvedClassMemberDispatch>,
+            dictionary: bool,
+        },
+        Complete {
+            dispatch: crate::ResolvedClassMemberDispatch,
+            ty: GateType,
+            count: usize,
+        },
+    }
+    let mut pending = vec![Step::Resolve {
+        member: dispatch.member,
+        subject: dispatch.subject.clone(),
+        ty: visible_ty,
+        dispatch: Some(dispatch),
+        dictionary,
+    }];
+    let mut values = Vec::new();
+    let mut active = Vec::new();
+    let mut steps = 0usize;
+    while let Some(step) = pending.pop() {
+        match step {
+            Step::Resolve {
+                member,
+                subject,
+                mut ty,
+                dispatch,
+                dictionary,
+            } => {
+                steps += 1;
+                if steps > 4096 || active.len() >= 256 {
+                    return None;
+                }
+                if dispatch.is_none()
+                    && let Some(local) = in_scope_class_evidence_by_member(env, member, &subject)
+                {
+                    values.push(GateRuntimeExpr {
+                        span,
+                        ty: local.ty.clone(),
+                        kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Local(
+                            local.binding,
+                        )),
+                    });
+                    continue;
+                }
+                if active.contains(&(member, subject.clone())) {
+                    return None;
+                }
+                let dispatch = dispatch.or_else(|| {
+                    resolve_class_member_dispatch_for_binding(module, member, &subject, env)
+                })?;
+                let mut requirements = instantiated_dispatch_requirements(
+                    module, typing, catalog, &dispatch, &ty, span,
+                )?;
+                if dictionary {
+                    let instance_count = match dispatch.implementation {
+                        crate::ClassMemberImplementation::SameModuleInstance {
+                            instance,
+                            member_index,
+                        } => {
+                            catalog
+                                .instance_member(instance, member_index)?
+                                .instance_requirement_count
+                        }
+                        crate::ClassMemberImplementation::ImportedInstance { import } => {
+                            match &module.imports()[import].metadata {
+                                ImportBindingMetadata::InstanceMember {
+                                    instance_evidence_count,
+                                    ..
+                                } => *instance_evidence_count,
+                                _ => return None,
+                            }
+                        }
+                        crate::ClassMemberImplementation::Builtin => 0,
+                    };
+                    if instance_count > requirements.len() {
+                        return None;
+                    }
+                    let method_requirements = requirements.split_off(instance_count);
+                    ty = prepend_callable_parameters(
+                        ty,
+                        method_requirements
+                            .iter()
+                            .map(|requirement| requirement.ty.clone())
+                            .collect(),
+                    );
+                }
+                active.push((member, subject));
+                pending.push(Step::Complete {
+                    dispatch,
+                    ty,
+                    count: requirements.len(),
+                });
+                for requirement in requirements.into_iter().rev() {
+                    pending.push(Step::Resolve {
+                        member: requirement.member,
+                        subject: requirement.subject,
+                        ty: requirement.visible_ty,
+                        dispatch: None,
+                        dictionary: true,
+                    });
+                }
+            }
+            Step::Complete {
+                dispatch,
+                ty,
+                count,
+            } => {
+                active.pop()?;
+                let arguments = values.split_off(values.len().checked_sub(count)?);
+                let callee = GateRuntimeExpr {
+                    span,
+                    ty: prepend_callable_parameters(
+                        ty.clone(),
+                        arguments
+                            .iter()
+                            .map(|argument| argument.ty.clone())
+                            .collect(),
+                    ),
+                    kind: GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(
+                        dispatch,
+                    )),
+                };
+                values.push(if arguments.is_empty() {
+                    callee
+                } else {
+                    GateRuntimeExpr {
+                        span,
+                        ty,
+                        kind: GateRuntimeExprKind::Apply {
+                            callee: Box::new(callee),
+                            arguments,
+                        },
+                    }
+                });
+            }
+        }
+    }
+    (values.len() == 1).then(|| values.pop().unwrap())
+}
+
 fn lower_class_evidence_arguments(
     module: &Module,
+    typing: &mut GateTypeContext<'_>,
+    catalog: &ClassEvidenceCatalog,
     env: &GateExprEnv,
     requirements: &[ClassEvidenceRequirement],
     substitutions: &HashMap<TypeParameterId, GateType>,
     span: SourceSpan,
 ) -> Option<Vec<GateRuntimeExpr>> {
-    let mut arguments = Vec::with_capacity(requirements.len());
-    for requirement in requirements {
-        let subject = substitute_gate_type(&requirement.subject, substitutions);
-        let scope_subject = match &subject {
-            GateType::TypeApplication {
-                parameter, name, ..
-            } => GateType::TypeParameter {
-                parameter: *parameter,
-                name: name.clone(),
-            },
-            other => other.clone(),
-        };
-        if let Some(local) =
-            in_scope_class_evidence_by_member(env, requirement.member, &scope_subject)
-        {
-            arguments.push(GateRuntimeExpr {
+    requirements
+        .iter()
+        .map(|requirement| {
+            let subject = substitute_evidence_subject(&requirement.subject, substitutions)?;
+            let visible_ty = substitute_gate_type(&requirement.visible_ty, substitutions);
+            if let Some(local) =
+                in_scope_class_evidence_by_member(env, requirement.member, &subject)
+            {
+                return Some(GateRuntimeExpr {
+                    span,
+                    ty: local.ty.clone(),
+                    kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Local(
+                        local.binding,
+                    )),
+                });
+            }
+            let dispatch = resolve_class_member_dispatch_for_binding(
+                module,
+                requirement.member,
+                &subject,
+                env,
+            )?;
+            lower_evidence_expression(
+                module,
+                typing,
+                catalog,
+                env,
                 span,
-                ty: local.ty.clone(),
-                kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Local(local.binding)),
-            });
-            continue;
-        }
-        let ty = substitute_gate_type(&requirement.ty, substitutions);
-        let dispatch =
-            resolve_class_member_dispatch_for_subject(module, requirement.member, &subject)?;
-        arguments.push(GateRuntimeExpr {
-            span,
-            ty,
-            kind: GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(dispatch)),
+                EvidenceExpressionInput {
+                    dispatch,
+                    visible_ty,
+                    dictionary: true,
+                },
+            )
+        })
+        .collect()
+}
+
+fn prepend_class_parameters(
+    requirements: &[ClassEvidenceRequirement],
+    parameters: &mut Vec<GeneralExprParameter>,
+    env: &mut GateExprEnv,
+) {
+    for requirement in requirements {
+        env.locals
+            .insert(requirement.binding, requirement.ty.clone());
+        env.class_evidence.push(GateClassEvidence {
+            binding: requirement.binding,
+            span: requirement.span,
+            name: requirement.name.clone(),
+            ty: requirement.ty.clone(),
+            subject: requirement.subject.clone(),
+            member: requirement.member,
+            priority: requirement.priority,
         });
     }
-    Some(arguments)
+    let mut evidence_parameters = requirements
+        .iter()
+        .map(|requirement| GeneralExprParameter {
+            binding: requirement.binding,
+            span: requirement.span,
+            name: requirement.name.clone(),
+            ty: requirement.ty.clone(),
+            kind: GeneralExprParameterKind::ClassEvidence {
+                subject: requirement.subject.clone(),
+                member: requirement.member,
+                priority: requirement.priority,
+            },
+        })
+        .collect::<Vec<_>>();
+    evidence_parameters.append(parameters);
+    *parameters = evidence_parameters;
 }
 
 pub(crate) fn extend_gate_env_with_class_evidence(
@@ -1260,10 +1819,33 @@ pub(crate) fn lower_name_expr_with_class_evidence(
     env: &GateExprEnv,
     visible_ty: &GateType,
 ) -> Option<GateRuntimeExpr> {
-    if let Some(local) =
-        lower_class_member_callee_with_evidence(env, reference, visible_ty, visible_ty.clone())
-    {
+    if let Some(local) = lower_class_member_callee_with_evidence(
+        module,
+        typing,
+        evidence,
+        env,
+        reference,
+        visible_ty.clone(),
+    ) {
         return Some(local);
+    }
+    if matches!(
+        reference.resolution.as_ref(),
+        ResolutionState::Resolved(
+            TermResolution::ClassMember(_) | TermResolution::AmbiguousClassMembers(_)
+        )
+    ) {
+        let dispatch =
+            resolve_class_member_dispatch_in_scope(module, reference, &[], Some(visible_ty), env)?;
+        return lower_class_dispatch_with_evidence(
+            module,
+            typing,
+            evidence,
+            env,
+            span,
+            dispatch,
+            visible_ty.clone(),
+        );
     }
     let imported = match reference.resolution.as_ref() {
         ResolutionState::Resolved(TermResolution::Import(id)) => Some(*id),
@@ -1273,46 +1855,26 @@ pub(crate) fn lower_name_expr_with_class_evidence(
         _ => None,
     };
     if let Some(import) = imported
-        && let crate::ImportBindingMetadata::ConstrainedValue { ty, evidence } =
-            &module.imports()[import].metadata
+        && let crate::ImportBindingMetadata::ConstrainedValue {
+            ty,
+            evidence: imported_evidence,
+        } = &module.imports()[import].metadata
     {
         let signature = typing.lower_import_value_type(ty);
         let substitutions = collect_type_param_subs(
             std::slice::from_ref(&signature),
             std::slice::from_ref(visible_ty),
         );
-        let requirements = evidence
-            .iter()
-            .map(|required| {
-                let (class_id, class) =
-                    module.items().iter().find_map(|(id, item)| match item {
-                        Item::Class(class) if class.name.text() == required.class_name.as_ref() => {
-                            Some((id, class))
-                        }
-                        _ => None,
-                    })?;
-                let member_index = class
-                    .members
-                    .iter()
-                    .position(|member| member.name.text() == required.member_name.as_ref())?;
-                let member = ClassMemberResolution {
-                    class: class_id,
-                    member_index,
-                };
-                let subject = typing.lower_import_value_type(&required.subject);
-                Some(ClassEvidenceRequirement {
-                    binding: BindingId::from_raw(0),
-                    span,
-                    name: required.member_name.clone(),
-                    ty: instantiate_class_member_type(module, typing, member, &subject)?,
-                    subject,
-                    member,
-                    priority: 0,
-                })
-            })
-            .collect::<Option<Vec<_>>>()?;
-        let arguments =
-            lower_class_evidence_arguments(module, env, &requirements, &substitutions, span)?;
+        let requirements = imported_evidence_requirements(module, typing, imported_evidence, span)?;
+        let arguments = lower_class_evidence_arguments(
+            module,
+            typing,
+            evidence,
+            env,
+            &requirements,
+            &substitutions,
+            span,
+        )?;
         let callee = GateRuntimeExpr {
             span,
             ty: prepend_callable_parameters(
@@ -1366,8 +1928,15 @@ pub(crate) fn lower_name_expr_with_class_evidence(
         std::slice::from_ref(&item_visible_ty),
         std::slice::from_ref(visible_ty),
     );
-    let evidence_arguments =
-        lower_class_evidence_arguments(module, env, requirements, &substitutions, span)?;
+    let evidence_arguments = lower_class_evidence_arguments(
+        module,
+        typing,
+        evidence,
+        env,
+        requirements,
+        &substitutions,
+        span,
+    )?;
     if evidence_arguments.is_empty() {
         return None;
     }
@@ -1395,28 +1964,39 @@ pub(crate) fn lower_name_expr_with_class_evidence(
 
 pub(crate) fn build_equality_runtime_expr(
     module: &Module,
+    typing: &mut GateTypeContext<'_>,
+    catalog: &ClassEvidenceCatalog,
     env: &GateExprEnv,
-    span: SourceSpan,
-    ty: GateType,
-    operator: BinaryOperator,
-    left: GateRuntimeExpr,
-    right: GateRuntimeExpr,
-) -> GateRuntimeExpr {
-    let callee = in_scope_equality_evidence(env, module, &left.ty)
-        .map(|evidence| GateRuntimeExpr {
+    input: ComparisonRuntimeExprInput,
+) -> Option<GateRuntimeExpr> {
+    let ComparisonRuntimeExprInput {
+        span,
+        ty,
+        operator,
+        left,
+        right,
+    } = input;
+    let callee = if let Some(evidence) = in_scope_equality_evidence(env, module, &left.ty) {
+        Some(GateRuntimeExpr {
             span,
             ty: evidence.ty.clone(),
             kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Local(evidence.binding)),
         })
-        .or_else(|| {
-            resolve_equality_dispatch(module, &left.ty).map(|dispatch| GateRuntimeExpr {
-                span,
-                ty: arrow_type(vec![left.ty.clone(), right.ty.clone()], ty.clone()),
-                kind: GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(dispatch)),
-            })
-        });
+    } else if let Some(dispatch) = resolve_equality_dispatch_in_scope(module, &left.ty, env) {
+        Some(lower_class_dispatch_with_evidence(
+            module,
+            typing,
+            catalog,
+            env,
+            span,
+            dispatch,
+            arrow_type(vec![left.ty.clone(), right.ty.clone()], ty.clone()),
+        )?)
+    } else {
+        None
+    };
     let Some(callee) = callee else {
-        return GateRuntimeExpr {
+        return Some(GateRuntimeExpr {
             span,
             ty,
             kind: GateRuntimeExprKind::Binary {
@@ -1424,7 +2004,7 @@ pub(crate) fn build_equality_runtime_expr(
                 operator,
                 right: Box::new(right),
             },
-        };
+        });
     };
     let equal = GateRuntimeExpr {
         span,
@@ -1434,7 +2014,7 @@ pub(crate) fn build_equality_runtime_expr(
             arguments: vec![left, right],
         },
     };
-    match operator {
+    Some(match operator {
         BinaryOperator::Equals => equal,
         BinaryOperator::NotEquals => GateRuntimeExpr {
             span,
@@ -1445,43 +2025,44 @@ pub(crate) fn build_equality_runtime_expr(
             },
         },
         _ => unreachable!("only equality operators lower through equality evidence"),
-    }
+    })
 }
 
 pub(crate) fn build_ordering_runtime_expr(
     module: &Module,
     typing: &mut GateTypeContext<'_>,
+    catalog: &ClassEvidenceCatalog,
     env: &GateExprEnv,
-    input: OrderingRuntimeExprInput,
-) -> GateRuntimeExpr {
-    let OrderingRuntimeExprInput {
+    input: ComparisonRuntimeExprInput,
+) -> Option<GateRuntimeExpr> {
+    let ComparisonRuntimeExprInput {
         span,
         ty,
         operator,
         left,
         right,
     } = input;
-    let callee = in_scope_ordering_evidence(env, module, &left.ty)
-        .map(|evidence| GateRuntimeExpr {
+    let callee = if let Some(evidence) = in_scope_ordering_evidence(env, module, &left.ty) {
+        Some(GateRuntimeExpr {
             span,
             ty: evidence.ty.clone(),
             kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Local(evidence.binding)),
         })
-        .or_else(|| {
-            resolve_ordering_dispatch(module, &left.ty).and_then(|dispatch| {
-                let callee_ty =
-                    instantiate_class_member_type(module, typing, dispatch.member, &left.ty)?;
-                Some(GateRuntimeExpr {
-                    span,
-                    ty: callee_ty,
-                    kind: GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(
-                        dispatch,
-                    )),
-                })
-            })
-        });
+    } else if let Some(dispatch) = resolve_ordering_dispatch_in_scope(module, &left.ty, env) {
+        let callee_ty = instantiate_class_member_type_for_binding(
+            module,
+            typing,
+            dispatch.member,
+            &dispatch.subject,
+        )?;
+        Some(lower_class_dispatch_with_evidence(
+            module, typing, catalog, env, span, dispatch, callee_ty,
+        )?)
+    } else {
+        None
+    };
     let Some(callee) = callee else {
-        return GateRuntimeExpr {
+        return Some(GateRuntimeExpr {
             span,
             ty,
             kind: GateRuntimeExprKind::Binary {
@@ -1489,40 +2070,17 @@ pub(crate) fn build_ordering_runtime_expr(
                 operator,
                 right: Box::new(right),
             },
-        };
+        });
     };
-    let Some(ordering_ty) = strip_leading_arrow_result(&callee.ty, 2) else {
-        return GateRuntimeExpr {
-            span,
-            ty,
-            kind: GateRuntimeExprKind::Binary {
-                left: Box::new(left),
-                operator,
-                right: Box::new(right),
-            },
-        };
+    let ordering_ty = strip_leading_arrow_result(&callee.ty, 2)?;
+    let (ordering_variant, equality_operator) = match operator {
+        BinaryOperator::GreaterThan => ("Greater", BinaryOperator::Equals),
+        BinaryOperator::LessThan => ("Less", BinaryOperator::Equals),
+        BinaryOperator::GreaterThanOrEqual => ("Less", BinaryOperator::NotEquals),
+        BinaryOperator::LessThanOrEqual => ("Greater", BinaryOperator::NotEquals),
+        _ => unreachable!("only ordering operators lower through Ord.compare"),
     };
-    let Some((ordering_variant, equality_operator)) = (match operator {
-        BinaryOperator::GreaterThan => Some(("Greater", BinaryOperator::Equals)),
-        BinaryOperator::LessThan => Some(("Less", BinaryOperator::Equals)),
-        BinaryOperator::GreaterThanOrEqual => Some(("Less", BinaryOperator::NotEquals)),
-        BinaryOperator::LessThanOrEqual => Some(("Greater", BinaryOperator::NotEquals)),
-        _ => None,
-    }) else {
-        unreachable!("only ordering operators lower through Ord.compare");
-    };
-    let Some(constructor) = ordering_constructor_handle(module, &ordering_ty, ordering_variant)
-    else {
-        return GateRuntimeExpr {
-            span,
-            ty,
-            kind: GateRuntimeExprKind::Binary {
-                left: Box::new(left),
-                operator,
-                right: Box::new(right),
-            },
-        };
-    };
+    let constructor = ordering_constructor_handle(module, &ordering_ty, ordering_variant)?;
     let compare = GateRuntimeExpr {
         span,
         ty: ordering_ty.clone(),
@@ -1536,10 +2094,22 @@ pub(crate) fn build_ordering_runtime_expr(
         ty: ordering_ty,
         kind: GateRuntimeExprKind::Reference(GateRuntimeReference::SumConstructor(constructor)),
     };
-    build_equality_runtime_expr(module, env, span, ty, equality_operator, compare, target)
+    build_equality_runtime_expr(
+        module,
+        typing,
+        catalog,
+        env,
+        ComparisonRuntimeExprInput {
+            span,
+            ty,
+            operator: equality_operator,
+            left: compare,
+            right: target,
+        },
+    )
 }
 
-pub(crate) struct OrderingRuntimeExprInput {
+pub(crate) struct ComparisonRuntimeExprInput {
     pub(crate) span: SourceSpan,
     pub(crate) ty: GateType,
     pub(crate) operator: BinaryOperator,
@@ -1559,9 +2129,11 @@ struct ShortCircuitValidateInput<'a> {
 }
 
 pub(crate) fn lower_class_member_callee_with_evidence(
+    module: &Module,
+    typing: &mut GateTypeContext<'_>,
+    catalog: &ClassEvidenceCatalog,
     env: &GateExprEnv,
     reference: &TermReference,
-    subject: &GateType,
     callee_ty: GateType,
 ) -> Option<GateRuntimeExpr> {
     let ResolutionState::Resolved(TermResolution::ClassMember(member)) =
@@ -1569,19 +2141,117 @@ pub(crate) fn lower_class_member_callee_with_evidence(
     else {
         return None;
     };
-    let evidence = in_scope_class_evidence_by_member(env, *member, subject).or_else(|| {
-        let mut candidates = env
-            .class_evidence
-            .iter()
-            .filter(|e| e.member == *member && callee_ty.fits_template(&e.ty));
-        let first = candidates.next()?;
-        candidates.next().is_none().then_some(first)
-    })?;
-    Some(GateRuntimeExpr {
+    let mut matches = env.class_evidence.iter().filter_map(|evidence| {
+        if evidence.member != *member {
+            return None;
+        }
+        let template =
+            instantiate_class_member_type_for_binding(module, typing, *member, &evidence.subject)?;
+        let mut substitutions = HashMap::new();
+        typing
+            .match_gate_type_template(&template, &callee_ty, &mut substitutions)
+            .then_some((evidence, substitutions))
+    });
+    let (local, substitutions) = matches.next()?;
+    if matches.next().is_some() {
+        return None;
+    }
+    let requirements = member_context_requirements(module, typing, *member, &local.subject)?
+        .into_iter()
+        .map(|(member, subject)| {
+            Some(ClassEvidenceRequirement {
+                binding: BindingId::from_raw(0),
+                span: reference.span(),
+                name: local.name.clone(),
+                ty: dictionary_callable_type(module, typing, member, &subject)?,
+                visible_ty: instantiate_class_member_type_for_binding(
+                    module, typing, member, &subject,
+                )?,
+                subject,
+                member,
+                priority: 0,
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let arguments = lower_class_evidence_arguments(
+        module,
+        typing,
+        catalog,
+        env,
+        &requirements,
+        &substitutions,
+        reference.span(),
+    )?;
+    // A dictionary is a polymorphic callable. Its reference retains the
+    // parameter contract; the application carries the instantiated result.
+    let callee = GateRuntimeExpr {
         span: reference.span(),
-        ty: callee_ty,
-        kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Local(evidence.binding)),
+        ty: env.locals.get(&local.binding)?.clone(),
+        kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Local(local.binding)),
+    };
+    Some(if arguments.is_empty() {
+        callee
+    } else {
+        GateRuntimeExpr {
+            span: reference.span(),
+            ty: callee_ty,
+            kind: GateRuntimeExprKind::Apply {
+                callee: Box::new(callee),
+                arguments,
+            },
+        }
     })
+}
+
+pub(crate) struct AmbientClassCall<'a> {
+    pub span: SourceSpan,
+    pub class_name: &'a str,
+    pub member_name: &'a str,
+    pub argument_types: Vec<GateType>,
+    pub result_type: GateType,
+}
+
+pub(crate) fn lower_ambient_class_call(
+    module: &Module,
+    typing: &mut GateTypeContext<'_>,
+    catalog: &ClassEvidenceCatalog,
+    env: &GateExprEnv,
+    input: AmbientClassCall<'_>,
+) -> Option<GateRuntimeExpr> {
+    let member = module.ambient_items().iter().find_map(|class| {
+        let Item::Class(item) = &module.items()[*class] else {
+            return None;
+        };
+        if item.name.text() != input.class_name {
+            return None;
+        }
+        Some(ClassMemberResolution {
+            class: *class,
+            member_index: item
+                .members
+                .iter()
+                .position(|member| member.name.text() == input.member_name)?,
+        })
+    })?;
+    let reference = TermReference::resolved(
+        NamePath::from_vec(vec![Name::new(input.member_name, input.span).ok()?]).ok()?,
+        TermResolution::ClassMember(member),
+    );
+    let dispatch = resolve_class_member_dispatch_in_scope(
+        module,
+        &reference,
+        &input.argument_types,
+        Some(&input.result_type),
+        env,
+    );
+    let callee_ty = arrow_type(input.argument_types, input.result_type);
+    if let Some(dispatch) = dispatch {
+        lower_class_dispatch_with_evidence(
+            module, typing, catalog, env, input.span, dispatch, callee_ty,
+        )
+    } else {
+        lower_class_member_callee_with_evidence(module, typing, catalog, env, &reference, callee_ty)
+    }
 }
 
 struct GeneralExprElaborator<'a> {
@@ -1890,6 +2560,18 @@ impl<'a> GeneralExprElaborator<'a> {
         owner: ItemId,
         function: &FunctionItem,
     ) -> GeneralExprItemElaboration {
+        if self.class_evidence.invalid_owners.contains(&owner) {
+            return GeneralExprItemElaboration {
+                owner,
+                body_expr: function.body,
+                parameters: Vec::new(),
+                outcome: GeneralExprOutcome::Blocked(BlockedGeneralExpr {
+                    blockers: vec![GeneralExprBlocker::UnknownExprType {
+                        span: function.header.span,
+                    }],
+                }),
+            };
+        }
         let inferred_signature = self
             .typing
             .item_value_type(owner)
@@ -2209,7 +2891,18 @@ impl<'a> GeneralExprElaborator<'a> {
                     };
                 }
             };
-        self.prepend_owner_class_parameters(owner, &mut parameters, &mut env);
+        let Some(layout) = self.class_evidence.instance_member(owner, member_index) else {
+            return GeneralExprInstanceMemberElaboration {
+                instance_owner: owner,
+                member_index,
+                body_expr: member.body,
+                parameters,
+                outcome: GeneralExprOutcome::Blocked(BlockedGeneralExpr {
+                    blockers: vec![GeneralExprBlocker::UnknownExprType { span: member.span }],
+                }),
+            };
+        };
+        prepend_class_parameters(&layout.requirements, &mut parameters, &mut env);
         let outcome = match self.lower_expr_with_signal_result_fallback(
             member.body,
             &env,
@@ -2234,28 +2927,7 @@ impl<'a> GeneralExprElaborator<'a> {
         parameters: &mut Vec<GeneralExprParameter>,
         env: &mut GateExprEnv,
     ) {
-        let requirements = self.class_evidence.requirements_for(owner);
-        if requirements.is_empty() {
-            return;
-        }
-        extend_gate_env_with_class_evidence(env, owner, &self.class_evidence);
-        let mut evidence_parameters = requirements
-            .iter()
-            .map(|requirement| GeneralExprParameter {
-                binding: requirement.binding,
-                span: requirement.span,
-                name: requirement.name.clone(),
-                ty: requirement.ty.clone(),
-                kind: GeneralExprParameterKind::ClassEvidence {
-                    subject: requirement.subject.clone(),
-                    member: requirement.member,
-                    priority: requirement.priority,
-                },
-            })
-            .collect::<Vec<_>>();
-        let mut ordinary = std::mem::take(parameters);
-        evidence_parameters.append(&mut ordinary);
-        *parameters = evidence_parameters;
+        prepend_class_parameters(self.class_evidence.requirements_for(owner), parameters, env);
     }
 
     fn lower_parameters(
@@ -2792,15 +3464,20 @@ impl<'a> GeneralExprElaborator<'a> {
                 let left = self.lower_expr(left, env, ambient, expected_operand.as_ref())?;
                 let right = self.lower_expr(right, env, ambient, Some(&left.ty))?;
                 if matches!(operator, BinaryOperator::Equals | BinaryOperator::NotEquals) {
-                    return Ok(build_equality_runtime_expr(
+                    return build_equality_runtime_expr(
                         self.module,
+                        &mut self.typing,
+                        &self.class_evidence,
                         env,
-                        expr.span,
-                        ty,
-                        operator,
-                        left,
-                        right,
-                    ));
+                        ComparisonRuntimeExprInput {
+                            span: expr.span,
+                            ty,
+                            operator,
+                            left,
+                            right,
+                        },
+                    )
+                    .ok_or_else(|| vec![GeneralExprBlocker::UnknownExprType { span: expr.span }]);
                 }
                 if matches!(
                     operator,
@@ -2809,18 +3486,20 @@ impl<'a> GeneralExprElaborator<'a> {
                         | BinaryOperator::GreaterThanOrEqual
                         | BinaryOperator::LessThanOrEqual
                 ) {
-                    return Ok(build_ordering_runtime_expr(
+                    return build_ordering_runtime_expr(
                         self.module,
                         &mut self.typing,
+                        &self.class_evidence,
                         env,
-                        OrderingRuntimeExprInput {
+                        ComparisonRuntimeExprInput {
                             span: expr.span,
                             ty,
                             operator,
                             left,
                             right,
                         },
-                    ));
+                    )
+                    .ok_or_else(|| vec![GeneralExprBlocker::UnknownExprType { span: expr.span }]);
                 }
                 GateRuntimeExprKind::Binary {
                     left: Box::new(left),
@@ -3263,9 +3942,9 @@ impl<'a> GeneralExprElaborator<'a> {
         };
         let inferred_parameter_types = inferred_callee_ty.as_ref().and_then(|ty| {
             let (parameters, inferred_result) = self.function_signature(ty, arguments.len())?;
-            // When the callee is polymorphic but the concrete result type is known,
-            // pre-substitute TypeParameters so argument expectations are concrete.
-            if !call_result_ty.has_type_params() && inferred_result.has_type_params() {
+            // Result structure constrains a polymorphic callback even when its
+            // payload or enclosing constructor still contains rigid parameters.
+            if inferred_result.has_type_params() {
                 let subs = collect_type_param_subs(
                     &[inferred_result],
                     std::slice::from_ref(call_result_ty),
@@ -3351,44 +4030,48 @@ impl<'a> GeneralExprElaborator<'a> {
         } else {
             self.arrow_type(argument_types.clone(), call_result_ty.clone())
         };
-        let lowered_callee = if let ExprKind::Name(reference) = &self.module.exprs()[callee].kind {
-            if matches!(
+        let lowered_callee = if let ExprKind::Name(reference) = &self.module.exprs()[callee].kind
+            && matches!(
                 reference.resolution.as_ref(),
-                ResolutionState::Resolved(TermResolution::ClassMember(_))
-                    | ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_))
+                ResolutionState::Resolved(
+                    TermResolution::ClassMember(_) | TermResolution::AmbiguousClassMembers(_)
+                )
             ) {
-                if let Some(dispatch) = resolve_class_member_dispatch(
+            if let Some(dispatch) = resolve_class_member_dispatch_in_scope(
+                self.module,
+                reference,
+                &argument_types,
+                Some(result_ty),
+                env,
+            ) {
+                lower_class_dispatch_with_evidence(
                     self.module,
-                    reference,
-                    &argument_types,
-                    Some(result_ty),
-                ) {
-                    GateRuntimeExpr {
+                    &mut self.typing,
+                    &self.class_evidence,
+                    env,
+                    self.module.exprs()[callee].span,
+                    dispatch,
+                    callee_expected.clone(),
+                )
+                .ok_or_else(|| {
+                    vec![GeneralExprBlocker::UnknownExprType {
                         span: self.module.exprs()[callee].span,
-                        ty: callee_expected.clone(),
-                        kind: GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(
-                            dispatch,
-                        )),
-                    }
-                } else if let Some(subject) = argument_types.first() {
-                    lower_class_member_callee_with_evidence(
-                        env,
-                        reference,
-                        subject,
-                        callee_expected.clone(),
-                    )
-                    .ok_or_else(|| {
-                        vec![GeneralExprBlocker::UnknownExprType {
-                            span: self.module.exprs()[callee].span,
-                        }]
-                    })?
-                } else {
-                    return Err(vec![GeneralExprBlocker::UnknownExprType {
-                        span: self.module.exprs()[callee].span,
-                    }]);
-                }
+                    }]
+                })?
             } else {
-                self.lower_expr(callee, env, ambient, Some(&callee_expected))?
+                lower_class_member_callee_with_evidence(
+                    self.module,
+                    &mut self.typing,
+                    &self.class_evidence,
+                    env,
+                    reference,
+                    callee_expected.clone(),
+                )
+                .ok_or_else(|| {
+                    vec![GeneralExprBlocker::UnknownExprType {
+                        span: self.module.exprs()[callee].span,
+                    }]
+                })?
             }
         } else {
             self.lower_expr(callee, env, ambient, Some(&callee_expected))?
@@ -4200,51 +4883,48 @@ impl<'a> GeneralExprElaborator<'a> {
             .ok_or_else(|| vec![GeneralExprBlocker::UnknownExprType { span: expr.span }])?;
         let callee_ty = self.arrow_type(plan.parameter_types.clone(), plan.result_type.clone());
 
-        // For class member callees, dispatch with all argument types (explicit + ambient)
-        // because `infer_name` returns no type for class members, making `lower_expr` fail
-        // when the callee type is open (contains TypeParameters).
         let callee = if let ExprKind::Name(reference) = &self.module.exprs()[plan.callee_expr].kind
-        {
-            if matches!(
+            && matches!(
                 reference.resolution.as_ref(),
-                ResolutionState::Resolved(TermResolution::ClassMember(_))
-                    | ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_))
+                ResolutionState::Resolved(
+                    TermResolution::ClassMember(_) | TermResolution::AmbiguousClassMembers(_)
+                )
             ) {
-                let mut arg_types: Vec<GateType> = plan
-                    .explicit_arguments
-                    .iter()
-                    .zip(plan.parameter_types.iter())
-                    .map(|(arg, expected_param)| {
-                        // Use the plan's parameter type as a hint; fall back to inferred.
-                        let info = self.typing.infer_expr(*arg, env, Some(ambient));
-                        info.actual_gate_type()
-                            .or(info.ty)
-                            .unwrap_or_else(|| expected_param.clone())
-                    })
-                    .collect();
-                arg_types.push(ambient.clone());
-                let callee_span = self.module.exprs()[plan.callee_expr].span;
-                if let Some(dispatch) = resolve_class_member_dispatch(
+            if let Some(dispatch) = resolve_class_member_dispatch_in_scope(
+                self.module,
+                reference,
+                &plan.parameter_types,
+                Some(&plan.result_type),
+                env,
+            ) {
+                lower_class_dispatch_with_evidence(
                     self.module,
-                    reference,
-                    &arg_types,
-                    Some(&plan.result_type),
-                ) {
-                    GateRuntimeExpr {
-                        span: callee_span,
-                        ty: callee_ty,
-                        kind: GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(
-                            dispatch,
-                        )),
-                    }
-                } else {
-                    lower_class_member_callee_with_evidence(env, reference, ambient, callee_ty)
-                        .ok_or_else(|| {
-                            vec![GeneralExprBlocker::UnknownExprType { span: callee_span }]
-                        })?
-                }
+                    &mut self.typing,
+                    &self.class_evidence,
+                    env,
+                    self.module.exprs()[plan.callee_expr].span,
+                    dispatch,
+                    callee_ty.clone(),
+                )
+                .ok_or_else(|| {
+                    vec![GeneralExprBlocker::UnknownExprType {
+                        span: self.module.exprs()[plan.callee_expr].span,
+                    }]
+                })?
             } else {
-                self.lower_expr(plan.callee_expr, env, Some(ambient), Some(&callee_ty))?
+                lower_class_member_callee_with_evidence(
+                    self.module,
+                    &mut self.typing,
+                    &self.class_evidence,
+                    env,
+                    reference,
+                    callee_ty.clone(),
+                )
+                .ok_or_else(|| {
+                    vec![GeneralExprBlocker::UnknownExprType {
+                        span: self.module.exprs()[plan.callee_expr].span,
+                    }]
+                })?
             }
         } else {
             self.lower_expr(plan.callee_expr, env, Some(ambient), Some(&callee_ty))?
@@ -4388,13 +5068,20 @@ impl<'a> GeneralExprElaborator<'a> {
         let pure_result = self
             .rewrap_applicative_gate_type(&cluster_ty, current_inner.clone())
             .ok_or_else(|| vec![GeneralExprBlocker::UnknownExprType { span: cluster.span }])?;
-        let pure = self.lower_builtin_class_member_reference(
-            cluster.span,
-            "Applicative",
-            "pure",
-            vec![current_inner.clone()],
-            pure_result.clone(),
-        )?;
+        let pure = lower_ambient_class_call(
+            self.module,
+            &mut self.typing,
+            &self.class_evidence,
+            env,
+            AmbientClassCall {
+                span: cluster.span,
+                class_name: "Applicative",
+                member_name: "pure",
+                argument_types: vec![current_inner.clone()],
+                result_type: pure_result.clone(),
+            },
+        )
+        .ok_or_else(|| vec![GeneralExprBlocker::UnknownExprType { span: cluster.span }])?;
         let mut current = GateRuntimeExpr {
             span: cluster.span,
             ty: pure_result,
@@ -4416,13 +5103,20 @@ impl<'a> GeneralExprElaborator<'a> {
             let apply_result = self
                 .rewrap_applicative_gate_type(&cluster_ty, current_inner.clone())
                 .ok_or_else(|| vec![GeneralExprBlocker::UnknownExprType { span: cluster.span }])?;
-            let apply = self.lower_builtin_class_member_reference(
-                cluster.span,
-                "Apply",
-                "apply",
-                vec![current.ty.clone(), member_ty.clone()],
-                apply_result.clone(),
-            )?;
+            let apply = lower_ambient_class_call(
+                self.module,
+                &mut self.typing,
+                &self.class_evidence,
+                env,
+                AmbientClassCall {
+                    span: cluster.span,
+                    class_name: "Apply",
+                    member_name: "apply",
+                    argument_types: vec![current.ty.clone(), member_ty.clone()],
+                    result_type: apply_result.clone(),
+                },
+            )
+            .ok_or_else(|| vec![GeneralExprBlocker::UnknownExprType { span: cluster.span }])?;
             current = GateRuntimeExpr {
                 span: cluster.span,
                 ty: apply_result,
@@ -4434,59 +5128,6 @@ impl<'a> GeneralExprElaborator<'a> {
         }
 
         Ok(current)
-    }
-
-    fn lower_builtin_class_member_reference(
-        &mut self,
-        span: SourceSpan,
-        class_name: &str,
-        member_name: &str,
-        argument_types: Vec<GateType>,
-        result_type: GateType,
-    ) -> Result<GateRuntimeExpr, Vec<GeneralExprBlocker>> {
-        let Some(resolution) = self.ambient_class_member_resolution(class_name, member_name) else {
-            return Err(vec![GeneralExprBlocker::UnknownExprType { span }]);
-        };
-        let reference = TermReference::resolved(
-            NamePath::from_vec(vec![
-                Name::new(member_name, span).expect("class members are named"),
-            ])
-            .expect("single-segment class member paths are valid"),
-            TermResolution::ClassMember(resolution),
-        );
-        let dispatch = resolve_class_member_dispatch(
-            self.module,
-            &reference,
-            &argument_types,
-            Some(&result_type),
-        )
-        .ok_or_else(|| vec![GeneralExprBlocker::UnknownExprType { span }])?;
-        let callee_ty = self.arrow_type(argument_types, result_type);
-        Ok(GateRuntimeExpr {
-            span,
-            ty: callee_ty,
-            kind: GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(dispatch)),
-        })
-    }
-
-    fn ambient_class_member_resolution(
-        &self,
-        class_name: &str,
-        member_name: &str,
-    ) -> Option<crate::ClassMemberResolution> {
-        self.module.ambient_items().iter().find_map(|item_id| {
-            match &self.module.items()[*item_id] {
-                Item::Class(class_item) if class_item.name.text() == class_name => class_item
-                    .members
-                    .iter()
-                    .position(|member| member.name.text() == member_name)
-                    .map(|member_index| crate::ClassMemberResolution {
-                        class: *item_id,
-                        member_index,
-                    }),
-                _ => None,
-            }
-        })
     }
 
     fn applicative_payload_type(&self, ty: &GateType) -> Option<GateType> {
@@ -4668,9 +5309,8 @@ impl<'a> GeneralExprElaborator<'a> {
             }
             ResolutionState::Resolved(TermResolution::ClassMember(_))
             | ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_)) => {
-                resolve_class_member_dispatch(self.module, reference, &[], Some(expected))
-                    .map(GateRuntimeReference::ClassMember)
-                    .ok_or_else(|| vec![GeneralExprBlocker::UnknownExprType { span }])
+                // Class references must pass through explicit evidence lowering.
+                Err(vec![GeneralExprBlocker::UnknownExprType { span }])
             }
             ResolutionState::Resolved(TermResolution::Import(import)) => {
                 if let Some(item_id) = ambient_item_for_import(self.module, *import) {
@@ -5415,6 +6055,37 @@ mod tests {
         typecheck::resolve_class_member_dispatch,
         validate::{GateExprEnv, GateType, GateTypeContext, gate_env_for_function},
     };
+
+    #[test]
+    fn recursive_method_evidence_is_blocked_instead_of_omitted() {
+        let lowered = lower_text_with_stdlib(
+            "recursive-member-evidence.aivi",
+            r#"
+class Echo A = { echo : Echo A => A -> A }
+type Echo A => A -> A
+func passthrough = value => value
+"#,
+        );
+        let report = elaborate_general_expressions(lowered.module());
+        let owner = lowered
+            .module()
+            .items()
+            .iter()
+            .find_map(|(id, item)| {
+                matches!(item, Item::Function(function) if function.name.text() == "passthrough")
+                    .then_some(id)
+            })
+            .unwrap();
+        assert!(matches!(
+            report
+                .items()
+                .iter()
+                .find(|item| item.owner == owner)
+                .unwrap()
+                .outcome,
+            GeneralExprOutcome::Blocked(_)
+        ));
+    }
 
     #[test]
     fn partial_generic_predicates_instantiate_from_the_pipe_input() {

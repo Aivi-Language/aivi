@@ -390,3 +390,93 @@ fn test_command_runs_stockroom_domain_scenarios() {
             .contains("test result: ok. 6 passed; 0 failed; 6 total")
     );
 }
+
+#[test]
+fn headless_tests_execute_imported_method_local_evidence() {
+    let dir = TempDir::new("imported-method-evidence");
+    dir.write(
+        "model/box.aivi",
+        r#"
+type Box A = Box A
+instance Functor Box = { map = f box => box ||> Box a -> Box (f a) }
+instance Foldable Box = { reduce = f seed box => box ||> Box a -> f seed a }
+instance Traversable Box = { traverse = f box => box ||> Box a -> map Box (f a) }
+type Int -> Option Int
+func increment = n => Some (n + 1)
+type Traversable F => F Int -> Option (F Int)
+func advance = box => traverse increment box
+type Traversable F => F Int -> Option (F Int)
+func forwarded = box => advance box
+type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)
+func advanceWith = f box => traverse f box
+export (Box, advance, forwarded, advanceWith)
+"#,
+    );
+    let path = dir.write(
+        "main.aivi",
+        r#"
+use model.box (Box, advance, forwarded, advanceWith)
+type Int -> Option Int
+func increment = n => Some (n + 1)
+type Int -> List Int
+func expand = n => [n, n + 1]
+@test
+value exercised : Task Text Bool = pure (traverse increment (Box 2) == Some (Box 3))
+@test
+value generic : Task Text Bool = pure (advance (Box 2) == Some (Box 3))
+@test
+value nested : Task Text Bool = pure (forwarded (Box 2) == Some (Box 3))
+@test
+value genericApplicative : Task Text Bool = pure (advanceWith increment (Box 2) == Some (Box 3))
+@test
+value genericList : Task Text Bool = pure (advanceWith expand (Box 2) == [Box 2, Box 3])
+"#,
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("test")
+        .arg(path)
+        .output()
+        .expect("imported evidence test should run");
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn headless_tests_pass_lowered_predicate_results_to_class_pure() {
+    let dir = TempDir::new("class-pure-predicate-result");
+    let path = dir.write(
+        "main.aivi",
+        r#"
+type Either L R = | Left L | Right R
+type (L1 -> L2) -> (R1 -> R2) -> (Either L1 R1) -> (Either L2 R2)
+func mapBoth = onLeft onRight either => either
+ ||> Left v -> Left (onLeft v)
+ ||> Right v -> Right (onRight v)
+type Text -> Text
+func mark = text => text
+type Int -> Int
+func double = n => n * 2
+@test
+value compared : Task Text Bool = pure (mapBoth mark double (Right 2) == Right 4)
+"#,
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("test")
+        .arg(path)
+        .output()
+        .expect("predicate evidence test should run");
+    assert!(
+        output.status.success(),
+        "stdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .contains("test result: ok. 1 passed; 0 failed; 1 total")
+    );
+}

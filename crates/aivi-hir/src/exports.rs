@@ -86,6 +86,8 @@ pub struct ExportedInstanceDeclaration {
 pub struct ExportedInstanceMember {
     pub name: Box<str>,
     pub ty: ImportValueType,
+    pub evidence: Vec<crate::ImportedClassEvidence>,
+    pub instance_evidence_count: usize,
 }
 
 /// Extract the set of names exported from a HIR module.
@@ -711,6 +713,8 @@ pub(crate) fn poly_gate_type_import_value_type(
 fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclaration> {
     let mut declarations = Vec::new();
     let mut typing = crate::validate::GateTypeContext::new(module);
+    let evidence_catalog =
+        crate::general_expr_elaboration::ClassEvidenceCatalog::for_instance_exports(module);
     for &item_id in module.root_items() {
         let Some(Item::Instance(instance)) = module.items().get(item_id) else {
             continue;
@@ -779,7 +783,17 @@ fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclara
         let members = instance
             .members
             .iter()
-            .filter_map(|member| {
+            .enumerate()
+            .filter_map(|(member_index, member)| {
+                let signature = class_item
+                    .members
+                    .iter()
+                    .find(|signature| signature.name.text() == member.name.text())?;
+                let mut member_parameters = parameters.clone();
+                for parameter in &signature.type_parameters {
+                    let next = member_parameters.len();
+                    member_parameters.entry(*parameter).or_insert(next);
+                }
                 let ty = member
                     .annotation
                     .and_then(|annotation| import_value_type(module, annotation))
@@ -794,7 +808,7 @@ fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclara
                                     class_member.annotation,
                                     &class_item.parameters,
                                     &instance.arguments,
-                                    &parameters,
+                                    &member_parameters,
                                 )
                             })
                     })
@@ -802,6 +816,14 @@ fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclara
                 Some(ExportedInstanceMember {
                     name: member.name.text().into(),
                     ty,
+                    evidence: evidence_catalog.export_instance_member_evidence(
+                        module,
+                        item_id,
+                        member_index,
+                        &member_parameters,
+                    )?,
+                    instance_evidence_count: evidence_catalog
+                        .instance_evidence_count(item_id, member_index)?,
                 })
             })
             .collect();
@@ -816,7 +838,7 @@ fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclara
     declarations
 }
 
-fn export_type_binding(
+pub(crate) fn export_type_binding(
     module: &Module,
     binding: &crate::TypeBinding,
     parameters: &TypeParamMap,
@@ -1057,13 +1079,39 @@ fn exported_instance_member_import_value_type_with_stack(
                 item_stack,
             )?),
         }),
-        TypeKind::Apply { .. } => exported_instance_member_applied_import_value_type_with_stack(
-            module,
-            ty,
-            class_substitutions,
-            free_params,
-            item_stack,
-        ),
+        TypeKind::Apply { callee, arguments } => {
+            if let TypeKind::Name(reference) = &module.types()[*callee].kind
+                && let ResolutionState::Resolved(TypeResolution::TypeParameter(parameter)) =
+                    reference.resolution.as_ref()
+                && !class_substitutions.contains_key(parameter)
+            {
+                let next = free_params.len();
+                let index = *free_params.entry(*parameter).or_insert(next);
+                return Some(ImportValueType::TypeApplication {
+                    index,
+                    name: module.type_parameters()[*parameter].name.text().to_owned(),
+                    arguments: arguments
+                        .iter()
+                        .map(|argument| {
+                            exported_instance_member_import_value_type_with_stack(
+                                module,
+                                *argument,
+                                class_substitutions,
+                                free_params,
+                                item_stack,
+                            )
+                        })
+                        .collect::<Option<Vec<_>>>()?,
+                });
+            }
+            exported_instance_member_applied_import_value_type_with_stack(
+                module,
+                ty,
+                class_substitutions,
+                free_params,
+                item_stack,
+            )
+        }
     }
 }
 

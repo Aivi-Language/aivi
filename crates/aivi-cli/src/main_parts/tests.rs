@@ -468,13 +468,13 @@ fn snake_serialized_frozen_image_reloads_frozen_catalog_without_backend_program(
 }
 
 #[test]
-fn source_run_cache_discards_keys_from_before_instance_prerequisite_checking() {
+fn source_run_cache_discards_keys_from_before_member_evidence_abi() {
     use std::{
         collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
     };
 
-    let temp = TempDir::new("source-run-cache-instance-prerequisite-revision");
+    let temp = TempDir::new("source-run-cache-member-evidence-revision");
     let entry = repo_path("demos/snake.aivi");
     let cache_home = temp.path().join("cache-home");
     let requested_view = Some("main");
@@ -483,7 +483,7 @@ fn source_run_cache_discards_keys_from_before_instance_prerequisite_checking() {
     let mut legacy = DefaultHasher::new();
     "aivi.source-run-cache".hash(&mut legacy);
     5_u32.hash(&mut legacy);
-    "11".hash(&mut legacy);
+    "12".hash(&mut legacy);
     env!("CARGO_PKG_VERSION").hash(&mut legacy);
     super::normalize_source_run_cache_path(&entry)
         .to_string_lossy()

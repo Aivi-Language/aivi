@@ -1500,14 +1500,15 @@ impl<'a> Lowerer<'a> {
             // self-import where every requested name is a known intrinsic and suppress
             // the cycle error in that case.
             let is_direct_self_import = cycle.modules().iter().all(|m| m.as_ref() == module_name);
-            let all_intrinsics = !item.imports.is_empty() && item.imports.iter().all(|import| {
-                import
-                    .path
-                    .segments
-                    .last()
-                    .map(|s| known_import_metadata(&module_name, &s.text).is_some())
-                    .unwrap_or(false)
-            });
+            let all_intrinsics = !item.imports.is_empty()
+                && item.imports.iter().all(|import| {
+                    import
+                        .path
+                        .segments
+                        .last()
+                        .map(|s| known_import_metadata(&module_name, &s.text).is_some())
+                        .unwrap_or(false)
+                });
             // Suppress false-positive import-cycle errors that arise when stdlib modules
             // are compiled transitively during workspace-hoist registration. In that
             // context the module is compiled with an import stack inherited from app
@@ -1608,6 +1609,8 @@ impl<'a> Lowerer<'a> {
                             subject: instance_decl.subject.clone(),
                             head: instance_decl.head.clone(),
                             context: instance_decl.context.clone(),
+                            evidence: member.evidence.clone(),
+                            instance_evidence_count: member.instance_evidence_count,
                             ty: member.ty.clone(),
                         },
                         callable_type: None,
@@ -5137,15 +5140,17 @@ impl<'a> Lowerer<'a> {
 
         for exported in exports.names.iter() {
             if !kind_filters.is_empty() {
-                let kind_matches = kind_filters.iter().any(|f| matches!(
-                    (f, &exported.kind),
-                    (HoistKindFilter::Func, ExportedNameKind::Function)
-                    | (HoistKindFilter::Value, ExportedNameKind::Value)
-                    | (HoistKindFilter::Signal, ExportedNameKind::Signal)
-                    | (HoistKindFilter::Type, ExportedNameKind::Type)
-                    | (HoistKindFilter::Domain, ExportedNameKind::Domain)
-                    | (HoistKindFilter::Class, ExportedNameKind::Class)
-                ));
+                let kind_matches = kind_filters.iter().any(|f| {
+                    matches!(
+                        (f, &exported.kind),
+                        (HoistKindFilter::Func, ExportedNameKind::Function)
+                            | (HoistKindFilter::Value, ExportedNameKind::Value)
+                            | (HoistKindFilter::Signal, ExportedNameKind::Signal)
+                            | (HoistKindFilter::Type, ExportedNameKind::Type)
+                            | (HoistKindFilter::Domain, ExportedNameKind::Domain)
+                            | (HoistKindFilter::Class, ExportedNameKind::Class)
+                    )
+                });
                 if !kind_matches {
                     continue;
                 }
@@ -5238,6 +5243,8 @@ impl<'a> Lowerer<'a> {
                         subject: instance_decl.subject.clone(),
                         head: instance_decl.head.clone(),
                         context: instance_decl.context.clone(),
+                        evidence: member.evidence.clone(),
+                        instance_evidence_count: member.instance_evidence_count,
                         ty: member.ty.clone(),
                     },
                     callable_type: None,
@@ -5275,12 +5282,18 @@ impl<'a> Lowerer<'a> {
         let mut named = Vec::new();
         let mut values = Vec::new();
         for instance in &exports.instances {
-            for binding in std::iter::once(&instance.head).chain(
-                instance
-                    .context
-                    .iter()
-                    .map(|constraint| &constraint.subject),
-            ) {
+            for binding in
+                std::iter::once(&instance.head)
+                    .chain(
+                        instance
+                            .context
+                            .iter()
+                            .map(|constraint| &constraint.subject),
+                    )
+                    .chain(instance.members.iter().flat_map(|member| {
+                        member.evidence.iter().map(|evidence| &evidence.subject)
+                    }))
+            {
                 match binding {
                     ImportedTypeBinding::Type(ty) => values.push(ty),
                     ImportedTypeBinding::Constructor { head, arguments } => {

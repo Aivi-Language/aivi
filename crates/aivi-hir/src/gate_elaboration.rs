@@ -4,18 +4,18 @@ use aivi_base::SourceSpan;
 use aivi_typing::{GatePlanner, GateResultKind};
 
 use crate::{
-    BigIntLiteral, BinaryOperator, BindingId, BuiltinTerm, ClassMemberResolution, ClusterId,
-    DecimalLiteral, DomainMemberHandle, ExprId, ExprKind, FloatLiteral, ImportBindingMetadata,
-    ImportId, IntegerLiteral, IntrinsicValue, Item, ItemId, Module, Name, NamePath, PatternId,
-    PipeExpr, PipeStageKind, PipeTransformMode, ProjectionBase, SuffixedIntegerLiteral,
-    TermReference, TermResolution, TextFragment, TextSegment, UnaryOperator,
+    BigIntLiteral, BinaryOperator, BindingId, BuiltinTerm, ClusterId, DecimalLiteral,
+    DomainMemberHandle, ExprId, ExprKind, FloatLiteral, ImportBindingMetadata, ImportId,
+    IntegerLiteral, IntrinsicValue, Item, ItemId, Module, Name, NamePath, PatternId, PipeExpr,
+    PipeStageKind, PipeTransformMode, ProjectionBase, SuffixedIntegerLiteral, TermResolution,
+    TextFragment, TextSegment, UnaryOperator,
     domain_operator_elaboration::select_domain_binary_operator,
     general_expr_elaboration::{
-        ClassEvidenceCatalog, OrderingRuntimeExprInput, build_equality_runtime_expr,
-        build_ordering_runtime_expr, extend_gate_env_with_class_evidence,
+        AmbientClassCall, ClassEvidenceCatalog, ComparisonRuntimeExprInput,
+        build_equality_runtime_expr, build_ordering_runtime_expr,
+        extend_gate_env_with_class_evidence, lower_ambient_class_call,
         lower_class_member_callee_with_evidence, lower_name_expr_with_class_evidence,
     },
-    typecheck::resolve_class_member_dispatch,
     validate::{
         GateExprEnv, GateIssue, GateType, GateTypeContext, PipeFunctionSignatureMatch,
         PipeSubjectStepOutcome, PipeSubjectWalker, extend_pipe_env_with_stage_memos,
@@ -851,22 +851,33 @@ fn lower_pipe_function_runtime_expr_from_plan(
             crate::ResolutionState::Resolved(TermResolution::ClassMember(_))
                 | crate::ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_))
         ) {
-            if let Some(dispatch) = resolve_class_member_dispatch(
+            if let Some(dispatch) = crate::typecheck::resolve_class_member_dispatch_in_scope(
                 module,
                 reference,
                 &plan.parameter_types,
                 Some(&plan.result_type),
+                env,
             ) {
-                GateRuntimeExpr {
-                    span: module.exprs()[plan.callee_expr].span,
-                    ty: callee_ty.clone(),
-                    kind: GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(
-                        dispatch,
-                    )),
-                }
-            } else if let Some(subject) = plan.parameter_types.first() {
-                lower_class_member_callee_with_evidence(env, reference, subject, callee_ty.clone())
-                    .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?
+                crate::general_expr_elaboration::lower_class_dispatch_with_evidence(
+                    module,
+                    typing,
+                    class_evidence,
+                    env,
+                    module.exprs()[plan.callee_expr].span,
+                    dispatch,
+                    callee_ty.clone(),
+                )
+                .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?
+            } else if !plan.parameter_types.is_empty() {
+                lower_class_member_callee_with_evidence(
+                    module,
+                    typing,
+                    class_evidence,
+                    env,
+                    reference,
+                    callee_ty.clone(),
+                )
+                .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?
             } else {
                 return Err(GateElaborationBlocker::UnknownRuntimeExprType { span });
             }
@@ -1580,9 +1591,22 @@ fn lower_gate_runtime_expr_with_purity(
                     .pop()
                     .expect("result stack has left for BuildBinary");
                 if matches!(operator, BinaryOperator::Equals | BinaryOperator::NotEquals) {
-                    results.push(build_equality_runtime_expr(
-                        module, env, span, ty, operator, left, right,
-                    ));
+                    results.push(
+                        build_equality_runtime_expr(
+                            module,
+                            typing,
+                            &class_evidence,
+                            env,
+                            ComparisonRuntimeExprInput {
+                                span,
+                                ty,
+                                operator,
+                                left,
+                                right,
+                            },
+                        )
+                        .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?,
+                    );
                 } else if matches!(
                     operator,
                     BinaryOperator::GreaterThan
@@ -1590,18 +1614,22 @@ fn lower_gate_runtime_expr_with_purity(
                         | BinaryOperator::GreaterThanOrEqual
                         | BinaryOperator::LessThanOrEqual
                 ) {
-                    results.push(build_ordering_runtime_expr(
-                        module,
-                        typing,
-                        env,
-                        OrderingRuntimeExprInput {
-                            span,
-                            ty,
-                            operator,
-                            left,
-                            right,
-                        },
-                    ));
+                    results.push(
+                        build_ordering_runtime_expr(
+                            module,
+                            typing,
+                            &class_evidence,
+                            env,
+                            ComparisonRuntimeExprInput {
+                                span,
+                                ty,
+                                operator,
+                                left,
+                                right,
+                            },
+                        )
+                        .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?,
+                    );
                 } else {
                     results.push(GateRuntimeExpr {
                         span,
@@ -1808,14 +1836,21 @@ fn lower_cluster_as_gate_runtime_expr(
     let mut current_inner = finalizer_ty.clone();
     let pure_result = cluster_rewrap_applicative_gate_type(&cluster_ty, current_inner.clone())
         .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
-    let pure_ref = lower_builtin_class_member_ref(
+    let catalog = ClassEvidenceCatalog::new(module);
+    let pure_ref = lower_ambient_class_call(
         module,
-        span,
-        "Applicative",
-        "pure",
-        vec![current_inner.clone()],
-        pure_result.clone(),
-    )?;
+        typing,
+        &catalog,
+        env,
+        AmbientClassCall {
+            span,
+            class_name: "Applicative",
+            member_name: "pure",
+            argument_types: vec![current_inner.clone()],
+            result_type: pure_result.clone(),
+        },
+    )
+    .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
     let mut current = GateRuntimeExpr {
         span,
         ty: pure_result,
@@ -1836,14 +1871,20 @@ fn lower_cluster_as_gate_runtime_expr(
         current_inner = gate_arrow_type(remaining, result_payload.clone());
         let apply_result = cluster_rewrap_applicative_gate_type(&cluster_ty, current_inner.clone())
             .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
-        let apply_ref = lower_builtin_class_member_ref(
+        let apply_ref = lower_ambient_class_call(
             module,
-            span,
-            "Apply",
-            "apply",
-            vec![current.ty.clone(), member_ty.clone()],
-            apply_result.clone(),
-        )?;
+            typing,
+            &catalog,
+            env,
+            AmbientClassCall {
+                span,
+                class_name: "Apply",
+                member_name: "apply",
+                argument_types: vec![current.ty.clone(), member_ty.clone()],
+                result_type: apply_result.clone(),
+            },
+        )
+        .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
         current = GateRuntimeExpr {
             span,
             ty: apply_result,
@@ -1908,58 +1949,6 @@ fn gate_arrow_type(parameters: Vec<GateType>, result: GateType) -> GateType {
 
 /// Find the `ClassMemberResolution` for the named class/member in the module's
 /// ambient (prelude) items.  Returns `None` if the class or member is absent.
-fn ambient_class_member_resolution_gate(
-    module: &Module,
-    class_name: &str,
-    member_name: &str,
-) -> Option<ClassMemberResolution> {
-    module
-        .ambient_items()
-        .iter()
-        .find_map(|item_id| match &module.items()[*item_id] {
-            Item::Class(class_item) if class_item.name.text() == class_name => class_item
-                .members
-                .iter()
-                .position(|m| m.name.text() == member_name)
-                .map(|member_index| ClassMemberResolution {
-                    class: *item_id,
-                    member_index,
-                }),
-            _ => None,
-        })
-}
-
-/// Build a synthetic `GateRuntimeExpr` reference to a builtin class member
-/// (e.g. `Applicative::pure` or `Apply::apply`) with the given argument and
-/// result types.
-fn lower_builtin_class_member_ref(
-    module: &Module,
-    span: SourceSpan,
-    class_name: &str,
-    member_name: &str,
-    argument_types: Vec<GateType>,
-    result_type: GateType,
-) -> Result<GateRuntimeExpr, GateElaborationBlocker> {
-    let resolution = ambient_class_member_resolution_gate(module, class_name, member_name)
-        .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
-    let reference = TermReference::resolved(
-        NamePath::from_vec(vec![
-            Name::new(member_name, span).expect("class member names are valid identifiers"),
-        ])
-        .expect("single-segment class member path is valid"),
-        TermResolution::ClassMember(resolution),
-    );
-    let dispatch =
-        resolve_class_member_dispatch(module, &reference, &argument_types, Some(&result_type))
-            .ok_or(GateElaborationBlocker::UnknownRuntimeExprType { span })?;
-    let callee_ty = gate_arrow_type(argument_types, result_type);
-    Ok(GateRuntimeExpr {
-        span,
-        ty: callee_ty,
-        kind: GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(dispatch)),
-    })
-}
-
 /// a domain member.  If so, schedules `BuildDomainBinary` and two `Eval` tasks
 /// on `work` and returns `true`.  Returns `false` if the expression is not a
 /// domain operator (the caller should handle it normally).

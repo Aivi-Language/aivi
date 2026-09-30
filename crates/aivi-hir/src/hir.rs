@@ -928,6 +928,8 @@ pub enum ImportBindingMetadata {
         subject: Box<str>,
         head: ImportedTypeBinding,
         context: Vec<ImportedClassConstraint>,
+        evidence: Vec<ImportedClassEvidence>,
+        instance_evidence_count: usize,
         ty: ImportValueType,
     },
 }
@@ -976,7 +978,7 @@ pub enum ImportTypeDefinition {
 pub struct ImportedClassEvidence {
     pub class_name: Box<str>,
     pub member_name: Box<str>,
-    pub subject: ImportValueType,
+    pub subject: ImportedTypeBinding,
 }
 
 /// A prerequisite of an imported instance. Quantifier indices are shared with

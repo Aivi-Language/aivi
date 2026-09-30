@@ -163,6 +163,33 @@ value renderFn : Pair (List (List Int)) Text -> Text = render
 }
 
 #[test]
+fn portable_member_shapes_preserve_import_identity_and_quantifier_sharing() {
+    let carrier = |import, parameter| GateType::OpaqueImport {
+        import: crate::ImportId::from_raw(import),
+        name: "Carrier".into(),
+        arguments: vec![GateType::TypeParameter {
+            parameter: crate::TypeParameterId::from_raw(parameter),
+            name: "A".into(),
+        }],
+        definition: None,
+    };
+    let arrow = |parameter, result| GateType::Arrow {
+        parameter: Box::new(parameter),
+        result: Box::new(result),
+    };
+    let expected = arrow(carrier(1, 10), carrier(1, 10));
+    let aliased = arrow(carrier(2, 20), carrier(2, 20));
+    let split_quantifiers = arrow(carrier(2, 20), carrier(2, 21));
+    let same_source = |left: crate::ImportId, right: crate::ImportId| {
+        left == right || (left.as_raw() == 1 && right.as_raw() == 2)
+    };
+    assert!(!expected.same_shape(&aliased));
+    assert!(expected.same_shape_with_import_identity(&aliased, same_source));
+    assert!(!expected.same_shape_with_import_identity(&split_quantifiers, same_source));
+    assert!(!expected.same_shape_with_import_identity(&aliased, |left, right| left == right));
+}
+
+#[test]
 fn imported_conditional_instances_keep_shared_head_quantifiers() {
     struct Resolver(crate::ExportedNames);
     impl crate::ImportResolver for Resolver {
@@ -1127,6 +1154,34 @@ fn typecheck_accepts_ordering_operator_sections() {
         report.is_ok(),
         "expected ordering operator section to typecheck, got diagnostics: {:?}",
         report.diagnostics()
+    );
+}
+
+#[test]
+fn unknown_binary_result_does_not_retain_operand_actual_type() {
+    let mut sources = SourceDatabase::new();
+    let file = sources.add_file(
+        "binary-actual-type.aivi",
+        "value compared : Bool = Some 1 == 2\n",
+    );
+    let parsed = parse_module(&sources[file]);
+    assert!(!parsed.has_errors());
+    let lowered = lower_module(&parsed.module);
+    let module = lowered.module();
+    let body = module
+        .items()
+        .iter()
+        .find_map(|(_, item)| match item {
+            Item::Value(value) if value.name.text() == "compared" => Some(value.body),
+            _ => None,
+        })
+        .unwrap();
+    let mut typing = GateTypeContext::new(module);
+    let info = typing.infer_expr(body, &GateExprEnv::default(), None);
+    assert!(info.ty.is_none());
+    assert!(
+        info.actual_gate_type().is_none(),
+        "operand evidence leaked: {info:?}"
     );
 }
 

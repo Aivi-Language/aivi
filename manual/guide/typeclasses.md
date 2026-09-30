@@ -168,6 +168,34 @@ hidden executable item body, then stores authored executable evidence that point
 body. Surface code still looks ordinary — you write `map f box`, not a synthetic helper call — but
 the selected evidence ultimately dispatches to that hidden lowered member body.
 
+The hidden callable takes instance prerequisites first, then the class member's own requirements,
+then its visible arguments. For example, `instance Eq A => Eq (Box A)` receives `Eq A` evidence;
+an authored `Traversable Box` receives the `Applicative G` operations required by `traverse`.
+Imports preserve this order and share type-variable indices between the member signature and its
+evidence. Direct calls, partial applications, pipes, and generic constrained functions use the same
+callable contract.
+
+```aivi
+type Box A = Box A
+instance Functor Box = { map = f box => box ||> Box a -> Box (f a) }
+instance Foldable Box = { reduce = f seed box => box ||> Box a -> f seed a }
+instance Traversable Box = { traverse = f box => box ||> Box a -> map Box (f a) }
+
+type Int -> Option Int
+func increment = n => Some (n + 1)
+type Traversable F => F Int -> Option (F Int)
+func advance = box => traverse increment box
+
+value advanced : Option (Box Int) = advance (Box 2)
+```
+
+An authored instance can supply a generic `Traversable F` dictionary as shown above. Builtin
+traversal currently requires a concrete result applicative when its intrinsic is selected, so passing
+a builtin `Traversable` dictionary with an abstract method-local `G` remains unsupported. Direct
+builtin `traverse` calls with known result applicatives retain the support listed above. Native
+compilation of authored evidence remains limited to the callable and constructor shapes supported
+by the backend; interpreter or lazy JIT execution does not prove strict AOT support.
+
 That is the key boundary to remember:
 
 - builtin carriers execute through builtin evidence intrinsics from the canonical registry

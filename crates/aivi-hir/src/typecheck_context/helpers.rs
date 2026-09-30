@@ -59,7 +59,7 @@ pub(crate) struct GateClassEvidence {
     pub(crate) span: SourceSpan,
     pub(crate) name: Box<str>,
     pub(crate) ty: GateType,
-    pub(crate) subject: GateType,
+    pub(crate) subject: TypeBinding,
     pub(crate) member: ClassMemberResolution,
     pub(crate) priority: u8,
 }
