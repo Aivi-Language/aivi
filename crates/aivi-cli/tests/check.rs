@@ -75,6 +75,70 @@ impl Drop for TempDir {
 }
 
 #[test]
+fn check_rejects_unsound_polymorphic_definitions() {
+    for (name, text) in [
+        (
+            "wrong-functor",
+            "type Box A = Box A\ninstance Functor Box = { map = f box => Box \"wrong\" }\n",
+        ),
+        (
+            "distinct-types",
+            "type A -> B -> A\nfunc first = x y => y\n",
+        ),
+        (
+            "fixed-callback",
+            "type (A -> A) -> B -> B\nfunc bad = f y => f y\n",
+        ),
+    ] {
+        let dir = TempDir::new(name);
+        let path = dir.write("main.aivi", text);
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("check")
+            .arg(path)
+            .output()
+            .expect("check command should run");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !output.status.success(),
+            "unsound polymorphic definition {name} was accepted"
+        );
+        assert!(stderr.contains("hir::type-mismatch"), "{name}: {stderr}");
+    }
+}
+
+#[test]
+fn check_accepts_quantified_instance_constraints_and_generic_callbacks() {
+    let dir = TempDir::new("instance-method-constraints");
+    let path = dir.write(
+        "main.aivi",
+        r#"
+class Display A = { display : Eq B => A -> B -> Bool }
+type Label = Label Text
+instance Display Label = { display = label item => item == item }
+type Box A = Box A
+instance Functor Box = { map = f box => box ||> Box a -> Box (f a) }
+instance Foldable Box = { reduce = f seed box => box ||> Box a -> f seed a }
+instance Traversable Box = { traverse = f box => box ||> Box a -> map Box (f a) }
+type A -> A
+func identity = x => x
+type List A -> List A
+func copy = items => items |> map identity
+value both : (List Int, List Text) = (copy [1, 2], copy ["a", "b"])
+"#,
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(path)
+        .output()
+        .expect("check command should run");
+    assert!(
+        output.status.success(),
+        "lawful polymorphic instances and calls must check: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn check_accepts_reactive_update_programs() {
     let dir = TempDir::new("check-reactive-update");
     let path = dir.write(

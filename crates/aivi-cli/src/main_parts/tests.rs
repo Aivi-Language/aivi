@@ -468,6 +468,38 @@ fn snake_serialized_frozen_image_reloads_frozen_catalog_without_backend_program(
 }
 
 #[test]
+fn source_run_cache_discards_keys_from_before_quantifier_checking() {
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
+
+    let temp = TempDir::new("source-run-cache-quantifier-revision");
+    let entry = repo_path("demos/snake.aivi");
+    let cache_home = temp.path().join("cache-home");
+    let requested_view = Some("main");
+    // Reconstruct the historical key exactly; these literal format/version
+    // values describe the old compiler rather than its current cache policy.
+    let mut legacy = DefaultHasher::new();
+    "aivi.source-run-cache".hash(&mut legacy);
+    5_u32.hash(&mut legacy);
+    "10".hash(&mut legacy);
+    env!("CARGO_PKG_VERSION").hash(&mut legacy);
+    super::normalize_source_run_cache_path(&entry)
+        .to_string_lossy()
+        .hash(&mut legacy);
+    requested_view.hash(&mut legacy);
+    let legacy_directory = cache_home
+        .join("aivi")
+        .join("run-cache")
+        .join(format!("{:016x}", legacy.finish()));
+    assert_ne!(
+        super::source_run_cache_dir(&cache_home, &entry, requested_view),
+        legacy_directory
+    );
+}
+
+#[test]
 fn source_run_cache_roundtrip_reloads_frozen_catalog_without_backend_program() {
     let temp = TempDir::new("source-run-cache-roundtrip");
     let entry = repo_path("demos/snake.aivi");

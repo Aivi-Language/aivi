@@ -7689,7 +7689,9 @@ impl Validator<'_> {
     ) -> Option<KindGraphWithParameterMap> {
         let mut store = KindStore::default();
         let mut spans = HashMap::new();
-        let mut parameter_map = self.kind_parameter_map(parameters, &mut store);
+        // Allocate kind parameters when referenced. An absent parameter has no
+        // constraint here; defaulting it to Type would corrupt later merging.
+        let mut parameter_map = HashMap::with_capacity(parameters.len());
         let mut lowered = HashMap::new();
         let mut stack = vec![KindBuildFrame::Enter(root)];
 

@@ -63,6 +63,33 @@ fn validate_resolved_text(path: &str, text: &str) -> ValidationReport {
     validate_module(lowered.module(), ValidationMode::RequireResolvedNames)
 }
 
+#[test]
+fn class_member_constraints_do_not_default_absent_constructor_parameters() {
+    let report = validate_resolved_text(
+        "traversable-method-kinds.aivi",
+        r#"
+type Box A = Box A
+instance Functor Box = {
+    map = f box => box
+        ||> Box a -> Box (f a)
+}
+instance Foldable Box = {
+    reduce = f seed box => box
+        ||> Box a -> f seed a
+}
+instance Traversable Box = {
+    traverse = f box => box
+        ||> Box a -> map Box (f a)
+}
+"#,
+    );
+    assert!(
+        report.is_ok(),
+        "Applicative G does not constrain the absent Traversable T parameter: {:?}",
+        report.diagnostics()
+    );
+}
+
 fn lower_module_text(path: &str, text: &str) -> crate::LoweringResult {
     let mut sources = SourceDatabase::new();
     let file_id = sources.add_file(path, text);

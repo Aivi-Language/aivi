@@ -1918,6 +1918,9 @@ impl<'a> GeneralExprElaborator<'a> {
                     .as_ref()
                     .map(|(_, result)| result.clone())
             });
+        let previous = self
+            .typing
+            .replace_rigid_type_parameters(function.type_parameters.clone());
         let outcome = match self.lower_expr_with_signal_result_fallback(
             function.body,
             &env,
@@ -1927,6 +1930,7 @@ impl<'a> GeneralExprElaborator<'a> {
             Ok(body) => GeneralExprOutcome::Lowered(body),
             Err(blockers) => GeneralExprOutcome::Blocked(BlockedGeneralExpr { blockers }),
         };
+        self.typing.replace_rigid_type_parameters(previous);
         GeneralExprItemElaboration {
             owner,
             body_expr: function.body,
@@ -2064,18 +2068,25 @@ impl<'a> GeneralExprElaborator<'a> {
         let expected_members = class_item
             .members
             .iter()
-            .map(|member| (member.name.text().to_owned(), member.annotation))
+            .map(|member| (member.name.text().to_owned(), member.clone()))
             .collect::<HashMap<_, _>>();
         instance
             .members
             .iter()
             .enumerate()
             .filter_map(|(member_index, member)| {
-                let annotation = expected_members.get(member.name.text()).copied()?;
-                let expected = self
-                    .typing
-                    .instantiate_poly_hir_type_partially(annotation, &argument_bindings)?;
-                Some(self.elaborate_instance_member(owner, member_index, member, &expected))
+                let signature = expected_members.get(member.name.text())?;
+                let expected = self.typing.instantiate_poly_hir_type_partially(
+                    signature.annotation,
+                    &argument_bindings,
+                )?;
+                let mut rigid = instance.type_parameters.clone();
+                rigid.extend(signature.type_parameters.iter().copied());
+                let previous = self.typing.replace_rigid_type_parameters(rigid);
+                let elaborated =
+                    self.elaborate_instance_member(owner, member_index, member, &expected);
+                self.typing.replace_rigid_type_parameters(previous);
+                Some(elaborated)
             })
             .collect()
     }
@@ -4582,7 +4593,9 @@ impl<'a> GeneralExprElaborator<'a> {
                 // If expression_matches failed for a closed expected type, check whether the
                 // inferred type is a polymorphic template that expected instantiates.  If so, use
                 // the closed expected type so the IR stays closed.
-                let info = self.typing.infer_expr(expr_id, env, ambient);
+                let info = self
+                    .typing
+                    .infer_expr_with_expected(expr_id, env, ambient, expected);
                 if !info.issues.is_empty() {
                     return Err(self.blockers_from_issues(info.issues));
                 }
@@ -4598,7 +4611,12 @@ impl<'a> GeneralExprElaborator<'a> {
                     .unwrap_or_else(|| expected.clone()));
             }
         }
-        let info = self.typing.infer_expr(expr_id, env, ambient);
+        let info = match expected {
+            Some(expected) => self
+                .typing
+                .infer_expr_with_expected(expr_id, env, ambient, expected),
+            None => self.typing.infer_expr(expr_id, env, ambient),
+        };
         if !info.issues.is_empty() {
             return Err(self.blockers_from_issues(info.issues));
         }
@@ -5397,6 +5415,83 @@ mod tests {
         typecheck::resolve_class_member_dispatch,
         validate::{GateExprEnv, GateType, GateTypeContext, gate_env_for_function},
     };
+
+    #[test]
+    fn partial_generic_predicates_instantiate_from_the_pipe_input() {
+        let lowered = lower_text_with_stdlib(
+            "partial-generic-predicate.aivi",
+            r#"
+use aivi.list (filter)
+type Entry K V = { key: K, value: V }
+type Eq K => K -> Entry K V -> Bool
+func matches = key entry => key == entry.key
+type Eq K => K -> List (Entry K V) -> List (Entry K V)
+func select = key entries => entries |> filter (matches key)
+"#,
+        );
+        assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+        let report = elaborate_general_expressions(lowered.module());
+        let body = report
+            .items()
+            .iter()
+            .find(|body| item_name(lowered.module(), body.owner) == Some("select"))
+            .unwrap();
+        let GeneralExprOutcome::Lowered(expr) = &body.outcome else {
+            panic!("{:?}", body.outcome);
+        };
+        let GateRuntimeExprKind::Pipe(pipe) = &expr.kind else {
+            panic!("expected a pipe");
+        };
+        assert_eq!(pipe.stages[0].result_subject, pipe.head.ty);
+        let GateRuntimePipeStageKind::Transform { expr, .. } = &pipe.stages[0].kind else {
+            panic!("expected a transform");
+        };
+        assert_eq!(expr.ty, pipe.head.ty);
+    }
+
+    #[test]
+    fn generic_class_pipe_retains_the_functions_quantified_result() {
+        let lowered = lower_text(
+            "generic-functor-result-binder.aivi",
+            r#"
+type Functor F => (A -> B) -> F A -> F B
+func transform = f xs => xs |> map f
+"#,
+        );
+        assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+        let module = lowered.module();
+        let (owner, function) = module
+            .items()
+            .iter()
+            .find_map(|(owner, item)| match item {
+                Item::Function(function) if function.name.text() == "transform" => {
+                    Some((owner, function))
+                }
+                _ => None,
+            })
+            .unwrap();
+        let mut typing = GateTypeContext::new(module);
+        let expected = typing
+            .lower_open_annotation(function.annotation.unwrap())
+            .unwrap();
+        let report = elaborate_general_expressions(module);
+        let body = report
+            .items()
+            .iter()
+            .find(|body| body.owner == owner)
+            .unwrap();
+        let GeneralExprOutcome::Lowered(expr) = &body.outcome else {
+            panic!("{:?}", body.outcome);
+        };
+        let GateRuntimeExprKind::Pipe(pipe) = &expr.kind else {
+            panic!("expected a pipe");
+        };
+        assert_eq!(pipe.stages[0].result_subject, expected);
+        let GateRuntimePipeStageKind::Transform { expr, .. } = &pipe.stages[0].kind else {
+            panic!("expected a transform");
+        };
+        assert_eq!(expr.ty, expected);
+    }
 
     #[test]
     fn markup_match_binds_signal_payload_fields() {

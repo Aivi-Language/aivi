@@ -5287,11 +5287,34 @@ impl<'a> Lowerer<'a> {
     }
 
     fn resolve_module(&mut self, namespaces: &Namespaces) {
-        for item_id in self.module.root_items().to_vec() {
-            self.resolve_item(item_id, namespaces, false);
+        // Instance annotations are instantiated from resolved class signatures.
+        // Resolve classes first, including forward declarations and ambient
+        // classes, so shared signature nodes retain their original binder IDs.
+        for ambient in [false, true] {
+            let items = if ambient {
+                self.module.ambient_items()
+            } else {
+                self.module.root_items()
+            }
+            .to_vec();
+            for item in items {
+                if matches!(self.module.items()[item], Item::Class(_)) {
+                    self.resolve_item(item, namespaces, ambient);
+                }
+            }
         }
-        for item_id in self.module.ambient_items().to_vec() {
-            self.resolve_item(item_id, namespaces, true);
+        for ambient in [false, true] {
+            let items = if ambient {
+                self.module.ambient_items()
+            } else {
+                self.module.root_items()
+            }
+            .to_vec();
+            for item in items {
+                if !matches!(self.module.items()[item], Item::Class(_)) {
+                    self.resolve_item(item, namespaces, ambient);
+                }
+            }
         }
     }
 
@@ -7997,13 +8020,13 @@ impl<'a> Lowerer<'a> {
                     None
                 };
                 for member in &mut item.members {
-                    if member.annotation.is_none()
-                        && let Some(class_annotations) = &class_annotations
-                    {
-                        member.annotation = class_annotations.get(member.name.text()).copied();
-                    }
                     if let Some(annotation) = member.annotation {
                         self.resolve_type(annotation, namespaces, &mut env);
+                    } else if let Some(class_annotations) = &class_annotations {
+                        // Instantiation may share unchanged nodes with the class.
+                        // They are resolved already and must never be rebound in
+                        // the instance's unrelated implicit-parameter scope.
+                        member.annotation = class_annotations.get(member.name.text()).copied();
                     }
                     let mut member_env = env.clone();
                     member_env.push_term_scope(self.binding_scope(

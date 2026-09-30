@@ -5,7 +5,9 @@ const BACKEND_PAYLOAD_FORMAT: &str = "aivi.backend-payload";
 const BACKEND_PAYLOAD_VERSION: u32 = 4;
 const SOURCE_RUN_CACHE_FORMAT: &str = "aivi.source-run-cache";
 const SOURCE_RUN_CACHE_VERSION: u32 = 5;
-const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "10";
+// Revision 11 rechecks sources after rigid definition quantifiers and complete
+// polymorphic instance-member checking were introduced.
+const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "11";
 const SOURCE_RUN_CACHE_DIR: &str = "run-cache";
 const SOURCE_RUN_CACHE_METADATA_FILE_NAME: &str = "source-run-cache.json";
 const MAX_BINARY_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;

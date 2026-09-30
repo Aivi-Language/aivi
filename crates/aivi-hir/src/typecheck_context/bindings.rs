@@ -109,16 +109,6 @@ pub enum TypeBinding {
     Constructor(TypeConstructorBinding),
 }
 
-impl TypeBinding {
-    pub(crate) fn matches(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Type(left), Self::Type(right)) => left.same_shape(right),
-            (Self::Constructor(left), Self::Constructor(right)) => left.matches(right),
-            _ => false,
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TypeConstructorBinding {
     head: TypeConstructorHead,
@@ -126,16 +116,6 @@ pub struct TypeConstructorBinding {
 }
 
 impl TypeConstructorBinding {
-    pub(crate) fn matches(&self, other: &Self) -> bool {
-        self.head == other.head
-            && self.arguments.len() == other.arguments.len()
-            && self
-                .arguments
-                .iter()
-                .zip(other.arguments.iter())
-                .all(|(left, right)| left.same_shape(right))
-    }
-
     pub fn head(&self) -> TypeConstructorHead {
         self.head
     }

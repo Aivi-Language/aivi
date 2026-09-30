@@ -14,7 +14,7 @@ class Equality A = {
 }
 ```
 
-This says that any type used with `Eq` must support equality.
+This says that any type used with `Equality` must provide `equal`.
 
 You can declare ordinary named methods too:
 
@@ -23,6 +23,37 @@ class Display A = {
     type display : A -> Text
 }
 ```
+
+## Polymorphic member contracts
+
+An instance must implement its class signature for every quantified type. For example,
+`Functor F` provides `map : (A -> B) -> F A -> F B`. Its implementation cannot replace
+`B` with a fixed type such as `Text`, or assume that independent parameters `A` and `B`
+are interchangeable. Generic functions follow the same rule: a function declared
+`A -> B -> A` must return an `A` value.
+
+Calls instantiate generic signatures using their arguments and expected result. A local
+argument retains its type throughout the body; calling another generic function does
+not change that local type. Container inputs constrain generic callbacks in expressions
+such as `items |> map identity`.
+
+A class member may have its own constraints. They apply to that member's quantified
+parameters and are available while checking each instance implementation:
+
+```aivi
+class Inspect A = {
+    type sameWith : Eq B => A -> B -> Bool
+}
+
+type Label = Label Text
+
+instance Inspect Label = {
+    sameWith = label item => item == item
+}
+```
+
+Here `B` is the same parameter in `Eq B` and in the argument type, and remains independent
+of the class parameter `A`. Each instance is checked against this contract.
 
 ## Block body syntax
 

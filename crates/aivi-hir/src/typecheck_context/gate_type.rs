@@ -201,7 +201,19 @@ impl GateType {
     pub fn same_shape(&self, other: &Self) -> bool {
         let mut left_to_right = HashMap::new();
         let mut right_to_left = HashMap::new();
-        Self::same_shape_inner(self, other, &mut left_to_right, &mut right_to_left)
+        Self::same_shape_inner(self, other, &mut left_to_right, &mut right_to_left, &[])
+    }
+
+    /// Definition quantifiers denote fixed, independent types. Other signature
+    /// parameters may still be alpha-renamed while comparing polymorphic shapes.
+    pub(crate) fn same_shape_with_rigid_parameters(
+        &self,
+        other: &Self,
+        rigid: &[TypeParameterId],
+    ) -> bool {
+        let mut left_to_right = HashMap::new();
+        let mut right_to_left = HashMap::new();
+        Self::same_shape_inner(self, other, &mut left_to_right, &mut right_to_left, rigid)
     }
 
     /// Substitute every occurrence of `param` with `replacement` throughout this type.
@@ -511,191 +523,6 @@ impl GateType {
         }
     }
 
-    /// Structurally match `self` (concrete) against `template` (may contain TypeParameter nodes),
-    /// collecting the bindings.  Returns `true` when matching succeeds and all TypeParameter
-    /// nodes receive consistent bindings.
-    pub(crate) fn unify_type_params(
-        &self,
-        template: &Self,
-        bindings: &mut HashMap<TypeParameterId, GateType>,
-    ) -> bool {
-        if let Some(expanded) = self.expand_transparent_import_alias() {
-            return expanded.unify_type_params(template, bindings);
-        }
-        if let Some(expanded) = template.expand_transparent_import_alias() {
-            return self.unify_type_params(&expanded, bindings);
-        }
-        match template {
-            Self::TypeApplication {
-                parameter,
-                arguments,
-                ..
-            } => {
-                let Some((head, actual)) = self.constructor_view() else {
-                    return false;
-                };
-                if actual.len() < arguments.len() {
-                    return false;
-                }
-                if let Some(previous) = bindings.get(parameter) {
-                    let Some((previous_head, previous_args)) = previous.constructor_view() else {
-                        return false;
-                    };
-                    let fixed = actual.len() - arguments.len();
-                    if previous_head != head
-                        || previous_args.len() != actual.len()
-                        || !previous_args[..fixed]
-                            .iter()
-                            .zip(&actual[..fixed])
-                            .all(|(a, b)| a.same_shape(b))
-                    {
-                        return false;
-                    }
-                } else {
-                    bindings.insert(*parameter, self.clone());
-                }
-                actual[actual.len() - arguments.len()..]
-                    .iter()
-                    .zip(arguments)
-                    .all(|(a, t)| a.unify_type_params(t, bindings))
-            }
-            Self::TypeParameter { parameter, .. } => match bindings.get(parameter) {
-                Some(existing) => existing.same_shape(self),
-                None => {
-                    bindings.insert(*parameter, self.clone());
-                    true
-                }
-            },
-            Self::Primitive(_) => self == template,
-            Self::Arrow {
-                parameter: tp,
-                result: tr,
-            } => match self {
-                Self::Arrow {
-                    parameter: sp,
-                    result: sr,
-                } => sp.unify_type_params(tp, bindings) && sr.unify_type_params(tr, bindings),
-                _ => false,
-            },
-            Self::List(te) => match self {
-                Self::List(se) => se.unify_type_params(te, bindings),
-                _ => false,
-            },
-            Self::Option(te) => match self {
-                Self::Option(se) => se.unify_type_params(te, bindings),
-                _ => false,
-            },
-            Self::Signal(te) => match self {
-                Self::Signal(se) => se.unify_type_params(te, bindings),
-                _ => false,
-            },
-            Self::Set(te) => match self {
-                Self::Set(se) => se.unify_type_params(te, bindings),
-                _ => false,
-            },
-            Self::Tuple(tes) => match self {
-                Self::Tuple(ses) => {
-                    ses.len() == tes.len()
-                        && ses
-                            .iter()
-                            .zip(tes.iter())
-                            .all(|(s, t)| s.unify_type_params(t, bindings))
-                }
-                _ => false,
-            },
-            Self::Record(tfields) => match self {
-                Self::Record(sfields) => {
-                    sfields.len() == tfields.len()
-                        && sfields.iter().zip(tfields.iter()).all(|(s, t)| {
-                            s.name == t.name && s.ty.unify_type_params(&t.ty, bindings)
-                        })
-                }
-                _ => false,
-            },
-            Self::Map { key: tk, value: tv } => match self {
-                Self::Map { key: sk, value: sv } => {
-                    sk.unify_type_params(tk, bindings) && sv.unify_type_params(tv, bindings)
-                }
-                _ => false,
-            },
-            Self::Result {
-                error: te,
-                value: tv,
-            } => match self {
-                Self::Result {
-                    error: se,
-                    value: sv,
-                } => se.unify_type_params(te, bindings) && sv.unify_type_params(tv, bindings),
-                _ => false,
-            },
-            Self::Validation {
-                error: te,
-                value: tv,
-            } => match self {
-                Self::Validation {
-                    error: se,
-                    value: sv,
-                } => se.unify_type_params(te, bindings) && sv.unify_type_params(tv, bindings),
-                _ => false,
-            },
-            Self::Task {
-                error: te,
-                value: tv,
-            } => match self {
-                Self::Task {
-                    error: se,
-                    value: sv,
-                } => se.unify_type_params(te, bindings) && sv.unify_type_params(tv, bindings),
-                _ => false,
-            },
-            Self::Domain {
-                name: tname,
-                arguments: targs,
-                ..
-            } => match self.named_type_parts() {
-                Some((sname, sargs)) => {
-                    sname == tname
-                        && sargs.len() == targs.len()
-                        && sargs
-                            .iter()
-                            .zip(targs.iter())
-                            .all(|(s, t)| s.unify_type_params(t, bindings))
-                }
-                _ => false,
-            },
-            Self::OpaqueItem {
-                arguments: targs,
-                name: tname,
-                ..
-            } => match self.named_type_parts() {
-                Some((sname, sargs)) => {
-                    sname == tname
-                        && sargs.len() == targs.len()
-                        && sargs
-                            .iter()
-                            .zip(targs.iter())
-                            .all(|(s, t)| s.unify_type_params(t, bindings))
-                }
-                _ => false,
-            },
-            Self::OpaqueImport {
-                name: tname,
-                arguments: targs,
-                ..
-            } => match self.named_type_parts() {
-                Some((sname, sargs)) => {
-                    sname == tname
-                        && sargs.len() == targs.len()
-                        && sargs
-                            .iter()
-                            .zip(targs.iter())
-                            .all(|(s, t)| s.unify_type_params(t, bindings))
-                }
-                _ => false,
-            },
-        }
-    }
-
     /// Expand a transparent imported type alias into a `GateType` by substituting
     /// the provided type arguments for `TypeVariable` placeholders.  Returns `None`
     /// when the alias body contains a `Named` reference that requires module context
@@ -783,39 +610,44 @@ impl GateType {
         right: &Self,
         left_to_right: &mut HashMap<TypeParameterId, TypeParameterId>,
         right_to_left: &mut HashMap<TypeParameterId, TypeParameterId>,
+        rigid: &[TypeParameterId],
     ) -> bool {
         let same_named_constructor = matches!((left.named_type_parts(), right.named_type_parts()), (Some((left, _)), Some((right, _))) if left == right);
         if !same_named_constructor {
-                // Expand transparent imported type aliases (e.g. `type Envelope A = A`)
-                // so that `Envelope Text` is recognised as the same shape as `Text`.
-                if let Self::OpaqueImport {
-                    arguments,
-                    definition: Some(def),
-                    ..
-                } = left
-                    && let ImportTypeDefinition::Alias(alias) = def.as_ref()
-                        && let Some(expanded) = Self::expand_import_alias_type(alias, arguments) {
-                            return Self::same_shape_inner(
-                                &expanded,
-                                right,
-                                left_to_right,
-                                right_to_left,
-                            );
-                        }
-                if let Self::OpaqueImport {
-                    arguments,
-                    definition: Some(def),
-                    ..
-                } = right
-                    && let ImportTypeDefinition::Alias(alias) = def.as_ref()
-                        && let Some(expanded) = Self::expand_import_alias_type(alias, arguments) {
-                            return Self::same_shape_inner(
-                                left,
-                                &expanded,
-                                left_to_right,
-                                right_to_left,
-                            );
-                        }
+            // Expand transparent imported type aliases (e.g. `type Envelope A = A`)
+            // so that `Envelope Text` is recognised as the same shape as `Text`.
+            if let Self::OpaqueImport {
+                arguments,
+                definition: Some(def),
+                ..
+            } = left
+                && let ImportTypeDefinition::Alias(alias) = def.as_ref()
+                && let Some(expanded) = Self::expand_import_alias_type(alias, arguments)
+            {
+                return Self::same_shape_inner(
+                    &expanded,
+                    right,
+                    left_to_right,
+                    right_to_left,
+                    rigid,
+                );
+            }
+            if let Self::OpaqueImport {
+                arguments,
+                definition: Some(def),
+                ..
+            } = right
+                && let ImportTypeDefinition::Alias(alias) = def.as_ref()
+                && let Some(expanded) = Self::expand_import_alias_type(alias, arguments)
+            {
+                return Self::same_shape_inner(
+                    left,
+                    &expanded,
+                    left_to_right,
+                    right_to_left,
+                    rigid,
+                );
+            }
         }
         match (left, right) {
             (
@@ -841,13 +673,25 @@ impl GateType {
                     },
                     left_to_right,
                     right_to_left,
+                    rigid,
                 ) && la.len() == ra.len()
-                    && la
-                        .iter()
-                        .zip(ra)
-                        .all(|(l, r)| Self::same_shape_inner(l, r, left_to_right, right_to_left))
+                    && la.iter().zip(ra).all(|(l, r)| {
+                        Self::same_shape_inner(l, r, left_to_right, right_to_left, rigid)
+                    })
             }
             (Self::Primitive(left), Self::Primitive(right)) => left == right,
+            (
+                Self::TypeParameter {
+                    parameter: left_parameter,
+                    ..
+                },
+                Self::TypeParameter {
+                    parameter: right_parameter,
+                    ..
+                },
+            ) if rigid.contains(left_parameter) || rigid.contains(right_parameter) => {
+                left_parameter == right_parameter
+            }
             (
                 Self::TypeParameter {
                     parameter: left_parameter,
@@ -874,7 +718,7 @@ impl GateType {
             (Self::Tuple(left), Self::Tuple(right)) => {
                 left.len() == right.len()
                     && left.iter().zip(right.iter()).all(|(left, right)| {
-                        Self::same_shape_inner(left, right, left_to_right, right_to_left)
+                        Self::same_shape_inner(left, right, left_to_right, right_to_left, rigid)
                     })
             }
             (Self::Record(left), Self::Record(right)) => {
@@ -886,6 +730,7 @@ impl GateType {
                                 &right.ty,
                                 left_to_right,
                                 right_to_left,
+                                rigid,
                             )
                     })
             }
@@ -904,13 +749,20 @@ impl GateType {
                     right_parameter,
                     left_to_right,
                     right_to_left,
-                ) && Self::same_shape_inner(left_result, right_result, left_to_right, right_to_left)
+                    rigid,
+                ) && Self::same_shape_inner(
+                    left_result,
+                    right_result,
+                    left_to_right,
+                    right_to_left,
+                    rigid,
+                )
             }
             (Self::List(left), Self::List(right))
             | (Self::Set(left), Self::Set(right))
             | (Self::Option(left), Self::Option(right))
             | (Self::Signal(left), Self::Signal(right)) => {
-                Self::same_shape_inner(left, right, left_to_right, right_to_left)
+                Self::same_shape_inner(left, right, left_to_right, right_to_left, rigid)
             }
             (
                 Self::Map {
@@ -922,8 +774,14 @@ impl GateType {
                     value: right_value,
                 },
             ) => {
-                Self::same_shape_inner(left_key, right_key, left_to_right, right_to_left)
-                    && Self::same_shape_inner(left_value, right_value, left_to_right, right_to_left)
+                Self::same_shape_inner(left_key, right_key, left_to_right, right_to_left, rigid)
+                    && Self::same_shape_inner(
+                        left_value,
+                        right_value,
+                        left_to_right,
+                        right_to_left,
+                        rigid,
+                    )
             }
             (
                 Self::Result {
@@ -955,8 +813,14 @@ impl GateType {
                     value: right_value,
                 },
             ) => {
-                Self::same_shape_inner(left_error, right_error, left_to_right, right_to_left)
-                    && Self::same_shape_inner(left_value, right_value, left_to_right, right_to_left)
+                Self::same_shape_inner(left_error, right_error, left_to_right, right_to_left, rigid)
+                    && Self::same_shape_inner(
+                        left_value,
+                        right_value,
+                        left_to_right,
+                        right_to_left,
+                        rigid,
+                    )
             }
             (
                 Self::Domain {
@@ -976,7 +840,7 @@ impl GateType {
                         .iter()
                         .zip(right_arguments.iter())
                         .all(|(left, right)| {
-                            Self::same_shape_inner(left, right, left_to_right, right_to_left)
+                            Self::same_shape_inner(left, right, left_to_right, right_to_left, rigid)
                         })
             }
             (
@@ -997,7 +861,7 @@ impl GateType {
                         .iter()
                         .zip(right_arguments.iter())
                         .all(|(left, right)| {
-                            Self::same_shape_inner(left, right, left_to_right, right_to_left)
+                            Self::same_shape_inner(left, right, left_to_right, right_to_left, rigid)
                         })
             }
             (
@@ -1028,7 +892,7 @@ impl GateType {
                         .iter()
                         .zip(right_arguments.iter())
                         .all(|(left, right)| {
-                            Self::same_shape_inner(left, right, left_to_right, right_to_left)
+                            Self::same_shape_inner(left, right, left_to_right, right_to_left, rigid)
                         })
             }
             // Cross-variant name-based equivalence: Domain, OpaqueItem, and
@@ -1038,13 +902,13 @@ impl GateType {
             _ => {
                 if let (Some((ln, la)), Some((rn, ra))) = (left.named_type_parts(), right.named_type_parts())
                     && ln == rn
-                        && la.len() == ra.len()
-                        && la.iter().zip(ra.iter()).all(|(l, r)| {
-                            Self::same_shape_inner(l, r, left_to_right, right_to_left)
-                        })
-                    {
-                        return true;
-                    }
+                    && la.len() == ra.len()
+                    && la.iter().zip(ra.iter()).all(|(l, r)| {
+                        Self::same_shape_inner(l, r, left_to_right, right_to_left, rigid)
+                    })
+                {
+                    return true;
+                }
                 false
             }
         }
@@ -1261,6 +1125,15 @@ impl fmt::Display for GateType {
 mod higher_kinded_type_tests {
     use super::*;
 
+    fn matches_template(
+        actual: &GateType,
+        template: &GateType,
+        bindings: &mut HashMap<TypeParameterId, GateType>,
+    ) -> bool {
+        let module = Module::default();
+        GateTypeContext::new(&module).match_gate_type_template(template, actual, bindings)
+    }
+
     fn parameter(id: u32, name: &str) -> GateType {
         GateType::TypeParameter {
             parameter: TypeParameterId::from_raw(id),
@@ -1294,7 +1167,7 @@ mod higher_kinded_type_tests {
             result: Box::new(result(BuiltinType::Text, BuiltinType::Bool)),
         };
         let mut substitutions = HashMap::new();
-        assert!(actual.unify_type_params(&template, &mut substitutions));
+        assert!(matches_template(&actual, &template, &mut substitutions));
         assert_eq!(template.substitute_type_parameters(&substitutions), actual);
     }
 
@@ -1308,7 +1181,7 @@ mod higher_kinded_type_tests {
             parameter: Box::new(result(BuiltinType::Text, BuiltinType::Int)),
             result: Box::new(result(BuiltinType::Int, BuiltinType::Bool)),
         };
-        assert!(!actual.unify_type_params(&template, &mut HashMap::new()));
+        assert!(!matches_template(&actual, &template, &mut HashMap::new()));
     }
 
     #[test]
@@ -1319,6 +1192,6 @@ mod higher_kinded_type_tests {
             arguments: vec![parameter(1, "A"), parameter(2, "B")],
         };
         let actual = GateType::Option(Box::new(GateType::Primitive(BuiltinType::Int)));
-        assert!(!actual.unify_type_params(&template, &mut HashMap::new()));
+        assert!(!matches_template(&actual, &template, &mut HashMap::new()));
     }
 }

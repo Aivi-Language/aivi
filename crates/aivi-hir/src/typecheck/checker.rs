@@ -205,6 +205,9 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn check_function_item(&mut self, item_id: ItemId, item: &FunctionItem) {
+        let previous = self
+            .typing
+            .replace_rigid_type_parameters(item.type_parameters.clone());
         let context = self.constraint_bindings(&item.context, &PolyTypeBindings::new());
         self.with_class_constraint_scope(context, |this| {
             let inferred_signature = supports_same_module_function_inference(item)
@@ -234,6 +237,7 @@ impl<'a> TypeChecker<'a> {
                 .or_else(|| inferred_parts.as_ref().map(|(_, result)| result.clone()));
             this.check_expr(item.body, &env, expected.as_ref(), &mut Vec::new());
         });
+        self.typing.replace_rigid_type_parameters(previous);
     }
 
     fn check_signal_item(&mut self, item: &SignalItem) {
@@ -385,7 +389,7 @@ impl<'a> TypeChecker<'a> {
             Item::Class(class_item) => class_item
                 .members
                 .iter()
-                .map(|member| (member.name.text().to_owned(), member.annotation))
+                .map(|member| (member.name.text().to_owned(), member.clone()))
                 .collect::<HashMap<_, _>>(),
             _ => return,
         };
@@ -409,16 +413,25 @@ impl<'a> TypeChecker<'a> {
         body_constraints.extend(class_requirements);
         self.with_class_constraint_scope(body_constraints, |this| {
             for member in &item.members {
-                let Some(annotation) = expected_members.get(member.name.text()).copied() else {
+                let Some(signature) = expected_members.get(member.name.text()) else {
                     continue;
                 };
                 let Some(expected) = this
                     .typing
-                    .instantiate_poly_hir_type(annotation, &argument_bindings)
+                    .instantiate_poly_hir_type_partially(signature.annotation, &argument_bindings)
                 else {
                     continue;
                 };
-                this.check_instance_member(member, &expected);
+                let mut rigid = item.type_parameters.clone();
+                rigid.extend(signature.type_parameters.iter().copied());
+                let previous = this.typing.replace_rigid_type_parameters(rigid);
+                let mut constraints = this.in_scope_class_constraints.clone();
+                constraints
+                    .extend(this.constraint_bindings(&signature.context, &argument_bindings));
+                this.with_class_constraint_scope(constraints, |this| {
+                    this.check_instance_member(member, &expected);
+                });
+                this.typing.replace_rigid_type_parameters(previous);
             }
         });
     }
@@ -676,7 +689,7 @@ impl<'a> TypeChecker<'a> {
         self.handle_constraints(&info.constraints);
 
         match (expected, info.ty.as_ref()) {
-            (Some(expected), Some(actual)) if actual.same_shape(expected) => true,
+            (Some(expected), Some(actual)) if self.typing.types_match(actual, expected) => true,
             (Some(expected), Some(actual)) => {
                 self.emit_type_mismatch(self.module.exprs()[expr_id].span, expected, actual);
                 false
@@ -701,7 +714,7 @@ impl<'a> TypeChecker<'a> {
             && info
                 .ty
                 .as_ref()
-                .is_some_and(|actual| actual.same_shape(expected))
+                .is_some_and(|actual| self.typing.types_match(actual, expected))
     }
 
     fn check_inferred_expr(
@@ -717,7 +730,7 @@ impl<'a> TypeChecker<'a> {
         self.handle_constraints(&info.constraints);
 
         match (expected, info.ty.as_ref()) {
-            (Some(expected), Some(actual)) if actual.same_shape(expected) => true,
+            (Some(expected), Some(actual)) if self.typing.types_match(actual, expected) => true,
             (Some(expected), Some(actual)) => {
                 self.emit_type_mismatch(self.module.exprs()[expr_id].span, expected, actual);
                 false
@@ -966,13 +979,13 @@ impl<'a> TypeChecker<'a> {
         } = binary;
         let left_actual = self.inferred_expr_type(left, env);
         let right_actual = self.inferred_expr_type(right, env);
-        let Some(operand_ty) = left_actual
-            .as_ref()
-            .zip(right_actual.as_ref())
-            .and_then(|(left_actual, right_actual)| {
-                left_actual.same_shape(right_actual).then_some(left_actual)
-            })
-        else {
+        let Some(operand_ty) = left_actual.as_ref().zip(right_actual.as_ref()).and_then(
+            |(left_actual, right_actual)| {
+                self.typing
+                    .types_match(left_actual, right_actual)
+                    .then_some(left_actual)
+            },
+        ) else {
             let checkpoint = self.diagnostics.len();
             self.check_expr(left, env, None, value_stack);
             self.check_expr(right, env, None, value_stack);
@@ -1117,7 +1130,7 @@ impl<'a> TypeChecker<'a> {
         actual: &GateType,
     ) -> bool {
         match expected {
-            Some(expected) if !actual.same_shape(expected) => {
+            Some(expected) if !self.typing.types_match(actual, expected) => {
                 self.emit_type_mismatch(self.module.exprs()[expr_id].span, expected, actual);
                 false
             }
@@ -1188,7 +1201,7 @@ impl<'a> TypeChecker<'a> {
             inherited_error,
             Self::result_block_expected_error(expected).cloned(),
         ) {
-            (Some(left), Some(right)) if left.same_shape(&right) => Some(left),
+            (Some(left), Some(right)) if self.typing.types_match(&left, &right) => Some(left),
             (Some(left), Some(_)) => Some(left),
             (Some(left), None) => Some(left),
             (None, Some(right)) => Some(right),
@@ -1208,7 +1221,7 @@ impl<'a> TypeChecker<'a> {
                 ResultBindingShape::Result { error, value } => {
                     if let (Some(expected_error), Some(actual_error)) =
                         (expected_error.as_ref(), error.as_ref())
-                        && !actual_error.same_shape(expected_error)
+                        && !self.typing.types_match(actual_error, expected_error)
                     {
                         self.emit_result_block_error_mismatch(
                             self.module.exprs()[pipe.head].span,
@@ -1640,7 +1653,9 @@ impl<'a> TypeChecker<'a> {
             .typing
             .select_suffixed_integer_candidate(literal, Some(expected))
         {
-            LiteralSuffixSelection::Unique { result, .. } => result.same_shape(expected),
+            LiteralSuffixSelection::Unique { result, .. } => {
+                self.typing.types_match(&result, expected)
+            }
             LiteralSuffixSelection::Ambiguous { candidates } => {
                 self.diagnostics.push(
                     Diagnostic::error(format!(
@@ -1750,7 +1765,10 @@ impl<'a> TypeChecker<'a> {
         for (parameter, expected_parameter_ty) in parameters.iter().zip(parameter_types.iter()) {
             if let Some(annotation) = parameter.annotation {
                 let parameter_ty = self.typing.lower_annotation(annotation)?;
-                if !parameter_ty.same_shape(expected_parameter_ty) {
+                if !self
+                    .typing
+                    .types_match(&parameter_ty, expected_parameter_ty)
+                {
                     self.emit_type_mismatch(reference.span(), expected_parameter_ty, &parameter_ty);
                     return Some(false);
                 }
@@ -1762,7 +1780,7 @@ impl<'a> TypeChecker<'a> {
         }
         if let Some(annotation) = result_annotation {
             let result_ty = self.typing.lower_open_annotation(annotation)?;
-            if !result_ty.same_shape(&result_expected) {
+            if !self.typing.types_match(&result_ty, &result_expected) {
                 self.emit_type_mismatch(reference.span(), &result_expected, &result_ty);
                 return Some(false);
             }
@@ -1787,7 +1805,7 @@ impl<'a> TypeChecker<'a> {
         }
         let actual = info.actual_gate_type().or(info.ty)?;
         signal_name_payload_type(self.module, expr_id, &actual)
-            .is_some_and(|payload| payload.same_shape(expected))
+            .is_some_and(|payload| self.typing.types_match(payload, expected))
             .then_some(true)
     }
 
@@ -1839,14 +1857,14 @@ impl<'a> TypeChecker<'a> {
         for (parameter, parameter_ty) in function.parameters.iter().zip(parameter_types.iter()) {
             if let Some(annotation) = parameter.annotation {
                 let annotation_ty = self.typing.lower_open_annotation(annotation)?;
-                if !annotation_ty.same_shape(parameter_ty) {
+                if !self.typing.types_match(&annotation_ty, parameter_ty) {
                     return None;
                 }
             }
         }
         if let Some(annotation) = function.annotation {
             let annotation_ty = self.typing.lower_open_annotation(annotation)?;
-            if !annotation_ty.same_shape(&result_type) {
+            if !self.typing.types_match(&annotation_ty, &result_type) {
                 return None;
             }
         }
@@ -2217,7 +2235,7 @@ impl<'a> TypeChecker<'a> {
                     self.expected_function_signature(&callee_ty, arguments.len())?;
                 let has_poly = result_ty.has_type_params()
                     || parameter_types.iter().any(|p| p.has_type_params());
-                if result_ty.same_shape(expected) && !has_poly {
+                if self.typing.types_match(&result_ty, expected) && !has_poly {
                     parameter_types
                 } else if has_poly {
                     // The callee has a polymorphic signature (e.g. imported with TypeVariables).
@@ -2226,12 +2244,30 @@ impl<'a> TypeChecker<'a> {
                     //   2. each argument's inferred type vs parameter type
                     // Then substitute all bindings into parameter types.
                     let mut bindings = HashMap::new();
-                    expected.unify_type_params(&result_ty, &mut bindings);
-                    for (argument, param) in arguments.iter().zip(parameter_types.iter()) {
-                        if param.has_type_params() {
-                            let arg_info = self.typing.infer_expr(*argument, env, None);
-                            if let Some(arg_ty) = arg_info.ty.as_ref() {
-                                arg_ty.unify_type_params(param, &mut bindings);
+                    self.typing
+                        .match_gate_type_template(&result_ty, expected, &mut bindings);
+                    // Values constrain callback inputs before a generic callback
+                    // is instantiated. Failed probes must not leave partial bindings.
+                    let actuals = arguments
+                        .iter()
+                        .map(|argument| self.typing.infer_expr(*argument, env, None).ty)
+                        .collect::<Vec<_>>();
+                    for callbacks in [false, true] {
+                        for (actual, param) in actuals.iter().zip(&parameter_types) {
+                            let Some(actual) = actual else {
+                                continue;
+                            };
+                            if matches!(actual, GateType::Arrow { .. }) != callbacks
+                                || !param.has_type_params()
+                            {
+                                continue;
+                            }
+                            let mut candidate = bindings.clone();
+                            if self
+                                .typing
+                                .match_gate_type_template(param, actual, &mut candidate)
+                            {
+                                bindings = candidate;
                             }
                         }
                     }
@@ -2241,7 +2277,7 @@ impl<'a> TypeChecker<'a> {
                             .map(|p| p.substitute_type_parameters(&bindings))
                             .collect();
                         let resolved_result = result_ty.substitute_type_parameters(&bindings);
-                        if !resolved_result.same_shape(expected) {
+                        if !self.typing.types_match(&resolved_result, expected) {
                             self.emit_type_mismatch(
                                 self.module.exprs()[expr_id].span,
                                 expected,
@@ -2250,7 +2286,7 @@ impl<'a> TypeChecker<'a> {
                             return Some(false);
                         }
                         resolved
-                    } else if result_ty.same_shape(expected) {
+                    } else if self.typing.types_match(&result_ty, expected) {
                         // All type params are in parameters only (e.g. `length : List A -> Int`).
                         // No bindings could be collected — fall back to checking arguments
                         // directly (the check_expr below will handle type param matching).
@@ -2621,7 +2657,7 @@ impl<'a> TypeChecker<'a> {
             let _ = self.check_patch_block_children(patch, env, value_stack);
             return false;
         };
-        if !parameter.same_shape(result) {
+        if !self.typing.types_match(parameter, result) {
             self.diagnostics.push(
                 Diagnostic::error(format!(
                     "patch literals require a same-shape function type, found `{expected}`"
@@ -3453,8 +3489,8 @@ impl<'a> TypeChecker<'a> {
             let annotation = parameter.annotation?;
             let payload = signal_name_payload_type(self.module, *argument_expr, actual);
             if let Some(lowered) = self.typing.lower_annotation(annotation) {
-                if !lowered.same_shape(actual)
-                    && !payload.is_some_and(|payload| lowered.same_shape(payload))
+                if !self.typing.types_match(&lowered, actual)
+                    && !payload.is_some_and(|payload| self.typing.types_match(&lowered, payload))
                 {
                     return None;
                 }
@@ -3487,7 +3523,7 @@ impl<'a> TypeChecker<'a> {
         if function.parameters.len() == argument_types.len() {
             // Full application: check result type against expected and collect constraints.
             if let Some(lowered) = self.typing.lower_annotation(result_annotation) {
-                if !lowered.same_shape(expected_result) {
+                if !self.typing.types_match(&lowered, expected_result) {
                     return None;
                 }
             } else if !self.typing.match_poly_hir_type(
@@ -3501,6 +3537,15 @@ impl<'a> TypeChecker<'a> {
                 .context
                 .iter()
                 .map(|constraint| self.typing.class_constraint_binding(*constraint, &bindings))
+                .collect::<Option<Vec<_>>>()?;
+            let instantiated_parameters = function
+                .parameters
+                .iter()
+                .take(arguments.len())
+                .map(|parameter| {
+                    self.typing
+                        .instantiate_poly_hir_type(parameter.annotation?, &bindings)
+                })
                 .collect::<Option<Vec<_>>>()?;
             Some((instantiated_parameters, constraints))
         } else {
@@ -3526,7 +3571,7 @@ impl<'a> TypeChecker<'a> {
                         .instantiate_poly_hir_type_partially(result_annotation, &bindings)
                 })?;
             let curried_result = self.arrow_type(&remaining_types, &result_ty);
-            if !curried_result.same_shape(expected_result)
+            if !self.typing.types_match(&curried_result, expected_result)
                 && !curried_result.fits_template(expected_result)
             {
                 return None;
@@ -3539,6 +3584,15 @@ impl<'a> TypeChecker<'a> {
                     self.typing.class_constraint_binding(*constraint, &bindings)
                 })
                 .collect::<Vec<_>>();
+            let instantiated_parameters = function
+                .parameters
+                .iter()
+                .take(arguments.len())
+                .map(|parameter| {
+                    self.typing
+                        .instantiate_poly_hir_type(parameter.annotation?, &bindings)
+                })
+                .collect::<Option<Vec<_>>>()?;
             Some((instantiated_parameters, constraints))
         }
     }

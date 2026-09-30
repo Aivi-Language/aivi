@@ -23,6 +23,173 @@ fn typecheck_text(path: &str, text: &str) -> TypeCheckReport {
     typecheck_module(lowered.module())
 }
 
+#[test]
+fn typecheck_rejects_wrong_polymorphic_instance_result() {
+    let report = typecheck_text(
+        "wrong-functor-result.aivi",
+        r#"
+type Box A = Box A
+instance Functor Box = {
+    map = f box => Box "wrong"
+}
+"#,
+    );
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| { diagnostic.code == Some(crate::codes::TYPE_MISMATCH) }),
+        "polymorphic instance bodies must satisfy every quantified result type: {:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
+fn typecheck_preserves_distinct_quantified_function_parameters() {
+    let report = typecheck_text(
+        "rigid-function-parameters.aivi",
+        "type A -> B -> A\nfunc first = x y => y\n",
+    );
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| { diagnostic.code == Some(crate::codes::TYPE_MISMATCH) }),
+        "a B value cannot satisfy the independently quantified A result: {:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
+fn typecheck_rejects_specialization_of_quantified_local_values() {
+    for text in [
+        "type A -> B -> (A, A)\nfunc bad = x y => (x, y)\n",
+        "type List B -> List A\nfunc bad = ys => ys\n",
+        "type (A -> A) -> B -> B\nfunc bad = f y => f y\n",
+        "type Functor F => (F A -> F A) -> F B -> F B\nfunc bad = f ys => f ys\n",
+        "type Functor F => (A -> B) -> F A -> F B\nfunc bad = f xs => xs\n",
+        "type A -> A -> A\nfunc choose = x y => x\ntype A -> B -> A\nfunc bad = x y => choose x y\n",
+    ] {
+        let report = typecheck_text("rigid-nested-types.aivi", text);
+        assert!(
+            !report.is_ok(),
+            "independent quantified types cannot be unified when checking a body: {text}"
+        );
+    }
+}
+
+#[test]
+fn contextual_type_templates_preserve_constructor_quantifiers() {
+    let module = Module::default();
+    let mut typing = GateTypeContext::new(&module);
+    let constructor = crate::TypeParameterId::from_raw(0);
+    let local = crate::TypeParameterId::from_raw(1);
+    let flexible = crate::TypeParameterId::from_raw(2);
+    typing.replace_rigid_type_parameters(vec![constructor, local]);
+    let application = |parameter| GateType::TypeApplication {
+        parameter: constructor,
+        name: "F".to_owned(),
+        arguments: vec![GateType::TypeParameter {
+            parameter,
+            name: "A".to_owned(),
+        }],
+    };
+    let mut bindings = HashMap::new();
+    assert!(typing.match_gate_type_template(
+        &application(flexible),
+        &application(local),
+        &mut bindings
+    ));
+    assert_eq!(
+        bindings.get(&flexible),
+        Some(&GateType::TypeParameter {
+            parameter: local,
+            name: "A".to_owned()
+        })
+    );
+    assert!(!typing.match_gate_type_template(
+        &application(local),
+        &application(flexible),
+        &mut HashMap::new()
+    ));
+    assert!(!typing.match_gate_type_template(
+        &application(local),
+        &GateType::List(Box::new(GateType::TypeParameter {
+            parameter: local,
+            name: "A".to_owned()
+        })),
+        &mut HashMap::new()
+    ));
+}
+
+#[test]
+fn typecheck_accepts_instantiation_at_polymorphic_calls() {
+    let report = typecheck_text(
+        "polymorphic-call-instantiation.aivi",
+        r#"
+type A -> A -> A
+func choose = x y => x
+type (A -> A) -> A -> A
+func apply = f x => f x
+type A -> B -> A
+func first = x y => choose x x
+value text : Text = choose "left" "right"
+value number : Int = apply (n => n + 1) 2
+"#,
+    );
+    assert!(
+        report.is_ok(),
+        "call sites must still instantiate generic signatures: {:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
+fn typecheck_instantiates_generic_callbacks_from_known_container_types() {
+    let report = typecheck_text(
+        "generic-callback-instantiation.aivi",
+        r#"
+type A -> B -> (A, B)
+func pair = left right => (left, right)
+type (A -> B -> C) -> List A -> List B -> List C
+func zipWith = transform left right => []
+type List A -> List B -> List (A, B)
+func zip = left right => zipWith pair left right
+
+type A -> A
+func identity = x => x
+type List A -> List A
+func copy = items => items |> map identity
+"#,
+    );
+    assert!(
+        report.is_ok(),
+        "generic callbacks must instantiate using their arguments and expected results: {:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
+fn typecheck_accepts_polymorphic_instance_member_constraints() {
+    let report = typecheck_text(
+        "constrained-instance-method.aivi",
+        r#"
+class Display A = {
+    display : Eq B => A -> B -> Bool
+}
+type Label = Label Text
+instance Display Label = {
+    display = label item => item == item
+}
+"#,
+    );
+    assert!(
+        report.is_ok(),
+        "method-local constraints must be available while checking its universally quantified body: {:?}",
+        report.diagnostics()
+    );
+}
+
 fn typecheck_and_elaborate_text(path: &str, text: &str) -> (TypeCheckReport, Module) {
     let mut sources = SourceDatabase::new();
     let file_id = sources.add_file(path, text);

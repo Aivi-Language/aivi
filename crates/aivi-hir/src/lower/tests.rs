@@ -57,6 +57,63 @@ fn lower_fixture(path: &str) -> super::LoweringResult {
 }
 
 #[test]
+fn instances_preserve_class_method_context_binders() {
+    for class_first in [false, true] {
+        let class = "class Display A = { display : Eq B => A -> B -> Bool }\n";
+        let instances = "type Label = Label Text\ntype Tag = Tag Int\ninstance Display Label = { display = label item => item == item }\ninstance Display Tag = { display = tag item => item == item }\n";
+        let text = if class_first {
+            format!("{class}{instances}")
+        } else {
+            format!("{instances}{class}")
+        };
+        let result = lower_text("instance-method-binders.aivi", &text);
+        assert!(!result.has_errors(), "{:?}", result.diagnostics());
+        let module = result.module();
+        let class = module
+            .items()
+            .iter()
+            .find_map(|(_, item)| match item {
+                Item::Class(class) if class.name.text() == "Display" => Some(class),
+                _ => None,
+            })
+            .unwrap();
+        let method = &class.members[0];
+        assert_eq!(method.type_parameters.len(), 1);
+        let binder = method.type_parameters[0];
+        let mut roots = method.context.clone();
+        roots.push(method.annotation);
+        for (_, item) in module.items().iter() {
+            if let Item::Instance(instance) = item {
+                roots.extend(
+                    instance
+                        .members
+                        .iter()
+                        .filter_map(|member| member.annotation),
+                );
+            }
+        }
+        let mut references = Vec::new();
+        while let Some(id) = roots.pop() {
+            match &module.types()[id].kind {
+                TypeKind::Name(reference) if reference.path.segments().first().text() == "B" => {
+                    references.push(&reference.resolution)
+                }
+                TypeKind::Arrow { parameter, result } => roots.extend([*parameter, *result]),
+                TypeKind::Apply { callee, arguments } => {
+                    roots.push(*callee);
+                    roots.extend(arguments.iter().copied());
+                }
+                _ => {}
+            }
+        }
+        assert!(!references.is_empty());
+        assert!(references.iter().all(|reference| matches!(reference,
+            ResolutionState::Resolved(TypeResolution::TypeParameter(parameter)) if *parameter == binder)),
+            "class constraints and instantiated method signatures must share one B binder: {references:?}");
+    }
+}
+
+#[test]
 fn did_you_mean_suggestion_for_misspelled_binding() {
     // "couner" is 2 edits from "counter" — should trigger a "did you mean" hint.
     let result = lower_text(
