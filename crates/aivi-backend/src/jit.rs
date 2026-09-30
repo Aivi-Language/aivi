@@ -18,9 +18,9 @@ use aivi_ffi_call::{
 
 use crate::{
     AbiPassMode, BackendExecutionEngine, BackendExecutionEngineKind, BackendExecutionOptions,
-    BackendRuntimeMeta, BackendRuntimeView, EvalFrame, EvaluationCallProfile, EvaluationError,
-    FrozenBackendCatalog, ItemId, KernelEvaluationProfile, KernelEvaluator, KernelExprId,
-    KernelFingerprint, KernelId, LayoutId, LayoutKind, NativeKernelArtifact,
+    BackendRuntimeMeta, BackendRuntimeView, DetachedRuntimeValue, EvalFrame, EvaluationCallProfile,
+    EvaluationError, FrozenBackendCatalog, ItemId, KernelEvaluationProfile, KernelEvaluator,
+    KernelExprId, KernelFingerprint, KernelId, LayoutId, LayoutKind, NativeKernelArtifact,
     NativeKernelArtifactSet, PrimitiveType, Program, RuntimeBigInt, RuntimeCallable,
     RuntimeDecimal, RuntimeFloat, RuntimeMap, RuntimeMapEntry, RuntimeRecordField, RuntimeValue,
     TASK_COMPOSITION_KERNEL_ID, TaskFunctionApplier,
@@ -39,7 +39,7 @@ pub(crate) struct LazyJitExecutionEngine<'a> {
     native_artifacts: Option<&'a NativeKernelArtifactSet>,
     fallback: KernelEvaluator<'a>,
     last_kernel_call: Option<LastKernelCall>,
-    item_cache: BTreeMap<ItemId, RuntimeValue>,
+    item_cache: BTreeMap<ItemId, DetachedRuntimeValue>,
     item_stack: BTreeSet<ItemId>,
     eval_trace: Vec<EvalFrame>,
     kernel_plans: BTreeMap<KernelId, CachedKernelPlan>,
@@ -365,9 +365,17 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
         if let Some((cached_result, cached_layout)) =
             self.last_kernel_call.as_ref().and_then(|last| {
                 (last.kernel_id == kernel_id
-                    && last.input_subject.as_ref() == input_subject
-                    && last.environment.as_ref() == environment)
-                    .then(|| (last.result.clone(), last.result_layout))
+                    && last
+                        .input_subject
+                        .as_ref()
+                        .map(DetachedRuntimeValue::as_runtime)
+                        == input_subject
+                    && last
+                        .environment
+                        .iter()
+                        .map(DetachedRuntimeValue::as_runtime)
+                        .eq(environment.iter()))
+                .then(|| (last.result.to_runtime(), last.result_layout))
             })
         {
             self.record_kernel_profile(
@@ -434,9 +442,12 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
 
         self.last_kernel_call = Some(LastKernelCall {
             kernel_id,
-            input_subject: input_subject.cloned(),
-            environment: environment.to_vec().into_boxed_slice(),
-            result: result.clone(),
+            input_subject: input_subject.map(DetachedRuntimeValue::from_runtime_copy),
+            environment: environment
+                .iter()
+                .map(DetachedRuntimeValue::from_runtime_copy)
+                .collect(),
+            result: DetachedRuntimeValue::from_runtime_copy(&result),
             result_layout,
         });
         Ok(result)
@@ -459,8 +470,12 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
             self.last_kernel_call.as_ref().and_then(|last| {
                 (last.kernel_id == kernel_id
                     && last.input_subject.is_none()
-                    && last.environment.as_ref() == environment)
-                    .then(|| (last.result.clone(), last.result_layout))
+                    && last
+                        .environment
+                        .iter()
+                        .map(DetachedRuntimeValue::as_runtime)
+                        .eq(environment.iter()))
+                .then(|| (last.result.to_runtime(), last.result_layout))
             })
         {
             self.record_kernel_profile(
@@ -524,8 +539,11 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
         self.last_kernel_call = Some(LastKernelCall {
             kernel_id,
             input_subject: None,
-            environment: environment.to_vec().into_boxed_slice(),
-            result: result.clone(),
+            environment: environment
+                .iter()
+                .map(DetachedRuntimeValue::from_runtime_copy)
+                .collect(),
+            result: DetachedRuntimeValue::from_runtime_copy(&result),
             result_layout,
         });
         Ok(result)
@@ -612,7 +630,11 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
             return Ok(value.clone());
         }
         let started_at = self.jit_profile.as_ref().map(|_| Instant::now());
-        if let Some(value) = self.item_cache.get(&item).cloned() {
+        if let Some(value) = self
+            .item_cache
+            .get(&item)
+            .map(DetachedRuntimeValue::to_runtime)
+        {
             self.record_item_profile(
                 item,
                 started_at.map_or(Duration::ZERO, |started| started.elapsed()),
@@ -675,7 +697,8 @@ impl BackendExecutionEngine for LazyJitExecutionEngine<'_> {
             started_at.map_or(Duration::ZERO, |started| started.elapsed()),
             false,
         );
-        self.item_cache.insert(item, result.clone());
+        self.item_cache
+            .insert(item, DetachedRuntimeValue::from_runtime_copy(&result));
         Ok(result)
     }
 }
@@ -724,9 +747,17 @@ impl BackendExecutionEngine for NativeOnlyExecutionEngine<'_> {
         if let Some((cached_result, cached_layout)) =
             self.last_kernel_call.as_ref().and_then(|last| {
                 (last.kernel_id == kernel_id
-                    && last.input_subject.as_ref() == input_subject
-                    && last.environment.as_ref() == environment)
-                    .then(|| (last.result.clone(), last.result_layout))
+                    && last
+                        .input_subject
+                        .as_ref()
+                        .map(DetachedRuntimeValue::as_runtime)
+                        == input_subject
+                    && last
+                        .environment
+                        .iter()
+                        .map(DetachedRuntimeValue::as_runtime)
+                        .eq(environment.iter()))
+                .then(|| (last.result.to_runtime(), last.result_layout))
             })
         {
             self.record_kernel_profile(
@@ -793,9 +824,12 @@ impl BackendExecutionEngine for NativeOnlyExecutionEngine<'_> {
 
         self.last_kernel_call = Some(LastKernelCall {
             kernel_id,
-            input_subject: input_subject.cloned(),
-            environment: environment.to_vec().into_boxed_slice(),
-            result: result.clone(),
+            input_subject: input_subject.map(DetachedRuntimeValue::from_runtime_copy),
+            environment: environment
+                .iter()
+                .map(DetachedRuntimeValue::from_runtime_copy)
+                .collect(),
+            result: DetachedRuntimeValue::from_runtime_copy(&result),
             result_layout,
         });
         Ok(result)
@@ -1553,18 +1587,21 @@ impl NativeKernelPlan {
 }
 
 #[derive(Default)]
-struct PackedValueHints(BTreeMap<usize, RuntimeValue>);
+struct PackedValueHints(BTreeMap<usize, DetachedRuntimeValue>);
 
 impl PackedValueHints {
     fn remember(&mut self, pointer: *const c_void, value: &RuntimeValue) {
         if !pointer.is_null() {
-            self.0.insert(pointer as usize, value.clone());
+            self.0.insert(
+                pointer as usize,
+                DetachedRuntimeValue::from_runtime_copy(value),
+            );
         }
     }
 
     fn lookup_matching(&self, plan: &MarshalPlan, pointer: *const c_void) -> Option<RuntimeValue> {
-        let value = self.0.get(&(pointer as usize))?.clone();
-        plan.matches(&value).then_some(value)
+        let value = self.0.get(&(pointer as usize))?;
+        plan.matches(value.as_runtime()).then(|| value.to_runtime())
     }
 }
 
@@ -3488,9 +3525,9 @@ fn pack_erased_domain_value(
 #[derive(Clone)]
 struct LastKernelCall {
     kernel_id: KernelId,
-    input_subject: Option<RuntimeValue>,
-    environment: Box<[RuntimeValue]>,
-    result: RuntimeValue,
+    input_subject: Option<DetachedRuntimeValue>,
+    environment: Box<[DetachedRuntimeValue]>,
+    result: DetachedRuntimeValue,
     result_layout: LayoutId,
 }
 
@@ -3550,4 +3587,35 @@ fn record_call(profile: &mut EvaluationCallProfile, elapsed: Duration, cache_hit
     }
     profile.total_time += elapsed;
     profile.max_time = profile.max_time.max(elapsed);
+}
+
+#[cfg(test)]
+mod snapshot_cache_tests {
+    use super::*;
+
+    #[test]
+    fn jit_caches_release_deep_task_values_on_a_small_stack() {
+        std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let program = Program::default();
+                let mut engine =
+                    LazyJitExecutionEngine::new(&program, BackendExecutionOptions::default());
+                let mut value = RuntimeValue::Int(3);
+                for _ in 0..20_000 {
+                    value = RuntimeValue::Task(crate::RuntimeTaskPlan::Pure {
+                        value: Box::new(value),
+                    });
+                }
+                let value = DetachedRuntimeValue::from_runtime_owned(value);
+                engine.item_cache.insert(ItemId::from_raw(0), value.clone());
+                let mut hints = PackedValueHints::default();
+                hints.0.insert(1, value);
+                drop(hints);
+                drop(engine);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
 }

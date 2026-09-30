@@ -303,7 +303,12 @@ impl SourceFile {
             .partition_point(|candidate| candidate.as_usize() <= clamped)
             .saturating_sub(1);
         let line_start = self.line_starts[line_index].as_usize();
-        let line_slice = &self.text[line_start..clamped];
+        let line_end = self
+            .line_span(line_index)
+            .expect("indexed line")
+            .end()
+            .as_usize();
+        let line_slice = &self.text[line_start..clamped.min(line_end)];
         LspPosition {
             line: line_index as u32,
             character: utf16_len(line_slice) as u32,
@@ -321,12 +326,7 @@ impl SourceFile {
             return None;
         }
         let line_start = self.line_starts[line_idx].as_usize();
-        let line_end = self
-            .line_starts
-            .get(line_idx + 1)
-            .copied()
-            .unwrap_or_else(|| ByteIndex::new(self.text.len() as u32))
-            .as_usize();
+        let line_end = self.line_span(line_idx)?.end().as_usize();
         let line_text = &self.text[line_start..line_end];
         let byte_offset = utf16_to_byte_offset(line_text, pos.character as usize)?;
         Some(ByteIndex::new((line_start + byte_offset) as u32))
@@ -457,7 +457,9 @@ fn compute_line_starts(text: &str) -> Arc<[ByteIndex]> {
     let mut starts = Vec::with_capacity(text.bytes().filter(|byte| *byte == b'\n').count() + 1);
     starts.push(ByteIndex::ZERO);
     for (index, byte) in text.bytes().enumerate() {
-        if byte == b'\n' {
+        // CRLF is one terminator. Bare CR and LF also start a new line,
+        // matching the editor's Rope configuration and UTF-16 coordinates.
+        if byte == b'\n' || (byte == b'\r' && text.as_bytes().get(index + 1) != Some(&b'\n')) {
             starts.push(ByteIndex::new((index + 1) as u32));
         }
     }
@@ -482,6 +484,64 @@ fn trim_line_end(text: &str, start: usize, end: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn line_positions_agree_for_lf_crlf_and_cr() {
+        for ending in ["\n", "\r\n", "\r"] {
+            let text = ["a😀b", "é", ""].join(ending);
+            let source = SourceFile::new(FileId::new(0), "lines.aivi", text.as_str());
+            assert_eq!(source.line_count(), 3, "{ending:?}");
+            for (line, content) in ["a😀b", "é", ""].into_iter().enumerate() {
+                assert_eq!(source.line_text(line), Some(content), "{ending:?}");
+                let start = source.line_span(line).unwrap().start().as_usize();
+                for byte in content
+                    .char_indices()
+                    .map(|(byte, _)| byte)
+                    .chain([content.len()])
+                {
+                    let position = LspPosition {
+                        line: line as u32,
+                        character: content[..byte].encode_utf16().count() as u32,
+                    };
+                    let offset = ByteIndex::new((start + byte) as u32);
+                    assert_eq!(source.lsp_position_to_offset(position), Some(offset));
+                    assert_eq!(source.offset_to_lsp_position(offset), position);
+                }
+            }
+            assert_eq!(
+                source.lsp_position_to_offset(LspPosition {
+                    line: 0,
+                    character: 2
+                }),
+                None
+            );
+        }
+    }
+
+    #[test]
+    fn lsp_columns_never_include_line_terminators() {
+        for ending in ["\n", "\r\n", "\r"] {
+            let text = format!("a{ending}b");
+            let source = SourceFile::new(FileId::new(0), "lines.aivi", text.as_str());
+            assert_eq!(
+                source.lsp_position_to_offset(LspPosition {
+                    line: 0,
+                    character: 2
+                }),
+                None,
+                "a column past the line must not address a terminator or the next line: {ending:?}"
+            );
+            for byte in 1..1 + ending.len() {
+                assert_eq!(
+                    source.offset_to_lsp_position(ByteIndex::new(byte as u32)),
+                    LspPosition {
+                        line: 0,
+                        character: 1
+                    }
+                );
+            }
+        }
+    }
 
     #[test]
     fn tracks_line_columns_and_line_text() {

@@ -427,6 +427,11 @@ impl GlibLinkedRuntimeDriver {
                 .as_mut()
                 .expect("GLib linked runtime state should exist before commit invalidation install")
                 .linked
+                .set_db_commit_invalidation_sink(Some(db_commit_invalidation_sink.clone()));
+            state
+                .as_mut()
+                .expect("GLib linked runtime state should exist before provider sink install")
+                .providers
                 .set_db_commit_invalidation_sink(Some(db_commit_invalidation_sink));
         }
         Self { context, shared }
@@ -877,13 +882,20 @@ impl GlibLinkedRuntimeShared {
     }
 
     fn worker_notifier(self: &Arc<Self>) -> Arc<dyn Fn() + Send + Sync + 'static> {
-        let shared = self.clone();
-        Arc::new(move || shared.request_tick())
+        let shared = Arc::downgrade(self);
+        Arc::new(move || {
+            if let Some(shared) = shared.upgrade() {
+                shared.request_tick();
+            }
+        })
     }
 
     fn db_commit_invalidation_sink(self: &Arc<Self>) -> crate::startup::DbCommitInvalidationSink {
-        let shared = self.clone();
+        let shared = Arc::downgrade(self);
         Arc::new(move |invalidation| {
+            let Some(shared) = shared.upgrade() else {
+                return;
+            };
             if shared.stopped.load(Ordering::Acquire) {
                 return;
             }
@@ -1642,7 +1654,34 @@ signal mirror : Signal Int = count
     }
 
     #[test]
+    fn glib_linked_runtime_drop_releases_notification_closures() {
+        let context = MainContext::new();
+        let lowered = lower_text("glib-drop-notifiers.aivi", "signal input : Signal Unit\n");
+        let assembly = crate::assemble_hir_runtime(lowered.hir.module()).unwrap();
+        let linked =
+            crate::link_backend_runtime(assembly, &lowered.core, Arc::new(lowered.backend))
+                .unwrap();
+        let driver =
+            GlibLinkedRuntimeDriver::new(context, linked, SourceProviderManager::new(), None);
+        let shared = Arc::downgrade(&driver.shared);
+        drop(driver);
+        assert!(
+            shared.upgrade().is_none(),
+            "notification closures must not retain their owning driver"
+        );
+    }
+
+    #[test]
     fn glib_linked_runtime_refreshes_db_live_after_matching_commit() {
+        assert_db_live_commit_refresh(false);
+    }
+
+    #[test]
+    fn glib_linked_runtime_refreshes_db_live_after_commit_followed_by_failure() {
+        assert_db_live_commit_refresh(true);
+    }
+
+    fn assert_db_live_commit_refresh(fail_after_commit: bool) {
         let context = MainContext::new();
         context
             .with_thread_default(|| {
@@ -1710,13 +1749,21 @@ signal primaryBytes : Signal (Result Text Bytes)
 }}
 signal secondaryBytes : Signal (Result Text Bytes)
 
-value addPrimary : Task Text Unit =
+type Unit -> Task Text Unit
+func afterCommit = unit => {}
+value successfulCommit : Task Text Unit =
     primaryDb.commit ["users"] [
         statement "insert into users(id, name) values (?, ?)" [paramInt 1, paramText "Ada"]
     ]
+value addPrimary : Task Text Unit = chain afterCommit successfulCommit
 "#,
                         primary_db.display(),
                         secondary_db.display(),
+                        if fail_after_commit {
+                            "primaryDb.commit [\"users\"] [statement \"insert into missing_table values (9)\" []]"
+                        } else {
+                            "pure unit"
+                        },
                     ),
                 );
                 let assembly = crate::assemble_hir_runtime(lowered.hir.module())
@@ -1807,12 +1854,13 @@ value addPrimary : Task Text Unit =
                         .spawn_task_worker_by_owner(add_primary_owner)
                         .expect("db commit task worker should spawn")
                 });
-                assert_eq!(
-                    handle
-                        .join()
-                        .expect("task worker thread should join cleanly"),
-                    Ok(crate::LinkedTaskWorkerOutcome::Published)
-                );
+                let result = handle.join().expect("task worker thread should join cleanly");
+                if fail_after_commit {
+                    let error = result.unwrap_err();
+                    assert!(error.to_string().contains("no such table"), "{error}");
+                } else {
+                    assert_eq!(result, Ok(crate::LinkedTaskWorkerOutcome::Published));
+                }
 
                 pump_until(&context, || {
                     driver.failure_count() > 0
@@ -1938,11 +1986,6 @@ value failInsert : Task Text Unit =
                     .expect("rows source binding should exist")
                     .spec
                     .instance;
-                let fail_task_signal = assembly
-                    .task_by_owner(item_id(lowered.hir.module(), "failInsert"))
-                    .expect("failInsert task binding should exist")
-                    .input
-                    .as_signal();
                 let fail_insert_owner = item_id(lowered.hir.module(), "failInsert");
                 let linked = crate::link_backend_runtime(
                     assembly,
@@ -1985,20 +2028,12 @@ value failInsert : Task Text Unit =
                         .spawn_task_worker_by_owner(fail_insert_owner)
                         .expect("failing db commit task worker should spawn")
                 });
-                assert_eq!(
-                    handle
-                        .join()
-                        .expect("task worker thread should join cleanly"),
-                    Ok(crate::LinkedTaskWorkerOutcome::Published)
-                );
-                pump_until(&context, || {
-                    driver.failure_count() > 0
-                        || driver
-                            .current_signal_value(fail_task_signal)
-                            .ok()
-                            .flatten()
-                            .is_some()
-                });
+                let error = handle
+                    .join()
+                    .expect("task worker thread should join cleanly")
+                    .unwrap_err();
+                assert!(error.to_string().contains("no such table"), "{error}");
+                pump_context(&context, Duration::from_millis(50));
 
                 if driver.failure_count() != 0 {
                     panic!(

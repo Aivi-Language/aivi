@@ -62,6 +62,18 @@ and dependent monadic sequencing.
 That division is why the current builtin executable support includes `Functor`, `Apply`,
 `Applicative`, `Chain`, and `Monad` for `Task E`.
 
+`aivi execute`, `aivi test`, linked task workers, `db.live`, and D-Bus reply-task workers retain
+the task's code and globals while running deferred callbacks. Task application runs the function-producing task before
+the value-producing task; a failure stops the remaining effects. Composition is driven by an
+explicit continuation stack, so nesting `map`, `apply`, `chain`, or `join` does not consume one
+Rust call frame per task. Host integrations that execute a composed task must supply an
+execution environment; the bare Rust executor reports an error when one is required.
+
+Database query and commit plans use the same task carrier. Composition receives
+the success value directly, and SQL failures stop pending callbacks and effects.
+Each successful database transaction sends its reactive change notification even
+when a later task step fails.
+
 ## Practical rule
 
 If you are unsure whether a class is the right abstraction, ask what must stay fixed:

@@ -871,34 +871,27 @@ impl<'a> GateTypeContext<'a> {
                 .and_then(|annotation| self.lower_annotation(annotation))
                 .or_else(|| self.infer_expr(item.body, &GateExprEnv::default(), None).ty),
             Item::Function(item) => {
-                let explicit_signature = item
+                // HIR normalization has already split the declared signature between
+                // parameter annotations and this result annotation. An arrow here is
+                // a returned function, so consuming parameter arrows again loses it.
+                let explicit_result = item
                     .annotation
                     .and_then(|annotation| self.lower_open_annotation(annotation));
-                let explicit_parameter_types = explicit_signature
-                    .as_ref()
-                    .and_then(|ty| Self::arrow_parameter_types(ty, item.parameters.len()));
-                let explicit_result = explicit_signature.as_ref().and_then(|ty| {
-                    Self::arrow_result_type(ty, item.parameters.len()).or_else(|| Some(ty.clone()))
-                });
                 let mut env = GateExprEnv::default();
                 let mut parameters = Vec::with_capacity(item.parameters.len());
                 for parameter in &item.parameters {
                     let parameter_ty = match parameter.annotation {
                         Some(annotation) => self.lower_open_annotation(annotation)?,
                         None => {
-                            if let Some(parameter_types) = explicit_parameter_types.as_ref() {
-                                parameter_types.get(parameters.len())?.clone()
-                            } else {
-                                if !self.allow_function_inference
-                                    || !supports_same_module_function_inference(item)
-                                {
-                                    return None;
-                                }
-                                let inferred = self.inferred_function_types().get(&item_id).cloned()?;
-                                let parameter_types =
-                                    Self::arrow_parameter_types(&inferred, item.parameters.len())?;
-                                parameter_types.get(parameters.len())?.clone()
+                            if !self.allow_function_inference
+                                || !supports_same_module_function_inference(item)
+                            {
+                                return None;
                             }
+                            let inferred = self.inferred_function_types().get(&item_id).cloned()?;
+                            let parameter_types =
+                                Self::arrow_parameter_types(&inferred, item.parameters.len())?;
+                            parameter_types.get(parameters.len())?.clone()
                         }
                     };
                     env.locals.insert(parameter.binding, parameter_ty.clone());

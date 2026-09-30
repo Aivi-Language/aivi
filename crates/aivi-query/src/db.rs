@@ -1,7 +1,7 @@
 use std::{
     path::{Path, PathBuf},
     sync::{
-        Arc,
+        Arc, OnceLock,
         atomic::{AtomicU64, Ordering},
     },
 };
@@ -22,20 +22,35 @@ use crate::{
     },
 };
 
-#[derive(Clone)]
 pub(crate) struct SourceInput {
     pub(crate) revision: u64,
-    pub(crate) path: Arc<PathBuf>,
+    pub(crate) path: PathBuf,
     pub(crate) text: Arc<str>,
+    id: aivi_base::FileId,
+    source: OnceLock<Arc<aivi_base::SourceFile>>,
 }
 
 impl SourceInput {
-    fn new(_file: SourceFile, path: PathBuf, text: String, revision: u64) -> Self {
+    fn new(file: SourceFile, path: PathBuf, text: String, revision: u64) -> Self {
         Self {
             revision,
-            path: Arc::new(path),
-            text: Arc::from(text.as_str()),
+            path,
+            text: Arc::from(text),
+            id: aivi_base::FileId::new(file.id),
+            source: OnceLock::new(),
         }
+    }
+
+    /// Build the line map at most once for this immutable input revision.
+    /// Lazy construction keeps edits that are superseded before analysis cheap.
+    pub(crate) fn source(&self) -> Arc<aivi_base::SourceFile> {
+        Arc::clone(self.source.get_or_init(|| {
+            Arc::new(aivi_base::SourceFile::new(
+                self.id,
+                self.path.clone(),
+                Arc::clone(&self.text),
+            ))
+        }))
     }
 }
 
@@ -132,7 +147,7 @@ struct DbState {
     /// Monotonic source-set/text generation used by whole-workspace tooling indexes.
     workspace_revision: u64,
     next_id: u32,
-    files: FxHashMap<u32, SourceInput>,
+    files: FxHashMap<u32, Arc<SourceInput>>,
     paths: FxHashMap<PathBuf, SourceFile>,
     parsed: FxHashMap<u32, Cached<ParsedFileResult>>,
     hir: FxHashMap<u32, Cached<HirModuleResult>>,
@@ -247,7 +262,7 @@ impl RootDatabase {
                     false
                 } else {
                     let revision = input.revision + 1;
-                    *input = SourceInput::new(file, path.clone(), text, revision);
+                    *input = Arc::new(SourceInput::new(file, path.clone(), text, revision));
                     true
                 }
             };
@@ -273,7 +288,7 @@ impl RootDatabase {
         let file = SourceFile { id };
         state
             .files
-            .insert(id, SourceInput::new(file, path.clone(), text, 0));
+            .insert(id, Arc::new(SourceInput::new(file, path.clone(), text, 0)));
         state.paths.insert(path, file);
         state.bump_workspace_revision();
         // A newly discovered file can satisfy previously missing imports or
@@ -315,13 +330,8 @@ impl RootDatabase {
     pub fn source_database(&self) -> aivi_base::SourceDatabase {
         let state = self.state.read();
         let mut sources = aivi_base::SourceDatabase::new();
-        for (&id, input) in &state.files {
-            let file_id = aivi_base::FileId::new(id);
-            sources.insert(aivi_base::SourceFile::new(
-                file_id,
-                input.path.as_ref().clone(),
-                Arc::clone(&input.text),
-            ));
+        for input in state.files.values() {
+            sources.insert(input.source().as_ref().clone());
         }
         sources
     }
@@ -337,8 +347,8 @@ impl RootDatabase {
                 false
             } else {
                 let revision = input.revision + 1;
-                let path = input.path.as_ref().clone();
-                *input = SourceInput::new(file, path, text, revision);
+                let path = input.path.clone();
+                *input = Arc::new(SourceInput::new(file, path, text, revision));
                 true
             }
         };
@@ -354,30 +364,13 @@ impl RootDatabase {
         changed
     }
 
-    pub(crate) fn source_input(&self, file: SourceFile) -> SourceInput {
+    pub(crate) fn source_input(&self, file: SourceFile) -> Arc<SourceInput> {
         self.state
             .read()
             .files
             .get(&file.id)
             .cloned()
             .expect("source file handle must refer to a stored input")
-    }
-
-    /// Build an `aivi_base::SourceFile` for the given file handle.
-    ///
-    /// The `aivi_base::FileId` is set to `file.id` so it matches the id used
-    /// in all diagnostic spans produced during HIR lowering of this file.
-    pub(crate) fn make_source_file(&self, file: SourceFile) -> Arc<aivi_base::SourceFile> {
-        let state = self.state.read();
-        let input = state
-            .files
-            .get(&file.id)
-            .expect("source file handle must refer to a stored input");
-        Arc::new(aivi_base::SourceFile::new(
-            aivi_base::FileId::new(file.id),
-            input.path.as_ref().clone(),
-            Arc::clone(&input.text),
-        ))
     }
 
     pub(crate) fn cached_parsed(

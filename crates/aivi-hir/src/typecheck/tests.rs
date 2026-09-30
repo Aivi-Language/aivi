@@ -433,6 +433,49 @@ fn typecheck_accepts_prelude_functor_map_calls() {
 }
 
 #[test]
+fn typecheck_preserves_function_valued_results_when_referencing_functions() {
+    let report = typecheck_text(
+        "returned-function.aivi",
+        r#"
+type Int -> Int
+func increment = value => value + 1
+type Bool -> (Int -> Int)
+func getIncrement = ignored => increment
+type Bool -> Text -> (Int -> Int)
+func getIncrementWithLabel = ignored label => increment
+value function : Bool -> (Int -> Int) = getIncrement
+value withLabel : Bool -> Text -> (Int -> Int) = getIncrementWithLabel
+value direct : Int -> Int = getIncrement True
+value mapped : Option (Int -> Int) = map getIncrement (Some True)
+value applied : Option Int = apply mapped (Some 41)
+"#,
+    );
+    assert!(report.is_ok(), "{:?}", report.diagnostics());
+}
+
+#[test]
+fn typecheck_rejects_discarding_a_function_valued_result_arrow() {
+    let report = typecheck_text(
+        "returned-function-mismatch.aivi",
+        r#"
+type Int -> Int
+func increment = value => value + 1
+type Bool -> (Int -> Int)
+func getIncrement = ignored => increment
+value wrong : Bool -> Int = getIncrement
+"#,
+    );
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| diagnostic.code == Some(crate::codes::TYPE_MISMATCH)),
+        "{:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
 fn typecheck_accepts_prelude_foldable_reduce_calls() {
     let report = typecheck_text(
         "prelude-reduce-call.aivi",

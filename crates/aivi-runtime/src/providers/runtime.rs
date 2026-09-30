@@ -1374,11 +1374,9 @@ fn spawn_dbus_method_worker(
                     return Some(message.clone());
                 }
                 if let Some(task) = reply_task.as_ref() {
-                    match execute_runtime_value_with_context_with_stdio(
-                        task.clone(),
-                        &provider_context,
-                    )
-                    .and_then(runtime_dbus_reply_task_result)
+                    match provider_context
+                        .execute_task_with_stdio(task.to_runtime())
+                        .and_then(runtime_dbus_reply_task_result)
                     {
                         Ok(reply_variant) => {
                             let reply = message.new_method_reply();
@@ -1540,24 +1538,22 @@ fn spawn_db_live_worker(
         if stop.load(Ordering::Acquire) || port.is_cancelled() {
             return;
         }
-        let value = match execute_runtime_value_with_context_with_stdio(plan.task.clone(), &context)
-        {
-            Ok(value) => value,
+        let value = match context.execute_task_with_stdio(plan.task.into_runtime()) {
+            Ok(value) => RuntimeValue::ResultOk(Box::new(value)),
             Err(error) => {
-                let Some(result) = &plan.result else {
-                    return;
-                };
-                let Ok(value) = db_live_query_error_value(instance, result, &error.to_string())
+                let Ok(value) =
+                    db_live_query_error_value(instance, &plan.result, &error.to_string())
                 else {
                     return;
                 };
                 value
             }
         };
+        let value = DetachedRuntimeValue::from_runtime_owned(value);
         if stop.load(Ordering::Acquire) || port.is_cancelled() {
             return;
         }
-        let _ = port.publish(DetachedRuntimeValue::from_runtime_owned(value));
+        let _ = port.publish(value);
     })
 }
 
@@ -2461,15 +2457,14 @@ fn parse_task_argument(
     provider: BuiltinSourceProvider,
     index: usize,
     value: &DetachedRuntimeValue,
-) -> Result<RuntimeValue, SourceProviderExecutionError> {
+) -> Result<DetachedRuntimeValue, SourceProviderExecutionError> {
     match strip_detached_signal(value) {
-        RuntimeValue::Task(task) => Ok(RuntimeValue::Task(task.clone())),
-        RuntimeValue::DbTask(task) => Ok(RuntimeValue::DbTask(task.clone())),
+        task @ RuntimeValue::Task(_) => Ok(DetachedRuntimeValue::from_runtime_copy(task)),
         other => Err(SourceProviderExecutionError::InvalidArgument {
             instance,
             provider,
             index,
-            expected: "Task or DbTask".into(),
+            expected: "Task".into(),
             value: Box::new(other.clone()),
         }),
     }
@@ -2969,7 +2964,7 @@ fn db_connect_error_value(
 
 fn db_live_query_error_value(
     instance: SourceInstanceId,
-    result: &RequestResultPlan,
+    result: &TaskResultPlan,
     detail: &str,
 ) -> Result<RuntimeValue, SourceProviderExecutionError> {
     let provider = BuiltinSourceProvider::DbLive;

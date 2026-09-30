@@ -727,6 +727,10 @@ pub enum DecodeStep {
         error: DecodeStepId,
         value: DecodeStepId,
     },
+    TaskResult {
+        error: DecodeStepId,
+        value: Type,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

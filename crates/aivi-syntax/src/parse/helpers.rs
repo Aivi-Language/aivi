@@ -891,7 +891,7 @@ impl<'a> Parser<'a> {
     fn line_indent_of_token(&self, index: usize) -> usize {
         let start = self.tokens[index].span().start().as_usize();
         let line_start = self.source.text()[..start]
-            .rfind('\n')
+            .rfind(['\n', '\r'])
             .map(|position| position + 1)
             .unwrap_or(0);
         self.source.text()[line_start..start].chars().count()

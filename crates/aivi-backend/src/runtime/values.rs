@@ -12,12 +12,20 @@ pub struct RuntimeMapEntry {
 
 /// Ordered runtime map storage backed by an `IndexMap`.
 ///
-/// Keys must implement `Hash + Eq` so that lookups are O(1) rather than
-/// O(n). Insertion order is preserved exactly as written in the source,
+/// Lookups use an expected constant number of hash-table probes, plus the cost
+/// of hashing and comparing the key. Insertion order is preserved as written,
 /// satisfying the display and serialisation invariant that `{b: 2, a: 1}`
 /// prints with `b` before `a`.
+///
+/// Equality and hashing ignore insertion order. Hashing visits every entry.
 #[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeMap(IndexMap<RuntimeValue, RuntimeValue>);
+
+// One immutable process seed is shared by every map, so equal maps use the same
+// entry digest regardless of insertion order, construction, or caller hasher.
+// This hash-table digest is never serialized or used as a persistent fingerprint.
+static RUNTIME_MAP_ENTRY_HASHER: std::sync::LazyLock<foldhash::quality::RandomState> =
+    std::sync::LazyLock::new(foldhash::quality::RandomState::default);
 
 impl RuntimeMap {
     /// Build a map from a list of entries, preserving insertion order.
@@ -45,7 +53,7 @@ impl RuntimeMap {
         self.0.iter()
     }
 
-    /// Look up a value by key in O(1) time.
+    /// Look up a value using expected O(1) probes, plus key hashing/equality.
     pub fn get(&self, key: &RuntimeValue) -> Option<&RuntimeValue> {
         self.0.get(key)
     }
@@ -53,10 +61,19 @@ impl RuntimeMap {
 
 impl std::hash::Hash for RuntimeMap {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        for (k, v) in &self.0 {
-            k.hash(state);
-            v.hash(state);
+        use std::hash::BuildHasher;
+
+        // Hash associated pairs independently, then combine commutatively.
+        // Use the quality variant because this sum needs well-distributed entry
+        // digests. A fixed or per-map seed would permit precomputed collisions
+        // or violate the requirement that equal maps hash equally, respectively.
+        let entry_hasher = &*RUNTIME_MAP_ENTRY_HASHER;
+        let mut entries = 0_u64;
+        for entry in &self.0 {
+            entries = entries.wrapping_add(entry_hasher.hash_one(entry));
         }
+        self.len().hash(state);
+        entries.hash(state);
     }
 }
 
@@ -66,6 +83,158 @@ impl<'a> IntoIterator for &'a RuntimeMap {
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
+    }
+}
+
+#[cfg(test)]
+mod map_hash_tests {
+    use super::*;
+    use std::hash::{DefaultHasher, Hasher};
+
+    fn map(entries: &[(i64, i64)]) -> RuntimeMap {
+        RuntimeMap::from_entries(
+            entries
+                .iter()
+                .map(|&(key, value)| RuntimeMapEntry {
+                    key: RuntimeValue::Int(key),
+                    value: RuntimeValue::Int(value),
+                })
+                .collect(),
+        )
+    }
+
+    fn hash(value: &impl Hash) -> u64 {
+        let mut state = DefaultHasher::new();
+        value.hash(&mut state);
+        state.finish()
+    }
+
+    #[test]
+    fn equal_maps_hash_equally_for_every_insertion_order() {
+        let expected = map(&[(1, 10), (2, 20), (3, 30)]);
+        for order in [
+            [1, 2, 3],
+            [1, 3, 2],
+            [2, 1, 3],
+            [2, 3, 1],
+            [3, 1, 2],
+            [3, 2, 1],
+        ] {
+            let actual = map(&order.map(|key| (key, key * 10)));
+            assert_eq!(expected, actual);
+            assert_eq!(hash(&expected), hash(&actual));
+            assert_eq!(
+                actual
+                    .iter()
+                    .map(|(key, _)| key.clone())
+                    .collect::<Vec<_>>(),
+                order.map(RuntimeValue::Int)
+            );
+        }
+    }
+
+    #[test]
+    fn reordered_nested_map_keys_support_lookup_and_last_value_replacement() {
+        let first = RuntimeValue::Map(map(&[(1, 10), (2, 20)]));
+        let reordered = RuntimeValue::Map(map(&[(2, 20), (1, 10)]));
+        let different = RuntimeValue::Map(map(&[(3, 30), (4, 40)]));
+        for (first, reordered, different) in [
+            (first.clone(), reordered.clone(), different.clone()),
+            (
+                RuntimeValue::List(vec![first]),
+                RuntimeValue::List(vec![reordered]),
+                RuntimeValue::List(vec![different]),
+            ),
+        ] {
+            // Singleton lookups bypass hashing in IndexMap. Use two distinct
+            // keys to exercise the hash/equality contract during lookup.
+            let outer = RuntimeMap::from_entries(vec![
+                RuntimeMapEntry {
+                    key: first.clone(),
+                    value: RuntimeValue::Int(1),
+                },
+                RuntimeMapEntry {
+                    key: different.clone(),
+                    value: RuntimeValue::Int(99),
+                },
+            ]);
+            assert_eq!(outer.get(&reordered), Some(&RuntimeValue::Int(1)));
+            let outer = RuntimeMap::from_entries(vec![
+                RuntimeMapEntry {
+                    key: first.clone(),
+                    value: RuntimeValue::Int(1),
+                },
+                RuntimeMapEntry {
+                    key: different.clone(),
+                    value: RuntimeValue::Int(99),
+                },
+                RuntimeMapEntry {
+                    key: reordered,
+                    value: RuntimeValue::Int(2),
+                },
+            ]);
+            assert_eq!(outer.len(), 2);
+            assert_eq!(outer.get(&first), Some(&RuntimeValue::Int(2)));
+            assert_eq!(outer.get(&different), Some(&RuntimeValue::Int(99)));
+            assert_eq!(
+                format!("{:?}", outer.iter().next().unwrap().0),
+                format!("{first:?}")
+            );
+        }
+    }
+
+    #[test]
+    fn map_hash_tracks_final_values_and_key_value_associations() {
+        let replaced = map(&[(1, 99), (2, 20), (1, 10)]);
+        let expected = map(&[(2, 20), (1, 10)]);
+        assert_eq!(replaced, expected);
+        assert_eq!(hash(&replaced), hash(&expected));
+        // Guard against hashing keys and values as two independent multisets.
+        assert_ne!(hash(&expected), hash(&map(&[(1, 20), (2, 10)])));
+        assert_ne!(hash(&RuntimeMap::default()), hash(&map(&[(1, 10)])));
+
+        let wrap = |value| {
+            RuntimeMap::from_entries(vec![RuntimeMapEntry {
+                key: RuntimeValue::Unit,
+                value: RuntimeValue::Map(value),
+            }])
+        };
+        assert_eq!(hash(&wrap(replaced)), hash(&wrap(expected)));
+    }
+
+    #[test]
+    fn hashing_preserves_equality_debug_and_serialization() {
+        let map = map(&[(1, 10), (2, 20)]);
+        let cold_clone = map.clone();
+        let bytes = postcard::to_stdvec(&map).unwrap();
+        let debug = format!("{map:?}");
+        let digest = hash(&map);
+        assert_eq!(map, cold_clone);
+        assert_eq!(debug, format!("{map:?}"));
+        assert_eq!(bytes, postcard::to_stdvec(&map).unwrap());
+        // Preserve the original newtype's wire representation exactly.
+        assert_eq!(bytes, postcard::to_stdvec(&map.0).unwrap());
+        let warm_clone = map.clone();
+        let decoded: RuntimeMap = postcard::from_bytes(&bytes).unwrap();
+        assert_eq!(decoded, map);
+        assert_eq!(hash(&decoded), digest);
+        assert_eq!(hash(&cold_clone), digest);
+        assert_eq!(hash(&warm_clone), digest);
+    }
+
+    #[test]
+    fn concurrent_hashing_uses_one_order_independent_digest() {
+        let map = map(&[(1, 10), (2, 20), (3, 30)]);
+        let expected = hash(&self::map(&[(3, 30), (1, 10), (2, 20)]));
+        let barrier = std::sync::Barrier::new(8);
+        std::thread::scope(|scope| {
+            for _ in 0..8 {
+                scope.spawn(|| {
+                    barrier.wait();
+                    assert_eq!(hash(&map), expected);
+                });
+            }
+        });
     }
 }
 
@@ -96,9 +265,8 @@ pub enum RuntimeConstructor {
     Invalid,
 }
 
-/// Backend-owned DB task plans stay separate from `RuntimeTaskPlan` until executor integration
-/// lands. This keeps the representation explicit without forcing runtime/CLI wiring in this slice.
-#[allow(dead_code)]
+/// Database leaves in the common task carrier. The worker owns execution;
+/// callbacks receive the query rows or commit unit value after success.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RuntimeDbTaskPlan {
     Query(RuntimeDbQueryPlan),
@@ -109,7 +277,6 @@ pub enum RuntimeDbTaskPlan {
 ///
 /// The `database` text must already be normalized so equality and change invalidation use the same
 /// canonical key.
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeDbConnection {
     pub database: Box<str>,
@@ -119,7 +286,6 @@ pub struct RuntimeDbConnection {
 ///
 /// Argument order is significant and preserves the lowering order so later execution can bind
 /// placeholders deterministically without re-inspecting source syntax.
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeDbStatement {
     pub sql: Box<str>,
@@ -127,7 +293,6 @@ pub struct RuntimeDbStatement {
 }
 
 /// Read-only DB work.
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeDbQueryPlan {
     pub connection: RuntimeDbConnection,
@@ -135,7 +300,6 @@ pub struct RuntimeDbQueryPlan {
 }
 
 /// Transactional DB work whose successful commit must invalidate explicit table keys.
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct RuntimeDbCommitPlan {
     pub connection: RuntimeDbConnection,
@@ -216,7 +380,7 @@ impl fmt::Display for RuntimeDbCommitPlan {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RuntimeTaskPlan {
     Pure {
         value: Box<RuntimeValue>,
@@ -432,11 +596,13 @@ pub enum RuntimeTaskPlan {
     Join {
         outer: Box<RuntimeTaskPlan>,
     },
+    Database(RuntimeDbTaskPlan),
 }
 
 impl fmt::Display for RuntimeTaskPlan {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Database(plan) => plan.fmt(f),
             Self::Pure { value } => write!(f, "pure({value})"),
             Self::RandomInt { low, high } => write!(f, "randomInt({low}, {high})"),
             Self::RandomBytes { count } => write!(f, "randomBytes({count})"),
@@ -559,7 +725,7 @@ pub enum RuntimeCallable {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum RuntimeValue {
     Unit,
     Bool(bool),
@@ -571,9 +737,8 @@ pub enum RuntimeValue {
     Bytes(Box<[u8]>),
     Tuple(Vec<RuntimeValue>),
     List(Vec<RuntimeValue>),
-    // Runtime maps intentionally preserve source entry order. The dedicated
-    // wrapper keeps that invariant explicit while lookup remains linear until
-    // the runtime defines a total key ordering for all `RuntimeValue` variants.
+    // Runtime maps preserve source entry order while using order-independent
+    // equality and hashing, including when a map is itself used as a key.
     Map(RuntimeMap),
     Set(Vec<RuntimeValue>),
     Record(Vec<RuntimeRecordField>),
@@ -586,45 +751,307 @@ pub enum RuntimeValue {
     ValidationInvalid(Box<RuntimeValue>),
     Signal(Box<RuntimeValue>),
     Task(RuntimeTaskPlan),
-    DbTask(RuntimeDbTaskPlan),
     SuffixedInteger { raw: Box<str>, suffix: Box<str> },
     Callable(RuntimeCallable),
 }
 
+impl RuntimeValue {
+    /// Leave scalar destruction to the owner; detach recursive trees before the
+    /// owner replaces or clears a slot. This preserves the common scalar path.
+    pub(crate) fn discard_tree_in_place(&mut self) {
+        if !runtime_value_is_scalar(self) {
+            std::mem::replace(self, Self::Unit).discard();
+        }
+    }
+
+    /// Release an owned value without recursively dropping its value or task tree.
+    /// Use this when abandoning deeply nested pending work. This does not execute effects
+    /// and does not change the ordinary value representation or its automatic destructor.
+    pub fn discard(self) {
+        // Scalar snapshots have no tree to traverse. Keep their normal drop
+        // allocation-free, including the empty sentinel used by boundary owners.
+        if matches!(
+            self,
+            Self::Unit
+                | Self::Bool(_)
+                | Self::Int(_)
+                | Self::Float(_)
+                | Self::Decimal(_)
+                | Self::BigInt(_)
+                | Self::Text(_)
+                | Self::Bytes(_)
+                | Self::OptionNone
+                | Self::SuffixedInteger { .. }
+        ) {
+            return;
+        }
+        let mut pending = match self {
+            Self::Tuple(values) | Self::List(values) | Self::Set(values) => values,
+            Self::Map(ref map)
+                if map.iter().all(|(key, value)| {
+                    runtime_value_is_scalar(key) && runtime_value_is_scalar(value)
+                }) =>
+            {
+                return;
+            }
+            other => vec![other],
+        };
+        while let Some(value) = pending.pop() {
+            match value {
+                Self::Tuple(values) | Self::List(values) | Self::Set(values) => {
+                    pending.extend(values)
+                }
+                Self::Map(values) => {
+                    for (key, value) in values.0 {
+                        pending.push(key);
+                        pending.push(value);
+                    }
+                }
+                Self::Record(fields) => pending.extend(fields.into_iter().map(|field| field.value)),
+                Self::Sum(value) => pending.extend(value.fields),
+                Self::OptionSome(value)
+                | Self::ResultOk(value)
+                | Self::ResultErr(value)
+                | Self::ValidationValid(value)
+                | Self::ValidationInvalid(value)
+                | Self::Signal(value) => pending.push(*value),
+                Self::Callable(callable) => {
+                    let (RuntimeCallable::ItemBody {
+                        bound_arguments, ..
+                    }
+                    | RuntimeCallable::BuiltinConstructor {
+                        bound_arguments, ..
+                    }
+                    | RuntimeCallable::SumConstructor {
+                        bound_arguments, ..
+                    }
+                    | RuntimeCallable::DomainMember {
+                        bound_arguments, ..
+                    }
+                    | RuntimeCallable::BuiltinClassMember {
+                        bound_arguments, ..
+                    }
+                    | RuntimeCallable::IntrinsicValue {
+                        bound_arguments, ..
+                    }) = callable;
+                    pending.extend(bound_arguments);
+                }
+                Self::Task(plan) => match plan {
+                    RuntimeTaskPlan::Database(RuntimeDbTaskPlan::Query(plan)) => {
+                        pending.extend(plan.statement.arguments)
+                    }
+                    RuntimeTaskPlan::Database(RuntimeDbTaskPlan::Commit(plan)) => {
+                        for statement in plan.statements {
+                            pending.extend(statement.arguments);
+                        }
+                    }
+                    RuntimeTaskPlan::Pure { value } => pending.push(*value),
+                    RuntimeTaskPlan::Map { function, inner }
+                    | RuntimeTaskPlan::Chain { function, inner } => {
+                        pending.push(*function);
+                        pending.push(Self::Task(*inner));
+                    }
+                    RuntimeTaskPlan::Apply {
+                        function_task,
+                        value_task,
+                    } => {
+                        pending.push(Self::Task(*function_task));
+                        pending.push(Self::Task(*value_task));
+                    }
+                    RuntimeTaskPlan::Join { outer } => pending.push(Self::Task(*outer)),
+                    RuntimeTaskPlan::DbusCall { body, .. } => pending.extend(body),
+                    RuntimeTaskPlan::NotificationSend { notification, .. } => {
+                        pending.push(*notification)
+                    }
+                    RuntimeTaskPlan::AuthPkce { config }
+                    | RuntimeTaskPlan::AuthRefresh { config, .. } => pending.push(*config),
+                    RuntimeTaskPlan::CustomCapabilityCommand(plan) => {
+                        for argument in plan
+                            .provider_arguments
+                            .into_iter()
+                            .chain(plan.options)
+                            .chain(plan.arguments)
+                        {
+                            pending.push(argument.value);
+                        }
+                    }
+                    RuntimeTaskPlan::RandomInt { .. }
+                    | RuntimeTaskPlan::RandomBytes { .. }
+                    | RuntimeTaskPlan::StdoutWrite { .. }
+                    | RuntimeTaskPlan::StderrWrite { .. }
+                    | RuntimeTaskPlan::FsWriteText { .. }
+                    | RuntimeTaskPlan::FsWriteBytes { .. }
+                    | RuntimeTaskPlan::FsCreateDirAll { .. }
+                    | RuntimeTaskPlan::FsDeleteFile { .. }
+                    | RuntimeTaskPlan::FsReadText { .. }
+                    | RuntimeTaskPlan::FsReadDir { .. }
+                    | RuntimeTaskPlan::FsExists { .. }
+                    | RuntimeTaskPlan::FsReadBytes { .. }
+                    | RuntimeTaskPlan::FsRename { .. }
+                    | RuntimeTaskPlan::FsCopy { .. }
+                    | RuntimeTaskPlan::FsDeleteDir { .. }
+                    | RuntimeTaskPlan::JsonValidate { .. }
+                    | RuntimeTaskPlan::JsonGet { .. }
+                    | RuntimeTaskPlan::JsonAt { .. }
+                    | RuntimeTaskPlan::JsonKeys { .. }
+                    | RuntimeTaskPlan::JsonPretty { .. }
+                    | RuntimeTaskPlan::JsonMinify { .. }
+                    | RuntimeTaskPlan::EnvGet { .. }
+                    | RuntimeTaskPlan::EnvList { .. }
+                    | RuntimeTaskPlan::LogEmit { .. }
+                    | RuntimeTaskPlan::LogEmitContext { .. }
+                    | RuntimeTaskPlan::RegexIsMatch { .. }
+                    | RuntimeTaskPlan::RegexFind { .. }
+                    | RuntimeTaskPlan::RegexFindText { .. }
+                    | RuntimeTaskPlan::RegexFindAll { .. }
+                    | RuntimeTaskPlan::RegexReplace { .. }
+                    | RuntimeTaskPlan::RegexReplaceAll { .. }
+                    | RuntimeTaskPlan::HttpGet { .. }
+                    | RuntimeTaskPlan::HttpGetBytes { .. }
+                    | RuntimeTaskPlan::HttpGetStatus { .. }
+                    | RuntimeTaskPlan::HttpPost { .. }
+                    | RuntimeTaskPlan::HttpPut { .. }
+                    | RuntimeTaskPlan::HttpDelete { .. }
+                    | RuntimeTaskPlan::HttpHead { .. }
+                    | RuntimeTaskPlan::HttpPostJson { .. }
+                    | RuntimeTaskPlan::SecretLookup { .. }
+                    | RuntimeTaskPlan::SecretStore { .. }
+                    | RuntimeTaskPlan::SecretDelete { .. }
+                    | RuntimeTaskPlan::NotificationClose { .. }
+                    | RuntimeTaskPlan::TimeNowMs
+                    | RuntimeTaskPlan::TimeMonotonicMs
+                    | RuntimeTaskPlan::RandomFloat => {}
+                },
+                Self::Unit
+                | Self::Bool(_)
+                | Self::Int(_)
+                | Self::Float(_)
+                | Self::Decimal(_)
+                | Self::BigInt(_)
+                | Self::Text(_)
+                | Self::Bytes(_)
+                | Self::OptionNone
+                | Self::SuffixedInteger { .. } => {}
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod disposal_tests {
+    use super::*;
+
+    #[test]
+    fn discard_releases_deep_containers_tasks_and_captures_on_a_small_stack() {
+        std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let mut value = RuntimeValue::Unit;
+                for index in 0..20_000 {
+                    value = match index % 6 {
+                        0 => RuntimeValue::List(vec![value]),
+                        1 => RuntimeValue::OptionSome(Box::new(value)),
+                        2 => RuntimeValue::Task(RuntimeTaskPlan::Pure {
+                            value: Box::new(value),
+                        }),
+                        3 => RuntimeValue::Record(vec![RuntimeRecordField {
+                            label: "value".into(),
+                            value,
+                        }]),
+                        4 => RuntimeValue::Callable(RuntimeCallable::BuiltinConstructor {
+                            constructor: RuntimeConstructor::Some,
+                            bound_arguments: vec![value],
+                        }),
+                        _ => RuntimeValue::Map(RuntimeMap::from_entries(vec![RuntimeMapEntry {
+                            key: RuntimeValue::Unit,
+                            value,
+                        }])),
+                    };
+                }
+                value.discard();
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+}
+
 /// Explicit snapshot used when runtime values cross GTK/worker/FFI boundaries.
 ///
-/// Future moving-collector work must not let those boundaries assume that
-/// ordinary language values keep stable addresses. This wrapper forces callers to
-/// either deep-copy a live runtime value (`from_runtime_copy`) or to explicitly
-/// mark an already-owned value as boundary-ready (`from_runtime_owned`).
-#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct DetachedRuntimeValue(RuntimeValue);
+/// Snapshots own independent value trees. Copying and releasing a deep tree use
+/// explicit worklists; no ordinary value address is assumed to remain stable.
+/// The private disposal flag records whether copying left any recursive child
+/// work. Shallow copies keep Rust's normal destructor; all other owners and
+/// decoded snapshots conservatively use iterative release.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(transparent)]
+pub struct DetachedRuntimeValue {
+    value: RuntimeValue,
+    #[serde(skip, default = "snapshot_requires_iterative_drop")]
+    iterative_drop: bool,
+}
+
+const fn snapshot_requires_iterative_drop() -> bool {
+    true
+}
 
 impl DetachedRuntimeValue {
     pub const fn unit() -> Self {
-        Self(RuntimeValue::Unit)
+        Self {
+            value: RuntimeValue::Unit,
+            iterative_drop: false,
+        }
     }
 
+    #[inline]
     pub fn from_runtime_copy(value: &RuntimeValue) -> Self {
-        Self(value.clone())
+        clone_runtime_snapshot(value)
     }
 
     pub fn from_runtime_owned(value: RuntimeValue) -> Self {
-        Self(value)
+        Self {
+            value,
+            iterative_drop: true,
+        }
     }
 
     pub const fn as_runtime(&self) -> &RuntimeValue {
-        &self.0
+        &self.value
     }
 
     pub fn to_runtime(&self) -> RuntimeValue {
-        self.0.clone()
+        self.value.clone()
     }
 
-    pub fn into_runtime(self) -> RuntimeValue {
-        self.0
+    pub fn into_runtime(mut self) -> RuntimeValue {
+        std::mem::replace(&mut self.value, RuntimeValue::Unit)
     }
 }
+
+impl Drop for DetachedRuntimeValue {
+    #[inline]
+    fn drop(&mut self) {
+        if self.iterative_drop && !runtime_value_is_scalar(&self.value) {
+            std::mem::replace(&mut self.value, RuntimeValue::Unit).discard();
+        }
+    }
+}
+
+impl fmt::Debug for DetachedRuntimeValue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("DetachedRuntimeValue")
+            .field(&self.value)
+            .finish()
+    }
+}
+
+impl PartialEq for DetachedRuntimeValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl Eq for DetachedRuntimeValue {}
 
 impl PartialEq<RuntimeValue> for DetachedRuntimeValue {
     fn eq(&self, other: &RuntimeValue) -> bool {
@@ -739,7 +1166,6 @@ impl RuntimeValue {
                         stack.push(DisplayFrame::StaticText("Signal("));
                     }
                     Self::Task(task) => write!(target, "<task {task}>")?,
-                    Self::DbTask(task) => write!(target, "<task {task}>")?,
                     Self::SuffixedInteger { raw, suffix } => write!(target, "{raw}{suffix}")?,
                     Self::Callable(callable) => match callable {
                         RuntimeCallable::ItemBody { item, .. } => {

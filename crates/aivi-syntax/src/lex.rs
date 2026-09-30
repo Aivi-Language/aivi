@@ -239,25 +239,29 @@ fn lex_range(source: &SourceFile, range: std::ops::Range<usize>) -> LexedModule 
     let mut at_line_start = range.start == 0
         || bytes
             .get(range.start.saturating_sub(1))
-            .is_some_and(|byte| *byte == b'\n');
+            .is_some_and(|byte| matches!(byte, b'\n' | b'\r'));
     let mut tokens = Vec::new();
     let mut diagnostics = Vec::new();
 
     while cursor < range.end {
-        if bytes[cursor] == b'\n' {
+        if matches!(bytes[cursor], b'\n' | b'\r') {
+            let start = cursor;
+            cursor += 1;
+            if bytes[start] == b'\r' && cursor < range.end && bytes[cursor] == b'\n' {
+                cursor += 1;
+            }
             tokens.push(Token::new(
                 TokenKind::Newline,
-                source.span(cursor..cursor + 1),
+                source.span(start..cursor),
                 false,
             ));
-            cursor += 1;
             at_line_start = true;
             continue;
         }
 
-        if matches!(bytes[cursor], b' ' | b'\t' | b'\r') {
+        if matches!(bytes[cursor], b' ' | b'\t') {
             let start = cursor;
-            while cursor < range.end && matches!(bytes[cursor], b' ' | b'\t' | b'\r') {
+            while cursor < range.end && matches!(bytes[cursor], b' ' | b'\t') {
                 cursor += 1;
             }
             tokens.push(Token::new(
@@ -313,7 +317,7 @@ fn lex_range(source: &SourceFile, range: std::ops::Range<usize>) -> LexedModule 
         // Handle line comments (`//`).
         if bytes[cursor..range.end].starts_with(b"//") {
             let start = cursor;
-            while cursor < range.end && bytes[cursor] != b'\n' {
+            while cursor < range.end && !matches!(bytes[cursor], b'\n' | b'\r') {
                 cursor += 1;
             }
             tokens.push(Token::new(
@@ -674,6 +678,9 @@ fn scan_quoted_body(
                         .next()
                         .expect("escaped codepoint must stay on a UTF-8 boundary");
                     match escaped {
+                        // An incomplete escape must leave the line terminator
+                        // for the main lexer so recovery preserves later items.
+                        '\n' | '\r' => break,
                         'n' | 't' | 'r' | '\\' | '"' | '\'' | '0' => {
                             cursor += 1;
                         }
@@ -685,10 +692,11 @@ fn scan_quoted_body(
                             cursor += 1;
                             if cursor < end && bytes[cursor] == b'{' {
                                 cursor += 1;
-                                while cursor < end && bytes[cursor] != b'}' {
+                                while cursor < end && !matches!(bytes[cursor], b'}' | b'\n' | b'\r')
+                                {
                                     cursor += 1;
                                 }
-                                if cursor < end {
+                                if cursor < end && bytes[cursor] == b'}' {
                                     cursor += 1; // consume `}`
                                 }
                             } else {
@@ -728,7 +736,7 @@ fn scan_quoted_body(
                 terminated = true;
                 break;
             }
-            '\n' => break,
+            '\n' | '\r' => break,
             _ => cursor += next.len_utf8(),
         }
     }

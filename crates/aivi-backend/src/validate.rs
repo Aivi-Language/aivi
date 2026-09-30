@@ -867,6 +867,9 @@ pub fn validate_program(program: &Program) -> Result<(), ValidationErrors> {
                 DecodeStepKind::Domain { carrier, .. } => {
                     push_decode_step(decode_id, *carrier, decode, &mut errors);
                 }
+                DecodeStepKind::TaskResult { error } => {
+                    push_decode_step(decode_id, *error, decode, &mut errors);
+                }
                 DecodeStepKind::List { element } | DecodeStepKind::Option { element } => {
                     push_decode_step(decode_id, *element, decode, &mut errors);
                 }

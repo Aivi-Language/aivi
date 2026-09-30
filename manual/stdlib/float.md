@@ -4,6 +4,11 @@ Pure helpers and compiler intrinsics for finite IEEE 754 double-precision values
 general numeric operations here; presentation rounding, percentages, angle wrapping, and curve
 evaluation belong in application libraries.
 
+`0.0` and `-0.0` compare equal and address the same map key, including inside
+compound keys. Their signs are preserved when rendering or serializing values.
+Runtime deserialization rejects NaN and infinities, just as construction and
+`parseText` do.
+
 ```aivi
 use aivi.core.float (
     pi

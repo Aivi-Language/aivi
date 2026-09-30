@@ -1,4 +1,27 @@
 #[test]
+fn db_live_adapter_retains_native_map_success_layout() {
+    let backend = lower_text(
+        "backend-db-live-map-layout.aivi",
+        "value query : Task Text (List (Map Text Text)) = pure []\n@source db.live query\nsignal result : Signal (Result Text (List (Map Text Text)))\n",
+    );
+    let (_, plan) = backend.decode_plans().iter().next().unwrap();
+    let step = &plan.steps()[plan.root];
+    assert!(matches!(step.kind, DecodeStepKind::TaskResult { .. }));
+    let LayoutKind::Result { value, .. } = &backend.layouts()[step.layout].kind else {
+        panic!("task adapter must retain a Result layout");
+    };
+    let LayoutKind::List { element } = &backend.layouts()[*value].kind else {
+        panic!("task success must retain its List layout");
+    };
+    assert!(matches!(
+        backend.layouts()[*element].kind,
+        LayoutKind::Map { .. }
+    ));
+    assert_eq!(step.kind.summary(), "task result error=step0");
+    validate_program(&backend).unwrap();
+}
+
+#[test]
 fn runtime_evaluates_db_query_builder_flow_into_db_task_plan() {
     let backend = lower_text(
         "backend-db-query-runtime.aivi",
@@ -25,15 +48,17 @@ value selectUsers: Task Text (List (Map Text Text)) =
         evaluator
             .evaluate_item(find_item(&backend, "selectUsers"), &globals)
             .expect("db query should evaluate into a backend db task plan"),
-        RuntimeValue::DbTask(RuntimeDbTaskPlan::Query(RuntimeDbQueryPlan {
-            connection: RuntimeDbConnection {
-                database: "app.sqlite".into(),
-            },
-            statement: RuntimeDbStatement {
-                sql: "select * from users where id = ?".into(),
-                arguments: vec![RuntimeValue::Int(7)],
-            },
-        }))
+        RuntimeValue::Task(RuntimeTaskPlan::Database(RuntimeDbTaskPlan::Query(
+            RuntimeDbQueryPlan {
+                connection: RuntimeDbConnection {
+                    database: "app.sqlite".into(),
+                },
+                statement: RuntimeDbStatement {
+                    sql: "select * from users where id = ?".into(),
+                    arguments: vec![RuntimeValue::Int(7)],
+                },
+            }
+        )))
     );
 }
 
@@ -67,22 +92,24 @@ value activateUser: Task Text Unit =
         evaluator
             .evaluate_item(find_item(&backend, "activateUser"), &globals)
             .expect("db commit should evaluate into a backend db task plan"),
-        RuntimeValue::DbTask(RuntimeDbTaskPlan::Commit(RuntimeDbCommitPlan {
-            connection: RuntimeDbConnection {
-                database: "app.sqlite".into(),
-            },
-            statements: vec![
-                RuntimeDbStatement {
-                    sql: "update users set active = ? where id = ?".into(),
-                    arguments: vec![RuntimeValue::Bool(true), RuntimeValue::Int(7)],
+        RuntimeValue::Task(RuntimeTaskPlan::Database(RuntimeDbTaskPlan::Commit(
+            RuntimeDbCommitPlan {
+                connection: RuntimeDbConnection {
+                    database: "app.sqlite".into(),
                 },
-                RuntimeDbStatement {
-                    sql: "insert into audit_log(message) values (?)".into(),
-                    arguments: vec![RuntimeValue::Text("activated user".into())],
-                },
-            ],
-            changed_tables: ["users", "audit_log"].into_iter().map(Into::into).collect(),
-        }))
+                statements: vec![
+                    RuntimeDbStatement {
+                        sql: "update users set active = ? where id = ?".into(),
+                        arguments: vec![RuntimeValue::Bool(true), RuntimeValue::Int(7)],
+                    },
+                    RuntimeDbStatement {
+                        sql: "insert into audit_log(message) values (?)".into(),
+                        arguments: vec![RuntimeValue::Text("activated user".into())],
+                    },
+                ],
+                changed_tables: ["users", "audit_log"].into_iter().map(Into::into).collect(),
+            }
+        )))
     );
 }
 

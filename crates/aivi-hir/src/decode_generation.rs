@@ -155,6 +155,11 @@ pub enum DecodeProgramStep {
         error: DecodeProgramStepId,
         value: DecodeProgramStepId,
     },
+    /// Decode a task failure while preserving the native success type in the IR.
+    TaskResult {
+        error: DecodeProgramStepId,
+        value: Box<crate::GateType>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -320,10 +325,19 @@ fn generate_source_decode_program(
         });
     }
 
+    let mut root = program_step_id(plan.schema.root());
+    if let Some(value) = &plan.task_success {
+        let error = root;
+        root = DecodeProgramStepId::from_index(steps.len());
+        steps.push(DecodeProgramStep::TaskResult {
+            error,
+            value: value.clone(),
+        });
+    }
     Ok(SourceDecodeProgram {
         mode: plan.mode,
         payload_annotation: plan.payload_annotation,
-        root: program_step_id(plan.schema.root()),
+        root,
         steps,
     })
 }

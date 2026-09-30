@@ -64,21 +64,6 @@ pub(crate) struct RuntimeDbCommitInvalidation {
     pub changed_tables: BTreeSet<Box<str>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct RuntimeTaskExecutionOutcome {
-    pub value: RuntimeValue,
-    pub commit_invalidation: Option<RuntimeDbCommitInvalidation>,
-}
-
-impl RuntimeTaskExecutionOutcome {
-    fn value(value: RuntimeValue) -> Self {
-        Self {
-            value,
-            commit_invalidation: None,
-        }
-    }
-}
-
 pub fn execute_runtime_task_plan(
     plan: RuntimeTaskPlan,
     stdout: &mut impl Write,
@@ -95,6 +80,7 @@ pub fn execute_runtime_task_plan_with_context(
 ) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
     match plan {
         RuntimeTaskPlan::Pure { value } => Ok(*value),
+        RuntimeTaskPlan::Database(plan) => execute_runtime_db_task_plan_with_context(plan, context),
         RuntimeTaskPlan::RandomInt { low, high } => {
             Ok(RuntimeValue::Int(sample_random_i64_inclusive(low, high)?))
         }
@@ -570,17 +556,14 @@ pub fn execute_runtime_task_plan_with_context(
             };
             executor.execute(context, &plan, stdout, stderr)
         }
-        // Invariant: Map/Apply/Chain/Join are deferred composition plans that require a
-        // TaskFunctionApplier (a Cranelift evaluator). They must only be executed via
-        // execute_runtime_task_plan_with_applier, never via this bare executor.
-        RuntimeTaskPlan::Map { .. }
+        plan @ (RuntimeTaskPlan::Map { .. }
         | RuntimeTaskPlan::Apply { .. }
         | RuntimeTaskPlan::Chain { .. }
-        | RuntimeTaskPlan::Join { .. } => {
-            panic!(
-                "BUG: deferred Task composition plan reached bare executor — \
-                 these variants require an applier (execute_runtime_task_plan_with_applier)"
-            )
+        | RuntimeTaskPlan::Join { .. }) => {
+            RuntimeValue::Task(plan).discard();
+            Err(task_error(
+                "deferred Task composition requires an execution environment",
+            ))
         }
     }
 }
@@ -588,7 +571,7 @@ pub fn execute_runtime_task_plan_with_context(
 pub fn execute_runtime_db_task_plan(
     plan: RuntimeDbTaskPlan,
 ) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
-    Ok(execute_runtime_db_task_plan_with_effects(plan)?.value)
+    execute_runtime_db_task_plan_with_context(plan, &SourceProviderContext::current())
 }
 
 pub fn execute_runtime_task_plan_with_stdio(
@@ -620,91 +603,121 @@ pub(crate) fn execute_runtime_task_plan_with_applier(
     applier: &mut dyn TaskFunctionApplier,
     globals: &BTreeMap<ItemId, RuntimeValue>,
 ) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
-    match plan {
-        // Deferred composition variants — require the applier.
-        RuntimeTaskPlan::Map { function, inner } => {
-            let result = execute_runtime_task_plan_with_applier(
-                *inner, context, stdout, stderr, applier, globals,
-            )?;
-            applier
-                .apply_task_function(*function, vec![result], globals)
-                .map_err(|e| RuntimeTaskExecutionError::new(format!("Task.map failed: {e}")))
-        }
-        RuntimeTaskPlan::Apply {
-            function_task,
-            value_task,
-        } => {
-            let function = execute_runtime_task_plan_with_applier(
-                *function_task,
-                context,
-                stdout,
-                stderr,
-                applier,
-                globals,
-            )?;
-            let value = execute_runtime_task_plan_with_applier(
-                *value_task,
-                context,
-                stdout,
-                stderr,
-                applier,
-                globals,
-            )?;
-            applier
-                .apply_task_function(function, vec![value], globals)
-                .map_err(|e| RuntimeTaskExecutionError::new(format!("Task.apply failed: {e}")))
-        }
-        RuntimeTaskPlan::Chain { function, inner } => {
-            let result = execute_runtime_task_plan_with_applier(
-                *inner, context, stdout, stderr, applier, globals,
-            )?;
-            let next_task = applier
-                .apply_task_function(*function, vec![result], globals)
-                .map_err(|e| RuntimeTaskExecutionError::new(format!("Task.chain failed: {e}")))?;
-            match next_task {
-                RuntimeValue::Task(next_plan) => execute_runtime_task_plan_with_applier(
-                    next_plan, context, stdout, stderr, applier, globals,
-                ),
-                _ => Err(RuntimeTaskExecutionError::new(
-                    "Task.chain: the continuation must return a Task value",
-                )),
+    let mut plan = plan;
+    let mut continuations = TaskContinuations::default();
+    'execute: loop {
+        let mut value = match plan {
+            RuntimeTaskPlan::Map { function, inner } => {
+                continuations.0.push(TaskContinuation::Map(*function));
+                plan = *inner;
+                continue;
             }
-        }
-        RuntimeTaskPlan::Join { outer } => {
-            let inner = execute_runtime_task_plan_with_applier(
-                *outer, context, stdout, stderr, applier, globals,
-            )?;
-            match inner {
-                RuntimeValue::Task(inner_plan) => execute_runtime_task_plan_with_applier(
-                    inner_plan, context, stdout, stderr, applier, globals,
-                ),
-                _ => Err(RuntimeTaskExecutionError::new(
-                    "Task.join: the outer task must produce a Task value",
-                )),
+            RuntimeTaskPlan::Apply {
+                function_task,
+                value_task,
+            } => {
+                continuations
+                    .0
+                    .push(TaskContinuation::ApplyFunction(*value_task));
+                plan = *function_task;
+                continue;
             }
+            RuntimeTaskPlan::Chain { function, inner } => {
+                continuations.0.push(TaskContinuation::Chain(*function));
+                plan = *inner;
+                continue;
+            }
+            RuntimeTaskPlan::Join { outer } => {
+                continuations.0.push(TaskContinuation::Join);
+                plan = *outer;
+                continue;
+            }
+            leaf => execute_runtime_task_plan_with_context(leaf, context, stdout, stderr)?,
+        };
+        loop {
+            value = match continuations.0.pop() {
+                None => return Ok(value),
+                Some(TaskContinuation::Map(function)) => applier
+                    .apply_task_function(function, vec![value], globals)
+                    .map_err(|e| task_error(format!("Task.map failed: {e}")))?,
+                Some(TaskContinuation::ApplyFunction(value_task)) => {
+                    continuations.0.push(TaskContinuation::ApplyValue(value));
+                    plan = value_task;
+                    continue 'execute;
+                }
+                Some(TaskContinuation::ApplyValue(function)) => applier
+                    .apply_task_function(function, vec![value], globals)
+                    .map_err(|e| task_error(format!("Task.apply failed: {e}")))?,
+                Some(TaskContinuation::Chain(function)) => {
+                    let next = applier
+                        .apply_task_function(function, vec![value], globals)
+                        .map_err(|e| task_error(format!("Task.chain failed: {e}")))?;
+                    let RuntimeValue::Task(next) = next else {
+                        next.discard();
+                        return Err(task_error(
+                            "Task.chain: the continuation must return a Task value",
+                        ));
+                    };
+                    plan = next;
+                    continue 'execute;
+                }
+                Some(TaskContinuation::Join) => {
+                    let RuntimeValue::Task(inner) = value else {
+                        value.discard();
+                        return Err(task_error(
+                            "Task.join: the outer task must produce a Task value",
+                        ));
+                    };
+                    plan = inner;
+                    continue 'execute;
+                }
+            };
         }
-        // All other variants delegate to the non-applier executor.
-        other => execute_runtime_task_plan_with_context(other, context, stdout, stderr),
     }
 }
 
-/// Execute a [`RuntimeValue`] with an applier callback. If the value is a `Task` with deferred
-/// composition plans, those are resolved using `applier` and `globals`.
-pub(crate) fn execute_runtime_value_with_context_effects_and_applier(
+// Continuations own pending work. Apply always runs its function task before its value task;
+// an error must release the unexecuted branch without recursively dropping its composition tree.
+enum TaskContinuation {
+    Map(RuntimeValue),
+    ApplyFunction(RuntimeTaskPlan),
+    ApplyValue(RuntimeValue),
+    Chain(RuntimeValue),
+    Join,
+}
+
+#[derive(Default)]
+struct TaskContinuations(Vec<TaskContinuation>);
+
+impl Drop for TaskContinuations {
+    fn drop(&mut self) {
+        for continuation in self.0.drain(..) {
+            match continuation {
+                TaskContinuation::ApplyFunction(plan) => RuntimeValue::Task(plan).discard(),
+                TaskContinuation::Map(value)
+                | TaskContinuation::ApplyValue(value)
+                | TaskContinuation::Chain(value) => value.discard(),
+                TaskContinuation::Join => {}
+            }
+        }
+    }
+}
+
+/// Execute a value while retaining the evaluator and globals that created its task plan.
+/// Deferred task callbacks receive the success payload after each effect completes.
+pub fn execute_runtime_value_with_context_and_applier(
     value: RuntimeValue,
     context: &SourceProviderContext,
     stdout: &mut impl Write,
     stderr: &mut impl Write,
     applier: &mut dyn TaskFunctionApplier,
     globals: &BTreeMap<ItemId, RuntimeValue>,
-) -> Result<RuntimeTaskExecutionOutcome, RuntimeTaskExecutionError> {
+) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
     match value {
         RuntimeValue::Task(plan) => {
             execute_runtime_task_plan_with_applier(plan, context, stdout, stderr, applier, globals)
-                .map(RuntimeTaskExecutionOutcome::value)
         }
-        RuntimeValue::DbTask(plan) => execute_runtime_db_task_plan_with_effects(plan),
-        other => Ok(RuntimeTaskExecutionOutcome::value(other)),
+        other => Ok(other),
     }
 }
 
@@ -713,13 +726,7 @@ pub fn execute_runtime_value(
     stdout: &mut impl Write,
     stderr: &mut impl Write,
 ) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
-    Ok(execute_runtime_value_with_context_effects(
-        value,
-        &SourceProviderContext::current(),
-        stdout,
-        stderr,
-    )?
-    .value)
+    execute_runtime_value_with_context(value, &SourceProviderContext::current(), stdout, stderr)
 }
 
 pub fn execute_runtime_value_with_context(
@@ -728,72 +735,27 @@ pub fn execute_runtime_value_with_context(
     stdout: &mut impl Write,
     stderr: &mut impl Write,
 ) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
-    Ok(execute_runtime_value_with_context_effects(value, context, stdout, stderr)?.value)
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn execute_runtime_value_with_effects(
-    value: RuntimeValue,
-    stdout: &mut impl Write,
-    stderr: &mut impl Write,
-) -> Result<RuntimeTaskExecutionOutcome, RuntimeTaskExecutionError> {
-    execute_runtime_value_with_context_effects(
-        value,
-        &SourceProviderContext::current(),
-        stdout,
-        stderr,
-    )
-}
-
-pub(crate) fn execute_runtime_value_with_context_effects(
-    value: RuntimeValue,
-    context: &SourceProviderContext,
-    stdout: &mut impl Write,
-    stderr: &mut impl Write,
-) -> Result<RuntimeTaskExecutionOutcome, RuntimeTaskExecutionError> {
     match value {
         RuntimeValue::Task(plan) => {
             execute_runtime_task_plan_with_context(plan, context, stdout, stderr)
-                .map(RuntimeTaskExecutionOutcome::value)
         }
-        RuntimeValue::DbTask(plan) => execute_runtime_db_task_plan_with_effects(plan),
-        other => Ok(RuntimeTaskExecutionOutcome::value(other)),
+        other => Ok(other),
     }
 }
 
 pub fn execute_runtime_value_with_stdio(
     value: RuntimeValue,
 ) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
-    Ok(execute_runtime_value_with_context_with_stdio_effects(
-        value,
-        &SourceProviderContext::current(),
-    )?
-    .value)
+    execute_runtime_value_with_context_with_stdio(value, &SourceProviderContext::current())
 }
 
 pub fn execute_runtime_value_with_context_with_stdio(
     value: RuntimeValue,
     context: &SourceProviderContext,
 ) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
-    Ok(execute_runtime_value_with_context_with_stdio_effects(value, context)?.value)
-}
-
-#[allow(dead_code)]
-pub(crate) fn execute_runtime_value_with_stdio_effects(
-    value: RuntimeValue,
-) -> Result<RuntimeTaskExecutionOutcome, RuntimeTaskExecutionError> {
-    execute_runtime_value_with_context_with_stdio_effects(value, &SourceProviderContext::current())
-}
-
-pub(crate) fn execute_runtime_value_with_context_with_stdio_effects(
-    value: RuntimeValue,
-    context: &SourceProviderContext,
-) -> Result<RuntimeTaskExecutionOutcome, RuntimeTaskExecutionError> {
     let stdout = std::io::stdout();
     let stderr = std::io::stderr();
-    let mut stdout = stdout.lock();
-    let mut stderr = stderr.lock();
-    execute_runtime_value_with_context_effects(value, context, &mut stdout, &mut stderr)
+    execute_runtime_value_with_context(value, context, &mut stdout.lock(), &mut stderr.lock())
 }
 
 fn task_error(message: impl Into<String>) -> RuntimeTaskExecutionError {
@@ -1557,14 +1519,13 @@ fn set_test_browser_opener(opener: Option<BrowserOpener>) {
         .expect("test browser opener mutex should not be poisoned") = opener;
 }
 
-fn execute_runtime_db_task_plan_with_effects(
+fn execute_runtime_db_task_plan_with_context(
     plan: RuntimeDbTaskPlan,
-) -> Result<RuntimeTaskExecutionOutcome, RuntimeTaskExecutionError> {
+    context: &SourceProviderContext,
+) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
     match plan {
-        RuntimeDbTaskPlan::Query(plan) => {
-            execute_runtime_db_query_plan(plan).map(RuntimeTaskExecutionOutcome::value)
-        }
-        RuntimeDbTaskPlan::Commit(plan) => execute_runtime_db_commit_plan(plan),
+        RuntimeDbTaskPlan::Query(plan) => execute_runtime_db_query_plan(plan),
+        RuntimeDbTaskPlan::Commit(plan) => execute_runtime_db_commit_plan(plan, context),
     }
 }
 
@@ -1574,7 +1535,7 @@ fn execute_runtime_db_query_plan(
     let script = sqlite_query_script(&plan.statement)?;
     let output = run_sqlite3_script(plan.connection.database.as_ref(), &script)?;
     if !output.status.success() {
-        return Ok(db_task_error_value(sqlite_output_error(&output)));
+        return Err(task_error(sqlite_output_error(&output)));
     }
     let stdout = String::from_utf8(output.stdout).map_err(|error| {
         task_error(format!("sqlite3 query output was not valid UTF-8: {error}"))
@@ -1586,38 +1547,27 @@ fn execute_runtime_db_query_plan(
             task_error(format!("sqlite3 query output was not valid JSON: {error}"))
         })?
     };
-    Ok(RuntimeValue::ResultOk(Box::new(decode_sqlite_rows(
-        payload,
-    )?)))
+    decode_sqlite_rows(payload)
 }
 
 fn execute_runtime_db_commit_plan(
     plan: RuntimeDbCommitPlan,
-) -> Result<RuntimeTaskExecutionOutcome, RuntimeTaskExecutionError> {
-    if plan.statements.is_empty() {
-        return Ok(RuntimeTaskExecutionOutcome {
-            value: RuntimeValue::ResultOk(Box::new(RuntimeValue::Unit)),
-            commit_invalidation: Some(RuntimeDbCommitInvalidation {
-                connection: plan.connection,
-                changed_tables: plan.changed_tables,
-            }),
-        });
+    context: &SourceProviderContext,
+) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
+    if !plan.statements.is_empty() {
+        let script = sqlite_commit_script(&plan)?;
+        let output = run_sqlite3_script(plan.connection.database.as_ref(), &script)?;
+        if !output.status.success() {
+            return Err(task_error(sqlite_output_error(&output)));
+        }
     }
-    let script = sqlite_commit_script(&plan)?;
-    let output = run_sqlite3_script(plan.connection.database.as_ref(), &script)?;
-    if output.status.success() {
-        Ok(RuntimeTaskExecutionOutcome {
-            value: RuntimeValue::ResultOk(Box::new(RuntimeValue::Unit)),
-            commit_invalidation: Some(RuntimeDbCommitInvalidation {
-                connection: plan.connection,
-                changed_tables: plan.changed_tables,
-            }),
-        })
-    } else {
-        Ok(RuntimeTaskExecutionOutcome::value(db_task_error_value(
-            sqlite_output_error(&output),
-        )))
-    }
+    // Notify each committed transaction immediately. A later task failure or
+    // cancellation cannot undo the database write or suppress its invalidation.
+    context.notify_db_commit(RuntimeDbCommitInvalidation {
+        connection: plan.connection,
+        changed_tables: plan.changed_tables,
+    });
+    Ok(RuntimeValue::Unit)
 }
 
 fn sqlite_query_script(
@@ -1770,10 +1720,6 @@ fn sqlite_json_value_to_text(value: serde_json::Value) -> String {
     }
 }
 
-fn db_task_error_value(message: String) -> RuntimeValue {
-    RuntimeValue::ResultErr(Box::new(RuntimeValue::Text(message.into_boxed_str())))
-}
-
 fn strip_runtime_signal(value: &RuntimeValue) -> &RuntimeValue {
     let mut current = value;
     while let RuntimeValue::Signal(inner) = current {
@@ -1849,11 +1795,271 @@ mod tests {
     use super::{
         CustomCapabilityCommandExecutor, RuntimeDbCommitInvalidation, execute_runtime_task_plan,
         execute_runtime_task_plan_with_context, execute_runtime_value,
-        execute_runtime_value_with_effects,
+        execute_runtime_value_with_context,
     };
     use crate::SourceProviderContext;
 
     static AUTH_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    struct CompositionApplier<F>(F);
+
+    impl<F> aivi_backend::TaskFunctionApplier for CompositionApplier<F>
+    where
+        F: FnMut(RuntimeValue, RuntimeValue) -> Result<RuntimeValue, aivi_backend::EvaluationError>,
+    {
+        fn apply_task_function(
+            &mut self,
+            function: RuntimeValue,
+            args: Vec<RuntimeValue>,
+            _globals: &std::collections::BTreeMap<aivi_backend::ItemId, RuntimeValue>,
+        ) -> Result<RuntimeValue, aivi_backend::EvaluationError> {
+            let [argument]: [RuntimeValue; 1] = args.try_into().unwrap();
+            (self.0)(function, argument)
+        }
+    }
+
+    fn pure(value: RuntimeValue) -> RuntimeTaskPlan {
+        RuntimeTaskPlan::Pure {
+            value: Box::new(value),
+        }
+    }
+
+    fn execute_composition(
+        plan: RuntimeTaskPlan,
+        applier: &mut dyn aivi_backend::TaskFunctionApplier,
+    ) -> Result<RuntimeValue, super::RuntimeTaskExecutionError> {
+        super::execute_runtime_task_plan_with_applier(
+            plan,
+            &SourceProviderContext::new(Vec::new(), PathBuf::from("."), Default::default()),
+            &mut Vec::new(),
+            &mut Vec::new(),
+            applier,
+            &Default::default(),
+        )
+    }
+
+    #[test]
+    fn task_composition_uses_bounded_stack_for_every_operator() {
+        thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                for operator in 0..4 {
+                    let mut plan = pure(RuntimeValue::Int(0));
+                    for _ in 0..10_000 {
+                        plan = match operator {
+                            0 => RuntimeTaskPlan::Map {
+                                function: Box::new(RuntimeValue::Unit),
+                                inner: Box::new(plan),
+                            },
+                            1 => RuntimeTaskPlan::Chain {
+                                function: Box::new(RuntimeValue::Unit),
+                                inner: Box::new(plan),
+                            },
+                            2 => RuntimeTaskPlan::Join {
+                                outer: Box::new(pure(RuntimeValue::Task(plan))),
+                            },
+                            _ => RuntimeTaskPlan::Apply {
+                                function_task: Box::new(pure(RuntimeValue::Unit)),
+                                value_task: Box::new(plan),
+                            },
+                        };
+                    }
+                    let mut calls = 0;
+                    let mut applier = CompositionApplier(|_, value| {
+                        calls += 1;
+                        let RuntimeValue::Int(value) = value else {
+                            panic!("expected Int")
+                        };
+                        let value = RuntimeValue::Int(value + 1);
+                        Ok(if operator == 1 {
+                            RuntimeValue::Task(pure(value))
+                        } else {
+                            value
+                        })
+                    });
+                    let result = execute_composition(plan, &mut applier).unwrap();
+                    let expected = if operator == 2 { 0 } else { 10_000 };
+                    assert_eq!(result, RuntimeValue::Int(expected));
+                    assert_eq!(calls, expected);
+                }
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    fn task_composition_error_discards_deep_unexecuted_branches() {
+        thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let mut unexecuted = RuntimeTaskPlan::StdoutWrite {
+                    text: "must not run".into(),
+                };
+                for _ in 0..20_000 {
+                    unexecuted = RuntimeTaskPlan::Map {
+                        function: Box::new(RuntimeValue::Unit),
+                        inner: Box::new(unexecuted),
+                    };
+                }
+                let plan = RuntimeTaskPlan::Apply {
+                    function_task: Box::new(RuntimeTaskPlan::JsonPretty {
+                        json: "invalid".into(),
+                    }),
+                    value_task: Box::new(unexecuted),
+                };
+                let error = execute_composition(
+                    plan,
+                    &mut CompositionApplier(|_, _| panic!("callback after failure")),
+                )
+                .unwrap_err();
+                assert!(error.to_string().contains("invalid JSON"), "{error}");
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    fn task_composition_error_discards_deep_callback_captures() {
+        thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let mut captured = RuntimeValue::Unit;
+                for _ in 0..20_000 {
+                    captured = RuntimeValue::OptionSome(Box::new(captured));
+                }
+                let function =
+                    RuntimeValue::Callable(aivi_backend::RuntimeCallable::BuiltinConstructor {
+                        constructor: aivi_backend::RuntimeConstructor::Some,
+                        bound_arguments: vec![captured],
+                    });
+                let plan = RuntimeTaskPlan::Map {
+                    function: Box::new(function),
+                    inner: Box::new(RuntimeTaskPlan::JsonPretty {
+                        json: "invalid".into(),
+                    }),
+                };
+                let error = execute_composition(
+                    plan,
+                    &mut CompositionApplier(|_, _| panic!("callback after failure")),
+                )
+                .unwrap_err();
+                assert!(error.to_string().contains("invalid JSON"), "{error}");
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[test]
+    fn task_composition_apply_orders_effects_and_callbacks() {
+        let plan = RuntimeTaskPlan::Apply {
+            function_task: Box::new(RuntimeTaskPlan::Map {
+                function: Box::new(RuntimeValue::Int(1)),
+                inner: Box::new(RuntimeTaskPlan::StdoutWrite {
+                    text: "function|".into(),
+                }),
+            }),
+            value_task: Box::new(RuntimeTaskPlan::Map {
+                function: Box::new(RuntimeValue::Int(2)),
+                inner: Box::new(RuntimeTaskPlan::StdoutWrite {
+                    text: "value|".into(),
+                }),
+            }),
+        };
+        let mut calls = Vec::new();
+        let mut applier = CompositionApplier(|function: RuntimeValue, value| {
+            calls.push((function.clone(), value));
+            Ok(function)
+        });
+        let mut stdout = Vec::new();
+        let value = super::execute_runtime_task_plan_with_applier(
+            plan,
+            &SourceProviderContext::default(),
+            &mut stdout,
+            &mut Vec::new(),
+            &mut applier,
+            &Default::default(),
+        )
+        .unwrap();
+        assert_eq!(stdout, b"function|value|");
+        assert_eq!(value, RuntimeValue::Int(1));
+        assert_eq!(
+            calls,
+            vec![
+                (RuntimeValue::Int(1), RuntimeValue::Unit),
+                (RuntimeValue::Int(2), RuntimeValue::Unit),
+                (RuntimeValue::Int(1), RuntimeValue::Int(2))
+            ]
+        );
+    }
+
+    #[test]
+    fn task_composition_reports_callback_and_result_errors() {
+        for operator in ["map", "chain", "apply"] {
+            let plan = match operator {
+                "map" => RuntimeTaskPlan::Map {
+                    function: Box::new(RuntimeValue::Unit),
+                    inner: Box::new(pure(RuntimeValue::Unit)),
+                },
+                "chain" => RuntimeTaskPlan::Chain {
+                    function: Box::new(RuntimeValue::Unit),
+                    inner: Box::new(pure(RuntimeValue::Unit)),
+                },
+                _ => RuntimeTaskPlan::Apply {
+                    function_task: Box::new(pure(RuntimeValue::Unit)),
+                    value_task: Box::new(pure(RuntimeValue::Unit)),
+                },
+            };
+            let error = execute_composition(
+                plan,
+                &mut CompositionApplier(|_, _| {
+                    Err(aivi_backend::EvaluationError::UnknownItem {
+                        item: aivi_backend::ItemId::from_raw(0),
+                    })
+                }),
+            )
+            .unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .starts_with(&format!("Task.{operator} failed:")),
+                "{error}"
+            );
+        }
+        for plan in [
+            RuntimeTaskPlan::Chain {
+                function: Box::new(RuntimeValue::Unit),
+                inner: Box::new(pure(RuntimeValue::Unit)),
+            },
+            RuntimeTaskPlan::Join {
+                outer: Box::new(pure(RuntimeValue::Unit)),
+            },
+        ] {
+            let error = execute_composition(plan, &mut CompositionApplier(|_, value| Ok(value)))
+                .unwrap_err();
+            assert!(error.to_string().contains("Task value"), "{error}");
+        }
+    }
+
+    #[test]
+    fn bare_task_composition_returns_an_error_without_running_effects() {
+        let plan = RuntimeTaskPlan::Map {
+            function: Box::new(RuntimeValue::Unit),
+            inner: Box::new(RuntimeTaskPlan::StdoutWrite {
+                text: "must not run".into(),
+            }),
+        };
+        let mut stdout = Vec::new();
+        let error = execute_runtime_task_plan(plan, &mut stdout, &mut Vec::new()).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("requires an execution environment")
+        );
+        assert!(stdout.is_empty());
+    }
 
     #[test]
     fn executes_all_regex_task_plans() {
@@ -2171,40 +2377,42 @@ mod tests {
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
 
-        let commit = RuntimeValue::DbTask(RuntimeDbTaskPlan::Commit(RuntimeDbCommitPlan {
-            connection: connection.clone(),
-            statements: vec![
-                RuntimeDbStatement {
-                    sql: "create table users(id integer primary key, name text not null)".into(),
-                    arguments: Vec::new(),
-                },
-                RuntimeDbStatement {
-                    sql: "insert into users(id, name) values (?, ?)".into(),
-                    arguments: vec![RuntimeValue::Int(1), RuntimeValue::Text("Ada".into())],
-                },
-                RuntimeDbStatement {
-                    sql: "insert into users(id, name) values (?, ?)".into(),
-                    arguments: vec![RuntimeValue::Int(2), RuntimeValue::Text("Linus".into())],
-                },
-            ],
-            changed_tables: BTreeSet::from(["users".into()]),
-        }));
+        let commit = RuntimeValue::Task(RuntimeTaskPlan::Database(RuntimeDbTaskPlan::Commit(
+            RuntimeDbCommitPlan {
+                connection: connection.clone(),
+                statements: vec![
+                    RuntimeDbStatement {
+                        sql: "create table users(id integer primary key, name text not null)"
+                            .into(),
+                        arguments: Vec::new(),
+                    },
+                    RuntimeDbStatement {
+                        sql: "insert into users(id, name) values (?, ?)".into(),
+                        arguments: vec![RuntimeValue::Int(1), RuntimeValue::Text("Ada".into())],
+                    },
+                    RuntimeDbStatement {
+                        sql: "insert into users(id, name) values (?, ?)".into(),
+                        arguments: vec![RuntimeValue::Int(2), RuntimeValue::Text("Linus".into())],
+                    },
+                ],
+                changed_tables: BTreeSet::from(["users".into()]),
+            },
+        )));
 
         let commit_result = execute_runtime_value(commit, &mut stdout, &mut stderr)
             .expect("db commit task should execute");
-        assert_eq!(
-            commit_result,
-            RuntimeValue::ResultOk(Box::new(RuntimeValue::Unit))
-        );
+        assert_eq!(commit_result, RuntimeValue::Unit);
 
         let query_result = execute_runtime_value(
-            RuntimeValue::DbTask(RuntimeDbTaskPlan::Query(RuntimeDbQueryPlan {
-                connection,
-                statement: RuntimeDbStatement {
-                    sql: "select id, name from users order by id".into(),
-                    arguments: Vec::new(),
+            RuntimeValue::Task(RuntimeTaskPlan::Database(RuntimeDbTaskPlan::Query(
+                RuntimeDbQueryPlan {
+                    connection,
+                    statement: RuntimeDbStatement {
+                        sql: "select id, name from users order by id".into(),
+                        arguments: Vec::new(),
+                    },
                 },
-            })),
+            ))),
             &mut stdout,
             &mut stderr,
         )
@@ -2212,7 +2420,7 @@ mod tests {
 
         assert_eq!(
             query_result,
-            RuntimeValue::ResultOk(Box::new(RuntimeValue::List(vec![
+            RuntimeValue::List(vec![
                 RuntimeValue::Map(RuntimeMap::from_entries(vec![
                     RuntimeMapEntry {
                         key: RuntimeValue::Text("id".into()),
@@ -2233,128 +2441,247 @@ mod tests {
                         value: RuntimeValue::Text("Linus".into()),
                     },
                 ])),
-            ]))),
+            ]),
         );
         assert!(stdout.is_empty());
         assert!(stderr.is_empty());
         let _ = fs::remove_file(&database);
     }
 
-    #[test]
-    fn execute_runtime_value_surfaces_db_query_failures_as_result_err_text() {
-        let database = test_path("db-query-failure");
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
+    fn db_task(plan: RuntimeDbTaskPlan) -> RuntimeValue {
+        RuntimeValue::Task(RuntimeTaskPlan::Database(plan))
+    }
 
-        let result = execute_runtime_value(
-            RuntimeValue::DbTask(RuntimeDbTaskPlan::Query(RuntimeDbQueryPlan {
+    fn db_commit_test_context() -> (
+        SourceProviderContext,
+        Arc<Mutex<Vec<RuntimeDbCommitInvalidation>>>,
+    ) {
+        let notifications = Arc::new(Mutex::new(Vec::new()));
+        let sink_notifications = notifications.clone();
+        let context = SourceProviderContext::current().with_db_commit_invalidation_sink(Some(
+            Arc::new(move |invalidation| sink_notifications.lock().unwrap().push(invalidation)),
+        ));
+        (context, notifications)
+    }
+
+    #[test]
+    fn execute_runtime_value_surfaces_db_query_failures_as_task_errors() {
+        let error = execute_runtime_value(
+            db_task(RuntimeDbTaskPlan::Query(RuntimeDbQueryPlan {
                 connection: RuntimeDbConnection {
-                    database: database.to_string_lossy().into_owned().into_boxed_str(),
+                    database: ":memory:".into(),
                 },
                 statement: RuntimeDbStatement {
                     sql: "select id from missing_table".into(),
                     arguments: Vec::new(),
                 },
             })),
-            &mut stdout,
-            &mut stderr,
+            &mut Vec::new(),
+            &mut Vec::new(),
         )
-        .expect("db query task should return a result value");
-
-        let RuntimeValue::ResultErr(error) = result else {
-            panic!("expected db query failure result, found {result:?}");
-        };
-        let RuntimeValue::Text(message) = error.as_ref() else {
-            panic!("expected db query failure message text, found {error:?}");
-        };
-        assert!(
-            message.contains("no such table"),
-            "expected missing-table error text, found {message}"
-        );
-        assert!(stdout.is_empty());
-        assert!(stderr.is_empty());
-        let _ = fs::remove_file(&database);
+        .unwrap_err();
+        assert!(error.to_string().contains("no such table"), "{error}");
     }
 
     #[test]
-    fn execute_runtime_value_reports_db_commit_invalidation_on_success() {
-        let database = test_path("db-commit-invalidation-success");
-        let connection = RuntimeDbConnection {
-            database: database.to_string_lossy().into_owned().into_boxed_str(),
-        };
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
-
-        let outcome = execute_runtime_value_with_effects(
-            RuntimeValue::DbTask(RuntimeDbTaskPlan::Commit(RuntimeDbCommitPlan {
-                connection: connection.clone(),
-                statements: vec![RuntimeDbStatement {
-                    sql: "create table users(id integer primary key, name text not null)".into(),
-                    arguments: Vec::new(),
-                }],
-                changed_tables: BTreeSet::from(["users".into(), "audit_log".into()]),
-            })),
-            &mut stdout,
-            &mut stderr,
-        )
-        .expect("db commit task should execute");
-
+    fn execute_runtime_value_notifies_each_successful_db_commit() {
+        let (context, notifications) = db_commit_test_context();
+        for database in [":memory:", ":memory:second"] {
+            let value = execute_runtime_value_with_context(
+                db_task(RuntimeDbTaskPlan::Commit(RuntimeDbCommitPlan {
+                    connection: RuntimeDbConnection {
+                        database: database.into(),
+                    },
+                    statements: Vec::new(),
+                    changed_tables: BTreeSet::from(["users".into(), "audit_log".into()]),
+                })),
+                &context,
+                &mut Vec::new(),
+                &mut Vec::new(),
+            )
+            .unwrap();
+            assert_eq!(value, RuntimeValue::Unit);
+        }
         assert_eq!(
-            outcome.value,
-            RuntimeValue::ResultOk(Box::new(RuntimeValue::Unit))
-        );
-        assert_eq!(
-            outcome.commit_invalidation,
-            Some(RuntimeDbCommitInvalidation {
-                connection,
+            *notifications.lock().unwrap(),
+            [":memory:", ":memory:second"].map(|database| RuntimeDbCommitInvalidation {
+                connection: RuntimeDbConnection {
+                    database: database.into()
+                },
                 changed_tables: BTreeSet::from(["users".into(), "audit_log".into()]),
             })
         );
-        assert!(stdout.is_empty());
-        assert!(stderr.is_empty());
-        let _ = fs::remove_file(&database);
     }
 
     #[test]
-    fn execute_runtime_value_omits_db_commit_invalidation_on_failure() {
-        let database = test_path("db-commit-invalidation-failure");
+    fn execute_runtime_value_omits_db_invalidation_for_rolled_back_transactions() {
+        let database = test_path("db-commit-rollback");
         let connection = RuntimeDbConnection {
             database: database.to_string_lossy().into_owned().into_boxed_str(),
         };
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
-
-        let outcome = execute_runtime_value_with_effects(
-            RuntimeValue::DbTask(RuntimeDbTaskPlan::Commit(RuntimeDbCommitPlan {
-                connection,
-                statements: vec![RuntimeDbStatement {
-                    sql: "insert into missing_table(id) values (?)".into(),
-                    arguments: vec![RuntimeValue::Int(7)],
-                }],
+        let (context, notifications) = db_commit_test_context();
+        let error = execute_runtime_value_with_context(
+            db_task(RuntimeDbTaskPlan::Commit(RuntimeDbCommitPlan {
+                connection: connection.clone(),
+                statements: vec![
+                    RuntimeDbStatement {
+                        sql: "create table users(id integer)".into(),
+                        arguments: Vec::new(),
+                    },
+                    RuntimeDbStatement {
+                        sql: "insert into missing_table values (7)".into(),
+                        arguments: Vec::new(),
+                    },
+                ],
                 changed_tables: BTreeSet::from(["users".into()]),
             })),
-            &mut stdout,
-            &mut stderr,
+            &context,
+            &mut Vec::new(),
+            &mut Vec::new(),
         )
-        .expect("db commit task should return a result value");
-
-        let RuntimeValue::ResultErr(error) = outcome.value else {
-            panic!(
-                "expected failing db commit result, found {:?}",
-                outcome.value
-            );
-        };
-        let RuntimeValue::Text(message) = error.as_ref() else {
-            panic!("expected failing db commit error text, found {error:?}");
-        };
+        .unwrap_err();
+        assert!(error.to_string().contains("no such table"), "{error}");
+        assert!(notifications.lock().unwrap().is_empty());
+        let error = execute_runtime_value(
+            db_task(RuntimeDbTaskPlan::Query(RuntimeDbQueryPlan {
+                connection,
+                statement: RuntimeDbStatement {
+                    sql: "select * from users".into(),
+                    arguments: Vec::new(),
+                },
+            })),
+            &mut Vec::new(),
+            &mut Vec::new(),
+        )
+        .unwrap_err();
         assert!(
-            message.contains("no such table"),
-            "expected missing-table failure text, found {message}"
+            error.to_string().contains("no such table"),
+            "the create-table statement must roll back: {error}"
         );
-        assert_eq!(outcome.commit_invalidation, None);
-        assert!(stdout.is_empty());
-        assert!(stderr.is_empty());
-        let _ = fs::remove_file(&database);
+        fs::remove_file(database).unwrap();
+    }
+
+    #[test]
+    fn db_task_composition_retains_successful_commit_notifications_after_failure() {
+        let database = test_path("db-composed-commits");
+        let connection = RuntimeDbConnection {
+            database: database.to_string_lossy().into_owned().into_boxed_str(),
+        };
+        let commit = |sql: &str| {
+            RuntimeTaskPlan::Database(RuntimeDbTaskPlan::Commit(RuntimeDbCommitPlan {
+                connection: connection.clone(),
+                statements: vec![RuntimeDbStatement {
+                    sql: sql.into(),
+                    arguments: Vec::new(),
+                }],
+                changed_tables: BTreeSet::from(["users".into()]),
+            }))
+        };
+        let second = commit("insert into users values (7)");
+        let failure = commit("insert into missing_table values (9)");
+        let plan = RuntimeTaskPlan::Chain {
+            function: Box::new(RuntimeValue::Int(2)),
+            inner: Box::new(RuntimeTaskPlan::Chain {
+                function: Box::new(RuntimeValue::Int(1)),
+                inner: Box::new(commit("create table users(id integer)")),
+            }),
+        };
+        let (context, notifications) = db_commit_test_context();
+        let mut second = Some(second);
+        let mut failure = Some(failure);
+        let mut applier = CompositionApplier(|function, value| {
+            assert_eq!(value, RuntimeValue::Unit);
+            // Each notification is visible before the dependent callback runs.
+            let plan = match function {
+                RuntimeValue::Int(1) => {
+                    assert_eq!(notifications.lock().unwrap().len(), 1);
+                    second.take().unwrap()
+                }
+                RuntimeValue::Int(2) => {
+                    assert_eq!(notifications.lock().unwrap().len(), 2);
+                    failure.take().unwrap()
+                }
+                _ => unreachable!(),
+            };
+            Ok(RuntimeValue::Task(plan))
+        });
+        let error = super::execute_runtime_task_plan_with_applier(
+            plan,
+            &context,
+            &mut Vec::new(),
+            &mut Vec::new(),
+            &mut applier,
+            &Default::default(),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("no such table"), "{error}");
+        assert_eq!(notifications.lock().unwrap().len(), 2);
+        let rows = execute_runtime_value(
+            db_task(RuntimeDbTaskPlan::Query(RuntimeDbQueryPlan {
+                connection,
+                statement: RuntimeDbStatement {
+                    sql: "select id from users".into(),
+                    arguments: Vec::new(),
+                },
+            })),
+            &mut Vec::new(),
+            &mut Vec::new(),
+        )
+        .unwrap();
+        let RuntimeValue::List(rows) = rows else {
+            panic!("query must return raw rows")
+        };
+        assert_eq!(rows.len(), 1);
+        fs::remove_file(database).unwrap();
+    }
+
+    #[test]
+    fn failed_db_tasks_short_circuit_callbacks_and_unexecuted_branches() {
+        let bad = || {
+            RuntimeTaskPlan::Database(RuntimeDbTaskPlan::Query(RuntimeDbQueryPlan {
+                connection: RuntimeDbConnection {
+                    database: ":memory:".into(),
+                },
+                statement: RuntimeDbStatement {
+                    sql: "select * from missing_table".into(),
+                    arguments: Vec::new(),
+                },
+            }))
+        };
+        let mut applier =
+            CompositionApplier(|_, _| panic!("failed task must not invoke callbacks"));
+        for plan in [
+            RuntimeTaskPlan::Map {
+                function: Box::new(RuntimeValue::Unit),
+                inner: Box::new(bad()),
+            },
+            RuntimeTaskPlan::Chain {
+                function: Box::new(RuntimeValue::Unit),
+                inner: Box::new(bad()),
+            },
+            RuntimeTaskPlan::Join {
+                outer: Box::new(bad()),
+            },
+            RuntimeTaskPlan::Apply {
+                function_task: Box::new(bad()),
+                value_task: Box::new(RuntimeTaskPlan::StdoutWrite {
+                    text: "must not run".into(),
+                }),
+            },
+        ] {
+            let mut stdout = Vec::new();
+            let error = super::execute_runtime_task_plan_with_applier(
+                plan,
+                &SourceProviderContext::current(),
+                &mut stdout,
+                &mut Vec::new(),
+                &mut applier,
+                &Default::default(),
+            )
+            .unwrap_err();
+            assert!(error.to_string().contains("no such table"), "{error}");
+            assert!(stdout.is_empty());
+        }
     }
 
     #[test]

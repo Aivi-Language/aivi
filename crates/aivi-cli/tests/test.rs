@@ -37,6 +37,159 @@ impl Drop for TempDir {
 }
 
 #[test]
+fn headless_commands_execute_effectful_task_composition() {
+    let dir = TempDir::new("task-composition");
+    let path = dir.write(
+        "main.aivi",
+        r#"
+use aivi.stdio (stdoutWrite)
+type Unit -> Int
+func answer = unit => 42
+type Unit -> Task Text Int
+func next = unit => map answer (stdoutWrite "second|")
+type Unit -> Task Text Int
+func sequence = unit => chain next (stdoutWrite "first|")
+type Int -> Int
+func increment = value => value + 1
+type Unit -> (Int -> Int)
+func getIncrement = unit => increment
+type Int -> Bool
+func isAnswer = value => value == 43
+value functionTask : Task Text (Int -> Int) = map getIncrement (stdoutWrite "function|")
+value nestedTask : Task Text (Task Text Int) = map sequence (stdoutWrite "outer|")
+value joinedTask : Task Text Int = join nestedTask
+value main : Task Text Int = apply functionTask joinedTask
+@test
+value mapped : Task Text Bool = map isAnswer main
+"#,
+    );
+    for (command, expected) in [
+        ("execute", "function|outer|first|second|43\n"),
+        ("test", "test result: ok. 1 passed; 0 failed; 1 total"),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg(command)
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{command}: {stdout}\n{stderr}");
+        assert!(stdout.contains(expected), "{command}: {stdout}");
+        for effect in ["function|", "outer|", "first|", "second|"] {
+            assert_eq!(stdout.matches(effect).count(), 1, "{command}: {stdout}");
+        }
+        assert!(
+            stdout.contains("function|outer|first|second|"),
+            "{command}: {stdout}"
+        );
+    }
+}
+
+#[test]
+fn headless_commands_compose_database_tasks() {
+    let dir = TempDir::new("db-task-composition");
+    let database = dir.path.join("app.sqlite");
+    let path = dir.write(
+        "main.aivi",
+        &format!(
+            r#"
+use aivi.db (statement)
+use aivi.list (length)
+type DatabaseHandle = {{ database: Text }}
+value conn = {{ database: "{}" }}
+@source db conn
+signal database : DatabaseHandle
+type List (Map Text Text) -> Int
+func rowCount = rows => length rows
+type Int -> Int
+func increment = value => value + 1
+type List (Map Text Text) -> (Int -> Int)
+func getIncrement = rows => increment
+value query : Task Text (List (Map Text Text)) =
+    database.query (statement "select id from users order by id" [])
+value functionTask : Task Text (Int -> Int) = map getIncrement query
+value nestedTask : Task Text (Task Text Int) = pure (map rowCount query)
+value applied : Task Text Int = apply functionTask (join nestedTask)
+type Unit -> Task Text Int
+func afterCommit = unit => applied
+value main : Task Text Int = chain afterCommit (
+    database.commit ["users"] [
+        statement "create table if not exists users(id integer)" [],
+        statement "delete from users" [],
+        statement "insert into users values (1), (2)" []
+    ]
+)
+type Int -> Bool
+func isThree = value => value == 3
+@test
+value composed : Task Text Bool = map isThree main
+"#,
+            database.display()
+        ),
+    );
+    for (command, expected) in [
+        ("execute", "3\n"),
+        ("test", "test result: ok. 1 passed; 0 failed; 1 total"),
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg(command)
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{command}: {stdout}\n{stderr}");
+        assert!(stdout.contains(expected), "{command}: {stdout}");
+    }
+}
+
+#[test]
+fn headless_database_failures_stop_effects_and_exit_unsuccessfully() {
+    let dir = TempDir::new("db-task-failure");
+    for (main, success_type) in [
+        ("query", "(List (Map Text Text))"),
+        ("map rowCount query", "Int"),
+        ("chain next query", "Unit"),
+    ] {
+        let path = dir.write(
+            "main.aivi",
+            &format!(
+                r#"
+use aivi.db (statement)
+use aivi.list (length)
+use aivi.stdio (stdoutWrite)
+type DatabaseHandle = {{ database: Text }}
+value conn = {{ database: ":memory:" }}
+@source db conn
+signal database : DatabaseHandle
+value query : Task Text (List (Map Text Text)) =
+    database.query (statement "select * from missing_table" [])
+type List (Map Text Text) -> Int
+func rowCount = rows => length rows
+type List (Map Text Text) -> Task Text Unit
+func next = rows => stdoutWrite "unexpected-effect"
+value main : Task Text {success_type} = {main}
+"#,
+            ),
+        );
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("execute")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "{main}: {stdout}\n{stderr}");
+        assert!(
+            stderr.contains("no such table"),
+            "{main}: {stdout}\n{stderr}"
+        );
+        assert!(!stdout.contains("unexpected-effect"), "{main}: {stdout}");
+    }
+}
+
+#[test]
 fn test_command_accepts_stdlib_validation_files() {
     for (name, source, summary) in [
         (

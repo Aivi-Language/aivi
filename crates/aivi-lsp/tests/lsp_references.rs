@@ -97,12 +97,13 @@ fn find_refs_returns_declaration_and_usage_for_local_binding() {
     let result = references(params, state);
 
     let locs = result.expect("find-refs should return at least one location for a used binding");
-    assert!(
-        locs.len() >= 2,
-        "should find the declaration and at least one use site; got {} location(s): {:?}",
+    assert_eq!(
         locs.len(),
-        locs
+        2,
+        "each declaration and use must occur exactly once"
     );
+    assert_eq!(locs[0].range.start, decl_pos);
+    assert_eq!(locs[1].range.start, position_of_nth(text, "x", 1));
     assert!(
         locs.iter().all(|l| l.uri == uri),
         "all reference locations should be in the same file"
@@ -116,17 +117,35 @@ fn find_refs_at_use_site_matches_declaration_site_results() {
     let (state, uri, _) = open_inline("refs-use-site.aivi", text);
 
     let use_pos = position_of_nth(text, "x", 1);
-    let params = reference_params(uri, use_pos);
-    let result = references(params, state);
+    let uses = references(reference_params(uri.clone(), use_pos), Arc::clone(&state))
+        .expect("reference site should resolve");
+    let declaration = references(reference_params(uri, position_of_nth(text, "x", 0)), state)
+        .expect("declaration should resolve");
+    assert_eq!(uses, declaration);
+}
 
-    assert!(
-        result.is_some(),
-        "find-refs at the use site of a binding should return locations"
+#[test]
+fn common_symbol_references_are_complete_sorted_and_stable_after_unrelated_edits() {
+    let count = 512;
+    let text = format!(
+        "value shared = 1\nvalue uses = [\n{}]\n",
+        "    shared,\n".repeat(count)
     );
-    assert!(
-        !result.unwrap().is_empty(),
-        "at least the reference site itself should be returned"
-    );
+    let (state, uri, _) = open_inline("refs-many.aivi", &text);
+    let other = inline_uri("refs-unrelated.aivi");
+    open_document(&state, &other, 1, "value unrelated = 0\n".to_owned());
+    let params = reference_params(uri.clone(), Position::new(0, 8));
+    let before = references(params.clone(), Arc::clone(&state)).unwrap();
+    assert_eq!(before.len(), count + 1);
+    assert_eq!(before[0].range.start, Position::new(0, 6));
+    for (index, location) in before[1..].iter().enumerate() {
+        assert_eq!(location.uri, uri);
+        assert_eq!(location.range.start, Position::new(index as u32 + 2, 4));
+        assert_eq!(location.range.end, Position::new(index as u32 + 2, 10));
+    }
+    open_document(&state, &other, 2, "value unrelated = 1\n".to_owned());
+    let after = references(params, state).unwrap();
+    assert_eq!(before, after);
 }
 
 #[test]

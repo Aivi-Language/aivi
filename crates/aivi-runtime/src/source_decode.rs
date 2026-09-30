@@ -186,6 +186,7 @@ pub fn validate_supported_program(
             | DecodeProgramStep::List { .. }
             | DecodeProgramStep::Option { .. }
             | DecodeProgramStep::Result { .. }
+            | DecodeProgramStep::TaskResult { .. }
             | DecodeProgramStep::Validation { .. } => {}
         }
     }
@@ -596,9 +597,7 @@ fn runtime_to_json(value: &RuntimeValue) -> Result<JsonValue, Box<str>> {
                 .map(|byte| JsonValue::Number(serde_json::Number::from(*byte)))
                 .collect(),
         )),
-        RuntimeValue::Task(_) | RuntimeValue::DbTask(_) => {
-            Err("runtime JSON encoding does not support Task values".into())
-        }
+        RuntimeValue::Task(_) => Err("runtime JSON encoding does not support Task values".into()),
     }
 }
 
@@ -936,6 +935,23 @@ fn decode_step(
             }
             other => Err(wrap(other, type_mismatch("result variant", other))),
         },
+        DecodeProgramStep::TaskResult { error, .. } => match value {
+            ExternalSourceValue::Variant { name, payload } if name.as_ref() == "Err" => {
+                let Some(payload) = payload.as_deref() else {
+                    return Err(wrap(
+                        value,
+                        SourceDecodeError::MissingVariantPayload {
+                            variant: name.clone(),
+                        },
+                    ));
+                };
+                Ok(RuntimeValue::ResultErr(Box::new(
+                    decode_step(program, program.step(*error), payload, depth + 1)
+                        .map_err(|e| e.with_segment(DecodePathSegment::Variant("Err".into())))?,
+                )))
+            }
+            other => Err(wrap(other, type_mismatch("task failure variant", other))),
+        },
         DecodeProgramStep::Validation {
             error,
             value: value_step,
@@ -1081,6 +1097,40 @@ mod tests {
 
     fn decode_program(path: &str, text: &str, signal_name: &str) -> aivi_hir::SourceDecodeProgram {
         lowered_decode_program(path, text, signal_name).1
+    }
+
+    #[test]
+    fn task_result_adapter_decodes_failures_and_rejects_external_successes() {
+        let program = decode_program(
+            "source-decode-task-result.aivi",
+            "value query : Task Text (List (Map Text Text)) = pure []\n@source db.live query\nsignal result : Signal (Result Text (List (Map Text Text)))\n",
+            "result",
+        );
+        assert!(matches!(
+            program.root_step(),
+            aivi_hir::DecodeProgramStep::TaskResult { .. }
+        ));
+        assert_eq!(
+            decode_external(
+                &program,
+                &ExternalSourceValue::variant_with_payload(
+                    "Err",
+                    ExternalSourceValue::Text("query failed".into())
+                )
+            )
+            .unwrap(),
+            RuntimeValue::ResultErr(Box::new(RuntimeValue::Text("query failed".into()))),
+        );
+        let error = decode_external(
+            &program,
+            &ExternalSourceValue::variant_with_payload("Ok", ExternalSourceValue::List(vec![])),
+        )
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("task failure variant"),
+            "{error}"
+        );
+        assert!(decode_external(&program, &ExternalSourceValue::variant("Err")).is_err());
     }
 
     #[test]

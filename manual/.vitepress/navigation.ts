@@ -118,6 +118,7 @@ const explanationSection: DocSection = {
     { text: 'Why AIVI?', link: '/guide/why-aivi' },
     { text: 'If You Are New to Functional Programming', link: '/explanation/functional-programming-bridge' },
     { text: 'Thinking in AIVI', link: '/guide/thinking-in-aivi' },
+    { text: 'Stockroom Language Audit', link: '/explanation/stockroom-language-audit' },
   ],
 }
 

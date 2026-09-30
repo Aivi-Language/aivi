@@ -87,6 +87,13 @@ impl SourceProviderManager {
         }
     }
 
+    pub(crate) fn set_db_commit_invalidation_sink(
+        &mut self,
+        sink: Option<crate::startup::DbCommitInvalidationSink>,
+    ) {
+        self.context = self.context.clone().with_db_commit_invalidation_sink(sink);
+    }
+
     pub fn app_dir(&self) -> &Path {
         self.context.app_dir()
     }
@@ -722,7 +729,9 @@ impl SourceProviderManager {
                     instance,
                     port,
                     plan,
-                    self.context.clone(),
+                    self.context
+                        .clone()
+                        .with_task_environment(config.task_environment.clone()),
                     delay,
                     stop.clone(),
                 );
@@ -785,8 +794,14 @@ impl SourceProviderManager {
             RuntimeSourceProvider::Builtin(BuiltinSourceProvider::DbusMethod) => {
                 let plan = DbusMethodPlan::parse(instance, config)?;
                 let stop = Arc::new(AtomicBool::new(false));
-                let handle =
-                    spawn_dbus_method_worker(port, plan, self.context.clone(), stop.clone())?;
+                let handle = spawn_dbus_method_worker(
+                    port,
+                    plan,
+                    self.context
+                        .clone()
+                        .with_task_environment(config.task_environment.clone()),
+                    stop.clone(),
+                )?;
                 self.thread_handles
                     .lock()
                     .unwrap()

@@ -1,7 +1,7 @@
 use aivi_base::{DiagnosticCode, SourceDatabase};
 use aivi_hir::{
-    Item, SourceLifecycleNodeOutcome, SourceProviderRef, ValidationMode,
-    elaborate_source_lifecycles, lower_module, validate_module,
+    DecodeProgramStep, GateType, Item, SourceDecodeProgramOutcome, SourceLifecycleNodeOutcome,
+    SourceProviderRef, ValidationMode, elaborate_source_lifecycles, lower_module, validate_module,
 };
 use aivi_syntax::parse_module;
 use aivi_typing::BuiltinSourceProvider;
@@ -14,6 +14,7 @@ type DbError =
 type Connection = {
     database: Text
 }
+
 
 type TableRef A = {
     changed: Signal Unit
@@ -208,4 +209,78 @@ fn db_live_rejects_options_without_defined_semantics() {
             lowered.diagnostics()
         );
     }
+}
+
+#[test]
+fn db_live_plans_only_failure_decoding_and_retains_native_success_type() {
+    let lowered = lower_text(
+        "db-live-map-decoding.aivi",
+        "type Rows = (List (Map Text Text))\nvalue query : Task Text Rows = pure []\n@source db.live query\nsignal rows : Signal (Result Text Rows)\n",
+    );
+    let report = aivi_hir::generate_source_decode_programs(lowered.module());
+    let SourceDecodeProgramOutcome::Planned(program) = &report.nodes()[0].outcome else {
+        panic!("db.live must not require an external codec for native Map successes");
+    };
+    let DecodeProgramStep::TaskResult { error, value } = program.root_step() else {
+        panic!("db.live must emit an explicit task outcome adapter");
+    };
+    assert!(matches!(
+        program.step(*error),
+        DecodeProgramStep::Scalar {
+            scalar: aivi_typing::PrimitiveType::Text
+        }
+    ));
+    assert!(
+        matches!(value.as_ref(), GateType::List(element) if matches!(element.as_ref(), GateType::Map { .. })),
+        "native rows type must stay explicit: {value:?}"
+    );
+    assert_eq!(
+        program.steps().len(),
+        2,
+        "success values must have no external decoder steps"
+    );
+
+    let external = lower_text(
+        "external-map-decoding.aivi",
+        "@source custom.feed\nsignal rows : Signal (Result Text (List (Map Text Text)))\n",
+    );
+    let report = aivi_hir::generate_source_decode_programs(external.module());
+    assert!(matches!(
+        report.nodes()[0].outcome,
+        SourceDecodeProgramOutcome::Blocked(_)
+    ));
+}
+
+#[test]
+fn db_live_retains_native_function_and_task_payloads_through_aliases() {
+    for (payload, body) in [
+        ("(Unit -> Int)", "callback"),
+        ("(Task Text Int)", "(pure 1)"),
+    ] {
+        let source = format!(
+            "type Outcome A = (Result Text A)\ntype Unit -> Int\nfunc callback = unit => 1\nvalue query : Task Text {payload} = pure {body}\n@source db.live query\nsignal result : Signal (Outcome {payload})\n"
+        );
+        let lowered = lower_text("db-live-native-values.aivi", &source);
+        let report = aivi_hir::generate_source_decode_programs(lowered.module());
+        let SourceDecodeProgramOutcome::Planned(program) = &report.nodes()[0].outcome else {
+            panic!(
+                "typed task successes must not require an external decoder: {:?}",
+                report.nodes()[0].outcome
+            );
+        };
+        assert!(matches!(
+            program.root_step(),
+            DecodeProgramStep::TaskResult { .. }
+        ));
+        assert_eq!(program.steps().len(), 2);
+    }
+    let lowered = lower_text(
+        "db-live-non-decodable-failure.aivi",
+        "value query : Task (Unit -> Int) Int = pure 1\n@source db.live query\nsignal result : Signal (Result (Unit -> Int) Int)\n",
+    );
+    let report = aivi_hir::generate_source_decode_programs(lowered.module());
+    assert!(matches!(
+        report.nodes()[0].outcome,
+        SourceDecodeProgramOutcome::Blocked(_)
+    ));
 }

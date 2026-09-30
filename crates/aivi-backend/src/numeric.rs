@@ -3,7 +3,9 @@ use std::hash::{Hash, Hasher};
 use num_bigint::{BigInt, Sign};
 use rust_decimal::Decimal;
 
-#[derive(Clone, Copy, Debug, PartialOrd, serde::Serialize, serde::Deserialize)]
+/// A finite IEEE 754 value. Construction and deserialization reject NaN and
+/// infinities; signed zeros retain their bits but compare and hash equally.
+#[derive(Clone, Copy, Debug, PartialOrd, serde::Serialize)]
 pub struct RuntimeFloat(f64);
 
 impl RuntimeFloat {
@@ -29,11 +31,24 @@ impl PartialEq for RuntimeFloat {
 
 impl Eq for RuntimeFloat {}
 
-// Safety: `RuntimeFloat::new` rejects NaN and infinities, so every stored
-// value is a finite f64 whose bit pattern is a stable, canonical identifier.
+impl<'de> serde::Deserialize<'de> for RuntimeFloat {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        // Keep the derived newtype's name and shape for every serde format.
+        #[derive(serde::Deserialize)]
+        #[serde(rename = "RuntimeFloat")]
+        struct Repr(f64);
+
+        let Repr(value) = Repr::deserialize(deserializer)?;
+        Self::new(value).ok_or_else(|| serde::de::Error::custom("expected a finite Float"))
+    }
+}
+
 impl Hash for RuntimeFloat {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.0.to_bits().hash(state);
+        // Zero has two equal representations. All other finite values have a
+        // unique bit pattern; normalize only the hash, preserving the value.
+        let bits = if self.0 == 0.0 { 0 } else { self.0.to_bits() };
+        bits.hash(state);
     }
 }
 
@@ -74,7 +89,9 @@ impl RuntimeDecimal {
         }
         let mantissa = i128::from_le_bytes(bytes[..16].try_into().ok()?);
         let scale = u32::from_le_bytes(bytes[16..20].try_into().ok()?);
-        Some(Self(Decimal::from_i128_with_scale(mantissa, scale)))
+        Decimal::try_from_i128_with_scale(mantissa, scale)
+            .ok()
+            .map(Self)
     }
 
     pub(crate) fn cmp(&self, other: &Self) -> std::cmp::Ordering {
@@ -126,8 +143,10 @@ impl RuntimeBigInt {
             2 => Sign::Minus,
             _ => return None,
         };
-        let magnitude_len = u64::from_le_bytes(bytes[8..16].try_into().ok()?) as usize;
-        let magnitude = bytes.get(Self::HEADER_BYTES..Self::HEADER_BYTES + magnitude_len)?;
+        let magnitude_len =
+            usize::try_from(u64::from_le_bytes(bytes[8..16].try_into().ok()?)).ok()?;
+        let magnitude_end = Self::HEADER_BYTES.checked_add(magnitude_len)?;
+        let magnitude = bytes.get(Self::HEADER_BYTES..magnitude_end)?;
         Some(Self(BigInt::from_bytes_le(sign, magnitude)))
     }
 
@@ -212,5 +231,81 @@ impl RuntimeBigInt {
 impl std::fmt::Display for RuntimeBigInt {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}n", self.0)
+    }
+}
+
+#[cfg(test)]
+mod constant_decoding_tests {
+    use super::*;
+
+    fn decimal_bytes(mantissa: i128, scale: u32) -> Vec<u8> {
+        let mut bytes = mantissa.to_le_bytes().to_vec();
+        bytes.extend_from_slice(&scale.to_le_bytes());
+        bytes
+    }
+
+    #[test]
+    fn decimal_constants_reject_out_of_range_scales() {
+        for scale in [29, u32::MAX] {
+            assert!(RuntimeDecimal::from_constant_bytes(&decimal_bytes(1, scale)).is_none());
+        }
+    }
+
+    #[test]
+    fn decimal_constants_reject_out_of_range_mantissas() {
+        for mantissa in [1_i128 << 96, -(1_i128 << 96), i128::MAX, i128::MIN] {
+            assert!(RuntimeDecimal::from_constant_bytes(&decimal_bytes(mantissa, 0)).is_none());
+        }
+    }
+
+    #[test]
+    fn decimal_constants_roundtrip_boundaries_and_reject_invalid_lengths() {
+        let max = (1_i128 << 96) - 1;
+        for mantissa in [0, 1, -1, max, -max] {
+            for scale in [0, 1, 28] {
+                let bytes = decimal_bytes(mantissa, scale);
+                let value = RuntimeDecimal::from_constant_bytes(&bytes).unwrap();
+                assert_eq!(value.encode_constant_bytes().as_ref(), bytes);
+                for len in 0..bytes.len() {
+                    assert!(RuntimeDecimal::from_constant_bytes(&bytes[..len]).is_none());
+                }
+                let mut oversized = bytes;
+                oversized.push(0);
+                assert!(RuntimeDecimal::from_constant_bytes(&oversized).is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn bigint_constants_reject_overflowing_or_truncated_magnitude_lengths() {
+        for length in [1, u32::MAX as u64 + 1, u64::MAX - 15, u64::MAX] {
+            let mut bytes = [0_u8; RuntimeBigInt::HEADER_BYTES];
+            bytes[0] = 1;
+            bytes[8..16].copy_from_slice(&length.to_le_bytes());
+            assert!(RuntimeBigInt::from_constant_bytes(&bytes).is_none());
+        }
+    }
+
+    #[test]
+    fn bigint_constants_roundtrip_and_reject_truncation_and_invalid_signs() {
+        for literal in [
+            "0n",
+            "1n",
+            "-1n",
+            "18446744073709551616n",
+            "-18446744073709551616n",
+        ] {
+            let expected = RuntimeBigInt::parse_literal(literal).unwrap();
+            let bytes = expected.encode_constant_bytes();
+            assert_eq!(RuntimeBigInt::from_constant_bytes(&bytes), Some(expected));
+            for len in 0..bytes.len() {
+                assert!(RuntimeBigInt::from_constant_bytes(&bytes[..len]).is_none());
+            }
+            for sign in [3, u8::MAX] {
+                let mut invalid = bytes.to_vec();
+                invalid[0] = sign;
+                assert!(RuntimeBigInt::from_constant_bytes(&invalid).is_none());
+            }
+        }
     }
 }

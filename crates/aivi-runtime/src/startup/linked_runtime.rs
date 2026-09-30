@@ -430,6 +430,7 @@ impl BackendLinkedRuntime {
             .ok_or(BackendRuntimeError::UnknownSourceInstance { instance })?;
         let snapshots = self.committed_signal_snapshots()?;
         let mut engine = self.executable_program().create_engine();
+        let mut task_globals = BTreeMap::new();
         let mut arguments = Vec::with_capacity(binding.arguments.len());
         for (index, argument) in binding.arguments.iter().enumerate() {
             let globals = self.required_signal_globals(
@@ -447,6 +448,7 @@ impl BackendLinkedRuntime {
                     error: Box::new(error),
                 })?;
             arguments.push(DetachedRuntimeValue::from_runtime_owned(value));
+            task_globals.extend(globals);
         }
         let mut options = Vec::with_capacity(binding.options.len());
         for option in &binding.options {
@@ -468,6 +470,7 @@ impl BackendLinkedRuntime {
                 option_name: option.option_name.clone(),
                 value: DetachedRuntimeValue::from_runtime_owned(value),
             });
+            task_globals.extend(globals);
         }
 
         Ok(EvaluatedSourceConfig {
@@ -488,6 +491,11 @@ impl BackendLinkedRuntime {
                 .clone(),
             arguments: arguments.into_boxed_slice(),
             options: options.into_boxed_slice(),
+            task_environment: Some(Arc::new(TaskExecutionEnvironment {
+                backend: self.backend.clone(),
+                native_kernels: Arc::clone(&self.native_kernels),
+                globals: task_globals,
+            })),
         })
     }
 

@@ -26,12 +26,13 @@ impl SourceFile {
 
     /// Return the current path snapshot for this file.
     pub fn path(self, db: &RootDatabase) -> PathBuf {
-        db.source_input(self).path.as_ref().clone()
+        db.source_input(self).path.clone()
     }
 
-    /// Return the current source snapshot for this file.
+    /// Return the immutable source snapshot shared by readers of this revision.
+    /// Its line map is built lazily on first access and reused until the text changes.
     pub fn source(self, db: &RootDatabase) -> Arc<aivi_base::SourceFile> {
-        db.make_source_file(self)
+        db.source_input(self).source()
     }
 
     /// Return the current revision for this file.

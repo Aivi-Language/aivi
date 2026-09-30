@@ -104,10 +104,9 @@ fn build_snapshot(state: &ServerState, files: &[(Url, SourceFile)]) -> Workspace
 
         let navigation = NavigationAnalysis::load(&state.db, *file);
         for (target, location) in navigation.reference_entries(&state.db) {
-            let locations = references.entry(target).or_default();
-            if !locations.contains(&location) {
-                locations.push(location);
-            }
+            // Normalize once below. Searching the growing vector here makes
+            // indexing a frequently referenced symbol quadratic.
+            references.entry(target).or_default().push(location);
         }
     }
 
@@ -196,6 +195,50 @@ mod tests {
         navigation::{NavigationAnalysis, NavigationLookup},
         state::ServerState,
     };
+
+    #[test]
+    fn snapshot_deduplicates_reference_entries_before_publication() {
+        let state = ServerState::new();
+        let uri = Url::parse("file:///workspace-index/duplicates.aivi").unwrap();
+        documents::open_document(
+            &state,
+            &uri,
+            1,
+            "value shared = 1\nvalue uses = [shared, shared]\n".to_owned(),
+        );
+        let file = state.file(&uri).unwrap();
+        let NavigationLookup::Targets(targets) = NavigationAnalysis::load(&state.db, file)
+            .definition_targets_at_lsp_position(
+                &state.db,
+                LspPosition {
+                    line: 0,
+                    character: 8,
+                },
+            )
+        else {
+            panic!("shared declaration must resolve");
+        };
+        let [target] = targets.as_slice() else {
+            panic!("one target expected")
+        };
+        let snapshot = super::build_snapshot(&state, &[(uri.clone(), file), (uri.clone(), file)]);
+        let indexed = &snapshot.references[target];
+        assert_eq!(
+            indexed.len(),
+            3,
+            "duplicates must not enter the immutable snapshot"
+        );
+        assert!(indexed.iter().all(|location| location.uri == uri));
+        assert!(
+            indexed
+                .windows(2)
+                .all(|pair| pair[0].range.start < pair[1].range.start)
+        );
+        assert_eq!(
+            snapshot.reference_locations(&[*target, *target]),
+            indexed.as_ref()
+        );
+    }
 
     #[test]
     fn reuses_snapshot_until_a_real_source_mutation() {

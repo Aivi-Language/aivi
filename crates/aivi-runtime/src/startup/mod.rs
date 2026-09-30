@@ -34,9 +34,7 @@ use crate::{
     },
     providers::SourceProviderContext,
     scheduler::DependencyValues,
-    task_executor::{
-        RuntimeDbCommitInvalidation, execute_runtime_value_with_context_effects_and_applier,
-    },
+    task_executor::{RuntimeDbCommitInvalidation, execute_runtime_value_with_context_and_applier},
 };
 
 include!("api.rs");

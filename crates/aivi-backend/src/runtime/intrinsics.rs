@@ -141,20 +141,20 @@ fn evaluate_intrinsic_value(
             };
             Ok(runtime_db_statement(sql, arguments))
         }
-        (IntrinsicValue::DbQuery, [connection, statement]) => Ok(RuntimeValue::DbTask(
+        (IntrinsicValue::DbQuery, [connection, statement]) => Ok(RuntimeValue::Task(RuntimeTaskPlan::Database(
             RuntimeDbTaskPlan::Query(RuntimeDbQueryPlan {
                 connection: expect_intrinsic_db_connection(kernel, expr, value, 0, connection)?,
                 statement: expect_intrinsic_db_statement(kernel, expr, value, 1, statement)?,
             }),
-        )),
+        ))),
         (IntrinsicValue::DbCommit, [connection, changed_tables, statements]) => Ok(
-            RuntimeValue::DbTask(RuntimeDbTaskPlan::Commit(RuntimeDbCommitPlan {
+            RuntimeValue::Task(RuntimeTaskPlan::Database(RuntimeDbTaskPlan::Commit(RuntimeDbCommitPlan {
                 connection: expect_intrinsic_db_connection(kernel, expr, value, 0, connection)?,
                 statements: expect_intrinsic_db_statement_list(kernel, expr, value, 2, statements)?,
                 changed_tables: expect_intrinsic_text_list(kernel, expr, value, 1, changed_tables)?
                     .into_iter()
                     .collect(),
-            })),
+            }))),
         ),
         // Float math intrinsics — pure functions, return directly
         (IntrinsicValue::FloatFloor, [n]) => {

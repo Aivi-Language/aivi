@@ -8,7 +8,7 @@ use aivi_lsp::{
     semantic_tokens::{semantic_tokens_full, semantic_tokens_full_delta, semantic_tokens_range},
     state::ServerState,
 };
-use criterion::{Criterion, Throughput, criterion_group, criterion_main};
+use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
 use tower_lsp::lsp_types::{
     PartialResultParams, Position, Range, ReferenceContext, ReferenceParams,
     SemanticTokensDeltaParams, SemanticTokensFullDeltaResult, SemanticTokensParams,
@@ -204,12 +204,65 @@ fn bench_lsp_operations(c: &mut Criterion) {
     sync.finish();
 }
 
+/// Rebuild the semantic index while retaining the large document's HIR cache.
+/// An unrelated edit invalidates the index before every timed request.
+fn bench_reference_index_rebuild(c: &mut Criterion) {
+    let mut group = c.benchmark_group("lsp_reference_index_rebuild");
+    for count in [256, 1_024, 4_096] {
+        let state = Arc::new(ServerState::new());
+        let uri = Url::parse("file:///benchmarks/references.aivi").unwrap();
+        let revision_uri = Url::parse("file:///benchmarks/revision.aivi").unwrap();
+        let text = format!(
+            "value shared = 1\nvalue uses = [\n{}]\n",
+            "    shared,\n".repeat(count)
+        );
+        open_document(&state, &uri, 1, text);
+        open_document(&state, &revision_uri, 1, "// revision 1\n".to_owned());
+        let params = ReferenceParams {
+            text_document_position: TextDocumentPositionParams {
+                text_document: TextDocumentIdentifier { uri },
+                position: Position::new(0, 8),
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+            context: ReferenceContext {
+                include_declaration: true,
+            },
+        };
+        assert_eq!(
+            references(params.clone(), Arc::clone(&state))
+                .unwrap()
+                .len(),
+            count + 1
+        );
+        let mut version = 1;
+        group.throughput(Throughput::Elements(count as u64));
+        group.bench_function(format!("shared_{count}"), |b| {
+            b.iter_batched(
+                || {
+                    version += 1;
+                    open_document(
+                        &state,
+                        &revision_uri,
+                        version,
+                        format!("// revision {version}\n"),
+                    );
+                },
+                |()| black_box(references(params.clone(), Arc::clone(&state)).unwrap()),
+                // Batching several edits ahead of requests would measure cache hits.
+                BatchSize::PerIteration,
+            );
+        });
+    }
+    group.finish();
+}
+
 criterion_group! {
     name = lsp;
     config = Criterion::default()
         .sample_size(40)
         .warm_up_time(Duration::from_secs(2))
         .measurement_time(Duration::from_secs(5));
-    targets = bench_lsp_operations
+    targets = bench_lsp_operations, bench_reference_index_rebuild
 }
 criterion_main!(lsp);

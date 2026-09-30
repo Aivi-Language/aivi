@@ -46,9 +46,7 @@ pub(crate) fn value_matches_layout(program: &Program, value: &RuntimeValue, layo
         (LayoutKind::Primitive(PrimitiveType::Text), RuntimeValue::Text(_)) => true,
         (LayoutKind::Primitive(PrimitiveType::Bytes), RuntimeValue::Bytes(_)) => true,
         (LayoutKind::Primitive(PrimitiveType::Task), RuntimeValue::Task(_))
-        | (LayoutKind::Primitive(PrimitiveType::Task), RuntimeValue::DbTask(_))
-        | (LayoutKind::Task { .. }, RuntimeValue::Task(_))
-        | (LayoutKind::Task { .. }, RuntimeValue::DbTask(_)) => true,
+        | (LayoutKind::Task { .. }, RuntimeValue::Task(_)) => true,
         (LayoutKind::Tuple(expected), RuntimeValue::Tuple(elements)) => {
             expected.len() == elements.len()
                 && expected
@@ -239,9 +237,7 @@ fn structural_eq(
         (RuntimeValue::Callable(_), _)
         | (_, RuntimeValue::Callable(_))
         | (RuntimeValue::Task(_), _)
-        | (_, RuntimeValue::Task(_))
-        | (RuntimeValue::DbTask(_), _)
-        | (_, RuntimeValue::DbTask(_)) => {
+        | (_, RuntimeValue::Task(_)) => {
             return Err(EvaluationError::UnsupportedStructuralEquality {
                 kernel,
                 expr,
@@ -330,7 +326,6 @@ fn runtime_values_may_match(left: &RuntimeValue, right: &RuntimeValue) -> bool {
         | (RuntimeValue::ValidationValid(_), RuntimeValue::ValidationValid(_))
         | (RuntimeValue::ValidationInvalid(_), RuntimeValue::ValidationInvalid(_))
         | (RuntimeValue::Task(_), RuntimeValue::Task(_))
-        | (RuntimeValue::DbTask(_), RuntimeValue::DbTask(_))
         | (RuntimeValue::Callable(_), RuntimeValue::Callable(_))
         | (RuntimeValue::SuffixedInteger { .. }, RuntimeValue::SuffixedInteger { .. }) => true,
         (RuntimeValue::Int(_), RuntimeValue::SuffixedInteger { .. })

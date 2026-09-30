@@ -302,6 +302,12 @@ The source-backed side of the family stays on `db.connect` / `db.live`. On-deman
 uses handle members such as `database.query ...` and `database.commit ...`, which return ordinary
 `Task Text ...` values on the current command path.
 
+Database tasks support ordinary `map`, `apply`, `chain`, and `join` composition.
+Successful queries supply their rows to callbacks; successful commits supply
+`Unit`. SQL failures stop the remaining task effects and make `aivi execute` exit
+unsuccessfully. A successful task may itself return a `Result` value without
+turning that payload into a task failure.
+
 ---
 
 ## Reactive queries with `db.live`
@@ -316,9 +322,7 @@ use aivi.db (
     DbSource
     DbError
     Connection
-    DbRow
-    DbStatement
-    DbParam
+    TableRef
 )
 
 value conn : Connection = {
@@ -328,20 +332,34 @@ value conn : Connection = {
 @source db conn
 signal database : DbSource
 
-value loadTodos : DbStatement = {
+value loadTodos : Task Text (List (Map Text Text)) = database.query {
     sql: "select id, title, done from todos order by id",
     arguments: []
 }
 
-@source db.live loadTodos with {
-    refreshOn: database
+signal todosChanged : Signal Unit
+value todosTable : TableRef Unit = {
+    name: "todos",
+    conn: conn,
+    changed: todosChanged
 }
-signal todos : Signal (Result DbError (List DbRow))
+
+@source db.live loadTodos with {
+    refreshOn: todosTable.changed
+}
+signal todos : Signal (Result DbError (List (Map Text Text)))
 ```
 
 The `db.live` source runs the query on a worker thread and republishes whenever `refreshOn`
 fires. After a successful `database.commit`, the runtime automatically advances matching
 `.changed` signals, which triggers the refresh.
+
+`db.live` publishes a successful task payload as `Ok payload` and converts task
+failures into the declared signal error type. If the task payload is itself a
+`Result`, it stays nested inside that outer `Ok`. Native success values, including
+map rows, require no external decoder. Each successful commit notifies
+matching reactive queries, including commits in a composed task whose later
+steps fail. A rolled-back transaction sends no change notification.
 
 ### Inserting a row
 
@@ -413,8 +431,7 @@ use aivi.db (
     DbSource
     DbError
     Connection
-    DbRow
-    DbStatement
+    TableRef
     DbParam
 )
 
@@ -451,15 +468,22 @@ value conn : Connection = {
 @source db conn
 signal database : DbSource
 
-value listQuery : DbStatement = {
+value listQuery : Task Text (List (Map Text Text)) = database.query {
     sql: "select id, title, done from todos order by id",
     arguments: []
 }
 
-@source db.live listQuery with {
-    refreshOn: database
+signal todosChanged : Signal Unit
+value todosTable : TableRef Unit = {
+    name: "todos",
+    conn: conn,
+    changed: todosChanged
 }
-signal todoRows : Signal (Result DbError (List DbRow))
+
+@source db.live listQuery with {
+    refreshOn: todosTable.changed
+}
+signal todoRows : Signal (Result DbError (List (Map Text Text)))
 
 signal todoCount : Signal Text
 

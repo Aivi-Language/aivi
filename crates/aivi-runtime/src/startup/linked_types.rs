@@ -1,10 +1,32 @@
+// Materialized globals borrow no scheduler state. Keep their tree ownership
+// scoped so normal completion and error unwinding both release them iteratively.
+struct MaterializedRuntimeGlobals(BTreeMap<BackendItemId, RuntimeValue>);
+
+impl std::ops::Deref for MaterializedRuntimeGlobals {
+    type Target = BTreeMap<BackendItemId, RuntimeValue>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Drop for MaterializedRuntimeGlobals {
+    fn drop(&mut self) {
+        for value in std::mem::take(&mut self.0).into_values() {
+            value.discard();
+        }
+    }
+}
+
 fn materialize_detached_globals(
     globals: &BTreeMap<BackendItemId, DetachedRuntimeValue>,
-) -> BTreeMap<BackendItemId, RuntimeValue> {
-    globals
-        .iter()
-        .map(|(&item, value)| (item, value.to_runtime()))
-        .collect()
+) -> MaterializedRuntimeGlobals {
+    MaterializedRuntimeGlobals(
+        globals
+            .iter()
+            .map(|(&item, value)| (item, value.to_runtime()))
+            .collect(),
+    )
 }
 
 fn signal_global_value(value: &RuntimeValue) -> RuntimeValue {
@@ -514,5 +536,33 @@ impl DetachedRuntimeCompletionPort {
         self.inner
             .complete(value.into_runtime())
             .map_err(map_detached_publication_port_error)
+    }
+}
+
+#[cfg(test)]
+mod snapshot_ownership_tests {
+    use super::*;
+
+    #[test]
+    fn materialized_task_globals_release_deep_values_on_a_small_stack() {
+        std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let mut value = RuntimeValue::Int(3);
+                for _ in 0..20_000 {
+                    value = RuntimeValue::OptionSome(Box::new(value));
+                }
+                let globals = BTreeMap::from([(
+                    BackendItemId::from_raw(0),
+                    DetachedRuntimeValue::from_runtime_owned(value),
+                )]);
+                let materialized = materialize_detached_globals(&globals);
+                assert_eq!(materialized.len(), 1);
+                drop(materialized);
+                drop(globals);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
     }
 }

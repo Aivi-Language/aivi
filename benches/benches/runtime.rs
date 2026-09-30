@@ -1,6 +1,9 @@
 use std::{fmt::Write as _, hint::black_box, path::PathBuf, sync::Arc, time::Duration};
 
-use aivi_backend::{CommittedValueStore, MovingRuntimeValueStore, RuntimeValue};
+use aivi_backend::{
+    CommittedValueStore, DetachedRuntimeValue, MovingRuntimeValueStore, RuntimeMap,
+    RuntimeMapEntry, RuntimeTaskPlan, RuntimeValue,
+};
 use aivi_query::{RootDatabase, SourceFile, whole_program_backend_unit};
 use aivi_runtime::{
     DependencyValues, InputHandle, Publication, Scheduler, SignalGraphBuilder,
@@ -11,9 +14,134 @@ use aivi_runtime::{
     hir_adapter::BackendRuntimePayload,
 };
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 const GRAPH_WIDTH: usize = 256;
 const REQUIREMENT_WIDTH: usize = 16;
+
+fn bench_runtime_snapshots(c: &mut Criterion) {
+    let mut group = c.benchmark_group("runtime_snapshots");
+    let list = RuntimeValue::List((0..64).map(RuntimeValue::Int).collect());
+    let map = RuntimeValue::Map(RuntimeMap::from_entries(
+        (0..64)
+            .map(|key| RuntimeMapEntry {
+                key: RuntimeValue::Int(key),
+                value: RuntimeValue::Int(key * 10),
+            })
+            .collect(),
+    ));
+    let mut task = RuntimeTaskPlan::Pure {
+        value: Box::new(RuntimeValue::Int(1)),
+    };
+    for _ in 0..32 {
+        task = RuntimeTaskPlan::Join {
+            outer: Box::new(RuntimeTaskPlan::Pure {
+                value: Box::new(RuntimeValue::Task(task)),
+            }),
+        };
+    }
+    for (name, value) in [
+        ("scalar", RuntimeValue::Int(1)),
+        ("list_64", list),
+        ("map_64", map),
+        ("task_join_32", RuntimeValue::Task(task)),
+    ] {
+        group.bench_function(name, |b| {
+            b.iter(|| black_box(DetachedRuntimeValue::from_runtime_copy(black_box(&value))))
+        });
+        value.discard();
+    }
+    group.finish();
+}
+
+fn bench_runtime_maps(c: &mut Criterion) {
+    let mut group = c.benchmark_group("runtime_maps");
+    for size in [4, 64, 1024] {
+        group.throughput(Throughput::Elements(1));
+        let new_map = || {
+            RuntimeMap::from_entries(
+                (0..size)
+                    .map(|key| RuntimeMapEntry {
+                        key: RuntimeValue::Int(key),
+                        value: RuntimeValue::Int(key * 10),
+                    })
+                    .collect(),
+            )
+        };
+        let map = new_map();
+        group.bench_function(format!("hash_{size}"), |b| {
+            b.iter(|| {
+                let mut state = DefaultHasher::new();
+                black_box(&map).hash(&mut state);
+                black_box(state.finish())
+            })
+        });
+        group.bench_function(format!("cold_hash_{size}"), |b| {
+            b.iter_batched_ref(
+                new_map,
+                |map| {
+                    let mut state = DefaultHasher::new();
+                    black_box(map).hash(&mut state);
+                    black_box(state.finish())
+                },
+                BatchSize::PerIteration,
+            )
+        });
+        group.bench_function(format!("construct_{size}"), |b| {
+            b.iter(|| black_box(new_map()))
+        });
+        group.bench_function(format!("construct_and_hash_{size}"), |b| {
+            b.iter(|| {
+                let map = new_map();
+                let mut state = DefaultHasher::new();
+                black_box(&map).hash(&mut state);
+                black_box(state.finish())
+            })
+        });
+        group.bench_function(format!("clone_{size}"), |b| {
+            b.iter(|| black_box(map.clone()))
+        });
+        let key = RuntimeValue::Int(size - 1);
+        // Average randomized table layouts instead of repeatedly measuring one
+        // seed's probe/tag collisions. Setup stays outside the timed region.
+        let lookup_maps = (0..32).map(|_| new_map()).collect::<Vec<_>>();
+        group.throughput(Throughput::Elements(lookup_maps.len() as u64));
+        group.bench_function(format!("scalar_lookup_batch32_{size}"), |b| {
+            b.iter(|| {
+                for map in &lookup_maps {
+                    black_box(map.get(black_box(&key)));
+                }
+            })
+        });
+        let nested_maps = lookup_maps
+            .into_iter()
+            .map(|map| {
+                let key = RuntimeValue::Map(map);
+                // IndexMap skips hashing for a singleton. Keep a second,
+                // distinct map key so this measures the hashed lookup path.
+                let outer = RuntimeMap::from_entries(vec![
+                    RuntimeMapEntry {
+                        key: RuntimeValue::Map(RuntimeMap::default()),
+                        value: RuntimeValue::Unit,
+                    },
+                    RuntimeMapEntry {
+                        key: key.clone(),
+                        value: RuntimeValue::Unit,
+                    },
+                ]);
+                (outer, key)
+            })
+            .collect::<Vec<_>>();
+        group.bench_function(format!("nested_lookup_batch32_{size}"), |b| {
+            b.iter(|| {
+                for (outer, key) in &nested_maps {
+                    black_box(outer.get(black_box(key)));
+                }
+            })
+        });
+    }
+    group.finish();
+}
 
 fn chain_scheduler() -> (Scheduler<i64>, InputHandle) {
     let mut builder = SignalGraphBuilder::new();
@@ -270,6 +398,6 @@ criterion_group! {
         .sample_size(40)
         .warm_up_time(Duration::from_secs(2))
         .measurement_time(Duration::from_secs(5));
-    targets = bench_sparse_ticks, bench_scheduler, bench_runtime_startup, bench_committed_values
+    targets = bench_sparse_ticks, bench_scheduler, bench_runtime_startup, bench_committed_values, bench_runtime_maps, bench_runtime_snapshots
 }
 criterion_main!(runtime);

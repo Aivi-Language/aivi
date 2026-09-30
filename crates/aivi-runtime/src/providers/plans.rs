@@ -71,7 +71,9 @@ impl fmt::Display for SourceProviderExecutionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnavailableProvider { instance, provider } => write!(
-                f, "source instance {} has no implementation for provider {provider:?}", instance.as_raw()
+                f,
+                "source instance {} has no implementation for provider {provider:?}",
+                instance.as_raw()
             ),
             Self::MissingDecodeProgram { instance, provider } => write!(
                 f,
@@ -396,9 +398,60 @@ impl DbConnectPlan {
 
 #[derive(Clone)]
 struct DbLivePlan {
-    task: RuntimeValue,
+    task: DetachedRuntimeValue,
     debounce: Duration,
-    result: Option<RequestResultPlan>,
+    result: TaskResultPlan,
+}
+
+#[derive(Clone)]
+struct TaskResultPlan {
+    decode: hir::SourceDecodeProgram,
+    error: ErrorPlan,
+}
+
+impl TaskResultPlan {
+    fn parse(
+        instance: SourceInstanceId,
+        config: &EvaluatedSourceConfig,
+    ) -> Result<Self, SourceProviderExecutionError> {
+        let provider = BuiltinSourceProvider::DbLive;
+        let decode = config
+            .decode
+            .clone()
+            .ok_or(SourceProviderExecutionError::MissingDecodeProgram { instance, provider })?;
+        validate_supported_program(&decode).map_err(|error| {
+            SourceProviderExecutionError::UnsupportedDecodeProgram {
+                instance,
+                provider,
+                detail: error.to_string().into_boxed_str(),
+            }
+        })?;
+        let hir::DecodeProgramStep::TaskResult { error, .. } = decode.root_step() else {
+            return Err(SourceProviderExecutionError::UnsupportedProviderShape {
+                instance,
+                provider,
+                detail: "db.live requires a typed Task outcome adapter for `Signal (Result E A)`"
+                    .into(),
+            });
+        };
+        let error = ErrorPlan::from_step(instance, provider, &decode, *error)?;
+        Ok(Self { decode, error })
+    }
+
+    fn error_value(
+        &self,
+        kind: TextSourceErrorKind,
+        message: &str,
+    ) -> Result<RuntimeValue, Box<str>> {
+        decode_external(
+            &self.decode,
+            &ExternalSourceValue::variant_with_payload(
+                "Err",
+                self.error.payload_for(kind, message)?,
+            ),
+        )
+        .map_err(|error| error.to_string().into_boxed_str())
+    }
 }
 
 impl DbLivePlan {
@@ -430,13 +483,8 @@ impl DbLivePlan {
                 }
             }
         }
-        let result = if config.decode.is_some() {
-            let result = RequestResultPlan::parse(instance, provider, config)?;
-            db_live_query_error_value(instance, &result, "db.live query failure")?;
-            Some(result)
-        } else {
-            None
-        };
+        let result = TaskResultPlan::parse(instance, config)?;
+        db_live_query_error_value(instance, &result, "db.live query failure")?;
         Ok(Self {
             task,
             debounce,
@@ -2686,7 +2734,7 @@ struct DbusMethodPlan {
     bus: DbusBus,
     address: Option<Box<str>>,
     destination: Box<str>,
-    reply_task: Option<RuntimeValue>,
+    reply_task: Option<DetachedRuntimeValue>,
     path: Option<Box<str>>,
     interface: Option<Box<str>>,
     member: Option<Box<str>>,

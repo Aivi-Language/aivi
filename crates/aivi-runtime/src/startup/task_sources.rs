@@ -87,6 +87,63 @@ pub struct EvaluatedSourceConfig {
     pub decode: Option<hir::SourceDecodeProgram>,
     pub arguments: Box<[DetachedRuntimeValue]>,
     pub options: Box<[EvaluatedSourceOption]>,
+    /// The immutable environment used to evaluate this configuration. Provider
+    /// workers retain it for deferred callbacks; host-constructed plans may omit it.
+    pub task_environment: Option<Arc<TaskExecutionEnvironment>>,
+}
+
+/// Immutable code and committed globals for a task crossing a worker boundary.
+/// Each execution constructs its own engine on the worker; no live evaluator or
+/// scheduler-owned state crosses threads.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TaskExecutionEnvironment {
+    backend: BackendRuntimePayload,
+    native_kernels: Arc<aivi_backend::NativeKernelArtifactSet>,
+    globals: BTreeMap<BackendItemId, DetachedRuntimeValue>,
+}
+
+impl TaskExecutionEnvironment {
+    pub(crate) fn execute_with_stdio(
+        &self,
+        value: RuntimeValue,
+        context: &SourceProviderContext,
+    ) -> Result<RuntimeValue, crate::RuntimeTaskExecutionError> {
+        use aivi_backend::RuntimeTaskPlan;
+        // Primitive plans never invoke language callbacks. Keep their execution
+        // independent of engine setup, including the common direct DB query.
+        if !matches!(
+            &value,
+            RuntimeValue::Task(
+                RuntimeTaskPlan::Map { .. }
+                    | RuntimeTaskPlan::Apply { .. }
+                    | RuntimeTaskPlan::Chain { .. }
+                    | RuntimeTaskPlan::Join { .. }
+            )
+        ) {
+            return crate::task_executor::execute_runtime_value_with_context_with_stdio(value, context);
+        }
+        let mut engine = self
+            .backend
+            .executable_program(self.native_kernels.as_ref())
+            .with_execution_options(aivi_backend::BackendExecutionOptions {
+                prefer_interpreter: true,
+                ..Default::default()
+            })
+            .create_engine();
+        let globals = materialize_detached_globals(&self.globals);
+        let mut applier = EvaluatorApplier {
+            evaluator: &mut *engine,
+            globals: &globals,
+        };
+        crate::execute_runtime_value_with_context_and_applier(
+            value,
+            context,
+            &mut std::io::stdout().lock(),
+            &mut std::io::stderr().lock(),
+            &mut applier,
+            &globals,
+        )
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -207,7 +264,9 @@ fn execute_task_plan(
     let stderr = std::io::stderr();
     let mut stdout = stdout.lock();
     let mut stderr = stderr.lock();
-    let outcome = execute_runtime_value_with_context_effects_and_applier(
+    let execution_context =
+        execution_context.with_db_commit_invalidation_sink(db_commit_invalidation_sink);
+    let value = execute_runtime_value_with_context_and_applier(
         value,
         &execution_context,
         &mut stdout,
@@ -221,12 +280,7 @@ fn execute_task_plan(
         backend_item,
         error: Box::new(error),
     })?;
-    if let Some(invalidation) = outcome.commit_invalidation
-        && let Some(sink) = db_commit_invalidation_sink
-    {
-        sink(invalidation);
-    }
-    match completion.complete(DetachedRuntimeValue::from_runtime_owned(outcome.value)) {
+    match completion.complete(DetachedRuntimeValue::from_runtime_owned(value)) {
         Ok(()) => Ok(LinkedTaskWorkerOutcome::Published),
         Err(PublicationPortError::Cancelled { .. }) => Ok(LinkedTaskWorkerOutcome::Cancelled),
         Err(PublicationPortError::Disconnected { stamp, value }) => {

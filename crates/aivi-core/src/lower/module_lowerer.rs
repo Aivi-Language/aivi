@@ -4210,6 +4210,10 @@ impl<'a> ModuleLowerer<'a> {
                         value: step_id_for(program, &step_positions, *value),
                     }
                 }
+                aivi_hir::DecodeProgramStep::TaskResult { error, value } => DecodeStep::TaskResult {
+                    error: step_id_for(program, &step_positions, *error),
+                    value: self.lower_type(value),
+                },
             };
             let _ = steps
                 .alloc(lowered)

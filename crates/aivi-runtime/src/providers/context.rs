@@ -103,14 +103,13 @@ pub struct SourceProviderContext {
     stdin_override: Option<Result<Box<str>, Box<str>>>,
     stdin_text: Arc<OnceLock<Result<Box<str>, Box<str>>>>,
     custom_capability_command_executor: Option<Arc<dyn CustomCapabilityCommandExecutor>>,
+    task_environment: Option<Arc<crate::TaskExecutionEnvironment>>,
+    db_commit_invalidation_sink: Option<crate::startup::DbCommitInvalidationSink>,
     decode_diagnostic_reporter: Arc<std::sync::Mutex<Option<Arc<DecodeDiagnosticReporter>>>>,
 }
 
-type DecodeDiagnosticReporter = dyn Fn(
-        SourceInstanceId,
-        aivi_typing::BuiltinSourceProvider,
-        crate::SourceDecodeErrorWithPath,
-    ) + Send
+type DecodeDiagnosticReporter = dyn Fn(SourceInstanceId, aivi_typing::BuiltinSourceProvider, crate::SourceDecodeErrorWithPath)
+    + Send
     + Sync
     + 'static;
 
@@ -147,6 +146,8 @@ impl SourceProviderContext {
             stdin_override: None,
             stdin_text: Arc::new(OnceLock::new()),
             custom_capability_command_executor: None,
+            task_environment: None,
+            db_commit_invalidation_sink: None,
             decode_diagnostic_reporter: Arc::new(std::sync::Mutex::new(None)),
         }
     }
@@ -154,6 +155,41 @@ impl SourceProviderContext {
     pub fn with_app_dir(mut self, app_dir: PathBuf) -> Self {
         self.app_dir = Arc::new(app_dir);
         self
+    }
+
+    fn with_task_environment(
+        mut self,
+        environment: Option<Arc<crate::TaskExecutionEnvironment>>,
+    ) -> Self {
+        self.task_environment = environment;
+        self
+    }
+
+    pub(crate) fn with_db_commit_invalidation_sink(
+        mut self,
+        sink: Option<crate::startup::DbCommitInvalidationSink>,
+    ) -> Self {
+        self.db_commit_invalidation_sink = sink;
+        self
+    }
+
+    pub(crate) fn notify_db_commit(
+        &self,
+        invalidation: crate::task_executor::RuntimeDbCommitInvalidation,
+    ) {
+        if let Some(sink) = &self.db_commit_invalidation_sink {
+            sink(invalidation);
+        }
+    }
+
+    fn execute_task_with_stdio(
+        &self,
+        value: RuntimeValue,
+    ) -> Result<RuntimeValue, RuntimeTaskExecutionError> {
+        match &self.task_environment {
+            Some(environment) => environment.execute_with_stdio(value, self),
+            None => execute_runtime_value_with_context_with_stdio(value, self),
+        }
     }
 
     pub fn with_entry_path(self, entry_path: &Path) -> Self {

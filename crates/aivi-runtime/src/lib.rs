@@ -75,7 +75,7 @@ pub use startup::{
     LinkedReactiveSignal, LinkedRecurrenceSignal, LinkedSourceArgument, LinkedSourceBinding,
     LinkedSourceLifecycleAction, LinkedSourceOption, LinkedSourceTickOutcome, LinkedTaskBinding,
     LinkedTaskExecutionBinding, LinkedTaskExecutionBlocker, LinkedTaskWorkerError,
-    LinkedTaskWorkerOutcome, clear_native_kernel_plan_cache,
+    LinkedTaskWorkerOutcome, TaskExecutionEnvironment, clear_native_kernel_plan_cache,
     derive_backend_linked_runtime_tables_with_seed_and_native_kernels_from_payload,
     derive_backend_runtime_link_seed, link_backend_runtime, link_backend_runtime_with_seed,
     link_backend_runtime_with_seed_and_native_kernels,
@@ -86,5 +86,5 @@ pub use startup::{
 pub use task_executor::{
     CustomCapabilityCommandExecutor, RuntimeTaskExecutionError, execute_runtime_db_task_plan,
     execute_runtime_task_plan, execute_runtime_task_plan_with_context, execute_runtime_value,
-    execute_runtime_value_with_context,
+    execute_runtime_value_with_context, execute_runtime_value_with_context_and_applier,
 };

@@ -12,7 +12,7 @@ struct BuiltinCallSite {
 
 pub struct KernelEvaluator<'a> {
     program: &'a Program,
-    item_cache: BTreeMap<ItemId, RuntimeValue>,
+    item_cache: BTreeMap<ItemId, DetachedRuntimeValue>,
     item_stack: BTreeSet<ItemId>,
     /// Ordered evaluation trace: items visited during the current evaluation,
     /// in the order they were first entered. Used for error rendering.
@@ -174,9 +174,17 @@ impl<'a> KernelEvaluator<'a> {
         if let Some((cached_result, cached_layout)) =
             self.last_kernel_call.as_ref().and_then(|last| {
                 (last.kernel_id == kernel_id
-                    && last.input_subject.as_ref() == input_subject
-                    && last.environment.as_ref() == environment)
-                    .then(|| (last.result.clone(), last.result_layout))
+                    && last
+                        .input_subject
+                        .as_ref()
+                        .map(DetachedRuntimeValue::as_runtime)
+                        == input_subject
+                    && last
+                        .environment
+                        .iter()
+                        .map(DetachedRuntimeValue::as_runtime)
+                        .eq(environment.iter()))
+                .then(|| (last.result.to_runtime(), last.result_layout))
             })
         {
             self.record_kernel_profile(
@@ -243,9 +251,12 @@ impl<'a> KernelEvaluator<'a> {
         let result = result?;
         self.last_kernel_call = Some(LastKernelCall {
             kernel_id,
-            input_subject: input_subject.cloned(),
-            environment: environment.to_vec().into_boxed_slice(),
-            result: result.clone(),
+            input_subject: input_subject.map(DetachedRuntimeValue::from_runtime_copy),
+            environment: environment
+                .iter()
+                .map(DetachedRuntimeValue::from_runtime_copy)
+                .collect(),
+            result: DetachedRuntimeValue::from_runtime_copy(&result),
             result_layout: kernel.result_layout,
         });
         Ok((result, kernel.result_layout))
@@ -260,7 +271,11 @@ impl<'a> KernelEvaluator<'a> {
             return Ok(value.clone());
         }
         let started_at = self.profile.as_ref().map(|_| Instant::now());
-        if let Some(value) = self.item_cache.get(&item).cloned() {
+        if let Some(value) = self
+            .item_cache
+            .get(&item)
+            .map(DetachedRuntimeValue::to_runtime)
+        {
             self.record_item_profile(
                 item,
                 started_at.map_or(Duration::ZERO, |started| started.elapsed()),
@@ -329,7 +344,8 @@ impl<'a> KernelEvaluator<'a> {
             started_at.map_or(Duration::ZERO, |started| started.elapsed()),
             false,
         );
-        self.item_cache.insert(item, result.clone());
+        self.item_cache
+            .insert(item, DetachedRuntimeValue::from_runtime_copy(&result));
         Ok(result)
     }
 
@@ -1032,9 +1048,7 @@ impl<'a> KernelEvaluator<'a> {
                                 .iter()
                                 .zip(values.iter())
                                 .rev()
-                                .map(|(pattern, value)| {
-                                    (pattern, ValueTask::Borrowed(value))
-                                }),
+                                .map(|(pattern, value)| (pattern, ValueTask::Borrowed(value))),
                         );
                     }
                     ValueTask::Owned(RuntimeValue::Tuple(values)) => {
@@ -1071,9 +1085,7 @@ impl<'a> KernelEvaluator<'a> {
                                 .iter()
                                 .zip(values.iter())
                                 .rev()
-                                .map(|(pattern, value)| {
-                                    (pattern, ValueTask::Borrowed(value))
-                                }),
+                                .map(|(pattern, value)| (pattern, ValueTask::Borrowed(value))),
                         );
                     }
                     ValueTask::Owned(RuntimeValue::List(mut values)) => {
@@ -1100,9 +1112,10 @@ impl<'a> KernelEvaluator<'a> {
                     ValueTask::Borrowed(RuntimeValue::Record(values)) => {
                         let mut children = Vec::with_capacity(fields.len());
                         for field in fields {
-                            let Some(value) = values.iter().find(|candidate| {
-                                candidate.label.as_ref() == field.label.as_ref()
-                            }) else {
+                            let Some(value) = values
+                                .iter()
+                                .find(|candidate| candidate.label.as_ref() == field.label.as_ref())
+                            else {
                                 return Ok(false);
                             };
                             children.push((&field.pattern, &value.value));
@@ -1111,9 +1124,7 @@ impl<'a> KernelEvaluator<'a> {
                             children
                                 .into_iter()
                                 .rev()
-                                .map(|(pattern, value)| {
-                                    (pattern, ValueTask::Borrowed(value))
-                                }),
+                                .map(|(pattern, value)| (pattern, ValueTask::Borrowed(value))),
                         );
                     }
                     ValueTask::Owned(RuntimeValue::Record(mut values)) => {
@@ -1138,63 +1149,59 @@ impl<'a> KernelEvaluator<'a> {
                 InlinePipePatternKind::Constructor {
                     constructor,
                     arguments,
-                } => match constructor {
-                    InlinePipeConstructor::Builtin(constructor) => {
-                        let Some(payload) = truthy_falsy_payload(value.as_ref(), *constructor)
-                        else {
-                            return Ok(false);
-                        };
-                        match (payload, arguments.as_slice()) {
-                            (None, []) => {}
-                            (Some(payload), [argument]) => {
-                                work.push((argument, ValueTask::Owned(payload)));
-                            }
-                            _ => {
-                                return Err(EvaluationError::UnsupportedInlinePipePattern {
-                                    kernel: kernel_id,
-                                    expr: expr_id,
-                                });
+                } => {
+                    match constructor {
+                        InlinePipeConstructor::Builtin(constructor) => {
+                            let Some(payload) = truthy_falsy_payload(value.as_ref(), *constructor)
+                            else {
+                                return Ok(false);
+                            };
+                            match (payload, arguments.as_slice()) {
+                                (None, []) => {}
+                                (Some(payload), [argument]) => {
+                                    work.push((argument, ValueTask::Owned(payload)));
+                                }
+                                _ => {
+                                    return Err(EvaluationError::UnsupportedInlinePipePattern {
+                                        kernel: kernel_id,
+                                        expr: expr_id,
+                                    });
+                                }
                             }
                         }
+                        InlinePipeConstructor::Sum(handle) => match value {
+                            ValueTask::Borrowed(RuntimeValue::Sum(value)) => {
+                                if value.item != handle.item
+                                    || value.variant_name.as_ref() != handle.variant_name.as_ref()
+                                    || value.fields.len() != arguments.len()
+                                {
+                                    return Ok(false);
+                                }
+                                work.extend(
+                                    arguments.iter().zip(value.fields.iter()).rev().map(
+                                        |(pattern, value)| (pattern, ValueTask::Borrowed(value)),
+                                    ),
+                                );
+                            }
+                            ValueTask::Owned(RuntimeValue::Sum(value)) => {
+                                if value.item != handle.item
+                                    || value.variant_name.as_ref() != handle.variant_name.as_ref()
+                                    || value.fields.len() != arguments.len()
+                                {
+                                    return Ok(false);
+                                }
+                                work.extend(
+                                    arguments
+                                        .iter()
+                                        .zip(value.fields)
+                                        .rev()
+                                        .map(|(pattern, value)| (pattern, ValueTask::Owned(value))),
+                                );
+                            }
+                            _ => return Ok(false),
+                        },
                     }
-                    InlinePipeConstructor::Sum(handle) => match value {
-                        ValueTask::Borrowed(RuntimeValue::Sum(value)) => {
-                            if value.item != handle.item
-                                || value.variant_name.as_ref() != handle.variant_name.as_ref()
-                                || value.fields.len() != arguments.len()
-                            {
-                                return Ok(false);
-                            }
-                            work.extend(
-                                arguments
-                                    .iter()
-                                    .zip(value.fields.iter())
-                                    .rev()
-                                    .map(|(pattern, value)| {
-                                        (pattern, ValueTask::Borrowed(value))
-                                    }),
-                            );
-                        }
-                        ValueTask::Owned(RuntimeValue::Sum(value)) => {
-                            if value.item != handle.item
-                                || value.variant_name.as_ref() != handle.variant_name.as_ref()
-                                || value.fields.len() != arguments.len()
-                            {
-                                return Ok(false);
-                            }
-                            work.extend(
-                                arguments
-                                    .iter()
-                                    .zip(value.fields)
-                                    .rev()
-                                    .map(|(pattern, value)| {
-                                        (pattern, ValueTask::Owned(value))
-                                    }),
-                            );
-                        }
-                        _ => return Ok(false),
-                    },
-                },
+                }
             }
         }
         Ok(true)
@@ -1720,9 +1727,7 @@ impl<'a> KernelEvaluator<'a> {
                             reason,
                         }
                     })?;
-                self.reduce_builtin_carrier(
-                    call_site, carrier, function, initial, subject, globals,
-                )
+                self.reduce_builtin_carrier(call_site, carrier, function, initial, subject, globals)
             }
             BuiltinClassMemberIntrinsic::Traverse {
                 traversable,

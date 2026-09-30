@@ -691,21 +691,17 @@ fn test_file_with_context_selected(
                 continue;
             }
         };
-        let value = match evaluate_task_owner_value(
+        let outcome = with_task_owner_value(
             path,
             artifact,
             context.clone(),
             "`aivi test`",
             &format!("test `{}`", test.name),
-        ) {
-            Ok(value) => value,
-            Err(message) => {
-                failed += 1;
-                write_output_line(stderr, &format!("fail {}: {message}", test.location))?;
-                continue;
-            }
-        };
-        match execute_test_task_value(value, &context, stdout, stderr) {
+            |value, applier, globals| {
+                execute_test_task_value(value, &context, stdout, stderr, applier, globals)
+            },
+        );
+        match outcome {
             Ok(TestTaskOutcome {
                 passed: true,
                 detail,
@@ -1090,18 +1086,30 @@ fn launch_execute(
     stdout: &mut impl Write,
     stderr: &mut impl Write,
 ) -> Result<(), String> {
-    let value =
-        evaluate_task_owner_value(path, artifact, context.clone(), "`aivi execute`", "`main`")?;
-    execute_main_task_value(value, &context, stdout, stderr)
+    with_task_owner_value(
+        path,
+        artifact,
+        context.clone(),
+        "`aivi execute`",
+        "`main`",
+        |value, applier, globals| {
+            execute_main_task_value(value, &context, stdout, stderr, applier, globals)
+        },
+    )
 }
 
-fn evaluate_task_owner_value(
+fn with_task_owner_value<R>(
     path: &Path,
     artifact: ExecuteArtifact,
     context: SourceProviderContext,
     command_name: &str,
     entry_name: &str,
-) -> Result<RuntimeValue, String> {
+    execute: impl FnOnce(
+        RuntimeValue,
+        &mut dyn TaskFunctionApplier,
+        &BTreeMap<BackendItemId, RuntimeValue>,
+    ) -> Result<R, String>,
+) -> Result<R, String> {
     let ExecuteArtifact {
         task_owner,
         runtime_assembly,
@@ -1117,14 +1125,15 @@ fn evaluate_task_owner_value(
             });
         let mut evaluator = executable.create_engine();
         let globals = BTreeMap::new();
-        return evaluator
+        let value = evaluator
             .evaluate_item(backend_item, &globals)
             .map_err(|error| {
                 format!(
                     "failed to evaluate {entry_name} for {command_name} in {}: {error}",
                     path.display()
                 )
-            });
+            })?;
+        return execute(value, evaluator.as_mut(), &globals);
     }
     let Some(runtime_assembly) = runtime_assembly else {
         return Err(format!(
@@ -1152,7 +1161,7 @@ fn evaluate_task_owner_value(
     })?;
     let mut providers = SourceProviderManager::with_context(context);
     settle_execute_sources(&mut linked, &mut providers)?;
-    linked
+    let value = linked
         .evaluate_task_value_by_owner(task_owner)
         .map(|value| value.into_runtime())
         .map_err(|error| {
@@ -1160,7 +1169,20 @@ fn evaluate_task_owner_value(
                 "failed to evaluate {entry_name} for {command_name} in {}: {error}",
                 path.display()
             )
-        })
+        })?;
+    let globals = linked
+        .current_signal_globals()
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .map(|(item, value)| (item, value.into_runtime()))
+        .collect();
+    let executable = BackendExecutableProgram::interpreted(linked.backend())
+        .with_execution_options(aivi_backend::BackendExecutionOptions {
+            prefer_interpreter: true,
+            ..Default::default()
+        });
+    let mut evaluator = executable.create_engine();
+    execute(value, evaluator.as_mut(), &globals)
 }
 
 fn settle_execute_sources(
@@ -1227,14 +1249,18 @@ fn execute_main_task_value(
     context: &SourceProviderContext,
     stdout: &mut impl Write,
     stderr: &mut impl Write,
+    applier: &mut dyn TaskFunctionApplier,
+    globals: &BTreeMap<BackendItemId, RuntimeValue>,
 ) -> Result<(), String> {
-    if !matches!(&value, RuntimeValue::Task(_) | RuntimeValue::DbTask(_)) {
+    if !matches!(&value, RuntimeValue::Task(_)) {
         return Err(format!(
             "`aivi execute` expected `main` to evaluate to a task plan, found `{value}`"
         ));
     }
-    let result = execute_runtime_value_with_context(value, context, stdout, stderr)
-        .map_err(|error| error.to_string())?;
+    let result = execute_runtime_value_with_context_and_applier(
+        value, context, stdout, stderr, applier, globals,
+    )
+    .map_err(|error| error.to_string())?;
     if result != RuntimeValue::Unit {
         write_output_line(stdout, &result.to_string())?;
     }
@@ -1246,14 +1272,18 @@ fn execute_test_task_value(
     context: &SourceProviderContext,
     stdout: &mut impl Write,
     stderr: &mut impl Write,
+    applier: &mut dyn TaskFunctionApplier,
+    globals: &BTreeMap<BackendItemId, RuntimeValue>,
 ) -> Result<TestTaskOutcome, String> {
-    if !matches!(&value, RuntimeValue::Task(_) | RuntimeValue::DbTask(_)) {
+    if !matches!(&value, RuntimeValue::Task(_)) {
         return Err(format!(
             "`aivi test` expected each `@test` value to evaluate to a task plan, found `{value}`"
         ));
     }
-    let result = execute_runtime_value_with_context(value, context, stdout, stderr)
-        .map_err(|error| error.to_string())?;
+    let result = execute_runtime_value_with_context_and_applier(
+        value, context, stdout, stderr, applier, globals,
+    )
+    .map_err(|error| error.to_string())?;
     Ok(match result {
         RuntimeValue::Unit => TestTaskOutcome {
             passed: true,

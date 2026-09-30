@@ -2,16 +2,17 @@ use std::collections::HashMap;
 
 use aivi_base::SourceSpan;
 use aivi_typing::{
-    Closedness, DecodeMode, DecodePlanner, DecodePlanningError, DecodeSchema, ExternalTypeId,
-    PrimitiveType, RecordField, ShapeErrorKind, SumVariant, TypeId as StructuralTypeId,
-    TypeParameterId as StructuralTypeParameterId, TypeStore,
+    BuiltinSourceProvider, Closedness, DecodeMode, DecodePlanner, DecodePlanningError,
+    DecodeSchema, ExternalTypeId, PrimitiveType, RecordField, ShapeErrorKind, SumVariant,
+    TypeId as StructuralTypeId, TypeParameterId as StructuralTypeParameterId, TypeStore,
 };
 
 use crate::{
-    BuiltinType, DecoratorId, DecoratorPayload, ExprId, ExprKind, ImportBindingMetadata, ImportId,
-    ImportTypeDefinition, ImportValueType, Item, ItemId, Module, ResolutionState, SignalItem,
-    SourceDecorator, SumConstructorHandle, TermReference, TermResolution, TypeId as HirTypeId,
-    TypeItemBody, TypeKind, TypeParameterId as HirTypeParameterId, TypeResolution, TypeVariant,
+    BuiltinType, DecoratorId, DecoratorPayload, ExprId, ExprKind, GateType, ImportBindingMetadata,
+    ImportId, ImportTypeDefinition, ImportValueType, Item, ItemId, Module, ResolutionState,
+    SignalItem, SourceDecorator, SourceProviderRef, SumConstructorHandle, TermReference,
+    TermResolution, TypeId as HirTypeId, TypeItemBody, TypeKind,
+    TypeParameterId as HirTypeParameterId, TypeResolution, TypeVariant,
 };
 
 /// Focused pre-runtime decode-schema handoff for `@source` signals.
@@ -64,6 +65,8 @@ pub struct SourceDecodePlan {
     pub structural_types: TypeStore,
     pub domain_bindings: Vec<SourceDecodeDomainBinding>,
     pub sum_bindings: Vec<SourceDecodeSumBinding>,
+    /// `db.live` successes are already typed; only their task failures need decoding.
+    pub task_success: Option<Box<GateType>>,
 }
 
 impl SourceDecodePlan {
@@ -178,7 +181,24 @@ fn elaborate_source_decode_signal(
         });
     };
 
-    let lowered = match DecodeTypeLowerer::new(module).lower_source_signal_payload(annotation) {
+    let task_success = if SourceProviderRef::from_path(source.provider.as_ref())
+        == SourceProviderRef::Builtin(BuiltinSourceProvider::DbLive)
+    {
+        crate::typecheck_context::GateTypeContext::new(module)
+            .lower_annotation(annotation)
+            .and_then(|ty| match ty {
+                GateType::Signal(payload) => match *payload {
+                    GateType::Result { value, .. } => Some(value),
+                    _ => None,
+                },
+                _ => None,
+            })
+    } else {
+        None
+    };
+    let lowered = match DecodeTypeLowerer::new(module)
+        .lower_source_signal_payload(annotation, task_success.is_some())
+    {
         Ok(lowered) => Some(lowered),
         Err(error) => {
             blockers.push(error);
@@ -189,7 +209,14 @@ fn elaborate_source_decode_signal(
     let payload_annotation = lowered.as_ref().map(|lowered| lowered.payload_annotation);
 
     if let (Some(mode), Some(lowered)) = (mode, lowered) {
-        match DecodePlanner::plan(&lowered.structural_types, lowered.subject, mode) {
+        let subject = match (
+            task_success.as_ref(),
+            lowered.structural_types.node(lowered.subject),
+        ) {
+            (Some(_), aivi_typing::TypeNode::Result { error, .. }) => *error,
+            _ => lowered.subject,
+        };
+        match DecodePlanner::plan(&lowered.structural_types, subject, mode) {
             Ok(schema) if blockers.is_empty() => {
                 return SourceDecodeNodeOutcome::Planned(SourceDecodePlan {
                     mode,
@@ -198,6 +225,7 @@ fn elaborate_source_decode_signal(
                     structural_types: lowered.structural_types,
                     domain_bindings: lowered.domain_bindings,
                     sum_bindings: lowered.sum_bindings,
+                    task_success,
                 });
             }
             Ok(_) => {}
@@ -339,6 +367,7 @@ pub(crate) struct DecodeTypeLowerer<'a> {
     inline_named_in_progress: Vec<String>,
     domain_bindings: Vec<SourceDecodeDomainBinding>,
     sum_bindings: Vec<SourceDecodeSumBinding>,
+    native_task_outcome: bool,
 }
 
 impl<'a> DecodeTypeLowerer<'a> {
@@ -356,6 +385,7 @@ impl<'a> DecodeTypeLowerer<'a> {
             inline_named_in_progress: Vec::new(),
             domain_bindings: Vec::new(),
             sum_bindings: Vec::new(),
+            native_task_outcome: false,
         }
     }
 
@@ -375,7 +405,9 @@ impl<'a> DecodeTypeLowerer<'a> {
     fn lower_source_signal_payload(
         mut self,
         annotation: HirTypeId,
+        native_task_outcome: bool,
     ) -> Result<LoweredDecodeType, SourceDecodeElaborationBlocker> {
+        self.native_task_outcome = native_task_outcome;
         let mut item_stack = Vec::new();
         let (payload_annotation, substitutions) =
             self.resolve_signal_payload(annotation, &HashMap::new(), &mut item_stack)?;
@@ -525,10 +557,9 @@ impl<'a> DecodeTypeLowerer<'a> {
                 let source = self.lower_type(source, substitutions, item_stack)?;
                 self.apply_record_row_transform(source, &transform, ty.span)
             }
-            TypeKind::Arrow { .. } => Err(DecodeTypeLoweringError::unsupported(
-                ty.span,
-                SourceDecodeUnsupportedTypeKind::Arrow,
-            )),
+            TypeKind::Arrow { .. } => {
+                self.non_decodable_type(ty.span, SourceDecodeUnsupportedTypeKind::Arrow)
+            }
             TypeKind::Apply { callee, arguments } => {
                 let mut lowered_arguments = Vec::with_capacity(arguments.len());
                 for argument in arguments.iter().copied() {
@@ -681,14 +712,13 @@ impl<'a> DecodeTypeLowerer<'a> {
                 match builtin_scalar(*builtin) {
                     Some(primitive) => Ok(self.types.primitive(primitive)),
                     None => match builtin {
-                        BuiltinType::Signal => Err(DecodeTypeLoweringError::unsupported(
+                        BuiltinType::Signal => self.non_decodable_type(
                             span,
                             SourceDecodeUnsupportedTypeKind::NestedSignal,
-                        )),
-                        BuiltinType::Task => Err(DecodeTypeLoweringError::unsupported(
-                            span,
-                            SourceDecodeUnsupportedTypeKind::Task,
-                        )),
+                        ),
+                        BuiltinType::Task => {
+                            self.non_decodable_type(span, SourceDecodeUnsupportedTypeKind::Task)
+                        }
                         BuiltinType::List
                         | BuiltinType::Map
                         | BuiltinType::Set
@@ -775,14 +805,11 @@ impl<'a> DecodeTypeLowerer<'a> {
                 ))
             }
             ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Signal)) => {
-                Err(DecodeTypeLoweringError::unsupported(
-                    span,
-                    SourceDecodeUnsupportedTypeKind::NestedSignal,
-                ))
+                self.non_decodable_type(span, SourceDecodeUnsupportedTypeKind::NestedSignal)
             }
-            ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Task)) => Err(
-                DecodeTypeLoweringError::unsupported(span, SourceDecodeUnsupportedTypeKind::Task),
-            ),
+            ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Task)) => {
+                self.non_decodable_type(span, SourceDecodeUnsupportedTypeKind::Task)
+            }
             ResolutionState::Resolved(TypeResolution::Builtin(builtin)) => {
                 Ok(self.external_reference(builtin_type_name(*builtin)))
             }
@@ -1081,10 +1108,9 @@ impl<'a> DecodeTypeLowerer<'a> {
                         DecodeTypeLoweringError::invalid_shape(span, error.kind().clone())
                     })
             }
-            ImportValueType::Arrow { .. } => Err(DecodeTypeLoweringError::unsupported(
-                span,
-                SourceDecodeUnsupportedTypeKind::Arrow,
-            )),
+            ImportValueType::Arrow { .. } => {
+                self.non_decodable_type(span, SourceDecodeUnsupportedTypeKind::Arrow)
+            }
             ImportValueType::List(element) => {
                 let element = self.lower_import_value_type(element, arguments, span)?;
                 Ok(self.types.list(element))
@@ -1105,14 +1131,12 @@ impl<'a> DecodeTypeLowerer<'a> {
                 let value = self.lower_import_value_type(value, arguments, span)?;
                 Ok(self.types.validation(error, value))
             }
-            ImportValueType::Signal(_) => Err(DecodeTypeLoweringError::unsupported(
-                span,
-                SourceDecodeUnsupportedTypeKind::NestedSignal,
-            )),
-            ImportValueType::Task { .. } => Err(DecodeTypeLoweringError::unsupported(
-                span,
-                SourceDecodeUnsupportedTypeKind::Task,
-            )),
+            ImportValueType::Signal(_) => {
+                self.non_decodable_type(span, SourceDecodeUnsupportedTypeKind::NestedSignal)
+            }
+            ImportValueType::Task { .. } => {
+                self.non_decodable_type(span, SourceDecodeUnsupportedTypeKind::Task)
+            }
             ImportValueType::TypeApplication { name, .. } => {
                 // An abstract constructor cannot provide a closed external schema.
                 let parameter = self.types.define_parameter(name.clone());
@@ -1185,14 +1209,12 @@ impl<'a> DecodeTypeLowerer<'a> {
                 BuiltinType::Result | BuiltinType::Validation => {
                     Ok(self.external_reference(builtin_type_name(builtin)))
                 }
-                BuiltinType::Signal => Err(DecodeTypeLoweringError::unsupported(
-                    span,
-                    SourceDecodeUnsupportedTypeKind::NestedSignal,
-                )),
-                BuiltinType::Task => Err(DecodeTypeLoweringError::unsupported(
-                    span,
-                    SourceDecodeUnsupportedTypeKind::Task,
-                )),
+                BuiltinType::Signal => {
+                    self.non_decodable_type(span, SourceDecodeUnsupportedTypeKind::NestedSignal)
+                }
+                BuiltinType::Task => {
+                    self.non_decodable_type(span, SourceDecodeUnsupportedTypeKind::Task)
+                }
                 BuiltinType::Int
                 | BuiltinType::Float
                 | BuiltinType::Decimal
@@ -1202,6 +1224,26 @@ impl<'a> DecodeTypeLowerer<'a> {
                 | BuiltinType::Unit
                 | BuiltinType::Bytes => unreachable!("scalar builtins should match above"),
             },
+        }
+    }
+
+    fn non_decodable_type(
+        &mut self,
+        span: SourceSpan,
+        kind: SourceDecodeUnsupportedTypeKind,
+    ) -> Result<StructuralTypeId, DecodeTypeLoweringError> {
+        if self.native_task_outcome {
+            // The structural store describes both branches, but only E is passed to the
+            // planner. Native A keeps its complete GateType in the task adapter. These
+            // opaque references still fail planning if they occur inside E.
+            let name = match kind {
+                SourceDecodeUnsupportedTypeKind::Arrow => "Function",
+                SourceDecodeUnsupportedTypeKind::NestedSignal => "Signal",
+                SourceDecodeUnsupportedTypeKind::Task => "Task",
+            };
+            Ok(self.external_reference(name))
+        } else {
+            Err(DecodeTypeLoweringError::unsupported(span, kind))
         }
     }
 

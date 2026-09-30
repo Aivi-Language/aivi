@@ -231,7 +231,7 @@ impl CommittedValueStore<RuntimeValue> for MovingRuntimeValueStore {
                 self.root_worklist.push((handle, object));
             }
         }
-        self.to_space.values.clear();
+        self.to_space.clear();
         self.to_space.values.reserve(self.root_worklist.len());
         for index in 0..self.root_worklist.len() {
             let (handle, object) = self.root_worklist[index];
@@ -244,7 +244,7 @@ impl CommittedValueStore<RuntimeValue> for MovingRuntimeValueStore {
         }
 
         std::mem::swap(&mut self.from_space, &mut self.to_space);
-        self.to_space.values.clear();
+        self.to_space.clear();
         self.collections = self.collections.wrapping_add(1);
     }
 
@@ -259,6 +259,13 @@ struct RuntimeGcSpace {
 }
 
 impl RuntimeGcSpace {
+    fn clear(&mut self) {
+        for value in &mut self.values {
+            value.discard_tree_in_place();
+        }
+        self.values.clear();
+    }
+
     fn push(&mut self, value: RuntimeValue) -> RuntimeGcObjectId {
         let index = self.values.len() as u32;
         self.values.push(value);
@@ -283,7 +290,14 @@ impl RuntimeGcSpace {
             .values
             .get_mut(id.0 as usize)
             .expect("moving-GC object ids must reference the active space");
+        object.discard_tree_in_place();
         *object = value;
+    }
+}
+
+impl Drop for RuntimeGcSpace {
+    fn drop(&mut self) {
+        self.clear();
     }
 }
 
@@ -442,5 +456,37 @@ mod tests {
         store.replace(&mut slot, RuntimeValue::Int(3));
         assert_eq!(slot, Some(handle));
         assert_eq!(store.get(&slot), Some(&RuntimeValue::Int(3)));
+    }
+    #[test]
+    fn moving_store_releases_deep_values_on_replace_collection_and_drop() {
+        std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let nested = || {
+                    let mut value = RuntimeValue::Int(17);
+                    for _ in 0..20_000 {
+                        value = RuntimeValue::Task(crate::RuntimeTaskPlan::Pure {
+                            value: Box::new(value),
+                        });
+                    }
+                    value
+                };
+                let mut store = MovingRuntimeValueStore::default();
+                let mut slot = None;
+                store.replace(&mut slot, nested());
+                store.replace(&mut slot, RuntimeValue::Int(5));
+                assert_eq!(store.get(&slot), Some(&RuntimeValue::Int(5)));
+                store.replace(&mut slot, nested());
+                store.clear(&mut slot);
+                store.collect(&[]);
+                assert_eq!(store.allocated_value_count(), 0);
+                store.replace(&mut slot, nested());
+                store.collect(&[&slot]);
+                assert_eq!(store.live_root_count(), 1);
+                drop(store);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
     }
 }

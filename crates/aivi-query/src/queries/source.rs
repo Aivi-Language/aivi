@@ -54,7 +54,7 @@ pub fn parsed_file(db: &RootDatabase, file: SourceFile) -> Arc<ParsedFileResult>
         }
         db.record_parsed_miss();
 
-        let source = db.make_source_file(file);
+        let source = input.source();
         let parsed = parse_module(source.as_ref());
         let diagnostics =
             Arc::<[Diagnostic]>::from(parsed.all_diagnostics().cloned().collect::<Vec<_>>());

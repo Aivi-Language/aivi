@@ -1417,6 +1417,9 @@ impl<'a> ProgramLowerer<'a> {
             Option,
             Result,
             Validation,
+            TaskResult {
+                value: core::Type,
+            },
         }
 
         let mut steps = Arena::new();
@@ -1499,6 +1502,12 @@ impl<'a> ProgramLowerer<'a> {
                         core::DecodeStep::Result { error, value } => {
                             tasks.push(Task::Build(DecodeBuildTask::Result));
                             tasks.push(Task::Visit(*value));
+                            tasks.push(Task::Visit(*error));
+                        }
+                        core::DecodeStep::TaskResult { error, value } => {
+                            tasks.push(Task::Build(DecodeBuildTask::TaskResult {
+                                value: value.clone(),
+                            }));
                             tasks.push(Task::Visit(*error));
                         }
                         core::DecodeStep::Validation { error, value } => {
@@ -1666,6 +1675,22 @@ impl<'a> ProgramLowerer<'a> {
                                         error: lowered[0].0,
                                         value: lowered[1].0,
                                     },
+                                },
+                                layout,
+                            )
+                        }
+                        DecodeBuildTask::TaskResult { value } => {
+                            let (error, error_layout) =
+                                values.pop().expect("task error step should be lowered");
+                            let value = self.intern_core_type(&value)?;
+                            let layout = self.intern_layout(Layout::new(LayoutKind::Result {
+                                error: error_layout,
+                                value,
+                            }))?;
+                            (
+                                DecodeStep {
+                                    layout,
+                                    kind: DecodeStepKind::TaskResult { error },
                                 },
                                 layout,
                             )

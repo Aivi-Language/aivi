@@ -378,7 +378,9 @@ fn full_line_span(source: &aivi_base::SourceFile, span: SourceSpan) -> SourceSpa
 }
 
 fn line_start_offset(text: &str, offset: usize) -> usize {
-    text[..offset].rfind('\n').map_or(0, |index| index + 1)
+    text[..offset]
+        .rfind(['\n', '\r'])
+        .map_or(0, |index| index + 1)
 }
 
 fn line_end_offset(text: &str, offset: usize) -> usize {
@@ -632,5 +634,15 @@ mod tests {
         assert_eq!(edit.new_text, "");
         assert_eq!(edit.range.start.character, 12);
         assert_eq!(edit.range.end.character, 18);
+    }
+
+    #[test]
+    fn standalone_annotation_removal_preserves_preceding_cr_line() {
+        let (source, _, _, summaries) = parse("value previous = 1\rtype Int\rvalue answer = 42\r");
+        let annotation = summaries[1]
+            .annotation
+            .as_ref()
+            .expect("standalone annotation");
+        assert_eq!(source.slice(annotation.removal_span.span()), "type Int\r");
     }
 }

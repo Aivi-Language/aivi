@@ -46,6 +46,7 @@ dependencies = [
  "cranelift-module",
  "cranelift-native",
  "cranelift-object",
+ "foldhash",
  "indexmap",
  "num-bigint 0.5.1",
  "num-traits",

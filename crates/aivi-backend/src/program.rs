@@ -1255,6 +1255,9 @@ pub enum DecodeStepKind {
         error: DecodeStepId,
         value: DecodeStepId,
     },
+    TaskResult {
+        error: DecodeStepId,
+    },
 }
 
 impl DecodeStepKind {
@@ -1273,6 +1276,7 @@ impl DecodeStepKind {
             Self::Validation { error, value } => {
                 format!("validation error=step{error} value=step{value}")
             }
+            Self::TaskResult { error } => format!("task result error=step{error}"),
         }
     }
 }

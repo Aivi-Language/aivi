@@ -173,7 +173,10 @@ impl fmt::Display for EvaluationError {
             Self::UnknownKernel { kernel } => write!(f, "unknown backend kernel {kernel}"),
             Self::UnknownItem { item } => write!(f, "unknown backend item {item}"),
             Self::MissingItemBody { item, name } => {
-                write!(f, "backend item {item} (`{name}`) has no lowered body kernel")
+                write!(
+                    f,
+                    "backend item {item} (`{name}`) has no lowered body kernel"
+                )
             }
             Self::MissingItemValue { item } => write!(
                 f,
@@ -374,9 +377,9 @@ impl std::error::Error for EvaluationError {}
 /// general memoization table.
 struct LastKernelCall {
     kernel_id: KernelId,
-    input_subject: Option<RuntimeValue>,
-    environment: Box<[RuntimeValue]>,
-    result: RuntimeValue,
+    input_subject: Option<DetachedRuntimeValue>,
+    environment: Box<[DetachedRuntimeValue]>,
+    result: DetachedRuntimeValue,
     result_layout: LayoutId,
 }
 

@@ -26,7 +26,7 @@ use std::os::unix::fs::PermissionsExt;
 use aivi_backend::{
     BackendExecutableProgram, BackendExecutionEngineHandle, DetachedRuntimeValue,
     ItemId as BackendItemId, KernelEvaluationProfile, Program as BackendProgram, RuntimeFloat,
-    RuntimeRecordField, RuntimeValue, compile_program_cached,
+    RuntimeRecordField, RuntimeValue, TaskFunctionApplier, compile_program_cached,
     lower_module_with_hir as lower_backend_module, validate_program,
 };
 use aivi_base::{Diagnostic, FileId, Severity, SourceDatabase, SourceSpan};
@@ -63,8 +63,8 @@ use aivi_runtime::{
     InputHandle as RuntimeInputHandle, Publication, SignalHandle, SourceProviderContext,
     SourceProviderManager, assemble_hir_runtime_with_items,
     assemble_hir_runtime_with_items_and_workspace_profiled_and_progress,
-    assemble_hir_runtime_with_items_profiled_and_progress, execute_runtime_value_with_context,
-    link_backend_runtime,
+    assemble_hir_runtime_with_items_profiled_and_progress,
+    execute_runtime_value_with_context_and_applier, link_backend_runtime,
 };
 use aivi_syntax::{Formatter, lex_module, parse_module};
 use gtk::{glib, prelude::*};

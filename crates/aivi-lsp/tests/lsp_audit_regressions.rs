@@ -62,6 +62,43 @@ fn hover_uses_reference_range_and_main_is_not_unused() {
 }
 
 #[test]
+fn hover_tracks_utf16_edits_with_mixed_line_endings() {
+    let text = "// 😀\rvalue answer = 42\r\nvalue main = answer\n";
+    let (state, uri) = memory(text);
+    aivi_lsp::documents::change_document(
+        &state,
+        &uri,
+        8,
+        &[TextDocumentContentChangeEvent {
+            range: Some(Range::new(Position::new(0, 3), Position::new(0, 5))),
+            range_length: Some(2),
+            text: "é".to_owned(),
+        }],
+    )
+    .expect("valid edit on the first CR-terminated line");
+    let hover = aivi_lsp::hover::hover(
+        HoverParams {
+            text_document_position_params: position(&uri, 2, 15),
+            work_done_progress_params: Default::default(),
+        },
+        Arc::clone(&state),
+    )
+    .expect("hover must still resolve the reference after the edit");
+    assert_eq!(
+        hover.range,
+        Some(Range::new(Position::new(2, 13), Position::new(2, 19)))
+    );
+    let file = state.file(&uri).unwrap();
+    let diagnostics = aivi_lsp::diagnostics::collect_lsp_diagnostics(&state.db, file, &uri);
+    assert!(
+        !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == Some(DiagnosticSeverity::ERROR)),
+        "{diagnostics:?}"
+    );
+}
+
+#[test]
 fn unused_action_removes_whole_multiline_function_and_signature() {
     let text = "type Int -> Int\nfunc unused = input =>\n    input + 1\n\nvalue main = 42\n";
     let (state, uri) = memory(text);

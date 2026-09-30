@@ -25,8 +25,44 @@ fn open_inline(name: &str, text: &str) -> (Arc<ServerState>, Url) {
 fn inlay_hint_params(uri: Url) -> InlayHintParams {
     InlayHintParams {
         text_document: TextDocumentIdentifier { uri },
-        range: Range::default(),
+        range: Range::new(
+            Default::default(),
+            tower_lsp::lsp_types::Position::new(u32::MAX, 0),
+        ),
         work_done_progress_params: WorkDoneProgressParams::default(),
+    }
+}
+
+#[test]
+fn inlay_hints_respect_requested_range_boundaries() {
+    use tower_lsp::lsp_types::Position;
+    let (state, uri) = open_inline(
+        "hints-range.aivi",
+        "value first = 1\nvalue second = 2\nvalue third = 3\n",
+    );
+    for (start, end, expected) in [
+        (
+            Position::new(1, 0),
+            Position::new(2, 0),
+            vec![Position::new(1, 12)],
+        ),
+        (
+            Position::new(1, 12),
+            Position::new(1, 13),
+            vec![Position::new(1, 12)],
+        ),
+        (Position::new(1, 0), Position::new(1, 12), vec![]),
+        (Position::new(1, 12), Position::new(1, 12), vec![]),
+        (Position::new(2, 0), Position::new(1, 0), vec![]),
+    ] {
+        let mut params = inlay_hint_params(uri.clone());
+        params.range = Range::new(start, end);
+        let positions = inlay_hints(params, Arc::clone(&state))
+            .unwrap_or_default()
+            .into_iter()
+            .map(|hint| hint.position)
+            .collect::<Vec<_>>();
+        assert_eq!(positions, expected, "range {start:?}..{end:?}");
     }
 }
 

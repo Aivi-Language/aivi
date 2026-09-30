@@ -231,6 +231,11 @@ mod tests {
         assert_eq!(snapshot.version, 8);
         assert_eq!(snapshot.text.to_string(), "aé!\r\nsecond\rthird-line");
         assert_eq!(snapshot.file.text(&state.db), snapshot.text.to_string());
+        let source = snapshot.file.source(&state.db);
+        assert_eq!(source.line_count(), snapshot.text.len_lines());
+        for (line, content) in ["aé!", "second", "third-line"].into_iter().enumerate() {
+            assert_eq!(source.line_text(line), Some(content));
+        }
     }
 
     #[test]

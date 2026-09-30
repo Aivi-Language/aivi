@@ -986,6 +986,7 @@ fn validate_decode_program(
                 .filter_map(|variant| variant.payload)
                 .collect(),
             DecodeStep::Domain { carrier, .. } => vec![*carrier],
+            DecodeStep::TaskResult { error, .. } => vec![*error],
             DecodeStep::List { element } | DecodeStep::Option { element } => vec![*element],
             DecodeStep::Result { error, value } | DecodeStep::Validation { error, value } => {
                 vec![*error, *value]

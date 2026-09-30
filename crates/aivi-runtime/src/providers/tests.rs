@@ -201,6 +201,22 @@ fn db_live_config(
     task: RuntimeValue,
     debounce_ms: Option<i64>,
 ) -> EvaluatedSourceConfig {
+    static RESULT_DECODE: std::sync::OnceLock<aivi_hir::SourceDecodeProgram> =
+        std::sync::OnceLock::new();
+    let decode = RESULT_DECODE.get_or_init(|| {
+        let lowered = lower_text(
+            "db-live-test-result-shape.aivi",
+            "value query : Task Text Int = pure 0\n@source db.live query\nsignal result : Signal (Result Text Int)\n",
+        );
+        aivi_hir::generate_source_decode_programs(lowered.hir.module())
+            .into_nodes()
+            .into_iter()
+            .find_map(|node| match node.outcome {
+                aivi_hir::SourceDecodeProgramOutcome::Planned(program) => Some(program),
+                _ => None,
+            })
+            .expect("db.live fixture should have a typed Result decoder")
+    });
     let mut options = Vec::new();
     if let Some(debounce_ms) = debounce_ms {
         options.push(EvaluatedSourceOption {
@@ -213,9 +229,10 @@ fn db_live_config(
         instance,
         source: aivi_backend::SourceId::from_raw(0),
         provider: RuntimeSourceProvider::builtin(BuiltinSourceProvider::DbLive),
-        decode: None,
+        decode: Some(decode.clone()),
         arguments: vec![DetachedRuntimeValue::from_runtime_owned(task)].into_boxed_slice(),
         options: options.into_boxed_slice(),
+        task_environment: None,
     }
 }
 
@@ -993,6 +1010,7 @@ fn dbus_method_source_replies_with_task_result() {
         "runtime-provider-dbus-method-task-reply.aivi",
         &format!(
             r#"
+use aivi.stdio (stdoutWrite)
 type BusNameFlag =
   | AllowReplacement
   | ReplaceExisting
@@ -1016,8 +1034,10 @@ type DbusCall = {{
     body: Text
 }}
 
+type Unit -> List DbusValue
+func replyValues = unit => [DbusString "running", DbusInt 42]
 value replyTask : Task Text (List DbusValue) =
-    pure [DbusString "running", DbusInt 42]
+    map replyValues (stdoutWrite "")
 
 @source dbus.ownName "{service_name}"
 signal busState : Signal BusNameState
@@ -1510,6 +1530,209 @@ fn imap_tcp_connection_installs_read_and_write_deadlines() {
 }
 
 #[test]
+fn db_live_wraps_composed_query_success_and_preserves_nested_result_payloads() {
+    for (body, payload_type, expected) in [
+        (
+            "query",
+            "(List (Map Text Text))",
+            RuntimeValue::List(vec![RuntimeValue::Map(
+                aivi_backend::RuntimeMap::from_entries(vec![aivi_backend::RuntimeMapEntry {
+                    key: RuntimeValue::Text("id".into()),
+                    value: RuntimeValue::Text("7".into()),
+                }]),
+            )]),
+        ),
+        ("map rowCount query", "Int", RuntimeValue::Int(1)),
+        (
+            "pure (Err \"payload\")",
+            "(Result Text Int)",
+            RuntimeValue::ResultErr(Box::new(RuntimeValue::Text("payload".into()))),
+        ),
+    ] {
+        let source = format!(
+            r#"
+use aivi.db (statement)
+use aivi.list (length)
+type DatabaseHandle = {{ database: Text }}
+value conn = {{ database: ":memory:" }}
+@source db conn
+signal database : DatabaseHandle
+value query : Task Text (List (Map Text Text)) =
+    database.query (statement "select 7 as id" [])
+type List (Map Text Text) -> Int
+func rowCount = rows => length rows
+value task : Task Text {payload_type} = {body}
+@source db.live task
+signal result : Signal (Result Text {payload_type})
+"#
+        );
+        let value = db_live_result_from_source(&source);
+        assert_eq!(value, RuntimeValue::ResultOk(Box::new(expected)));
+    }
+}
+
+fn db_live_result_from_source(source: &str) -> RuntimeValue {
+    let lowered = lower_text("db-live-composed-query.aivi", source);
+    let assembly = assemble_hir_runtime(lowered.hir.module()).unwrap();
+    let mut linked =
+        link_backend_runtime(assembly, &lowered.core, Arc::new(lowered.backend)).unwrap();
+    let result_signal = linked
+        .assembly()
+        .signal(item_id(lowered.hir.module(), "result"))
+        .unwrap()
+        .signal();
+    let mut providers = SourceProviderManager::new();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        let actions = linked.tick_with_source_lifecycle().unwrap();
+        providers.apply_actions(actions.source_actions()).unwrap();
+        if let Some(value) = linked.runtime().current_value(result_signal).unwrap() {
+            return value.clone();
+        }
+        assert!(
+            Instant::now() < deadline,
+            "db.live must publish a task outcome"
+        );
+        thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[test]
+fn db_live_converts_sql_failures_into_declared_error_values() {
+    let value = db_live_result_from_source(
+        r#"
+use aivi.db (statement)
+type DbError =
+  | QueryFailed Text
+  | ConnectionFailed Text
+type DatabaseHandle = { database: Text }
+value conn = { database: ":memory:" }
+@source db conn
+signal database : DatabaseHandle
+value query : Task Text (List (Map Text Text)) =
+    database.query (statement "select * from missing_table" [])
+@source db.live query
+signal result : Signal (Result DbError (List (Map Text Text)))
+"#,
+    );
+    let RuntimeValue::ResultErr(error) = value else {
+        panic!("SQL failure must publish Err, found {value:?}");
+    };
+    assert!(error.to_string().contains("no such table"), "{error}");
+    assert!(
+        matches!(*error, RuntimeValue::Sum(_)),
+        "DbError must retain its declared ADT"
+    );
+}
+
+#[test]
+fn db_live_deferred_task_keeps_its_source_global_snapshot() {
+    let lowered = lower_text(
+        "runtime-provider-db-live-composition.aivi",
+        r#"
+use aivi.stdio (stdoutWrite)
+@source process.cwd
+signal cwd : Signal Text
+type Unit -> Text
+func readCwd = unit => "{cwd}"
+value query : Task Text Text = map readCwd (stdoutWrite "")
+@source db.live query
+signal result : Signal (Result Text Text)
+"#,
+    );
+    let assembly = assemble_hir_runtime(lowered.hir.module()).unwrap();
+    let mut linked =
+        link_backend_runtime(assembly, &lowered.core, Arc::new(lowered.backend)).unwrap();
+    let result_signal = linked
+        .assembly()
+        .signal(item_id(lowered.hir.module(), "result"))
+        .unwrap()
+        .signal();
+    let context = SourceProviderContext::new(
+        Vec::new(),
+        PathBuf::from("/provider-snapshot"),
+        BTreeMap::new(),
+    );
+    let mut providers = SourceProviderManager::with_context(context.clone());
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut cwd_port = None;
+    let mut initial_config = None;
+    let result = loop {
+        let actions = linked.tick_with_source_lifecycle().unwrap();
+        for action in actions.source_actions() {
+            if let LinkedSourceLifecycleAction::Activate { port, config, .. } = action {
+                match config.provider {
+                    RuntimeSourceProvider::Builtin(BuiltinSourceProvider::ProcessCwd) => {
+                        cwd_port = Some(port.clone());
+                    }
+                    RuntimeSourceProvider::Builtin(BuiltinSourceProvider::DbLive) => {
+                        initial_config = Some(config.clone());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        providers.apply_actions(actions.source_actions()).unwrap();
+        if let Some(value) = linked.runtime().current_value(result_signal).unwrap() {
+            break value.clone();
+        }
+        assert!(
+            Instant::now() < deadline,
+            "db.live must publish its composed task result"
+        );
+        thread::sleep(Duration::from_millis(5));
+    };
+    assert_eq!(
+        result,
+        RuntimeValue::ResultOk(Box::new(RuntimeValue::Text("/provider-snapshot".into())))
+    );
+
+    cwd_port
+        .unwrap()
+        .publish(DetachedRuntimeValue::from_runtime_owned(
+            RuntimeValue::Text("/updated-snapshot".into()),
+        ))
+        .unwrap();
+    let expected = RuntimeValue::ResultOk(Box::new(RuntimeValue::Text("/updated-snapshot".into())));
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let mut reconfigured = false;
+    loop {
+        let actions = linked.tick_with_source_lifecycle().unwrap();
+        reconfigured |= actions.source_actions().iter().any(|action| {
+            matches!(action, LinkedSourceLifecycleAction::Reconfigure { config, .. }
+                if config.provider == RuntimeSourceProvider::Builtin(BuiltinSourceProvider::DbLive))
+        });
+        providers.apply_actions(actions.source_actions()).unwrap();
+        if linked.runtime().current_value(result_signal).unwrap() == Some(&expected) {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "db.live must execute with the updated snapshot"
+        );
+        thread::sleep(Duration::from_millis(5));
+    }
+    assert!(reconfigured);
+
+    // The old configuration remains self-contained after reconfiguration and
+    // disposal of the linked runtime that originally evaluated it.
+    drop(providers);
+    drop(linked);
+    let initial_config = initial_config.unwrap();
+    let old_result = thread::spawn(move || {
+        initial_config
+            .task_environment
+            .as_ref()
+            .unwrap()
+            .execute_with_stdio(initial_config.arguments[0].to_runtime(), &context)
+            .unwrap()
+    })
+    .join()
+    .unwrap();
+    assert_eq!(RuntimeValue::ResultOk(Box::new(old_result)), result);
+}
+
+#[test]
 fn db_live_source_executes_task_immediately_on_activation_even_with_debounce() {
     let instance = SourceInstanceId::from_raw(41);
     let (mut runtime, rows_signal, port) = db_live_test_runtime(instance);
@@ -1521,7 +1744,7 @@ fn db_live_source_executes_task_immediately_on_activation_even_with_debounce() {
             config: db_live_config(
                 instance,
                 RuntimeValue::Task(aivi_backend::RuntimeTaskPlan::Pure {
-                    value: Box::new(RuntimeValue::ResultOk(Box::new(RuntimeValue::Int(7)))),
+                    value: Box::new(RuntimeValue::Int(7)),
                 }),
                 Some(200),
             ),
@@ -1555,7 +1778,7 @@ fn db_live_rejects_options_without_runtime_semantics() {
         let mut config = db_live_config(
             instance,
             RuntimeValue::Task(aivi_backend::RuntimeTaskPlan::Pure {
-                value: Box::new(RuntimeValue::ResultOk(Box::new(RuntimeValue::Int(7)))),
+                value: Box::new(RuntimeValue::Int(7)),
             }),
             None,
         );
@@ -1595,10 +1818,8 @@ fn db_live_source_publishes_task_error_results() {
             port,
             config: db_live_config(
                 instance,
-                RuntimeValue::Task(aivi_backend::RuntimeTaskPlan::Pure {
-                    value: Box::new(RuntimeValue::ResultErr(Box::new(RuntimeValue::Text(
-                        "boom".into(),
-                    )))),
+                RuntimeValue::Task(aivi_backend::RuntimeTaskPlan::FsReadText {
+                    path: "/aivi-nonexistent-test-directory/missing-file".into(),
                 }),
                 None,
             ),
@@ -1617,7 +1838,7 @@ fn db_live_source_publishes_task_error_results() {
     let RuntimeValue::Text(message) = error.as_ref() else {
         panic!("expected text error payload, found {error:?}");
     };
-    assert_eq!(message.as_ref(), "boom");
+    assert!(message.contains("missing-file"), "{message}");
     providers.suspend_active_provider(instance);
 }
 
@@ -1633,7 +1854,7 @@ fn db_live_source_reconfigures_with_debounce() {
             config: db_live_config(
                 instance,
                 RuntimeValue::Task(aivi_backend::RuntimeTaskPlan::Pure {
-                    value: Box::new(RuntimeValue::ResultOk(Box::new(RuntimeValue::Int(1)))),
+                    value: Box::new(RuntimeValue::Int(1)),
                 }),
                 Some(100),
             ),
@@ -1670,7 +1891,7 @@ fn db_live_source_reconfigures_with_debounce() {
             config: db_live_config(
                 instance,
                 RuntimeValue::Task(aivi_backend::RuntimeTaskPlan::Pure {
-                    value: Box::new(RuntimeValue::ResultOk(Box::new(RuntimeValue::Int(2)))),
+                    value: Box::new(RuntimeValue::Int(2)),
                 }),
                 Some(100),
             ),
@@ -1701,7 +1922,7 @@ fn db_live_source_reconfigures_with_debounce() {
             config: db_live_config(
                 instance,
                 RuntimeValue::Task(aivi_backend::RuntimeTaskPlan::Pure {
-                    value: Box::new(RuntimeValue::ResultOk(Box::new(RuntimeValue::Int(3)))),
+                    value: Box::new(RuntimeValue::Int(3)),
                 }),
                 Some(100),
             ),
@@ -1956,4 +2177,90 @@ fn fs_read_uses_context_cwd_and_publishes_standard_errors() {
         }
     }
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn db_live_deep_task_snapshots_execute_and_cancel_without_recursive_drop() {
+    use aivi_backend::RuntimeTaskPlan;
+    let instance = SourceInstanceId::from_raw(91);
+    let mut task = RuntimeTaskPlan::Pure {
+        value: Box::new(RuntimeValue::Int(7)),
+    };
+    for _ in 0..10_000 {
+        task = RuntimeTaskPlan::Join {
+            outer: Box::new(RuntimeTaskPlan::Pure {
+                value: Box::new(RuntimeValue::Task(task)),
+            }),
+        };
+    }
+    let lowered = lower_text(
+        "deep-task-environment.aivi",
+        "value query : Task Text Int = pure 7\n@source db.live query\nsignal result : Signal (Result Text Int)\n",
+    );
+    let assembly = assemble_hir_runtime(lowered.hir.module()).unwrap();
+    let linked = link_backend_runtime(assembly, &lowered.core, Arc::new(lowered.backend)).unwrap();
+    let source = linked.source_bindings().next().unwrap().instance;
+    let mut config = linked.evaluate_source_config(source).unwrap();
+    config.arguments = vec![DetachedRuntimeValue::from_runtime_owned(
+        RuntimeValue::Task(task),
+    )]
+    .into_boxed_slice();
+    drop(linked);
+    thread::Builder::new()
+        .stack_size(256 * 1024)
+        .spawn(move || {
+            let context = SourceProviderContext::default()
+                .with_task_environment(config.task_environment.clone());
+            let plan = DbLivePlan::parse(instance, &config).unwrap();
+            // Reconfiguration and cancellation release retained copies automatically.
+            drop(plan.clone());
+            let (_, _, port) = db_live_test_runtime(instance);
+            let stopped = Arc::new(AtomicBool::new(true));
+            spawn_db_live_worker(
+                instance,
+                port,
+                plan.clone(),
+                context.clone(),
+                Duration::ZERO,
+                stopped,
+            )
+            .join()
+            .unwrap();
+            let mut runtime = db_live_test_runtime(instance);
+            spawn_db_live_worker(
+                instance,
+                runtime.2,
+                plan,
+                context.clone(),
+                Duration::ZERO,
+                Arc::new(AtomicBool::new(false)),
+            )
+            .join()
+            .unwrap();
+            runtime
+                .0
+                .tick(&mut |_, _: crate::DependencyValues<'_, RuntimeValue>| None);
+            assert_eq!(
+                runtime.0.current_value(runtime.1).unwrap().unwrap(),
+                &RuntimeValue::ResultOk(Box::new(RuntimeValue::Int(7)))
+            );
+            // D-Bus retains the same detached Task argument across callbacks.
+            let reply_task = parse_task_argument(
+                instance,
+                BuiltinSourceProvider::DbusMethod,
+                1,
+                &config.arguments[0],
+            )
+            .unwrap();
+            drop(reply_task.clone());
+            assert_eq!(
+                context
+                    .execute_task_with_stdio(reply_task.into_runtime())
+                    .unwrap(),
+                RuntimeValue::Int(7)
+            );
+        })
+        .unwrap()
+        .join()
+        .unwrap();
 }

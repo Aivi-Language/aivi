@@ -34,6 +34,11 @@ synchronization. The server stores text in ropes, applies every edit batch trans
 UTF-16 positions, rejects stale versions and invalid ranges, and updates the query database only
 after the entire batch validates.
 
+Source maps and incremental edits agree on LF, CRLF, and bare CR line endings, including
+mixed endings in one file. UTF-16 columns exclude line terminators and cannot split a surrogate
+pair. The lexer recognizes the same line boundaries for declarations, comments, and literal
+error recovery.
+
 Compiler analysis runs on a bounded worker pool rather than on Tokio executor threads. New edits
 cancel superseded diagnostic work, and a final document-version check prevents stale results from
 being published. Workspace references and symbols index all `.aivi` files under the initialized workspace roots,
@@ -58,7 +63,9 @@ analysis run on workers; publication remains serialized with document updates.
 | Structure | Folding ranges, code lenses for `@test` values |
 | Highlighting | Full, range, and delta semantic tokens |
 
-Inlay hints and code lenses can be disabled through initialization options. Completion returns current-module declarations, imported names, scoped function/lambda parameters,
+Inlay hints and code lenses can be disabled through initialization options. Inlay hints are limited
+to the requested range, including its start and excluding its end; an empty range returns no hints.
+Completion returns current-module declarations, imported names, scoped function/lambda parameters,
 and case-pattern bindings. After a dotted record name it returns fields when compiler elaboration
 supplies a structural record type; it does not guess fields for opaque or unresolved types and does
 not synthesize import edits. Semantic tokens classify resolved type, function, and variable sites,

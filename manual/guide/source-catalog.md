@@ -371,9 +371,12 @@ These built-ins publish one host-context snapshot when the source starts. They d
 
 - The compiler now recognizes `db.live` as a built-in provider key.
 - Runtime execution now runs the query task on a worker thread and republishes on activation or refresh.
-- The intended result shape is `Signal (Result DbError A)`.
+- Deferred task callbacks use the code and committed signal values captured when the source configuration was evaluated. Reconfiguration supplies a new snapshot; a worker never reads live scheduler state.
+- The result shape is `Signal (Result E A)`: a successful query task publishes `Ok payload`, and a failed task is converted to the declared error type, such as `DbError`. A task whose payload is itself a `Result` preserves that nested value inside `Ok`.
+- Success values retain their native task representation, including `List (Map Text Text)` query rows. The compiler plans external decoding for the failure type `E` only.
 - Optimistic publication and rollback notifications have no specified semantics yet. The closed source contract rejects `optimistic` and `onRollback` instead of silently ignoring them.
 - Successful `db.commit` tasks now advance matching input-backed `.changed` signals using the current `Connection.database` path plus changed table names, so `db.live refreshOn` paths refresh automatically after commits.
+- Each successful commit sends its notification before the next task callback runs. Composed tasks retain those notifications if a later step fails; failed or rolled-back commits send none.
 - `refreshOn` is the whole refresh boundary in the current slice. A `users.changed` projection is accepted, but it is still just an explicit trigger signal routed through that same path.
 - `commit()` now drives `TableRef.changed`-style refreshes automatically when the commit plan names the changed tables and the table handle resolves to the same normalized `Connection.database` path.
 - Invalidation is still coarse at the table level in this slice. Row-scoped `watch` behavior remains future work.
@@ -566,8 +569,9 @@ value view =
 - The output must currently be a record with fields `destination`, `path`, `interface`, `member`, and `body`.
 - Header fields must decode as `Text`.
 - The `body` field may currently be `Text` or `List DbusValue`.
-- `dbus.method` currently acts as a **service-side** method handler: it watches incoming calls whose destination/path/interface/member match the configured filter, publishes the call record into the signal graph, and replies immediately on the wire.
+- `dbus.method` currently acts as a **service-side** method handler: it watches incoming calls whose destination/path/interface/member match the configured filter, publishes the call record into the signal graph, and replies after the optional reply task finishes.
 - When present, the optional second source argument must be a `Task` that returns `List DbusValue`; the runtime executes it on each incoming call and sends its result as the method reply body.
+- Reply-task callbacks execute on the provider worker with the code and committed signal values captured for that source configuration. Reconfiguration replaces that environment for subsequent calls.
 - Use a comma before `replyTask` when it starts with an identifier or other apply-able expression, so the parser treats it as a second source argument instead of ordinary function application.
 - `reply` and `replyValues` are mutually exclusive. Without either option, the runtime replies with `Unit`.
 - A reply task argument is mutually exclusive with `reply` and `replyValues`.

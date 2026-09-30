@@ -6,12 +6,11 @@ use crate::{analysis::FileAnalysis, state::ServerState};
 
 /// Produce inlay hints for the visible range of the document.
 ///
-/// We emit a `TYPE`-kind hint at the end of each symbol's `selection_span` for:
-/// - Top-level `Variable` and `Function` symbols that have a known type detail.
-/// - Parameter children of `Function` symbols that have a detail.
+/// Emit type hints at unannotated declaration names with known inferred types,
+/// restricted to the requested range (start inclusive, end exclusive).
 pub fn inlay_hints(params: InlayHintParams, state: Arc<ServerState>) -> Option<Vec<InlayHint>> {
     let config = state.config();
-    if !config.inlay_hints_enabled {
+    if !config.inlay_hints_enabled || params.range.start >= params.range.end {
         return None;
     }
 
@@ -30,11 +29,15 @@ pub fn inlay_hints(params: InlayHintParams, state: Arc<ServerState>) -> Option<V
             continue;
         };
         let lsp_range = source.span_to_lsp_range(declaration.name_span.span());
+        let position = Position {
+            line: lsp_range.end.line,
+            character: lsp_range.end.character,
+        };
+        if position < params.range.start || position >= params.range.end {
+            continue;
+        }
         hints.push(InlayHint {
-            position: Position {
-                line: lsp_range.end.line,
-                character: lsp_range.end.character,
-            },
+            position,
             label: InlayHintLabel::String(truncate_inlay_hint_label(
                 inferred,
                 config.inlay_hints_max_length,

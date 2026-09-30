@@ -270,9 +270,7 @@ fn static_structural_eq(left: &RuntimeValue, right: &RuntimeValue) -> bool {
         (RuntimeValue::Callable(_), _)
         | (_, RuntimeValue::Callable(_))
         | (RuntimeValue::Task(_), _)
-        | (_, RuntimeValue::Task(_))
-        | (RuntimeValue::DbTask(_), _)
-        | (_, RuntimeValue::DbTask(_)) => false,
+        | (_, RuntimeValue::Task(_)) => false,
         _ => false,
     }
 }

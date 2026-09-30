@@ -21,6 +21,7 @@ use crate::{
 };
 
 include!("values.rs");
+include!("cloning.rs");
 include!("errors_profiles.rs");
 include!("evaluator.rs");
 include!("intrinsics.rs");

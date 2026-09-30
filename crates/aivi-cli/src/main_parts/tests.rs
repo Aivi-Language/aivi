@@ -3129,6 +3129,29 @@ value main : Task Text Unit =
 }
 
 #[test]
+fn execute_deferred_task_callback_keeps_source_globals() {
+    let workspace = TempDir::new("execute-composed-source");
+    let entry = workspace.write(
+        "main.aivi",
+        r#"
+use aivi.stdio (stdoutWrite)
+@source process.cwd
+signal cwd : Signal Text
+type Unit -> Task Text Unit
+func report = unit => stdoutWrite "cwd={cwd}"
+value main : Task Text Unit = chain report (stdoutWrite "start|")
+"#,
+    );
+    let (code, stdout, stderr) = execute_workspace(
+        &entry,
+        SourceProviderContext::new(Vec::new(), workspace.path().to_path_buf(), BTreeMap::new()),
+    );
+    assert_eq!(code, ExitCode::SUCCESS, "{stderr}");
+    assert_eq!(stdout, format!("start|cwd={}", workspace.path().display()));
+    assert!(stderr.is_empty(), "{stderr}");
+}
+
+#[test]
 fn execute_creates_and_deletes_filesystem_paths() {
     let workspace = TempDir::new("execute-fs-paths");
     let create_entry = workspace.write(

@@ -152,6 +152,7 @@ fn parsed_and_hir_queries_reuse_cached_snapshots_until_text_changes() {
     let parsed_second = parsed_file(&db, file);
     assert!(Arc::ptr_eq(&parsed_first, &parsed_second));
     let current_source = file.source(&db);
+    assert!(Arc::ptr_eq(&current_source, &parsed_first.source_arc()));
     assert_eq!(current_source.path(), parsed_first.source().path());
     assert_eq!(current_source.text(), parsed_first.source().text());
 
@@ -172,6 +173,73 @@ fn parsed_and_hir_queries_reuse_cached_snapshots_until_text_changes() {
     assert!(!Arc::ptr_eq(&parsed_first, &parsed_third));
     assert!(!Arc::ptr_eq(&hir_first, &hir_third));
     assert_eq!(hir_third.symbols()[0].name, "total");
+}
+
+#[test]
+fn source_snapshots_are_shared_per_revision_and_survive_replacement_and_removal() {
+    let db = RootDatabase::new();
+    let path = PathBuf::from("source-snapshot.aivi");
+    let original_text = "value first = 1\r\nvalue second = 2\r";
+    let file = db.open_file(path.clone(), original_text.to_owned());
+    let original = file.source(&db);
+    assert!(Arc::ptr_eq(&original, &file.source(&db)));
+    assert!(!file.set_text(&db, original_text.to_owned()));
+    assert_eq!(db.open_file(path.clone(), original_text.to_owned()), file);
+    assert!(Arc::ptr_eq(&original, &file.source(&db)));
+
+    assert!(file.set_text(&db, "value changed = 3\n".to_owned()));
+    let changed = file.source(&db);
+    assert!(!Arc::ptr_eq(&original, &changed));
+    assert_eq!(original.id(), changed.id());
+    assert_eq!(original.path(), changed.path());
+    assert_eq!(original.text(), original_text);
+    assert_eq!(original.line_count(), 3);
+    assert_eq!(changed.line_count(), 2);
+    let sources = db.source_database();
+    assert_eq!(sources[changed.id()].text(), changed.text());
+
+    db.remove_file(file);
+    assert_eq!(changed.text(), "value changed = 3\n");
+    let reopened = db.open_file(path, original_text.to_owned());
+    assert_ne!(reopened.source(&db).id(), original.id());
+    assert_eq!(original.line_text(1), Some("value second = 2"));
+}
+
+#[test]
+fn concurrent_source_readers_share_one_snapshot_without_retaining_removed_inputs() {
+    let db = RootDatabase::new();
+    let file = db.open_file(
+        PathBuf::from("concurrent-source.aivi"),
+        "value answer = 42\n".repeat(128),
+    );
+    let barrier = std::sync::Barrier::new(8);
+    let sources = std::thread::scope(|scope| {
+        let threads = (0..8)
+            .map(|_| {
+                scope.spawn(|| {
+                    barrier.wait();
+                    file.source(&db)
+                })
+            })
+            .collect::<Vec<_>>();
+        threads
+            .into_iter()
+            .map(|thread| thread.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    assert!(
+        sources
+            .iter()
+            .all(|source| Arc::ptr_eq(source, &sources[0]))
+    );
+    let weak = Arc::downgrade(&sources[0]);
+    db.remove_file(file);
+    assert_eq!(sources[0].line_count(), 129);
+    drop(sources);
+    assert!(
+        weak.upgrade().is_none(),
+        "removed source cache must be released with its last snapshot"
+    );
 }
 
 #[test]

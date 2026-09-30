@@ -20,6 +20,7 @@ cranelift-module.workspace = true
 cranelift-native.workspace = true
 cranelift-object.workspace = true
 indexmap = { version = "2", features = ["serde"] }
+foldhash = "0.2"
 num-bigint = { workspace = true, features = ["serde"] }
 num-traits = "0.2"
 rayon = "1"
