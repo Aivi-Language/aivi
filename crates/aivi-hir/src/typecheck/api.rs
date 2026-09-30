@@ -40,6 +40,7 @@ struct DefaultRecordElision {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct EqConstraintScope {
     constrained_parameters: HashSet<TypeParameterId>,
+    class_constraints: Vec<ClassConstraintBinding>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -278,6 +279,12 @@ pub(crate) fn resolve_class_member_dispatch_for_subject(
     let subject = checker
         .typing
         .class_member_subject_binding(member, subject)?;
+    checker
+        .require_class_binding(&ClassConstraintBinding {
+            class_item: member.class,
+            subject: subject.clone(),
+        })
+        .ok()?;
     let implementation = checker.class_member_implementation(member, &subject)?;
     Some(ResolvedClassMemberDispatch {
         member,

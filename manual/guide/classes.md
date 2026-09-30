@@ -206,6 +206,25 @@ func bothEqual = leftA rightA leftB rightB =>
 
 The constraint ensures the function can only be called when `K` (or `A`, `B`, etc.) has an `Eq` instance. Without the constraint, using `==` on an open type parameter is a type error.
 
+### Conditional instance resolution
+
+An instance context is a prerequisite for selecting that instance. For example,
+`instance Eq A => Render (Box A)` can supply `Render (Box Int)` only when `Eq Int`
+is available. The checker infers `A` from the requested instance head and proves
+every instantiated prerequisite. A prerequisite whose parameters cannot be
+inferred from the head produces a diagnostic. Imported instances preserve the
+same heads, quantifier indices, and prerequisites.
+
+Resolution accepts finite proofs that move or grow type arguments. An exact
+cycle cannot supply evidence by itself. The compiler limits a proof search to
+256 active prerequisites and 4096 proof steps, and reports a complexity-limit
+diagnostic when either limit is exceeded. These are compiler resource limits;
+there is no rule requiring every prerequisite to have a smaller type expression.
+
+Checking an instance context and passing its executable evidence are separate
+compiler obligations. Conditional authored member execution is still subject
+to the [authored evidence boundary](/guide/typeclasses#execution-boundary-builtin-carriers-vs-authored-instances).
+
 ## Ord constraints and domain ordering
 
 Use `Ord` when a function needs ordering rather than just equality:

@@ -114,7 +114,7 @@ impl<'a> GateTypeContext<'a> {
         match (left, right) {
             (TypeBinding::Type(left), TypeBinding::Type(right)) => self.types_match(left, right),
             (TypeBinding::Constructor(left), TypeBinding::Constructor(right)) => {
-                left.head == right.head
+                self.constructor_heads_match(left.head, right.head)
                     && left.arguments.len() == right.arguments.len()
                     && left
                         .arguments
@@ -124,6 +124,81 @@ impl<'a> GateTypeContext<'a> {
             }
             _ => false,
         }
+    }
+
+    fn import_type_identities_match(&self, left: ImportId, right: ImportId) -> bool {
+        if left == right {
+            return true;
+        }
+        let (Some(left), Some(right)) = (
+            self.module.imports().get(left),
+            self.module.imports().get(right),
+        ) else {
+            return false;
+        };
+        left.source_module.is_some()
+            && left.source_module == right.source_module
+            && left.imported_name.text() == right.imported_name.text()
+    }
+
+    fn constructor_heads_match(
+        &self,
+        left: TypeConstructorHead,
+        right: TypeConstructorHead,
+    ) -> bool {
+        if left == right
+            || matches!((left, right), (TypeConstructorHead::Import(left), TypeConstructorHead::Import(right)) if self.import_type_identities_match(left, right))
+        {
+            return true;
+        }
+        let (import, item) = match (left, right) {
+            (TypeConstructorHead::Import(import), TypeConstructorHead::Item(item))
+            | (TypeConstructorHead::Item(item), TypeConstructorHead::Import(import)) => {
+                (import, item)
+            }
+            _ => return false,
+        };
+        // Linking can replace a portable transparent alias with its local HIR
+        // item. Compare type functions with identical rigid arguments;
+        // nominal declarations retain their owner identity.
+        if !matches!(
+            self.module
+                .imports()
+                .get(import)
+                .map(|binding| &binding.metadata),
+            Some(ImportBindingMetadata::TypeConstructor {
+                definition: Some(ImportTypeDefinition::Alias(_)),
+                ..
+            })
+        ) || !matches!(self.module.items().get(item), Some(Item::Type(ty)) if matches!(ty.body, TypeItemBody::Alias(_)))
+        {
+            return false;
+        }
+        let arity = type_constructor_arity(left, self.module);
+        if arity != type_constructor_arity(right, self.module) {
+            return false;
+        }
+        let parameters = (0..arity)
+            .map(|index| {
+                TypeParameterId::from_raw(self.module.type_parameters().len() as u32 + index as u32)
+            })
+            .collect::<Vec<_>>();
+        let arguments = parameters
+            .iter()
+            .map(|parameter| GateType::TypeParameter {
+                parameter: *parameter,
+                name: format!("T{}", parameter.as_raw()),
+            })
+            .collect::<Vec<_>>();
+        let mut probe = self.contextual_probe();
+        probe.rigid_type_parameters.extend(parameters);
+        let (Some(left), Some(right)) = (
+            probe.apply_type_constructor(left, &arguments, &mut Vec::new()),
+            probe.apply_type_constructor(right, &arguments, &mut Vec::new()),
+        ) else {
+            return false;
+        };
+        probe.types_match(&left, &right)
     }
 
     pub(crate) fn replace_rigid_type_parameters(
@@ -613,6 +688,9 @@ impl<'a> GateTypeContext<'a> {
     }
 
     pub(crate) fn poly_type_binding(&mut self, ty: TypeId) -> Option<TypeBinding> {
+        if let Some(binding) = self.partial_type_constructor_binding(ty, &mut Vec::new()) {
+            return Some(TypeBinding::Constructor(binding));
+        }
         if let Some(lowered) = self.lower_annotation(ty) {
             return Some(TypeBinding::Type(lowered));
         }
@@ -809,6 +887,11 @@ impl<'a> GateTypeContext<'a> {
         actual: &TypeBinding,
         bindings: &mut PolyTypeBindings,
     ) -> bool {
+        // A fully applied instance head still needs to infer its quantified
+        // arguments. Matching only a closed binding loses those substitutions.
+        if let TypeBinding::Type(actual) = actual {
+            return self.match_poly_hir_type(ty, actual, bindings);
+        }
         if let Some(candidate) = self.instantiate_poly_type_binding(ty, bindings) {
             return self.type_bindings_match(&candidate, actual);
         }
@@ -830,11 +913,15 @@ impl<'a> GateTypeContext<'a> {
                     return false;
                 };
                 match reference.resolution.as_ref() {
-                    ResolutionState::Resolved(TypeResolution::Item(_)) => {
+                    ResolutionState::Resolved(
+                        TypeResolution::Item(_)
+                        | TypeResolution::Import(_)
+                        | TypeResolution::Builtin(_),
+                    ) => {
                         let Some((head, _)) = self.type_constructor_head_and_arity(*callee) else {
                             return false;
                         };
-                        if head != actual_binding.head()
+                        if !self.constructor_heads_match(head, actual_binding.head())
                             || arguments.len() != actual_binding.arguments.len()
                         {
                             return false;
@@ -1288,6 +1375,25 @@ impl<'a> GateTypeContext<'a> {
                     })
                     .map(|(id, _)| id);
                 if let Some(import) = import_id {
+                    if matches!(
+                        self.module.imports()[import].metadata,
+                        ImportBindingMetadata::AmbientType
+                    ) && let Some(item) =
+                        self.module.ambient_items().iter().copied().find(|item| {
+                            match &self.module.items()[*item] {
+                                Item::Type(ty) => ty.name.text() == type_name,
+                                Item::Domain(domain) => domain.name.text() == type_name,
+                                _ => false,
+                            }
+                        })
+                        && let Some(ty) = self.contextual_probe().apply_type_constructor(
+                            TypeConstructorHead::Item(item),
+                            &lowered_args,
+                            &mut Vec::new(),
+                        )
+                    {
+                        return ty;
+                    }
                     self.import_type_for_domain_or_opaque(import, type_name.clone(), lowered_args)
                 } else {
                     // Fallback: create an opaque import with a sentinel; the type checker
@@ -2412,7 +2518,7 @@ impl<'a> GateTypeContext<'a> {
                     arguments: actual_arguments,
                     ..
                 } => {
-                    import == actual_import
+                    self.import_type_identities_match(*import, *actual_import)
                         && template_arguments.len() == actual_arguments.len()
                         && template_arguments.iter().zip(actual_arguments.iter()).all(
                             |(template, actual)| {
@@ -4253,8 +4359,23 @@ impl<'a> GateTypeContext<'a> {
                 };
                 Some((TypeConstructorHead::Item(*item_id), arity))
             }
+            ResolutionState::Resolved(TypeResolution::Import(import)) => {
+                match &self.module.imports()[*import].metadata {
+                    ImportBindingMetadata::TypeConstructor { kind, .. }
+                    | ImportBindingMetadata::Domain { kind, .. } => {
+                        Some((TypeConstructorHead::Import(*import), kind.arity()))
+                    }
+                    ImportBindingMetadata::BuiltinType(builtin) => Some((
+                        TypeConstructorHead::Builtin(*builtin),
+                        builtin_type_arity(*builtin),
+                    )),
+                    ImportBindingMetadata::Bundle(crate::ImportBundleKind::BuiltinOption) => {
+                        Some((TypeConstructorHead::Builtin(BuiltinType::Option), 1))
+                    }
+                    _ => None,
+                }
+            }
             ResolutionState::Resolved(TypeResolution::TypeParameter(_))
-            | ResolutionState::Resolved(TypeResolution::Import(_))
             | ResolutionState::Unresolved => None,
         }
     }

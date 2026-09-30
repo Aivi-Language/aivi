@@ -926,6 +926,8 @@ pub enum ImportBindingMetadata {
         class_name: Box<str>,
         member_name: Box<str>,
         subject: Box<str>,
+        head: ImportedTypeBinding,
+        context: Vec<ImportedClassConstraint>,
         ty: ImportValueType,
     },
 }
@@ -975,6 +977,40 @@ pub struct ImportedClassEvidence {
     pub class_name: Box<str>,
     pub member_name: Box<str>,
     pub subject: ImportValueType,
+}
+
+/// A prerequisite of an imported instance. Quantifier indices are shared with
+/// its head and member signatures; this is a proof obligation, not a callable.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImportedClassConstraint {
+    pub class_name: Box<str>,
+    pub subject: ImportedTypeBinding,
+}
+
+/// Portable type and constructor bindings retain the distinction between a
+/// saturated type and a partially applied higher-kinded constructor.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ImportedTypeBinding {
+    Type(ImportValueType),
+    Constructor {
+        head: ImportedTypeConstructor,
+        arguments: Vec<ImportValueType>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ImportedTypeConstructor {
+    Builtin(BuiltinType),
+    Named {
+        name: Box<str>,
+        arity: usize,
+        definition: Option<Box<ImportTypeDefinition>>,
+    },
+    Parameter {
+        index: usize,
+        name: Box<str>,
+        arity: usize,
+    },
 }
 
 /// Portable imported value-type surface that HIR uses before real module-linked nominal typing

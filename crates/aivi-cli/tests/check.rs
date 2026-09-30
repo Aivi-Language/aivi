@@ -169,6 +169,58 @@ fn check_accepts_reactive_update_programs() {
 }
 
 #[test]
+fn check_discharge_same_module_and_imported_instance_prerequisites() {
+    for (name, source, accepted) in [
+        (
+            "concrete",
+            "class Render A = { render : A -> Text }\ntype Blob = Blob Bytes\ninstance Eq Bytes => Render Blob = { render = blob => \"rendered\" }\nvalue show : Blob -> Text = render\n",
+            false,
+        ),
+        (
+            "local-generic",
+            "class Render A = { render : A -> Text }\ntype Box A = Box A\ninstance Eq A => Render (Box A) = { render = box => \"rendered\" }\nvalue show : Box Bytes -> Text = render\n",
+            false,
+        ),
+        (
+            "imported-missing",
+            "use shared.carrier (Carrier)\nvalue selected : (Int -> Bool) -> Carrier Bytes Int -> Carrier Bytes Bool = map\n",
+            false,
+        ),
+        (
+            "imported-available",
+            "use shared.carrier (Carrier)\nvalue selected : (Int -> Bool) -> Carrier Text Int -> Carrier Text Bool = map\n",
+            true,
+        ),
+    ] {
+        let dir = TempDir::new("check-instance-prerequisites");
+        dir.write(
+            "shared/carrier.aivi",
+            r#"
+type Carrier E A = Carrier E A
+instance Eq E => Functor (Carrier E) = {
+    map = f carrier => carrier ||> Carrier e a -> Carrier e (f a)
+}
+export Carrier
+"#,
+        );
+        let path = dir.write(&format!("{name}.aivi"), source);
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("check")
+            .arg(path)
+            .output()
+            .expect("check should run");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.success(), accepted, "{name}: {stderr}");
+        if !accepted {
+            assert!(
+                stderr.contains("hir::missing-class-instance") && stderr.contains("Eq"),
+                "{name}: {stderr}"
+            );
+        }
+    }
+}
+
+#[test]
 fn check_reports_reactive_update_self_reference_from_hir() {
     let dir = TempDir::new("check-reactive-update-self-reference");
     let path = dir.write(

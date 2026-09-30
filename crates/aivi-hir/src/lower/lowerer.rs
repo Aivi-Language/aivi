@@ -1585,6 +1585,7 @@ impl<'a> Lowerer<'a> {
         // Auto-register imported instance member bindings so cross-module instance
         // resolution can find them without the user explicitly importing by name.
         if let ImportModuleResolution::Resolved(exports) = &module_resolution {
+            self.register_instance_type_imports(&module_name, exports, item.base.span);
             for instance_decl in &exports.instances {
                 for member in &instance_decl.members {
                     let synthetic_name = format!(
@@ -1605,6 +1606,8 @@ impl<'a> Lowerer<'a> {
                             class_name: instance_decl.class_name.clone(),
                             member_name: member.name.clone(),
                             subject: instance_decl.subject.clone(),
+                            head: instance_decl.head.clone(),
+                            context: instance_decl.context.clone(),
                             ty: member.ty.clone(),
                         },
                         callable_type: None,
@@ -5212,6 +5215,7 @@ impl<'a> Lowerer<'a> {
         }
 
         // Auto-register instance members for class dispatch.
+        self.register_instance_type_imports(module_name, exports, span);
         for instance_decl in &exports.instances {
             for member in &instance_decl.members {
                 let synthetic_name = format!(
@@ -5232,12 +5236,166 @@ impl<'a> Lowerer<'a> {
                         class_name: instance_decl.class_name.clone(),
                         member_name: member.name.clone(),
                         subject: instance_decl.subject.clone(),
+                        head: instance_decl.head.clone(),
+                        context: instance_decl.context.clone(),
                         ty: member.ty.clone(),
                     },
                     callable_type: None,
                     deprecation: None,
                 });
             }
+        }
+    }
+
+    /// Instance heads need a nominal identity even when only values of their
+    /// carrier are imported. These bindings stay out of the surface namespace.
+    fn register_instance_type_imports(
+        &mut self,
+        module_name: &str,
+        exports: &crate::ExportedNames,
+        span: SourceSpan,
+    ) {
+        use crate::{ImportTypeDefinition, ImportedTypeBinding, ImportedTypeConstructor};
+        let mut known = self
+            .module
+            .imports()
+            .iter()
+            .filter(|(_, binding)| {
+                binding.source_module.as_deref() == Some(module_name)
+                    && matches!(
+                        binding.metadata,
+                        ImportBindingMetadata::TypeConstructor { .. }
+                            | ImportBindingMetadata::Domain { .. }
+                            | ImportBindingMetadata::AmbientType
+                            | ImportBindingMetadata::BuiltinType(_)
+                    )
+            })
+            .map(|(_, binding)| binding.imported_name.text().to_owned())
+            .collect::<HashSet<_>>();
+        let mut named = Vec::new();
+        let mut values = Vec::new();
+        for instance in &exports.instances {
+            for binding in std::iter::once(&instance.head).chain(
+                instance
+                    .context
+                    .iter()
+                    .map(|constraint| &constraint.subject),
+            ) {
+                match binding {
+                    ImportedTypeBinding::Type(ty) => values.push(ty),
+                    ImportedTypeBinding::Constructor { head, arguments } => {
+                        if let ImportedTypeConstructor::Named {
+                            name,
+                            arity,
+                            definition,
+                        } = head
+                        {
+                            named.push((name.to_string(), *arity, definition.clone()));
+                        }
+                        values.extend(arguments);
+                    }
+                }
+            }
+            values.extend(instance.members.iter().map(|member| &member.ty));
+        }
+        while let Some(ty) = values.pop() {
+            match ty {
+                ImportValueType::Named {
+                    type_name,
+                    arguments,
+                    definition,
+                } => {
+                    named.push((type_name.clone(), arguments.len(), definition.clone()));
+                    values.extend(arguments);
+                }
+                ImportValueType::Tuple(elements)
+                | ImportValueType::TypeApplication {
+                    arguments: elements,
+                    ..
+                } => values.extend(elements),
+                ImportValueType::Record(fields) => {
+                    values.extend(fields.iter().map(|field| &field.ty))
+                }
+                ImportValueType::Arrow { parameter, result } => {
+                    values.extend([parameter.as_ref(), result.as_ref()])
+                }
+                ImportValueType::List(element)
+                | ImportValueType::Set(element)
+                | ImportValueType::Option(element)
+                | ImportValueType::Signal(element) => values.push(element),
+                ImportValueType::Map { key, value } => {
+                    values.extend([key.as_ref(), value.as_ref()])
+                }
+                ImportValueType::Result { error, value }
+                | ImportValueType::Validation { error, value }
+                | ImportValueType::Task { error, value } => {
+                    values.extend([error.as_ref(), value.as_ref()])
+                }
+                ImportValueType::Primitive(_) | ImportValueType::TypeVariable { .. } => {}
+            }
+        }
+        for (name, arity, definition) in named {
+            if !known.insert(name.clone()) {
+                continue;
+            }
+            let metadata = if let Some(
+                metadata @ (ImportBindingMetadata::AmbientType
+                | ImportBindingMetadata::BuiltinType(_)),
+            ) = known_import_metadata(module_name, &name)
+            {
+                metadata
+            } else {
+                match exports.find(&name).map(|export| &export.metadata) {
+                    Some(ImportBindingMetadata::TypeConstructor {
+                        kind,
+                        fields,
+                        definition,
+                        ..
+                    }) => ImportBindingMetadata::TypeConstructor {
+                        type_item: None,
+                        constructors: None,
+                        kind: kind.clone(),
+                        fields: fields.clone(),
+                        definition: definition.clone(),
+                    },
+                    Some(ImportBindingMetadata::Domain { kind, carrier, .. }) => {
+                        ImportBindingMetadata::Domain {
+                            kind: kind.clone(),
+                            literal_suffixes: Vec::new(),
+                            carrier: carrier.clone(),
+                        }
+                    }
+                    _ => match definition.as_deref() {
+                        Some(ImportTypeDefinition::Domain(carrier)) => {
+                            ImportBindingMetadata::Domain {
+                                kind: Kind::constructor(arity),
+                                literal_suffixes: Vec::new(),
+                                carrier: Some(carrier.clone()),
+                            }
+                        }
+                        _ => ImportBindingMetadata::TypeConstructor {
+                            type_item: None,
+                            constructors: None,
+                            kind: Kind::constructor(arity),
+                            fields: None,
+                            definition: definition.map(|definition| *definition),
+                        },
+                    },
+                }
+            };
+            self.alloc_import(ImportBinding {
+                span,
+                source_module: Some(module_name.into()),
+                imported_name: self.make_name(&name, span),
+                local_name: self.make_name(
+                    &format!("__instance_type_{}_{}", module_name.replace('.', "_"), name),
+                    span,
+                ),
+                resolution: ImportBindingResolution::Resolved,
+                metadata,
+                callable_type: None,
+                deprecation: None,
+            });
         }
     }
 

@@ -24,6 +24,337 @@ fn typecheck_text(path: &str, text: &str) -> TypeCheckReport {
 }
 
 #[test]
+fn conditional_instances_discharge_concrete_and_inferred_prerequisites() {
+    for (name, source, accepted) in [
+        (
+            "concrete",
+            "class Render A = { render : A -> Text }\ntype Blob = Blob Bytes\ninstance Eq Bytes => Render Blob = { render = blob => \"rendered\" }\nvalue renderFn : Blob -> Text = render\n",
+            false,
+        ),
+        (
+            "inferred-missing",
+            "class Render A = { render : A -> Text }\ntype Box A = Box A\ninstance Eq A => Render (Box A) = { render = box => \"rendered\" }\nvalue renderFn : Box Bytes -> Text = render\n",
+            false,
+        ),
+        (
+            "inferred-available",
+            "class Render A = { render : A -> Text }\ntype Box A = Box A\ninstance Eq A => Render (Box A) = { render = box => \"rendered\" }\nvalue renderFn : Box Int -> Text = render\n",
+            true,
+        ),
+        (
+            "unbound-prerequisite",
+            "class Render A = { render : A -> Text }\ntype Blob = Blob Int\ninstance Eq A => Render Blob = { render = blob => \"rendered\" }\nvalue renderFn : Blob -> Text = render\n",
+            false,
+        ),
+        (
+            "contextual",
+            "class Render A = { render : A -> Text }\ntype Box A = Box A\ninstance Eq A => Render (Box A) = { render = box => \"rendered\" }\ntype Eq A => Box A -> Text\nfunc showBox = box => render box\n",
+            true,
+        ),
+        (
+            "equality",
+            "type Blob = Blob Int\ninstance Eq Bytes => Eq Blob = {\n    (==) = left right => True\n    (!=) = left right => False\n}\nvalue same : Bool = Blob 1 == Blob 2\n",
+            false,
+        ),
+    ] {
+        let report = typecheck_text(name, source);
+        assert_eq!(
+            report.is_ok(),
+            accepted,
+            "{name}: {:?}",
+            report.diagnostics()
+        );
+        if !accepted {
+            assert!(
+                report
+                    .diagnostics()
+                    .iter()
+                    .any(|d| d.code == Some(code("missing-class-instance"))
+                        || d.code == Some(crate::codes::MISSING_EQ_INSTANCE)),
+                "{name}: {:?}",
+                report.diagnostics()
+            );
+        }
+    }
+}
+
+#[test]
+fn conditional_equality_uses_its_captured_class_constraint_scope() {
+    for (constraint, instance_constraint, accepted) in [
+        ("Eq A =>", "Eq A", true),
+        ("Ord A =>", "Eq A", true),
+        ("Render A =>", "Render A", true),
+        ("", "Render A", false),
+    ] {
+        let source = format!(
+            "class Render A = {{ render : A -> Text }}\ntype Box A = Box A\ninstance {instance_constraint} => Eq (Box A) = {{\n    (==) = left right => True\n    (!=) = left right => False\n}}\ntype {constraint} Box A -> Box A -> Bool\nfunc same = left right => left == right\n"
+        );
+        let report = typecheck_text("scoped-conditional-equality.aivi", &source);
+        assert_eq!(report.is_ok(), accepted, "{:?}", report.diagnostics());
+    }
+
+    let report = typecheck_text(
+        "conditional-equality-scope-leak.aivi",
+        r#"
+class Render A = { render : A -> Text }
+type Box A = Box A
+instance Render A => Eq (Box A) = {
+    (==) = left right => True
+    (!=) = left right => False
+}
+type Render A => Box A -> Box A -> Bool
+func scoped = left right => left == right
+type Box A -> Box A -> Bool
+func unscoped = left right => left == right
+"#,
+    );
+    assert!(!report.is_ok());
+    assert_eq!(
+        report
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code == Some(crate::codes::MISSING_EQ_INSTANCE))
+            .count(),
+        1,
+        "{:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
+fn conditional_instances_reject_cycles_and_bound_growing_proofs() {
+    for (source, reason) in [
+        (
+            "class Render A = { render : A -> Text }\ntype Box A = Box A\ninstance Render (Box A) => Render (Box A) = { render = box => \"rendered\" }\nvalue renderFn : Box Int -> Text = render\n",
+            "cyclic instance prerequisites",
+        ),
+        (
+            "class Render A = { render : A -> Text }\ntype Box A = Box A\ninstance Render (Box (Box A)) => Render (Box A) = { render = box => \"rendered\" }\nvalue renderFn : Box Int -> Text = render\n",
+            "compiler complexity limit",
+        ),
+    ] {
+        let report = typecheck_text("cyclic-instance.aivi", source);
+        assert!(!report.is_ok(), "an ungrounded proof must fail");
+        assert!(
+            format!("{:?}", report.diagnostics()).contains(reason),
+            "{:?}",
+            report.diagnostics()
+        );
+    }
+}
+
+#[test]
+fn conditional_instances_can_move_arguments_without_a_decreasing_head_rule() {
+    let report = typecheck_text(
+        "finite-instance-proof.aivi",
+        r#"
+class Render A = { render : A -> Text }
+type Pair A B = Pair A B
+instance Render (Pair A (List B)) => Render (Pair (List A) B) = { render = pair => "list" }
+instance Render (Pair Int B) = { render = pair => "int" }
+value renderFn : Pair (List (List Int)) Text -> Text = render
+"#,
+    );
+    assert!(
+        report.is_ok(),
+        "a finite proof that moves list layers must succeed: {:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
+fn imported_conditional_instances_keep_shared_head_quantifiers() {
+    struct Resolver(crate::ExportedNames);
+    impl crate::ImportResolver for Resolver {
+        fn resolve(&self, path: &[&str]) -> crate::ImportModuleResolution {
+            if path == ["shared", "carrier"] {
+                crate::ImportModuleResolution::Resolved(self.0.clone())
+            } else {
+                crate::ImportModuleResolution::Missing
+            }
+        }
+    }
+    let owner = lowered_module_text(
+        "carrier.aivi",
+        r#"
+type Carrier E A = Carrier E A
+instance Eq E => Functor (Carrier E) = {
+    map = f carrier => carrier ||> Carrier e a -> Carrier e (f a)
+}
+instance Eq A => Semigroup (Carrier Text A) = { append = left right => left }
+value sample : Carrier Text Int = Carrier "context" 1
+export (Carrier, sample)
+"#,
+    );
+    assert!(typecheck_module(&owner).is_ok());
+    let exported = crate::exports(&owner);
+    assert_eq!(exported.instances.len(), 2);
+    let functor = &exported.instances[0];
+    assert!(matches!(
+        &functor.context[0].subject,
+        crate::ImportedTypeBinding::Type(crate::ImportValueType::TypeVariable { index: 0, .. })
+    ));
+    assert!(
+        matches!(&functor.head, crate::ImportedTypeBinding::Constructor { arguments, .. }
+        if matches!(&arguments[0], crate::ImportValueType::TypeVariable { index: 0, .. }))
+    );
+    for (ty, accepted) in [
+        (
+            "(Int -> Bool) -> Carrier Text Int -> Carrier Text Bool",
+            true,
+        ),
+        (
+            "(Int -> Bool) -> Carrier Bytes Int -> Carrier Bytes Bool",
+            false,
+        ),
+        (
+            "Carrier Text Int -> Carrier Text Int -> Carrier Text Int",
+            true,
+        ),
+        (
+            "Carrier Text Bytes -> Carrier Text Bytes -> Carrier Text Bytes",
+            false,
+        ),
+    ] {
+        let member = if ty.starts_with('(') { "map" } else { "append" };
+        let mut sources = SourceDatabase::new();
+        let file = sources.add_file("consumer.aivi", format!("use shared.carrier (Carrier as Bag)\nuse shared.carrier (Carrier)\nvalue selected : {ty} = {member}\n"));
+        let parsed = parse_module(&sources[file]);
+        assert!(!parsed.has_errors());
+        let lowered =
+            crate::lower_module_with_resolver(&parsed.module, Some(&Resolver(exported.clone())));
+        assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+        let report = typecheck_module(lowered.module());
+        assert_eq!(report.is_ok(), accepted, "{ty}: {:?}", report.diagnostics());
+        if !accepted {
+            assert!(format!("{:?}", report.diagnostics()).contains("Eq"));
+        }
+    }
+    let mut private_export = exported.clone();
+    private_export.names.retain(|name| name.name == "sample");
+    let mut sources = SourceDatabase::new();
+    let file = sources.add_file("private-consumer.aivi", "use shared.carrier (sample)\ntype Int -> Int\nfunc increment = item => item + 1\nvalue mapped = map increment sample\n");
+    let parsed = parse_module(&sources[file]);
+    assert!(!parsed.has_errors());
+    let lowered =
+        crate::lower_module_with_resolver(&parsed.module, Some(&Resolver(private_export)));
+    assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+    let report = typecheck_module(lowered.module());
+    assert!(
+        report.is_ok(),
+        "carrier identity must survive without a named type import: {:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
+fn portable_instance_heads_bind_constructor_parameters_in_fixed_arguments() {
+    use crate::{
+        ImportValueType, ImportedTypeBinding, ImportedTypeConstructor, TypeConstructorBinding,
+        TypeConstructorHead,
+    };
+    let module = Module::default();
+    let mut typing = GateTypeContext::new(&module);
+    let application = ImportValueType::TypeApplication {
+        index: 0,
+        name: "F".into(),
+        arguments: vec![ImportValueType::TypeVariable {
+            index: 1,
+            name: "A".into(),
+        }],
+    };
+    let actual = GateType::Option(Box::new(GateType::Primitive(BuiltinType::Int)));
+    for (template, actual) in [
+        (
+            ImportedTypeBinding::Type(application.clone()),
+            TypeBinding::Type(actual.clone()),
+        ),
+        (
+            ImportedTypeBinding::Constructor {
+                head: ImportedTypeConstructor::Builtin(BuiltinType::Result),
+                arguments: vec![application],
+            },
+            TypeBinding::Constructor(TypeConstructorBinding::new(
+                TypeConstructorHead::Builtin(BuiltinType::Result),
+                vec![actual],
+            )),
+        ),
+    ] {
+        let mut bindings = PolyTypeBindings::new();
+        assert!(typing.match_import_type_binding(&template, &actual, &mut bindings));
+        let prerequisite = ImportedTypeBinding::Constructor {
+            head: ImportedTypeConstructor::Parameter {
+                index: 0,
+                name: "F".into(),
+                arity: 1,
+            },
+            arguments: Vec::new(),
+        };
+        assert_eq!(
+            typing.instantiate_import_type_binding(&prerequisite, &bindings),
+            Some(TypeBinding::Constructor(TypeConstructorBinding::new(
+                TypeConstructorHead::Builtin(BuiltinType::Option),
+                Vec::new()
+            )))
+        );
+        assert_eq!(
+            typing.instantiate_import_type_binding(&template, &bindings),
+            Some(actual)
+        );
+    }
+}
+
+#[test]
+fn imported_constructor_identity_preserves_transparent_alias_parameter_order() {
+    struct Resolver(crate::ExportedNames);
+    impl crate::ImportResolver for Resolver {
+        fn resolve(&self, _: &[&str]) -> crate::ImportModuleResolution {
+            crate::ImportModuleResolution::Resolved(self.0.clone())
+        }
+    }
+    for (definition, accepted) in [
+        ("type Pair A B = { left : A, right : B }\n", true),
+        ("type Pair A B = { left : B, right : A }\n", false),
+    ] {
+        let owner = lowered_module_text("owner.aivi", definition);
+        let mut sources = SourceDatabase::new();
+        let file = sources.add_file(
+            "consumer.aivi",
+            "use owner (Pair as ImportedPair)\ntype Pair A B = { left : A, right : B }\n",
+        );
+        let parsed = parse_module(&sources[file]);
+        let lowered = crate::lower_module_with_resolver(
+            &parsed.module,
+            Some(&Resolver(crate::exports(&owner))),
+        );
+        assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+        let module = lowered.module();
+        let (id, _) = module
+            .items()
+            .iter()
+            .find(|(_, item)| matches!(item, Item::Type(ty) if ty.name.text() == "Pair"))
+            .expect("local alias");
+        let typing = GateTypeContext::new(module);
+        let template = crate::ImportedTypeBinding::Constructor {
+            head: crate::ImportedTypeConstructor::Named {
+                name: "Pair".into(),
+                arity: 2,
+                definition: None,
+            },
+            arguments: Vec::new(),
+        };
+        let actual = TypeBinding::Constructor(crate::TypeConstructorBinding::new(
+            crate::TypeConstructorHead::Item(id),
+            Vec::new(),
+        ));
+        assert_eq!(
+            typing.match_import_type_binding(&template, &actual, &mut PolyTypeBindings::new()),
+            accepted
+        );
+    }
+}
+
+#[test]
 fn typecheck_rejects_wrong_polymorphic_instance_result() {
     let report = typecheck_text(
         "wrong-functor-result.aivi",

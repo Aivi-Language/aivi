@@ -76,6 +76,8 @@ fn domain_suffix_base(module: &Module, annotation: TypeId) -> Option<LiteralSuff
 pub struct ExportedInstanceDeclaration {
     pub class_name: Box<str>,
     pub subject: Box<str>,
+    pub head: crate::ImportedTypeBinding,
+    pub context: Vec<crate::ImportedClassConstraint>,
     pub members: Vec<ExportedInstanceMember>,
 }
 
@@ -708,6 +710,7 @@ pub(crate) fn poly_gate_type_import_value_type(
 /// Collect all instance declarations from a module for cross-module instance resolution.
 fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclaration> {
     let mut declarations = Vec::new();
+    let mut typing = crate::validate::GateTypeContext::new(module);
     for &item_id in module.root_items() {
         let Some(Item::Instance(instance)) = module.items().get(item_id) else {
             continue;
@@ -725,6 +728,52 @@ fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclara
             continue;
         };
         let Some(subject) = type_label_for_export(module, subject_type_id) else {
+            continue;
+        };
+        let parameters = instance
+            .type_parameters
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(index, parameter)| (parameter, index))
+            .collect::<TypeParamMap>();
+        let Some(mut head_binding) =
+            typing.open_poly_type_binding(subject_type_id, &HashMap::new())
+        else {
+            continue;
+        };
+        if let crate::TypeBinding::Type(witness @ crate::GateType::TypeParameter { .. }) =
+            &head_binding
+        {
+            let Some(binding) = typing.class_member_subject_binding(
+                crate::ClassMemberResolution {
+                    class: *class_item_id,
+                    member_index: 0,
+                },
+                witness,
+            ) else {
+                continue;
+            };
+            head_binding = binding;
+        }
+        let Some(head) = export_type_binding(module, &head_binding, &parameters) else {
+            continue;
+        };
+        let context = instance
+            .context
+            .iter()
+            .map(|constraint| {
+                let binding = typing.open_class_constraint_binding(*constraint, &HashMap::new())?;
+                let Item::Class(class) = &module.items()[binding.class_item] else {
+                    return None;
+                };
+                Some(crate::ImportedClassConstraint {
+                    class_name: class.name.text().into(),
+                    subject: export_type_binding(module, &binding.subject, &parameters)?,
+                })
+            })
+            .collect::<Option<Vec<_>>>();
+        let Some(context) = context else {
             continue;
         };
         let members = instance
@@ -745,6 +794,7 @@ fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclara
                                     class_member.annotation,
                                     &class_item.parameters,
                                     &instance.arguments,
+                                    &parameters,
                                 )
                             })
                     })
@@ -758,10 +808,89 @@ fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclara
         declarations.push(ExportedInstanceDeclaration {
             class_name,
             subject,
+            head,
+            context,
             members,
         });
     }
     declarations
+}
+
+fn export_type_binding(
+    module: &Module,
+    binding: &crate::TypeBinding,
+    parameters: &TypeParamMap,
+) -> Option<crate::ImportedTypeBinding> {
+    use crate::{ImportedTypeBinding, ImportedTypeConstructor, TypeBinding, TypeConstructorHead};
+    Some(match binding {
+        TypeBinding::Type(ty) => ImportedTypeBinding::Type(match ty {
+            crate::GateType::OpaqueItem {
+                item, arguments, ..
+            }
+            | crate::GateType::Domain {
+                item, arguments, ..
+            } => {
+                let arguments = arguments
+                    .iter()
+                    .map(|ty| poly_gate_type_import_value_type(ty, parameters))
+                    .collect::<Option<Vec<_>>>()?;
+                named_import_value_type_from_item(module, *item, arguments, &mut Vec::new())?
+            }
+            other => poly_gate_type_import_value_type(other, parameters)?,
+        }),
+        TypeBinding::Constructor(binding) => ImportedTypeBinding::Constructor {
+            head: match binding.head() {
+                TypeConstructorHead::Builtin(builtin) => ImportedTypeConstructor::Builtin(builtin),
+                TypeConstructorHead::Item(id) => {
+                    let (name, arity) = match &module.items()[id] {
+                        Item::Type(ty) => (ty.name.text(), ty.parameters.len()),
+                        Item::Domain(domain) => (domain.name.text(), domain.parameters.len()),
+                        _ => return None,
+                    };
+                    let ImportValueType::Named { definition, .. } =
+                        named_import_value_type_from_item(module, id, Vec::new(), &mut Vec::new())?
+                    else {
+                        return None;
+                    };
+                    ImportedTypeConstructor::Named {
+                        name: name.into(),
+                        arity,
+                        definition,
+                    }
+                }
+                TypeConstructorHead::Import(id) => {
+                    let import = &module.imports()[id];
+                    let arity = match &import.metadata {
+                        ImportBindingMetadata::TypeConstructor { kind, .. }
+                        | ImportBindingMetadata::Domain { kind, .. } => kind.arity(),
+                        _ => return None,
+                    };
+                    let ImportValueType::Named { definition, .. } =
+                        named_import_value_type_from_import(module, id, Vec::new())?
+                    else {
+                        return None;
+                    };
+                    ImportedTypeConstructor::Named {
+                        name: import.imported_name.text().into(),
+                        arity,
+                        definition,
+                    }
+                }
+                TypeConstructorHead::Parameter { parameter, arity } => {
+                    ImportedTypeConstructor::Parameter {
+                        index: *parameters.get(&parameter)?,
+                        name: module.type_parameters()[parameter].name.text().into(),
+                        arity,
+                    }
+                }
+            },
+            arguments: binding
+                .arguments()
+                .iter()
+                .map(|ty| poly_gate_type_import_value_type(ty, parameters))
+                .collect::<Option<Vec<_>>>()?,
+        },
+    })
 }
 
 /// Build a portable type for an instance member from its parameters and annotation,
@@ -807,13 +936,14 @@ fn exported_instance_class_member_type(
     member_annotation: TypeId,
     class_parameters: &crate::NonEmpty<TypeParameterId>,
     instance_arguments: &crate::NonEmpty<TypeId>,
+    instance_parameters: &TypeParamMap,
 ) -> Option<ImportValueType> {
     let class_substitutions = class_parameters
         .iter()
         .copied()
         .zip(instance_arguments.iter().copied())
         .collect::<TypeParamSubstitutions>();
-    let mut free_params = TypeParamMap::new();
+    let mut free_params = instance_parameters.clone();
     let mut item_stack = Vec::new();
     exported_instance_member_import_value_type_with_stack(
         module,

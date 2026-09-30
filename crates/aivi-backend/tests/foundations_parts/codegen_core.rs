@@ -981,3 +981,23 @@ value folded : Int = reduce accumulate 0 items
         RuntimeValue::Int(123)
     );
 }
+
+#[test]
+fn runtime_folds_imported_non_empty_values_without_importing_the_domain() {
+    let backend = lower_workspace_text(
+        "stdlib-non-empty-inferred-instance.aivi",
+        r#"
+use aivi.nonEmpty (fromHeadTail)
+type Int -> Int -> Int
+func accumulate = total n => total * 10 + n
+value folded : Int = reduce accumulate 0 (append (fromHeadTail 1 [2, 3]) (fromHeadTail 4 [5]))
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "folded"), &BTreeMap::new())
+            .unwrap(),
+        RuntimeValue::Int(12345)
+    );
+}

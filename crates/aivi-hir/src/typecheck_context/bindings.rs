@@ -116,6 +116,9 @@ pub struct TypeConstructorBinding {
 }
 
 impl TypeConstructorBinding {
+    pub(crate) fn new(head: TypeConstructorHead, arguments: Vec<GateType>) -> Self {
+        Self { head, arguments }
+    }
     pub fn head(&self) -> TypeConstructorHead {
         self.head
     }

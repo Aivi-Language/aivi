@@ -10,6 +10,9 @@ struct TypeChecker<'a> {
     /// any in-scope class evidence through `with` / `require`.
     eq_constrained_parameters: HashSet<TypeParameterId>,
     in_scope_class_constraints: Vec<ClassConstraintBinding>,
+    active_instance_constraints: Vec<ClassConstraintBinding>,
+    instance_resolution_calls: usize,
+    instance_resolution_steps: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -76,6 +79,9 @@ impl<'a> TypeChecker<'a> {
             pending_eq_constraints: Vec::new(),
             eq_constrained_parameters: HashSet::new(),
             in_scope_class_constraints: Vec::new(),
+            active_instance_constraints: Vec::new(),
+            instance_resolution_calls: 0,
+            instance_resolution_steps: 0,
         }
     }
 
@@ -92,6 +98,9 @@ impl<'a> TypeChecker<'a> {
             pending_eq_constraints: Vec::new(),
             eq_constrained_parameters: HashSet::new(),
             in_scope_class_constraints: Vec::new(),
+            active_instance_constraints: Vec::new(),
+            instance_resolution_calls: 0,
+            instance_resolution_steps: 0,
         }
     }
 
@@ -3386,6 +3395,7 @@ impl<'a> TypeChecker<'a> {
     fn current_eq_constraint_scope(&self) -> EqConstraintScope {
         EqConstraintScope {
             constrained_parameters: self.eq_constrained_parameters.clone(),
+            class_constraints: self.in_scope_class_constraints.clone(),
         }
     }
 
@@ -3614,19 +3624,28 @@ impl<'a> TypeChecker<'a> {
         scope: &EqConstraintScope,
         item_stack: &mut Vec<ItemId>,
     ) -> Result<(), String> {
-        if self
-            .require_compiler_derived_eq_with_scope(ty, scope, item_stack)
-            .is_ok()
-        {
-            return Ok(());
-        }
         if let Some(class_item_id) = self.class_item_id_by_name("Eq")
-            && self
-                .resolve_same_module_instance(class_item_id, ty)?
+            && (self
+                .resolve_same_module_instance_binding_with_id(
+                    class_item_id,
+                    &TypeBinding::Type(ty.clone()),
+                )?
                 .is_some()
-            {
-                return Ok(());
-            }
+                || self
+                    .resolve_imported_instance_binding(
+                        class_item_id,
+                        &TypeBinding::Type(ty.clone()),
+                    )?
+                    .is_some())
+        {
+            let binding = ClassConstraintBinding {
+                class_item: class_item_id,
+                subject: TypeBinding::Type(ty.clone()),
+            };
+            return self.with_class_constraint_scope(scope.class_constraints.clone(), |this| {
+                this.require_class_binding(&binding)
+            });
+        }
         self.require_compiler_derived_eq_with_scope(ty, scope, item_stack)
     }
 
@@ -3862,7 +3881,7 @@ impl<'a> TypeChecker<'a> {
         subject: &TypeBinding,
     ) -> Option<ClassMemberImplementation> {
         let class_name = self.class_name(resolution.class)?.to_owned();
-        if let Some((instance_id, instance)) = self
+        if let Some((instance_id, _)) = self
             .resolve_same_module_instance_binding_with_id(resolution.class, subject)
             .ok()?
         {
@@ -3870,6 +3889,9 @@ impl<'a> TypeChecker<'a> {
                 return None;
             };
             let member_name = class_item.members.get(resolution.member_index)?.name.text();
+            let Item::Instance(instance) = &self.module.items()[instance_id] else {
+                return None;
+            };
             let member_index = instance
                 .members
                 .iter()
@@ -3883,9 +3905,7 @@ impl<'a> TypeChecker<'a> {
             return Some(ClassMemberImplementation::Builtin);
         }
         // Check imported instances from other modules.
-        if let Some(import) =
-            self.resolve_imported_instance_member(&class_name, resolution, subject)
-        {
+        if let Some(import) = self.resolve_imported_instance_member(resolution, subject) {
             return Some(ClassMemberImplementation::ImportedInstance { import });
         }
         if matches!(class_name.as_str(), "Eq" | "Setoid")
@@ -3896,105 +3916,118 @@ impl<'a> TypeChecker<'a> {
         None
     }
 
-    /// Match the instantiated class signature against portable instance evidence.
-    /// Head labels identify the carrier; the type comparison retains fixed and
-    /// polymorphic arguments instead of conflating every instance of that head.
+    /// Match the portable typed head and check its class member signature.
+    /// One shared substitution environment retains fixed and polymorphic arguments.
     fn imported_instance_member_matches(
         &self,
         metadata: &ImportBindingMetadata,
         resolution: ClassMemberResolution,
         subject: &TypeBinding,
-    ) -> bool {
+    ) -> Option<PolyTypeBindings> {
         let Item::Class(class) = &self.module.items()[resolution.class] else {
-            return false;
+            return None;
         };
-        let Some(member) = class.members.get(resolution.member_index) else {
-            return false;
-        };
+        let member = class.members.get(resolution.member_index)?;
         let ImportBindingMetadata::InstanceMember {
             class_name,
             member_name,
-            subject: imported_subject,
+            head,
             ty,
+            ..
         } = metadata
         else {
-            return false;
+            return None;
         };
         if class_name.as_ref() != class.name.text() || member_name.as_ref() != member.name.text() {
-            return false;
+            return None;
         }
-        let head = match subject {
-            TypeBinding::Type(
-                GateType::Domain { name, .. } | GateType::OpaqueItem { name, .. },
-            ) => name.clone(),
-            TypeBinding::Type(GateType::OpaqueImport { import, name, .. }) => self
-                .module
-                .imports()
-                .get(*import)
-                .map(|binding| binding.imported_name.text().to_owned())
-                .unwrap_or_else(|| name.clone()),
-            TypeBinding::Constructor(binding) => match binding.head() {
-                crate::validate::TypeConstructorHead::Import(import) => {
-                    let Some(binding) = self.module.imports().get(import) else {
-                        return false;
-                    };
-                    binding.imported_name.text().to_owned()
-                }
-                _ => self.type_binding_label(subject),
-            },
-            _ => self.type_binding_label(subject),
-        };
-        if imported_subject.as_ref() != head {
-            return false;
+        let mut bindings = PolyTypeBindings::new();
+        if !self
+            .typing
+            .match_import_type_binding(head, subject, &mut bindings)
+        {
+            return None;
         }
         let mut typing = GateTypeContext::new(self.module);
-        let bindings = HashMap::from([(*class.parameters.first(), subject.clone())]);
-        let Some(expected) =
-            typing.instantiate_poly_hir_type_partially(member.annotation, &bindings)
-        else {
-            return false;
-        };
-        let template = typing.lower_import_value_type(ty);
-        expected.fits_template(&template)
+        let class_bindings = HashMap::from([(*class.parameters.first(), subject.clone())]);
+        let expected =
+            typing.instantiate_poly_hir_type_partially(member.annotation, &class_bindings)?;
+        expected
+            .fits_template(&typing.lower_import_value_type(ty))
+            .then_some(bindings)
     }
 
     fn resolve_imported_instance_member(
         &self,
-        _class_name: &str,
         resolution: ClassMemberResolution,
         subject: &TypeBinding,
     ) -> Option<ImportId> {
-        let mut selected: Option<(ImportId, &crate::ImportBinding)> = None;
-        for (id, import) in self.module.imports().iter() {
-            if !self.imported_instance_member_matches(&import.metadata, resolution, subject) {
-                continue;
-            }
-            if let Some((_, previous)) = selected {
-                if previous.source_module != import.source_module
-                    || previous.imported_name.text() != import.imported_name.text()
-                {
-                    return None;
-                }
-            } else {
-                selected = Some((id, import));
-            }
-        }
-        selected.map(|(id, _)| id)
+        let (representative, _) = self
+            .resolve_imported_instance_binding(resolution.class, subject)
+            .ok()??;
+        let previous = &self.module.imports()[representative];
+        let ImportBindingMetadata::InstanceMember {
+            head: previous_head,
+            context: previous_context,
+            ..
+        } = &previous.metadata
+        else {
+            return None;
+        };
+        self.module.imports().iter().find(|(_, import)| {
+            import.source_module == previous.source_module
+                && matches!(&import.metadata, ImportBindingMetadata::InstanceMember { head, context, .. } if head == previous_head && context == previous_context)
+                && self.imported_instance_member_matches(&import.metadata, resolution, subject).is_some()
+        }).map(|(id, _)| id)
     }
 
-    fn has_imported_instance_binding(&self, class_item_id: ItemId, subject: &TypeBinding) -> bool {
+    fn resolve_imported_instance_binding(
+        &self,
+        class_item_id: ItemId,
+        subject: &TypeBinding,
+    ) -> Result<Option<(ImportId, PolyTypeBindings)>, String> {
         let Item::Class(class) = &self.module.items()[class_item_id] else {
-            return false;
+            return Ok(None);
         };
-        class.members.iter().enumerate().all(|(member_index, _)| {
-            let resolution = ClassMemberResolution {
-                class: class_item_id,
-                member_index,
-            };
-            self.module.imports().iter().any(|(_, import)| {
+        let resolution = ClassMemberResolution {
+            class: class_item_id,
+            member_index: 0,
+        };
+        let mut selected: Option<(ImportId, PolyTypeBindings)> = None;
+        for (id, import) in self.module.imports().iter() {
+            let Some(bindings) =
                 self.imported_instance_member_matches(&import.metadata, resolution, subject)
-            })
-        })
+            else {
+                continue;
+            };
+            let ImportBindingMetadata::InstanceMember { head, context, .. } = &import.metadata
+            else {
+                unreachable!();
+            };
+            // All members must belong to the same declaration. Do not assemble
+            // an instance from unrelated imported implementations.
+            if !class.members.iter().all(|member| self.module.imports().iter().any(|(_, candidate)| {
+                candidate.source_module == import.source_module
+                    && matches!(&candidate.metadata, ImportBindingMetadata::InstanceMember { class_name, member_name, head: candidate_head, context: candidate_context, .. }
+                        if class_name.as_ref() == class.name.text() && member_name.as_ref() == member.name.text()
+                            && candidate_head == head && candidate_context == context)
+            })) { continue; }
+            if let Some((previous, _)) = &selected {
+                let previous = &self.module.imports()[*previous];
+                if previous.source_module == import.source_module
+                    && previous.metadata == import.metadata
+                {
+                    continue;
+                }
+                return Err(format!(
+                    "multiple imported `{}` instances match `{}`; overlapping instances are not allowed",
+                    class.name.text(),
+                    self.type_binding_label(subject)
+                ));
+            }
+            selected = Some((id, bindings));
+        }
+        Ok(selected)
     }
 
     fn solve_class_constraint_bindings(
@@ -4016,72 +4049,125 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn require_class_binding(&mut self, binding: &ClassConstraintBinding) -> Result<(), String> {
-        if self.in_scope_class_constraints.contains(binding) {
-            return Ok(());
+        enum ProofStep {
+            Require(ClassConstraintBinding),
+            Complete(ClassConstraintBinding),
         }
-        let Some(class_name) = self.class_name(binding.class_item).map(str::to_owned) else {
-            return Err("constraint does not reference a class item".to_owned());
-        };
-        if matches!(class_name.as_str(), "Eq" | "Setoid")
-            && matches!(&binding.subject, TypeBinding::Type(_))
-        {
-            let TypeBinding::Type(ty) = &binding.subject else {
-                unreachable!();
-            };
-            if self
-                .require_compiler_derived_eq(ty, &mut Vec::new())
-                .is_ok()
-            {
-                return Ok(());
+        // These are compiler resource limits, not a decreasing-instance-head rule.
+        // Finite proofs may move or grow arguments; exact cycles cannot prove evidence.
+        const MAX_INSTANCE_DEPTH: usize = 256;
+        const MAX_PROOF_STEPS: usize = 4096;
+        let previous_depth = self.active_instance_constraints.len();
+        if self.instance_resolution_calls == 0 {
+            self.instance_resolution_steps = 0;
+        }
+        self.instance_resolution_calls += 1;
+        let result = (|| {
+            let mut pending = vec![ProofStep::Require(binding.clone())];
+            let mut proven = Vec::new();
+            while let Some(step) = pending.pop() {
+                let goal = match step {
+                    ProofStep::Complete(goal) => {
+                        let popped = self.active_instance_constraints.pop();
+                        debug_assert_eq!(popped.as_ref(), Some(&goal));
+                        proven.push(goal);
+                        continue;
+                    }
+                    ProofStep::Require(goal) => goal,
+                };
+                if self.in_scope_class_constraints.contains(&goal) || proven.contains(&goal) {
+                    continue;
+                }
+                self.instance_resolution_steps += 1;
+                if self.instance_resolution_steps > MAX_PROOF_STEPS
+                    || self.active_instance_constraints.len() >= MAX_INSTANCE_DEPTH
+                {
+                    return Err(format!(
+                        "instance resolution exceeded its compiler complexity limit ({MAX_INSTANCE_DEPTH} active prerequisites or {MAX_PROOF_STEPS} proof steps) while proving `{}`",
+                        self.class_constraint_binding_label(&goal)
+                    ));
+                }
+                if self.active_instance_constraints.contains(&goal) {
+                    return Err(format!(
+                        "cyclic instance prerequisites cannot prove `{}`",
+                        self.class_constraint_binding_label(&goal)
+                    ));
+                }
+                let class_name = self
+                    .class_name(goal.class_item)
+                    .ok_or_else(|| "constraint does not reference a class item".to_owned())?
+                    .to_owned();
+                let prerequisites = if let Some((id, bindings)) = self
+                    .resolve_same_module_instance_binding_with_id(goal.class_item, &goal.subject)?
+                {
+                    let Item::Instance(instance) = &self.module.items()[id] else {
+                        unreachable!();
+                    };
+                    instance.context.iter().map(|constraint| {
+                        self.typing.class_constraint_binding(*constraint, &bindings).ok_or_else(|| format!("cannot infer a prerequisite of `{}` from its instance head", self.class_constraint_binding_label(&goal)))
+                    }).collect::<Result<Vec<_>, _>>()?
+                } else if let Some((import, bindings)) =
+                    self.resolve_imported_instance_binding(goal.class_item, &goal.subject)?
+                {
+                    let ImportBindingMetadata::InstanceMember { context, .. } =
+                        &self.module.imports()[import].metadata
+                    else {
+                        unreachable!();
+                    };
+                    context.iter().map(|constraint| {
+                        let class_item = self.class_item_id_by_name(&constraint.class_name).ok_or_else(|| format!("imported prerequisite class `{}` is unavailable", constraint.class_name))?;
+                        let subject = self.typing.instantiate_import_type_binding(&constraint.subject, &bindings).ok_or_else(|| format!("cannot infer imported prerequisite `{}` from the instance head", constraint.class_name))?;
+                        Ok(ClassConstraintBinding { class_item, subject })
+                    }).collect::<Result<Vec<_>, String>>()?
+                } else if self.has_builtin_class_instance_binding(&class_name, &goal.subject)
+                    || (matches!(class_name.as_str(), "Eq" | "Setoid")
+                        && matches!(&goal.subject, TypeBinding::Type(ty) if self.require_compiler_derived_eq(ty, &mut Vec::new()).is_ok()))
+                {
+                    proven.push(goal);
+                    continue;
+                } else {
+                    return Err(format!(
+                        "no compiler-provided, imported, or same-module `{class_name}` instance matches `{}`",
+                        self.type_binding_label(&goal.subject)
+                    ));
+                };
+                self.active_instance_constraints.push(goal.clone());
+                pending.push(ProofStep::Complete(goal));
+                pending.extend(prerequisites.into_iter().rev().map(ProofStep::Require));
             }
-        }
-        if self.has_builtin_class_instance_binding(class_name.as_str(), &binding.subject) {
-            return Ok(());
-        }
-        if self
-            .resolve_same_module_instance_binding(binding.class_item, &binding.subject)?
-            .is_some()
-        {
-            return Ok(());
-        }
-        if self.has_imported_instance_binding(binding.class_item, &binding.subject) {
-            return Ok(());
-        }
-        Err(format!(
-            "no compiler-provided, imported, or same-module `{class_name}` instance matches `{}`",
-            self.type_binding_label(&binding.subject)
-        ))
+            Ok(())
+        })();
+        self.active_instance_constraints.truncate(previous_depth);
+        self.instance_resolution_calls -= 1;
+        result.map_err(|reason| {
+            format!(
+                "{reason} (required by `{}`)",
+                self.class_constraint_binding_label(binding)
+            )
+        })
     }
 
-    #[allow(dead_code)]
+
     fn require_class_named(&mut self, class_name: &str, ty: &GateType) -> Result<(), String> {
-        if self.has_builtin_class_instance(class_name, ty) {
-            return Ok(());
-        }
-        let Some(class_item_id) = self.class_item_id_by_name(class_name) else {
-            return Err(format!(
-                "no compiler-provided, imported, or same-module `{class_name}` instance matches `{ty}`"
-            ));
-        };
-        if self
-            .require_class_binding(&ClassConstraintBinding {
-                class_item: class_item_id,
-                subject: TypeBinding::Type(ty.clone()),
-            })
-            .is_ok()
-        {
-            return Ok(());
-        }
-        self.resolve_same_module_instance(class_item_id, ty)?
-            .map(|_| ())
-            .ok_or_else(|| {
-                format!(
-                    "no imported or same-module `{class_name}` instance matches `{ty}` after resolved-HIR unification"
-                )
-            })
+        let class_item = self
+            .class_item_id_by_name(class_name)
+            .ok_or_else(|| format!("class `{class_name}` is unavailable"))?;
+        let subject = self
+            .typing
+            .class_member_subject_binding(
+                ClassMemberResolution {
+                    class: class_item,
+                    member_index: 0,
+                },
+                ty,
+            )
+            .ok_or_else(|| format!("cannot infer the `{class_name}` subject from `{ty}`"))?;
+        self.require_class_binding(&ClassConstraintBinding {
+            class_item,
+            subject,
+        })
     }
 
-    #[allow(dead_code)]
     fn has_builtin_class_instance(&self, class_name: &str, ty: &GateType) -> bool {
         match class_name {
             "Functor" | "Applicative" => matches!(
@@ -4196,91 +4282,56 @@ impl<'a> TypeChecker<'a> {
         class_item_id: ItemId,
         ty: &GateType,
     ) -> Result<Option<InstanceItem>, String> {
-        let instances = self
-            .module
-            .items()
-            .iter()
-            .filter_map(|(_, item)| match item {
-                Item::Instance(instance) => Some(instance.clone()),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        let mut matches = Vec::new();
-        for instance in instances {
-            if self.instance_class_item_id(&instance) != Some(class_item_id)
-                || instance.arguments.len() != 1
-            {
-                continue;
-            }
-            let mut bindings = PolyTypeBindings::new();
-            if self
-                .typing
-                .match_poly_hir_type(*instance.arguments.first(), ty, &mut bindings)
-            {
-                matches.push(instance);
-            }
-        }
-        match matches.len() {
-            0 => Ok(None),
-            1 => Ok(matches.into_iter().next()),
-            _ => Err(format!(
-                "multiple same-module instances match `{ty}` for `{}`; overlapping instances are not yet supported here",
-                match &self.module.items()[class_item_id] {
-                    Item::Class(class_item) => class_item.name.text(),
-                    _ => "<class>",
-                }
-            )),
-        }
+        let subject = TypeBinding::Type(ty.clone());
+        let Some((id, _)) =
+            self.resolve_same_module_instance_binding_with_id(class_item_id, &subject)?
+        else {
+            return Ok(None);
+        };
+        self.require_class_binding(&ClassConstraintBinding {
+            class_item: class_item_id,
+            subject,
+        })?;
+        let Item::Instance(instance) = &self.module.items()[id] else {
+            unreachable!();
+        };
+        Ok(Some(instance.clone()))
     }
 
-    fn resolve_same_module_instance_binding(
-        &mut self,
-        class_item_id: ItemId,
-        subject: &TypeBinding,
-    ) -> Result<Option<InstanceItem>, String> {
-        self.resolve_same_module_instance_binding_with_id(class_item_id, subject)
-            .map(|resolved| resolved.map(|(_, instance)| instance))
-    }
 
     fn resolve_same_module_instance_binding_with_id(
         &mut self,
         class_item_id: ItemId,
         subject: &TypeBinding,
-    ) -> Result<Option<(ItemId, InstanceItem)>, String> {
-        let instances = self
-            .module
-            .items()
-            .iter()
-            .filter_map(|(item_id, item)| match item {
-                Item::Instance(instance) => Some((item_id, instance.clone())),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        let mut matches = Vec::new();
-        for (instance_id, instance) in instances {
-            if self.instance_class_item_id(&instance) != Some(class_item_id)
+    ) -> Result<Option<(ItemId, PolyTypeBindings)>, String> {
+        let mut selected = None;
+        for (instance_id, item) in self.module.items().iter() {
+            let Item::Instance(instance) = item else {
+                continue;
+            };
+            if self.instance_class_item_id(instance) != Some(class_item_id)
                 || instance.arguments.len() != 1
             {
                 continue;
             }
             let mut bindings = PolyTypeBindings::new();
-            if self.typing.match_poly_type_binding(
+            if !self.typing.match_poly_type_binding(
                 *instance.arguments.first(),
                 subject,
                 &mut bindings,
             ) {
-                matches.push((instance_id, instance));
+                continue;
             }
+            if selected.is_some() {
+                return Err(format!(
+                    "multiple same-module instances match `{}` for `{}`; overlapping instances are not allowed",
+                    self.type_binding_label(subject),
+                    self.class_name(class_item_id).unwrap_or("<class>")
+                ));
+            }
+            selected = Some((instance_id, bindings));
         }
-        match matches.len() {
-            0 => Ok(None),
-            1 => Ok(matches.into_iter().next()),
-            _ => Err(format!(
-                "multiple same-module instances match `{}` for `{}`; overlapping instances are not yet supported here",
-                self.type_binding_label(subject),
-                self.class_name(class_item_id).unwrap_or("<class>")
-            )),
-        }
+        Ok(selected)
     }
 
     fn same_module_default_member_body(&mut self, ty: &GateType) -> Result<Option<ExprId>, String> {

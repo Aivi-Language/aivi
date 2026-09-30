@@ -37,4 +37,5 @@ include!("helpers.rs");
 include!("gate_type.rs");
 include!("bindings.rs");
 include!("context.rs");
+include!("imported_bindings.rs");
 include!("source_options.rs");
