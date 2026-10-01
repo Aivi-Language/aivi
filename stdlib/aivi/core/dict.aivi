@@ -1,7 +1,7 @@
 use aivi.list (
     filter
     find
-    map
+    map as listMap
     length
 )
 
@@ -81,7 +81,7 @@ func extractKey = entry =>
 
 type Dict K V -> (List K)
 func keys = d => d.entries
-  |> map extractKey
+  |> listMap extractKey
 
 type DictEntry K V -> V
 func extractValue = entry =>
@@ -89,7 +89,7 @@ func extractValue = entry =>
 
 type Dict K V -> (List V)
 func values = d => d.entries
-  |> map extractValue
+  |> listMap extractValue
 
 type DictEntry K V -> ((K, V))
 func toPair = entry =>
@@ -97,7 +97,7 @@ func toPair = entry =>
 
 type Dict K V -> (List (K, V))
 func toList = d => d.entries
-  |> map toPair
+  |> listMap toPair
 
 type Eq K => (Dict K V) -> (K, V) -> (Dict K V)
 func insertPair = acc pair => pair
@@ -116,7 +116,7 @@ func mapEntryValue = f entry =>
 
 type (V1 -> V2) -> (Dict K V1) -> (List (DictEntry K V2))
 func mappedEntries = f d => d.entries
-  |> map (mapEntryValue f)
+  |> listMap (mapEntryValue f)
 
 type (V1 -> V2) -> (Dict K V1) -> (Dict K V2)
 func mapValues = f d =>
@@ -218,6 +218,18 @@ instance Functor (Dict K) = {
 
 instance Foldable (Dict K) = {
     reduce = step seed dictionary => reduce step seed (values dictionary)
+}
+
+type Applicative G => (A -> G B) -> DictEntry K A -> G (DictEntry K B)
+func traverseEntry = transform item =>
+    map (entry item.key) (transform item.value)
+
+type List (DictEntry K V) -> Dict K V
+func fromEntries = entries =>
+    { entries }
+
+instance Traversable (Dict K) = {
+    traverse = transform dictionary => map fromEntries (traverse (traverseEntry transform) dictionary.entries)
 }
 
 type (A -> Option B) -> DictEntry K A -> Option (DictEntry K B)

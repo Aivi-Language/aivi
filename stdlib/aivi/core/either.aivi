@@ -123,6 +123,7 @@ value eitherItemsForTest : List (Either Text Int) = [
 
 // Comparisons require Eq for both payloads, including the unused branch.
 value leftEitherForTest : Either Text Int = Left "error"
+
 value rightEitherForTest : Either Text Int = Right 2
 value oneEitherForTest : Either Text Int = Right 1
 value errorResultForTest : Result Text Int = Err "error"
@@ -180,6 +181,13 @@ instance Foldable (Either E) = {
         either
         ||> Left _     -> seed
         ||> Right item -> step seed item
+}
+
+instance Traversable (Either E) = {
+    traverse = transform either =>
+        either
+        ||> Left error -> pure (Left error)
+        ||> Right item -> map Right (transform item)
 }
 
 instance Apply (Either E) = {

@@ -104,6 +104,7 @@ func errorValueForTest = text => text == "bad"
 
 // Keep both payload types known when deriving Eq for the result.
 value errorResultForTest : Result Text Int = Err "bad"
+
 value okResultForTest : Result Text Int = Ok 2
 value nestedResultForTest : Result Text (Result Text Int) = Ok (Ok 2)
 

@@ -674,6 +674,230 @@ value effects : Task Text Bool = map (n => n == 7) main
 }
 
 #[test]
+fn stdlib_traversal_preserves_imported_generic_and_cached_evidence() {
+    let dir = TempDir::new("stdlib-traversal-evidence");
+    dir.write(
+        "operations.aivi",
+        r#"
+type (Traversable F, Applicative G) => (A -> G B) -> F A -> G (F B)
+func traverseWith = transform values => traverse transform values
+type (Traversable F, Applicative G) => (A -> G B) -> F A -> G (F B)
+func forward = transform values => traverseWith transform values
+export forward
+"#,
+    );
+    let path = dir.write("main.aivi", r#"
+use operations (forward)
+use aivi.core.either (Either, Left, Right)
+use aivi.core.dict (Dict, fromList, toList as dictToList)
+use aivi.nonEmpty (NonEmptyList, fromHeadTail, toList as nelToList)
+use aivi.matrix (Matrix, MatrixError, fromRows, rows)
+type Int -> Option Int
+func increment = n => Some (n + 1)
+type Int -> Either Text Int
+func incrementRight = n => Right (n + 1)
+value right : Either Text Int = Right 2
+type Int -> Option Text
+func label = n => Some "item{n}"
+value left : Either Text Int = Left "unchanged"
+value dictionary : Dict Text Int = fromList [("b", 2), ("a", 1)]
+value items : NonEmptyList Int = fromHeadTail 1 [2, 3]
+value firstClass : (Int -> Option Int) -> Dict Text Int -> Option (Dict Text Int) = traverse
+value expectedDictionary : Either Text (List (Text, Int)) = Right [("a", 2), ("b", 3)]
+value traversedDictionary : Either Text (Dict Text Int) = forward incrementRight dictionary
+type Matrix Int -> Bool
+func checkMatrix = matrix => map rows (forward increment matrix) == Some [[2, 3], [4, 5]]
+type Matrix Int -> Bool
+func checkMatrixLabels = matrix => map rows (forward label matrix) == Some [["item1", "item2"], ["item3", "item4"]]
+value matrixChecked : Bool = fromRows [[1, 2], [3, 4]]
+ ||> Ok matrix -> checkMatrix matrix
+ ||> Err _ -> False
+value matrixLabelsChecked : Bool = fromRows [[1, 2], [3, 4]]
+ ||> Ok matrix -> checkMatrixLabels matrix
+ ||> Err _ -> False
+@test
+value eitherGeneric : Task Text Bool = pure (forward increment right == Some (Right 3))
+@test
+value eitherEmpty : Task Text Bool = pure (forward incrementRight left == Right left)
+@test
+value dictionaryGeneric : Task Text Bool = pure (map dictToList traversedDictionary == expectedDictionary)
+@test
+value dictionaryFirstClass : Task Text Bool = pure (map dictToList (firstClass increment dictionary) == Some [("a", 2), ("b", 3)])
+@test
+value nonEmptyGeneric : Task Text Bool = pure (map nelToList (forward incrementRight items) == Right [2, 3, 4])
+@test
+value matrixGeneric : Task Text Bool = pure matrixChecked
+@test
+value eitherChangedPayload : Task Text Bool = pure (forward label right == Some (Right "item2"))
+@test
+value dictionaryChangedPayload : Task Text Bool = pure (map dictToList (forward label dictionary) == Some [("a", "item1"), ("b", "item2")])
+@test
+value nonEmptyChangedPayload : Task Text Bool = pure (map nelToList (forward label items) == Some ["item1", "item2", "item3"])
+@test
+value matrixChangedPayload : Task Text Bool = pure matrixLabelsChecked
+"#);
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("10 passed; 0 failed; 10 total"), "{stdout}");
+    }
+}
+
+#[test]
+fn stdlib_traversal_defers_task_effects_and_stops_after_failure() {
+    let cases = [
+        (
+            "either",
+            "Either Text Int",
+            "Right 1",
+            "value == Right 1",
+            "1|",
+        ),
+        (
+            "dict",
+            "Dict Text Int",
+            "{ entries: [{ key: \"a\", value: 1 }, { key: \"b\", value: 2 }, { key: \"c\", value: 3 }] }",
+            "dictToList value == [(\"a\", 1), (\"b\", 2), (\"c\", 3)]",
+            "1|2|3|",
+        ),
+        (
+            "nonempty",
+            "NonEmptyList Int",
+            "fromHeadTail 1 [2, 3]",
+            "nelToList value == [1, 2, 3]",
+            "1|2|3|",
+        ),
+        (
+            "matrix",
+            "Matrix Int",
+            "",
+            "rows value == [[1, 2], [3, 4]] and width value == 2 and height value == 2",
+            "1|2|3|4|",
+        ),
+    ];
+    for (name, carrier, source, check, effects) in cases {
+        for failing in [false, true] {
+            let dir = TempDir::new("stdlib-traversal-effects");
+            dir.write(
+                "operations.aivi",
+                r#"
+type (Traversable F, Applicative G) => (A -> G B) -> F A -> G (F B)
+func traverseWith = transform values => traverse transform values
+export traverseWith
+"#,
+            );
+            let source_decl = if name == "matrix" {
+                "value source : Result MatrixError (Matrix Int) = fromRows [[1, 2], [3, 4]]"
+                    .to_owned()
+            } else {
+                let source = if failing && name == "either" {
+                    "Right 2"
+                } else {
+                    source
+                };
+                format!("value source : {carrier} = {source}")
+            };
+            let transform = if failing { "emitFail" } else { "emit" };
+            let main = if name == "matrix" {
+                format!(
+                    "source\n ||> Ok matrix -> map inspect (traverseWith {transform} matrix)\n ||> Err _ -> pure False"
+                )
+            } else {
+                format!("map inspect (traverseWith {transform} source)")
+            };
+            let program = r#"
+use operations (traverseWith)
+use aivi.core.either (Either, Left, Right)
+use aivi.core.dict (Dict, toList as dictToList)
+use aivi.nonEmpty (NonEmptyList, fromHeadTail, toList as nelToList)
+use aivi.matrix (Matrix, MatrixError, fromRows, rows, width, height)
+use aivi.stdio (stdoutWrite)
+use aivi.db (statement)
+type DatabaseHandle = { database: Text }
+value conn = { database: ":memory:" }
+@source db conn
+signal database : DatabaseHandle
+value query : Task Text (List (Map Text Text)) = database.query (statement "select * from missing_table" [])
+type Int -> Unit -> Int
+func afterEmit = n unit => n
+type Int -> List (Map Text Text) -> Int
+func afterQuery = n resultRows => n
+type Int -> Unit -> Task Text Int
+func failAfter = n unit => map (afterQuery n) query
+type Int -> Task Text Int
+func emit = n => map (afterEmit n) (stdoutWrite "{n}|")
+type Int -> Task Text Int
+func emitFail = n => n == 2
+ T|> chain (failAfter n) (stdoutWrite "{n}|")
+ F|> emit n
+type CARRIER -> Bool
+func inspect = value => CHECK
+SOURCE
+value unused : Task Text (List Int) = traverseWith emit [99]
+value main : Task Text Bool = MAIN
+@test
+value executed : Task Text Bool = main
+"#.replace("CARRIER", carrier).replace("CHECK", check).replace("SOURCE", &source_decl).replace("MAIN", &main);
+            let path = dir.write(&format!("{name}-{failing}.aivi"), &program);
+            // Repeat the same source paths to exercise source images and native caches.
+            for _ in 0..2 {
+                for command in ["execute", "test"] {
+                    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+                        .arg(command)
+                        .arg(&path)
+                        .output()
+                        .unwrap();
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    assert_eq!(
+                        output.status.success(),
+                        !failing,
+                        "{name}/{command}: {stdout}\n{stderr}"
+                    );
+                    let expected_effects = if failing && name == "either" {
+                        "2|"
+                    } else if failing {
+                        "1|2|"
+                    } else {
+                        effects
+                    };
+                    assert!(
+                        stdout.starts_with(expected_effects),
+                        "{name}/{command}: {stdout}"
+                    );
+                    for effect in ["1|", "2|", "3|", "4|", "99|"] {
+                        assert_eq!(
+                            stdout.matches(effect).count(),
+                            usize::from(expected_effects.contains(effect)),
+                            "{name}/{command}: {stdout}"
+                        );
+                    }
+                    if failing {
+                        assert!(
+                            format!("{stdout}\n{stderr}").contains("no such table"),
+                            "{name}/{command}: {stdout}\n{stderr}"
+                        );
+                    } else if command == "execute" {
+                        assert_eq!(stdout, format!("{effects}True\n"));
+                    } else {
+                        assert!(
+                            stdout.contains("1 passed; 0 failed; 1 total"),
+                            "{name}/{command}: {stdout}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn headless_commands_execute_effectful_task_composition() {
     let dir = TempDir::new("task-composition");
     let path = dir.write(

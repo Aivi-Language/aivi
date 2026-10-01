@@ -21,11 +21,15 @@ use aivi.nonEmpty (
 
 ## Type class operations
 
-`NonEmptyList` implements `Functor`, `Apply`, `Applicative`, `Chain`, `Monad`, and `Foldable`.
+`NonEmptyList` implements `Functor`, `Apply`, `Applicative`, `Chain`, `Monad`, `Foldable`, and `Traversable`.
 Use ambient `map` and `reduce` for generic code; `mapNel` remains the explicitly named mapping
 helper. `pure` creates a singleton. `apply` applies each function to every input, in function-major
 order. `chain` concatenates non-empty results in input order, and `join` flattens one layer.
 `Semigroup (NonEmptyList A)` supplies `append`, equivalent to `appendNel`.
+
+`traverse transform items` sequences effects from head to tail through any `Applicative G`,
+producing `G (NonEmptyList B)`. Each successful result keeps the input length and its non-empty
+guarantee. Traversing into `Task` builds a deferred plan whose effects run in that order.
 
 There is no `Monoid`, `Default`, or `Filterable` instance: none can promise to retain at least one
 item for every input allowed by its class signature.

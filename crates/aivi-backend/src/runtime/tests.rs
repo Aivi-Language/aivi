@@ -261,6 +261,66 @@ fn structural_equality_handles_bytes_maps_and_sets() {
 }
 
 #[test]
+fn validation_error_accumulation_appends_canonical_nonempty_carriers() {
+    let left = RuntimeValue::List(vec![
+        RuntimeValue::Text("name".into()),
+        RuntimeValue::Text("email".into()),
+    ]);
+    let right = RuntimeValue::List(vec![RuntimeValue::Text("age".into())]);
+    assert_eq!(
+        append_validation_errors(left, right).unwrap(),
+        RuntimeValue::List(vec![
+            RuntimeValue::Text("name".into()),
+            RuntimeValue::Text("email".into()),
+            RuntimeValue::Text("age".into()),
+        ])
+    );
+}
+
+#[test]
+fn validation_error_accumulation_rejects_empty_or_unrelated_carriers() {
+    for (left, right) in [
+        (
+            RuntimeValue::List(Vec::new()),
+            RuntimeValue::List(vec![RuntimeValue::Int(1)]),
+        ),
+        (
+            RuntimeValue::List(vec![RuntimeValue::Int(1)]),
+            RuntimeValue::List(Vec::new()),
+        ),
+        (
+            RuntimeValue::Text("first".into()),
+            RuntimeValue::Text("second".into()),
+        ),
+        (
+            RuntimeValue::List(vec![RuntimeValue::Int(1)]),
+            RuntimeValue::Int(2),
+        ),
+    ] {
+        assert!(append_validation_errors(left, right).is_err());
+    }
+}
+
+#[test]
+fn validation_error_accumulation_preserves_tagged_carrier_identity() {
+    let carrier = |item, type_name: &str| {
+        RuntimeValue::Sum(RuntimeSumValue {
+            item: HirItemId::from_raw(item),
+            type_name: type_name.into(),
+            variant_name: type_name.into(),
+            fields: vec![RuntimeValue::Int(1), RuntimeValue::List(Vec::new())],
+        })
+    };
+    assert!(
+        append_validation_errors(carrier(11, "NonEmptyList"), carrier(12, "NonEmptyList")).is_err()
+    );
+    assert!(
+        append_validation_errors(carrier(11, "NonEmptyList"), carrier(11, "NonEmpty")).is_err()
+    );
+    assert!(append_validation_errors(carrier(11, "Other"), carrier(11, "Other")).is_err());
+}
+
+#[test]
 fn validation_error_accumulation_appends_non_empty_payloads() {
     let left = RuntimeValue::Sum(RuntimeSumValue {
         item: HirItemId::from_raw(11),

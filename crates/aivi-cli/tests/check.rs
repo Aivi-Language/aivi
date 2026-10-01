@@ -1317,6 +1317,7 @@ fn check_accepts_stdlib_validation_files() {
         "tests/extended-stdlib-validation/main.aivi",
         "tests/matrix-validation/main.aivi",
         "tests/core-modules-validation/main.aivi",
+        "tests/class-instances-validation/main.aivi",
         "tests/path-fs-validation/main.aivi",
         "tests/runtime-stdlib-validation/main.aivi",
     ] {

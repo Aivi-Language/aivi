@@ -76,6 +76,12 @@ instance Foldable NonEmptyList = {
          |> reduce step seed
 }
 
+instance Traversable NonEmptyList = {
+    traverse = transform items =>
+        toList items
+        ||> [first, ...rest] -> apply (map fromHeadTail (transform first)) (traverse transform rest)
+}
+
 instance Semigroup (NonEmptyList A) = {
     append = appendNel
 }

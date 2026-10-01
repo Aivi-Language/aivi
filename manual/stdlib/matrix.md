@@ -34,7 +34,15 @@ use aivi.matrix (
 )
 ```
 
-## Overview
+## Type class operations
+
+`Matrix` implements `Functor`, `Foldable`, and `Traversable`. Ambient `map` preserves dimensions;
+`reduce` visits cells in row-major order. `traverse transform matrix` sequences cells through any
+`Applicative G`, producing `G (Matrix B)` with the original width, height, and row structure.
+Zero-width and zero-height matrices retain their dimensions and are lifted with `pure`.
+Task effects are deferred until execution, then run in row-major order.
+
+## API
 
 | Name | Type | Description |
 | --- | --- | --- |

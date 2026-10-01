@@ -979,6 +979,40 @@ value combined:Validation Text Pair =
 }
 
 #[test]
+fn canonical_nonempty_validation_errors_accumulate_through_apply_and_traverse() {
+    let backend = lower_workspace_text(
+        "stdlib-regression/validation-errors.aivi",
+        r#"
+use aivi.nonEmpty (NonEmptyList, fromHeadTail)
+type Int -> Validation (NonEmptyList Text) Int
+func reject = n => Invalid (fromHeadTail "error{n}" [])
+value functions : Validation (NonEmptyList Text) (Int -> Int) = Invalid (fromHeadTail "first" ["second"])
+value input : Validation (NonEmptyList Text) Int = Invalid (fromHeadTail "third" [])
+value accumulated : Validation (NonEmptyList Text) Int = apply functions input
+value traversed : Validation (NonEmptyList Text) (List Int) = traverse reject [1, 2, 3]
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    for (name, errors) in [
+        ("accumulated", ["first", "second", "third"]),
+        ("traversed", ["error1", "error2", "error3"]),
+    ] {
+        assert_eq!(
+            evaluator
+                .evaluate_item(find_item(&backend, name), &BTreeMap::new())
+                .unwrap(),
+            RuntimeValue::ValidationInvalid(Box::new(RuntimeValue::List(
+                errors
+                    .into_iter()
+                    .map(|error| RuntimeValue::Text(error.into()))
+                    .collect()
+            ))),
+            "{name}"
+        );
+    }
+}
+
+#[test]
 fn workspace_imported_builtin_class_members_lower_through_backend_runtime() {
     let backend = lower_workspace_text(
         "milestone-2/valid/workspace-type-imports/main.aivi",

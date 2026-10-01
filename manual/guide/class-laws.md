@@ -71,6 +71,12 @@ That division is why the current builtin executable support includes `Functor`, 
 Constructing that traversal creates a plan; it does not perform the task effects. The plan preserves
 the structure's declared element order, and empty structures are lifted with `pure`.
 
+The stdlib traversals follow the same contract: `Either E` visits only `Right`, `Dict K` visits
+values in entry order without comparing keys, `NonEmptyList` visits head to tail, and `Matrix`
+visits cells in row-major order. Successful traversals preserve keys, element positions and
+dimensions; an outer applicative may fail or produce several alternatives without changing the
+shape of any successful result. Executable validation accumulation uses `Validation (NonEmptyList E)`.
+
 `aivi execute`, `aivi test`, linked task workers, `db.live`, and D-Bus reply-task workers retain
 the task's code and globals while running deferred callbacks. Task application runs the function-producing task before
 the value-producing task; a failure stops the remaining effects. Composition is driven by an

@@ -2345,7 +2345,11 @@ impl<'a> GateTypeContext<'a> {
         if let Some(expanded_template) = template.expand_transparent_import_alias() {
             return self.match_gate_type_template(&expanded_template, actual, substitutions);
         }
-        if let Some(expanded_actual) = actual.expand_transparent_import_alias() {
+        // Abstract constructors need the declared alias head and fixed arguments.
+        // Expanding a record alias here would erase the witness for `F A`.
+        if !matches!(template, GateType::TypeApplication { .. })
+            && let Some(expanded_actual) = actual.expand_transparent_import_alias()
+        {
             return self.match_gate_type_template(template, &expanded_actual, substitutions);
         }
         match template {
@@ -4899,8 +4903,12 @@ impl<'a> GateTypeContext<'a> {
             ExprKind::Tuple(elements) => {
                 let mut info = GateExprInfo::default();
                 let mut lowered = Vec::with_capacity(elements.len());
+                let mut types = Vec::with_capacity(elements.len());
                 for element in elements.iter() {
                     let child = self.infer_expr(*element, env, ambient);
+                    if let Some(ty) = child.ty.clone().or_else(|| child.actual_gate_type()) {
+                        types.push(ty);
+                    }
                     if let Some(ty) = child.actual() {
                         lowered.push(ty);
                     }
@@ -4908,6 +4916,11 @@ impl<'a> GateTypeContext<'a> {
                 }
                 if lowered.len() == elements.len() {
                     info.set_actual(SourceOptionActualType::Tuple(lowered));
+                }
+                // Constructor evidence cannot represent lexical type parameters.
+                // Retain the full child contracts, including nominal alias identity.
+                if types.len() == elements.len() {
+                    info.ty = Some(GateType::Tuple(types));
                 }
                 info
             }
@@ -5047,8 +5060,15 @@ impl<'a> GateTypeContext<'a> {
                 let mut info = GateExprInfo::default();
                 let field_count = record.fields.len();
                 let mut fields = Vec::with_capacity(field_count);
+                let mut types = Vec::with_capacity(field_count);
                 for field in record.fields {
                     let child = self.infer_expr(field.value, env, ambient);
+                    if let Some(ty) = child.ty.clone().or_else(|| child.actual_gate_type()) {
+                        types.push(GateRecordField {
+                            name: field.label.text().to_owned(),
+                            ty,
+                        });
+                    }
                     if let Some(ty) = child.actual() {
                         fields.push(SourceOptionActualRecordField {
                             name: field.label.text().to_owned(),
@@ -5059,6 +5079,9 @@ impl<'a> GateTypeContext<'a> {
                 }
                 if fields.len() == field_count {
                     info.set_actual(SourceOptionActualType::Record(fields));
+                }
+                if types.len() == field_count {
+                    info.ty = Some(GateType::Record(types));
                 }
                 info
             }

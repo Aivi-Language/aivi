@@ -1243,6 +1243,63 @@ mod higher_kinded_type_tests {
     }
 
     #[test]
+    fn higher_kinded_matching_preserves_imported_record_alias_constructors() {
+        let alias = |key, value| GateType::OpaqueImport {
+            origin: None,
+            import: ImportId::from_raw(0),
+            name: "Dictionary".into(),
+            arguments: vec![GateType::Primitive(key), GateType::Primitive(value)],
+            definition: Some(Box::new(ImportTypeDefinition::Alias(
+                ImportValueType::Record(vec![
+                    crate::ImportRecordField {
+                        name: "key".into(),
+                        ty: ImportValueType::TypeVariable {
+                            index: 0,
+                            name: "K".into(),
+                        },
+                    },
+                    crate::ImportRecordField {
+                        name: "value".into(),
+                        ty: ImportValueType::TypeVariable {
+                            index: 1,
+                            name: "V".into(),
+                        },
+                    },
+                ]),
+            ))),
+        };
+        let template = GateType::Arrow {
+            parameter: Box::new(application(parameter(1, "A"))),
+            result: Box::new(application(parameter(2, "B"))),
+        };
+        let input = alias(BuiltinType::Text, BuiltinType::Int);
+        let output = alias(BuiltinType::Text, BuiltinType::Bool);
+        let actual = GateType::Arrow {
+            parameter: Box::new(input.clone()),
+            result: Box::new(output),
+        };
+        let mut bindings = HashMap::new();
+        assert!(matches_template(&actual, &template, &mut bindings));
+        assert_eq!(template.substitute_type_parameters(&bindings), actual);
+        let changed_key = GateType::Arrow {
+            parameter: Box::new(input.clone()),
+            result: Box::new(alias(BuiltinType::Int, BuiltinType::Bool)),
+        };
+        assert!(!matches_template(
+            &changed_key,
+            &template,
+            &mut HashMap::new()
+        ));
+        let structural = input.expand_transparent_import_alias().unwrap();
+        assert!(!matches_template(
+            &structural,
+            &application(parameter(1, "A")),
+            &mut HashMap::new()
+        ));
+        assert!(matches_template(&input, &structural, &mut HashMap::new()));
+    }
+
+    #[test]
     fn higher_kinded_substitution_preserves_fixed_constructor_arguments() {
         let template = GateType::Arrow {
             parameter: Box::new(application(parameter(1, "A"))),

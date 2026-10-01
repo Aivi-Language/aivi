@@ -8,6 +8,7 @@ use aivi.core.dict (
     Dict
     fromList as dictFromList
     toList as dictToList
+    keys as dictKeys
 )
 
 use aivi.core.set (
@@ -19,6 +20,16 @@ use aivi.nonEmpty (
     NonEmptyList
     fromHeadTail
     toList as nelToList
+)
+
+use aivi.matrix (
+    Matrix
+    MatrixError
+    fromRows
+    init as matrixInit
+    rows as matrixRows
+    width as matrixWidth
+    height as matrixHeight
 )
 
 type Int -> Int
@@ -283,3 +294,224 @@ value traverseSourceError : Task Text Bool = pure (traverseGeneric incrementRigh
 
 @test
 value traverseSourceInvalid : Task Text Bool = pure (traverseGeneric incrementRight sourceInvalid == Right sourceInvalid)
+
+// Authored Traversable instances receive the same method-local Applicative dictionary.
+value traversedDictionary : Option (Dict Text Int) = traverseGeneric keepPositive dictionary
+value traversedItems : Option (NonEmptyList Int) = traverseGeneric keepPositive items
+value failingDictionary : Dict Text Int = { entries: [{ key: "first", value: 1 }, { key: "second", value: -1 }] }
+value functionKeyDictionary : Dict (Int -> Int) Int = { entries: [{ key: increment, value: 2 }] }
+
+type Dict (Int -> Int) Int -> (Int, List Int)
+func inspectFunctionKeys = values =>
+    (reduce (n f => f n) 10 (dictKeys values), reduce (acc n => append acc [n]) [] values)
+
+type Int -> List Int
+func alternatives = n =>
+    [n, n + 10]
+
+type Int -> Result Text Int
+func positiveResult = n => n > 0
+ T|> Ok (n + 1)
+ F|> Err "negative"
+
+type Int -> Option Int
+func rejectOption = n =>
+    None
+
+type Int -> Int -> Int
+func emptyCell = x y =>
+    1
+
+type Int -> Validation (NonEmptyList Text) Int
+func rejectValidation = n => n
+ ||> 1 -> Invalid (fromHeadTail "first" [])
+ ||> _ -> Invalid (fromHeadTail "second" [])
+
+value eitherTraverser : (Int -> Option Int) -> Either Text Int -> Option (Either Text Int) = traverse
+value dictionaryTraverser : Dict Text Int -> Option (Dict Text Int) = traverse keepPositive
+value nelTraverser : NonEmptyList Int -> Option (NonEmptyList Int) = traverse keepPositive
+
+@test
+value eitherTraverseRight : Task Text Bool = pure (traverseGeneric keepPositive right == Some (Right 3))
+
+@test
+value eitherTraverseLeft : Task Text Bool = pure (traverseGeneric rejectOption left == Some left)
+
+@test
+value eitherTraverseFailure : Task Text Bool = pure (traverseGeneric rejectOption right == None)
+
+@test
+value eitherTraverseAuthoredApplicative : Task Text Bool = pure (traverseGeneric incrementRight right == Right (Right 3))
+
+@test
+value eitherTraverseFirstClass : Task Text Bool = pure (eitherTraverser keepPositive right == Some (Right 3))
+
+@test
+value dictTraverseOrder : Task Text Bool = pure (map dictToList traversedDictionary == Some [("a", 2), ("b", 3)])
+
+@test
+value dictTraverseEmpty : Task Text Bool = pure (map dictToList (traverseGeneric rejectOption emptyDictionary) == Some [])
+
+@test
+value dictTraverseFailure : Task Text Bool = pure (traverseGeneric keepPositive failingDictionary == None)
+
+@test
+value dictTraverseNoKeyEquality : Task Text Bool = pure (map inspectFunctionKeys (traverseGeneric keepPositive functionKeyDictionary) == Some (11, [3]))
+
+@test
+value dictTraversePartial : Task Text Bool = pure (map dictToList (dictionaryTraverser dictionary) == Some [("a", 2), ("b", 3)])
+
+@test
+value dictTraverseAlternatives : Task Text Bool = pure (map dictToList (traverseGeneric alternatives dictionary) == [[("a", 1), ("b", 2)], [("a", 1), ("b", 12)], [("a", 11), ("b", 2)], [("a", 11), ("b", 12)]])
+
+@test
+value nelTraverseOrder : Task Text Bool = pure (map nelToList traversedItems == Some [2, 3, 4])
+
+@test
+value nelTraverseSingleton : Task Text Bool = pure (map nelToList (traverseGeneric keepPositive pureItems) == Some [3])
+
+@test
+value nelTraverseHeadFailure : Task Text Bool = pure (traverseGeneric positiveResult (fromHeadTail -1 [2]) == Err "negative")
+
+@test
+value nelTraverseTailFailure : Task Text Bool = pure (traverseGeneric positiveResult (fromHeadTail 1 [-1]) == Err "negative")
+
+@test
+value nelTraversePartial : Task Text Bool = pure (map nelToList (nelTraverser items) == Some [2, 3, 4])
+
+@test
+value nelTraverseAlternatives : Task Text Bool = pure (map nelToList (traverseGeneric alternatives (fromHeadTail 1 [2])) == [[1, 2], [1, 12], [11, 2], [11, 12]])
+
+@test
+value nelTraverseValidation : Task Text Bool = pure (traverseGeneric rejectValidation (fromHeadTail 1 [2]) == Invalid (fromHeadTail "first" ["second"]))
+
+type Matrix Int -> Bool
+func matrixTraversalMatches = matrix =>
+    map matrixRows (traverseGeneric keepPositive matrix) == Some [[2, 3], [4, 5]]
+    and map matrixWidth (traverseGeneric keepPositive matrix) == Some 2
+    and map matrixHeight (traverseGeneric keepPositive matrix) == Some 2
+
+type Int -> Int -> Matrix Int -> Bool
+func emptyMatrixTraversalMatches = width height matrix =>
+    map matrixWidth (traverseGeneric rejectOption matrix) == Some width
+    and map matrixHeight (traverseGeneric rejectOption matrix) == Some height
+    and map matrixRows (traverseGeneric rejectOption matrix) == Some (matrixRows matrix)
+
+type Matrix Int -> Bool
+func matrixTraversalFails = matrix =>
+    traverseGeneric keepPositive matrix == None
+
+type Matrix Int -> Bool
+func matrixValidationOrder = matrix =>
+    traverseGeneric rejectValidation matrix == Invalid (fromHeadTail "first" ["second"])
+
+type Matrix Int -> Bool
+func matrixAlternatives = matrix =>
+    map matrixRows (traverseGeneric alternatives matrix) == [[[1, 2]], [[1, 12]], [[11, 2]], [[11, 12]]]
+
+type Result MatrixError Bool -> Bool
+func matrixCheck = checked => checked
+ ||> Ok passed -> passed
+ ||> Err _     -> False
+
+@test
+value matrixTraverseShape : Task Text Bool = pure (matrixCheck (map matrixTraversalMatches (fromRows [[1, 2], [3, 4]])))
+
+@test
+value matrixTraverseZeroWidth : Task Text Bool = pure (matrixCheck (map (emptyMatrixTraversalMatches 0 3) (matrixInit 0 3 emptyCell)))
+
+@test
+value matrixTraverseZeroHeight : Task Text Bool = pure (matrixCheck (map (emptyMatrixTraversalMatches 4 0) (matrixInit 4 0 emptyCell)))
+
+@test
+value matrixTraverseFailure : Task Text Bool = pure (matrixCheck (map matrixTraversalFails (fromRows [[1, 2], [-1, 4]])))
+
+@test
+value matrixTraverseValidationOrder : Task Text Bool = pure (matrixCheck (map matrixValidationOrder (fromRows [[1], [2]])))
+
+@test
+value matrixTraverseAlternatives : Task Text Bool = pure (matrixCheck (map matrixAlternatives (fromRows [[1, 2]])))
+
+// Identity, naturality and composition use executable authored Applicative dictionaries.
+type Identity A = Identity A
+instance Functor Identity = { map = f identity => identity ||> Identity a -> Identity (f a) }
+instance Apply Identity = { apply = functions values => functions ||> Identity f -> map f values }
+instance Applicative Identity = { pure = a => Identity a }
+
+type Identity A -> A
+func unwrapIdentity = identity => identity
+ ||> Identity a -> a
+
+type Int -> Identity Int
+func identityIntEffect = n =>
+    Identity n
+
+type Option A -> List A
+func optionAsList = option => option
+ ||> None   -> []
+ ||> Some a -> [a]
+
+type Int -> List Int
+func positiveAsList = n =>
+    optionAsList (keepPositive n)
+
+type OptionList A = OptionList (Option (List A))
+instance Functor OptionList = { map = f composed => composed ||> OptionList nested -> OptionList (map (map f) nested) }
+instance Apply OptionList = { apply = functions values => (functions, values) ||> (OptionList fs, OptionList xs) -> OptionList (apply (map apply fs) xs) }
+instance Applicative OptionList = { pure = a => OptionList (Some [a]) }
+
+type Int -> OptionList Int
+func composedChoices = n =>
+    OptionList (Some (alternatives n))
+
+type Int -> Option Int
+func keep = n =>
+    Some n
+
+type (Traversable F, Eq (F Int)) => F Int -> Bool
+func traversalIdentity = values =>
+    unwrapIdentity (traverse identityIntEffect values) == values
+
+type (Traversable F, Eq (F Int)) => F Int -> Bool
+func traversalNaturality = values =>
+    optionAsList (traverse keepPositive values) == traverse positiveAsList values
+
+type (Traversable F, Eq (F Int)) => F Int -> Bool
+func traversalComposition = values =>
+    traverse composedChoices values == OptionList (map (traverse alternatives) (traverse keep values))
+
+type (Traversable F, Eq (F Int)) => F Int -> Bool
+func traversalLaws = values =>
+    traversalIdentity values and traversalNaturality values and traversalComposition values
+
+@test
+value eitherTraverseLaws : Task Text Bool = pure (traversalLaws right and traversalLaws left)
+
+@test
+value dictTraverseLaws : Task Text Bool = pure (traversalLaws dictionary and traversalLaws emptyDictionary and traversalNaturality failingDictionary)
+
+@test
+value nelTraverseLaws : Task Text Bool = pure (traversalLaws items and traversalLaws pureItems and traversalNaturality (fromHeadTail -1 [2]))
+
+@test
+value matrixTraverseLaws : Task Text Bool = pure (matrixCheck (map traversalLaws (fromRows [[1, 2], [3, 4]])))
+
+@test
+value eitherTraverseTask : Task Text Bool = map (value => value == Right 3) (traverseGeneric incrementTask right)
+
+@test
+value dictTraverseTask : Task Text Bool = map (value => dictToList value == [("a", 2), ("b", 3)]) (traverseGeneric incrementTask dictionary)
+
+@test
+value nelTraverseTask : Task Text Bool = map (value => nelToList value == [2, 3, 4]) (traverseGeneric incrementTask items)
+
+type Matrix Int -> Task Text Bool
+func matrixTraversalTask = matrix =>
+    map (value => matrixRows value == [[2, 3], [4, 5]]) (traverseGeneric incrementTask matrix)
+
+value checkedMatrixTask : Task Text Bool = fromRows [[1, 2], [3, 4]]
+ ||> Ok matrix -> matrixTraversalTask matrix
+ ||> Err _     -> pure False
+
+@test
+value matrixTraverseTask : Task Text Bool = checkedMatrixTask

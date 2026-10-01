@@ -4,10 +4,14 @@
 
 ## Type class operations
 
-`Either E` implements `Functor`, `Apply`, `Applicative`, `Chain`, `Monad`, and `Foldable`. Ambient
+`Either E` implements `Functor`, `Apply`, `Applicative`, `Chain`, `Monad`, `Foldable`, and `Traversable`. Ambient
 `map` is equivalent to `mapRight`; `pure` constructs `Right`; `chain` and `join` short-circuit on
 `Left`. `apply` checks the function's `Either` first, preserving its `Left` when both inputs fail.
 `reduce` returns the seed for `Left` and visits the payload once for `Right`.
+
+`traverse transform either` sequences the `Right` payload through any `Applicative G`, producing
+`G (Either E B)`. A `Left` is lifted unchanged with `pure`; its payload is never passed to the
+transform. Traversing into `Task` builds a deferred plan.
 
 `Bifunctor Either` supplies `bimap`, equivalent to `mapBoth`. Import this module's type or helpers
 to make its instances available.

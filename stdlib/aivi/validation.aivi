@@ -75,6 +75,7 @@ func optionIsTwoForTest = opt => opt
 
 // Deriving Eq requires the error and success payload types to be known.
 value invalidValidationForTest : Validation Text Int = Invalid "bad"
+
 value validValidationForTest : Validation Text Int = Valid 2
 value okResultForTest : Result Text Int = Ok 2
 

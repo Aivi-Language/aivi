@@ -3991,25 +3991,55 @@ impl<'a> GeneralExprElaborator<'a> {
             (true, GateType::Signal(payload)) => payload.as_ref(),
             _ => result_ty,
         };
-        let inferred_parameter_types = inferred_callee_ty.as_ref().and_then(|ty| {
-            let (parameters, inferred_result) = self.function_signature(ty, arguments.len())?;
-            // Result structure constrains a polymorphic callback even when its
-            // payload or enclosing constructor still contains rigid parameters.
-            if inferred_result.has_type_params() {
-                let subs = collect_type_param_subs(
-                    &[inferred_result],
-                    std::slice::from_ref(call_result_ty),
-                );
-                if !subs.is_empty() {
-                    return Some(
-                        parameters
-                            .iter()
-                            .map(|p| substitute_gate_type(p, &subs))
-                            .collect(),
-                    );
+        let selected_class_parameters = if let ExprKind::Name(reference) =
+            &self.module.exprs()[callee].kind
+            && matches!(
+                reference.resolution.as_ref(),
+                ResolutionState::Resolved(
+                    TermResolution::ClassMember(_) | TermResolution::AmbiguousClassMembers(_)
+                )
+            ) {
+            let hints = arguments
+                .iter()
+                .map(|argument| {
+                    let info = self.typing.infer_expr(*argument, env, ambient);
+                    info.ty.clone().or_else(|| info.actual_gate_type())
+                })
+                .collect::<Vec<_>>();
+            match self.typing.select_class_member_call_with_argument_hints(
+                reference,
+                &hints,
+                call_result_ty,
+            ) {
+                Some(crate::validate::DomainMemberSelection::Unique(matched)) => {
+                    Some(matched.parameters)
                 }
+                _ => None,
             }
-            Some(parameters)
+        } else {
+            None
+        };
+        let inferred_parameter_types = selected_class_parameters.or_else(|| {
+            inferred_callee_ty.as_ref().and_then(|ty| {
+                let (parameters, inferred_result) = self.function_signature(ty, arguments.len())?;
+                // Result structure constrains a polymorphic callback even when its
+                // payload or enclosing constructor still contains rigid parameters.
+                if inferred_result.has_type_params() {
+                    let subs = collect_type_param_subs(
+                        &[inferred_result],
+                        std::slice::from_ref(call_result_ty),
+                    );
+                    if !subs.is_empty() {
+                        return Some(
+                            parameters
+                                .iter()
+                                .map(|p| substitute_gate_type(p, &subs))
+                                .collect(),
+                        );
+                    }
+                }
+                Some(parameters)
+            })
         });
         let argument_expectations = constructor_expectations.or(inferred_parameter_types.clone());
 
@@ -4031,13 +4061,19 @@ impl<'a> GeneralExprElaborator<'a> {
             let inferred_argument = self.typing.infer_expr(*argument, env, ambient);
             // Retain nominal carrier identity for class dispatch. The structural
             // actual view of a record alias loses the instance-owning type.
-            let observed_ty = inferred_argument
-                .ty
-                .clone()
-                .filter(|ty| !ty.has_type_params())
-                .or_else(|| inferred_argument.actual_gate_type())
-                .or_else(|| inferred_argument.ty.clone())
-                .unwrap_or_else(|| lowered.ty.clone());
+            let observed_ty = if matches!(lowered.ty, GateType::Arrow { .. }) {
+                // The callback was instantiated against the selected member contract.
+                // Its declaration's open quantifiers must not replace that contract.
+                lowered.ty.clone()
+            } else {
+                inferred_argument
+                    .ty
+                    .clone()
+                    .filter(|ty| !ty.has_type_params())
+                    .or_else(|| inferred_argument.actual_gate_type())
+                    .or_else(|| inferred_argument.ty.clone())
+                    .unwrap_or_else(|| lowered.ty.clone())
+            };
             let reads_payload = lifted
                 && inferred_parameter_types
                     .as_ref()
@@ -6154,6 +6190,93 @@ mod tests {
                 crate::ClassIdentity::Source { .. }
             )));
         }
+    }
+
+    #[test]
+    fn applicative_helpers_lower_polymorphic_callbacks_with_rigid_payloads() {
+        let source = r#"
+type Entry K A = { key: K, value: A }
+type K -> A -> Entry K A
+func entry = key value => { key, value }
+type Applicative G => (A -> G B) -> Entry K A -> G (Entry K B)
+func traverseEntry = transform item => map (entry item.key) (transform item.value)
+type Applicative G => (A -> G B) -> NonEmptyList A -> G (NonEmptyList B)
+func traverseNel = transform items => __aivi_nel_toList items
+ ||> [first, ...rest] -> apply (map __aivi_nel_fromHeadTail (transform first)) (traverse transform rest)
+type Applicative G => (A -> G B) -> List A -> G (List B)
+func traverseRow = transform row => traverse transform row
+type Int -> Int -> List (List A) -> (Int, Int, List (List A))
+func buildMatrix = width height rows => (width, height, rows)
+type Applicative G => (A -> G B) -> List (List A) -> G (Int, Int, List (List B))
+func traverseMatrix = transform rows => map (buildMatrix 2 2) (traverse (traverseRow transform) rows)
+"#;
+        let lowered = lower_text("applicative-helpers.aivi", source);
+        assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+        let checked = crate::typecheck_module(lowered.module());
+        assert!(checked.is_ok(), "{:?}", checked.diagnostics());
+        let report = elaborate_general_expressions(lowered.module());
+        let blocked = report
+            .items()
+            .iter()
+            .filter_map(|item| match &item.outcome {
+                GeneralExprOutcome::Blocked(blocked) => {
+                    Some((item_name(lowered.module(), item.owner), blocked.clone()))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(blocked.is_empty(), "{blocked:#?}");
+    }
+
+    #[test]
+    fn composed_applicative_instantiates_polymorphic_apply_callbacks() {
+        let lowered = lower_text(
+            "composed-applicative.aivi",
+            r#"
+type OptionList A = OptionList (Option (List A))
+instance Functor OptionList = { map = f composed => composed ||> OptionList nested -> OptionList (map (map f) nested) }
+instance Apply OptionList = { apply = functions values => (functions, values) ||> (OptionList fs, OptionList xs) -> OptionList (apply (map apply fs) xs) }
+instance Applicative OptionList = { pure = a => OptionList (Some [a]) }
+"#,
+        );
+        assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+        let checked = crate::typecheck_module(lowered.module());
+        assert!(checked.is_ok(), "{:?}", checked.diagnostics());
+        let report = elaborate_general_expressions(lowered.module());
+        let blocked = report
+            .instance_members()
+            .iter()
+            .filter_map(|member| match &member.outcome {
+                GeneralExprOutcome::Blocked(blocked) => {
+                    Some((member.instance_owner, member.member_index, blocked))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(blocked.is_empty(), "{blocked:#?}");
+    }
+
+    #[test]
+    fn generic_record_subjects_preserve_lexical_field_contracts() {
+        let lowered = lower_text(
+            "generic-record-subject.aivi",
+            r#"
+type A -> A
+func unwrapRecord = value => { payload: value }
+ ||> { payload: item } -> item
+"#,
+        );
+        assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+        let checked = crate::typecheck_module(lowered.module());
+        assert!(checked.is_ok(), "{:?}", checked.diagnostics());
+        let report = elaborate_general_expressions(lowered.module());
+        assert!(
+            report
+                .items()
+                .iter()
+                .all(|item| !matches!(&item.outcome, GeneralExprOutcome::Blocked(_))),
+            "{report:#?}"
+        );
     }
 
     #[test]

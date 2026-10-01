@@ -754,20 +754,28 @@ fn append_validation_errors(
     left: RuntimeValue,
     right: RuntimeValue,
 ) -> Result<RuntimeValue, &'static str> {
-    let RuntimeValue::Sum(left) = left else {
-        return Err(
-            "Validation apply only accumulates Invalid payloads shaped as `NonEmpty`/`NonEmptyList`",
-        );
+    const INVALID_ERRORS: &str =
+        "Validation apply only accumulates Invalid payloads shaped as `NonEmpty`/`NonEmptyList`";
+    let (left, right) = match (left, right) {
+        // NonEmptyList is a domain over List; its canonical runtime representation
+        // is the owned carrier. Validate non-emptiness before extending it in order.
+        (RuntimeValue::List(mut left), RuntimeValue::List(right)) => {
+            if left.is_empty() || right.is_empty() {
+                return Err(INVALID_ERRORS);
+            }
+            left.extend(right);
+            return Ok(RuntimeValue::List(left));
+        }
+        (RuntimeValue::Sum(left), RuntimeValue::Sum(right)) => (left, right),
+        _ => return Err(INVALID_ERRORS),
     };
-    let RuntimeValue::Sum(right) = right else {
-        return Err(
-            "Validation apply only accumulates Invalid payloads shaped as `NonEmpty`/`NonEmptyList`",
-        );
-    };
-    if !matches_non_empty_runtime(&left) || !matches_non_empty_runtime(&right) {
-        return Err(
-            "Validation apply only accumulates Invalid payloads shaped as `NonEmpty`/`NonEmptyList`",
-        );
+    if !matches_non_empty_runtime(&left)
+        || !matches_non_empty_runtime(&right)
+        || left.item != right.item
+        || left.type_name != right.type_name
+        || left.variant_name != right.variant_name
+    {
+        return Err(INVALID_ERRORS);
     }
 
     let RuntimeSumValue {
@@ -781,9 +789,7 @@ fn append_validation_errors(
     let left_tail = match left_fields.remove(0) {
         RuntimeValue::List(values) => values,
         _ => {
-            return Err(
-                "Validation apply only accumulates Invalid payloads shaped as `NonEmpty`/`NonEmptyList`",
-            );
+            return Err(INVALID_ERRORS);
         }
     };
 
@@ -796,9 +802,7 @@ fn append_validation_errors(
     let right_tail = match right_fields.remove(0) {
         RuntimeValue::List(values) => values,
         _ => {
-            return Err(
-                "Validation apply only accumulates Invalid payloads shaped as `NonEmpty`/`NonEmptyList`",
-            );
+            return Err(INVALID_ERRORS);
         }
     };
 

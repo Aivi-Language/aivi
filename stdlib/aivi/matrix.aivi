@@ -108,6 +108,14 @@ instance Foldable Matrix = {
     reduce = reduceMatrixBase
 }
 
+type Applicative G => (A -> G B) -> List A -> G (List B)
+func traverseRow = transform inputRow =>
+    traverse transform inputRow
+
+instance Traversable Matrix = {
+    traverse = transform matrix => map (buildMatrix (width matrix) (height matrix)) (traverse (traverseRow transform) (rows matrix))
+}
+
 type Int -> Int -> (Int -> Int -> A) -> Result MatrixError (Matrix A)
 func init = width height build => validateInitWidth width height build
  ||> Ok builtRows -> Ok (buildMatrix width height builtRows)

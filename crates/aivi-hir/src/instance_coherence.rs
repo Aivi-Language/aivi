@@ -823,6 +823,7 @@ pub(crate) fn provider_owns(module: &Module, class: &ClassIdentity, argument: Ty
                     class.as_ref(),
                     "Functor"
                         | "Foldable"
+                        | "Traversable"
                         | "Semigroup"
                         | "Applicative"
                         | "Apply"
@@ -837,6 +838,64 @@ pub(crate) fn provider_owns(module: &Module, class: &ClassIdentity, argument: Ty
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nonempty_traversal_ownership_requires_the_provider_and_standard_identities() {
+        let mut sources = aivi_base::SourceDatabase::new();
+        let file = sources.add_file(
+            "provider.aivi",
+            "value marker : NonEmptyList Int = pure 1\n",
+        );
+        let parsed = aivi_syntax::parse_module(&sources[file]);
+        assert!(!parsed.has_errors());
+        let lowered = crate::lower_module(&parsed.module);
+        assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+        let (mut module, _) = lowered.into_parts();
+        let head = module
+            .root_items()
+            .iter()
+            .find_map(|id| match &module.items()[*id] {
+                Item::Value(value) => value.annotation,
+                _ => None,
+            })
+            .unwrap();
+        let standard = ClassIdentity::Standard("Traversable".into());
+        assert!(!provider_owns(&module, &standard, head));
+        module.builtin_instance_provider = Some(crate::BuiltinInstanceProvider::NonEmpty);
+        assert!(provider_owns(&module, &standard, head));
+        assert!(!provider_owns(
+            &module,
+            &ClassIdentity::Source {
+                file,
+                name: "Traversable".into()
+            },
+            head
+        ));
+        for class in ["Monoid", "Default", "Filterable"] {
+            assert!(!provider_owns(
+                &module,
+                &ClassIdentity::Standard(class.into()),
+                head
+            ));
+        }
+        let foreign = module
+            .arenas
+            .types
+            .alloc(crate::TypeNode {
+                span: aivi_base::SourceSpan::default(),
+                kind: TypeKind::Name(crate::TypeReference {
+                    path: crate::NamePath::from_vec(vec![
+                        crate::Name::new("List", aivi_base::SourceSpan::default()).unwrap(),
+                    ])
+                    .unwrap(),
+                    resolution: ResolutionState::Resolved(TypeResolution::Builtin(
+                        BuiltinType::List,
+                    )),
+                }),
+            })
+            .unwrap();
+        assert!(!provider_owns(&module, &standard, foreign));
+    }
 
     #[test]
     fn normalization_and_unification_handle_twenty_thousand_nested_types() {

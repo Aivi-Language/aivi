@@ -107,15 +107,15 @@ make its instances available; no carrier-specific spelling of the class operatio
 
 | Carrier | Classes | Behavior |
 | --- | --- | --- |
-| `Either E` | `Functor`, `Apply`, `Applicative`, `Chain`, `Monad`, `Foldable` | Operate on `Right`; preserve and short-circuit `Left`. `pure` creates `Right`. |
+| `Either E` | `Functor`, `Apply`, `Applicative`, `Chain`, `Monad`, `Foldable`, `Traversable` | Operate on `Right`; preserve and short-circuit `Left`. `pure` creates `Right`; traversal lifts `Left` unchanged. |
 | `Either` | `Bifunctor` | `bimap` transforms both alternatives independently. |
-| `Dict K` | `Functor`, `Foldable`, `Filterable` | Transform or visit values, preserving keys and entry order. |
+| `Dict K` | `Functor`, `Foldable`, `Traversable`, `Filterable` | Transform or visit values, preserving keys and entry order. |
 | `Dict K V` | `Default` | An empty dictionary. |
 | `Set` from `aivi.core.set` | `Foldable` | Visit members once, in insertion order. |
 | `Set A` from `aivi.core.set` | `Default` | An empty set. |
-| `NonEmptyList` | `Functor`, `Apply`, `Applicative`, `Chain`, `Monad`, `Foldable` | Preserve non-emptiness; application uses function-major Cartesian order, and chaining concatenates results in input order. |
+| `NonEmptyList` | `Functor`, `Apply`, `Applicative`, `Chain`, `Monad`, `Foldable`, `Traversable` | Preserve non-emptiness; application uses function-major Cartesian order, chaining concatenates results in input order, and traversal preserves length. |
 | `NonEmptyList A` | `Semigroup` | Concatenate in order. |
-| `Matrix` | `Functor`, `Foldable` | Preserve dimensions when mapping; fold in row-major order. |
+| `Matrix` | `Functor`, `Foldable`, `Traversable` | Preserve dimensions when mapping or traversing; visit cells in row-major order. |
 | `Bytes` from `aivi.core.bytes` | `Semigroup`, `Monoid`, `Default` | Concatenation and empty bytes. |
 | `Text`, `Int`, `Bool` from `aivi.defaults` | `Default` | Empty text, zero, and false, respectively. |
 
@@ -124,6 +124,33 @@ members and would need output equality evidence. Non-empty lists do not get `Mon
 or `Filterable`: those operations could produce no elements. Dictionaries do not choose an
 implicit key-collision policy for `append` or `apply`. Matrix filtering would lose its rectangular
 shape. `Signal` and `Validation` retain the applicative boundaries described above.
+
+Use the same constrained function for builtin and stdlib carriers:
+
+```aivi
+use aivi.core.either (Either, Right)
+use aivi.core.dict (Dict, fromList as dictFromList)
+use aivi.nonEmpty (NonEmptyList, fromHeadTail)
+use aivi.matrix (Matrix, MatrixError, fromRows)
+
+type Int -> Option Int
+func positiveIncrement = n => n > 0
+ T|> Some (n + 1)
+ F|> None
+
+type Traversable F => F Int -> Option (F Int)
+func advanceAll = values => traverse positiveIncrement values
+
+value eitherInput : Either Text Int = Right 2
+value eitherOutput : Option (Either Text Int) = advanceAll eitherInput
+value dictionaryOutput : Option (Dict Text Int) = advanceAll (dictFromList [("a", 1), ("b", 2)])
+value nonEmptyOutput : Option (NonEmptyList Int) = advanceAll (fromHeadTail 1 [2, 3])
+value matrixOutput : Result MatrixError (Option (Matrix Int)) = map advanceAll (fromRows [[1, 2], [3, 4]])
+```
+
+`traverse` keeps the source shape. Into `Option`, any `None` fails the whole traversal; into
+`Validation (NonEmptyList E)`, failures accumulate in element order; into `List`, each alternative retains that
+shape. Into `Task`, effects stay deferred and run in the source's declared order at execution.
 
 ## Generic class-constrained functions
 

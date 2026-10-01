@@ -6,11 +6,15 @@ The empty dictionary is `{ entries: [] }`. `insert` places a new or replaced key
 
 ## Type class operations
 
-`Dict K` implements `Functor`, `Foldable`, and `Filterable`. Ambient `map` transforms values,
+`Dict K` implements `Functor`, `Foldable`, `Traversable`, and `Filterable`. Ambient `map` transforms values,
 `reduce` folds them in entry order, and `filterMap` removes entries whose transformed value is
 `None`. Keys and the relative order of retained entries are preserved. `Default (Dict K V)`
 creates an empty dictionary. These operations do not require `Eq K` because they never compare
 or insert keys.
+
+`traverse transform dictionary` sequences values through any `Applicative G`, producing
+`G (Dict K B)`. Every resulting dictionary keeps the original keys and entry order. An empty
+dictionary is lifted with `pure`. Task effects run in entry order when the plan is executed.
 
 `mapValues` remains the explicitly named equivalent of `map`. There is no implicit class-level
 merge policy for dictionaries.
