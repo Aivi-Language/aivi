@@ -75,6 +75,61 @@ impl Drop for TempDir {
 }
 
 #[test]
+fn check_verifies_imported_structural_equality_payloads() {
+    for (model, subject, diagnostic) in [
+        ("type Box = Box Bytes", "Box", Some("missing-eq-instance")),
+        (
+            "type Box = Box (Int -> Int)",
+            "Box",
+            Some("missing-eq-instance"),
+        ),
+        (
+            "type Box A = Here A | Next (Box Bytes)",
+            "Box Int",
+            Some("missing-eq-instance"),
+        ),
+        (
+            "type Box A = End | Next (Box (List A))",
+            "Box Int",
+            Some("equality-proof-complexity"),
+        ),
+        ("type Box A = Box A", "Box Int", None),
+        (
+            "type Box A = Box A",
+            "Box Bytes",
+            Some("missing-eq-instance"),
+        ),
+        (
+            "type Box = Box Bytes\ninstance Eq Box = { (==) = left right => True }",
+            "Box",
+            None,
+        ),
+    ] {
+        let dir = TempDir::new("imported-structural-equality");
+        dir.write("models.aivi", &format!("{model}\nexport Box\n"));
+        let left = subject.replacen("Box", "Original", 1);
+        let right = subject.replacen("Box", "Alias", 1);
+        let path = dir.write("main.aivi", &format!("use models (Box as Original)\nuse models (Box as Alias)\ntype {left} -> {right} -> Bool\nfunc same = left right => left == right\n"));
+        for _ in 0..2 {
+            let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+                .arg("check")
+                .arg(&path)
+                .output()
+                .expect("check should run");
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert_eq!(
+                output.status.success(),
+                diagnostic.is_none(),
+                "{model}: {stderr}"
+            );
+            if let Some(diagnostic) = diagnostic {
+                assert!(stderr.contains(diagnostic), "{model}: {stderr}");
+            }
+        }
+    }
+}
+
+#[test]
 fn check_requires_typed_comparison_evidence() {
     for (name, class, member, operator, diagnostic) in [
         (

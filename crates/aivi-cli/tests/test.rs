@@ -185,6 +185,59 @@ value relationName : Task Text Bool = pure (relationAccepts 1 2)
 }
 
 #[test]
+fn imported_equality_checks_closed_payloads_and_uses_standard_eq_instances() {
+    let dir = TempDir::new("imported-closed-equality-execution");
+    dir.write(
+        "models.aivi",
+        r#"
+type Box A = Box A
+type Custom = Custom Int
+instance Eq Custom = { (==) = left right => True }
+value left : Box (Option Int) = Box (Some 1)
+value same : Box (Option Int) = Box (Some 1)
+value different : Box (Option Int) = Box (Some 2)
+value customLeft : Custom = Custom 1
+value customRight : Custom = Custom 2
+export Box
+export Custom
+export left
+export same
+export different
+export customLeft
+export customRight
+"#,
+    );
+    let path = dir.write(
+        "main.aivi",
+        r#"
+use models (Box as Original, Custom, left, same, different, customLeft, customRight)
+use models (Box as Alias)
+type Original (Option Int) -> Alias (Option Int) -> Bool
+func equal = first second => first == second
+@test
+value matching : Task Text Bool = pure (equal left same)
+@test
+value differing : Task Text Bool = pure ((equal left different) == False)
+@test
+value authored : Task Text Bool = pure (customLeft == customRight)
+@test
+value authoredNegation : Task Text Bool = pure ((customLeft != customRight) == False)
+"#,
+    );
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .expect("test should run");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("4 passed; 0 failed; 4 total"), "{stdout}");
+    }
+}
+
+#[test]
 fn comparison_operators_preserve_imported_class_identity() {
     for class in ["Eq", "Equality"] {
         let library = format!(

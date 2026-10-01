@@ -1048,7 +1048,7 @@ fn collect_owner_class_requirements(
     let mut requirements: Vec<ClassEvidenceRequirement> = Vec::new();
     for binding in expanded_class_constraint_bindings(module, typing, constraints, substitutions)? {
         let subject = binding.subject.clone();
-        for (member, priority) in supported_evidence_members(module, binding.class_item) {
+        for (member, priority) in module.class_dictionary_members(binding.class_item) {
             if requirements
                 .iter()
                 .any(|existing| existing.member == member && existing.subject == subject)
@@ -1131,60 +1131,6 @@ fn expanded_class_constraint_bindings(
     Some(expanded)
 }
 
-fn supported_evidence_members(
-    module: &Module,
-    class_item_id: ItemId,
-) -> Vec<(ClassMemberResolution, u8)> {
-    let Item::Class(class_item) = &module.items()[class_item_id] else {
-        return Vec::new();
-    };
-    let standard_name = match &class_item.identity {
-        crate::ClassIdentity::Standard(name) => Some(name.as_ref()),
-        crate::ClassIdentity::Source { .. } => None,
-    };
-    // Only compiler-owned identities use the canonical operator dictionary ABI.
-    // Authored declarations carry all members, regardless of their spelling.
-    let members: &[(&str, u8)] = match standard_name {
-        Some("Eq") => &[("==", 0)],
-        Some("Setoid") => &[("equals", 1)],
-        Some("Ord") => &[("compare", 0)],
-        _ => {
-            return class_item
-                .members
-                .iter()
-                .enumerate()
-                .map(|(member_index, _)| {
-                    (
-                        ClassMemberResolution {
-                            class: class_item_id,
-                            member_index,
-                        },
-                        0,
-                    )
-                })
-                .collect();
-        }
-    };
-    members
-        .iter()
-        .filter_map(|(member_name, priority)| {
-            class_item
-                .members
-                .iter()
-                .position(|member| member.name.text() == *member_name)
-                .map(|member_index| {
-                    (
-                        ClassMemberResolution {
-                            class: class_item_id,
-                            member_index,
-                        },
-                        *priority,
-                    )
-                })
-        })
-        .collect()
-}
-
 fn instantiate_class_member_type_for_binding(
     module: &Module,
     typing: &mut GateTypeContext<'_>,
@@ -1215,7 +1161,8 @@ fn member_context_requirements(
         expanded_class_constraint_bindings(module, typing, &signature.context, &substitutions)?
             .into_iter()
             .flat_map(|binding| {
-                supported_evidence_members(module, binding.class_item)
+                module
+                    .class_dictionary_members(binding.class_item)
                     .into_iter()
                     .map(move |(member, _)| (member, binding.subject.clone()))
             })
@@ -6116,7 +6063,8 @@ mod tests {
                 if class.name.text() != name {
                     continue;
                 }
-                let members = super::supported_evidence_members(module, id)
+                let members = module
+                    .class_dictionary_members(id)
                     .into_iter()
                     .map(|(member, _)| class.members[member.member_index].name.text())
                     .collect::<Vec<_>>();

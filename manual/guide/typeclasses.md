@@ -299,6 +299,18 @@ to author separate domain members for `<`, `>`, `<=`, or `>=`; those operators c
 Exported ordinary instances also travel across module boundaries, so imported values of that type pick
 up the same operators.
 
+Standard `Eq` instances need only implement `(==)`. A user-authored class named `Eq` keeps
+every member it declares, including `(!=)` when present.
+
+Compiler-derived equality checks every payload of a closed sum, record, or domain, including
+imported declarations. Importing a type does not establish equality for its payloads: a sum
+containing `Bytes` or a function still needs an explicit instance. Recursive proofs distinguish
+the declaration and its actual type arguments, so `Box Int` cannot establish equality for a
+recursive `Box Bytes` payload. Unavailable imported representations require explicit evidence.
+Growing or excessively large proofs report `hir::equality-proof-complexity`; simplify the type
+or provide explicit equality evidence. Native execution also requires a supported closed layout;
+accepting a recursive proof does not make recursive native layouts executable.
+
 ## User-authored higher-kinded classes and instances
 
 ### Supported end to end today

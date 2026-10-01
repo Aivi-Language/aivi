@@ -13,7 +13,7 @@ use crate::{
         SignalItem, TermReference, TermResolution, TypeItemBody, TypeResolution, UnaryOperator,
         ValueItem,
     },
-    ids::{BindingId, ExprId, ImportId, ItemId, PatternId, TypeId, TypeParameterId},
+    ids::{BindingId, ExprId, ImportId, ItemId, PatternId, TypeId},
     typecheck_context::LiteralSuffixSelection,
     validate::{
         ClassConstraintBinding, ClassMemberCallMatch, DomainMemberSelection, GateExprEnv,
@@ -26,6 +26,8 @@ include!("api.rs");
 include!("checker.rs");
 
 include!("comparison.rs");
+
+include!("equality.rs");
 
 include!("helpers.rs");
 

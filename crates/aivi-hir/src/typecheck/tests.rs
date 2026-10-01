@@ -25,6 +25,245 @@ fn typecheck_text(path: &str, text: &str) -> TypeCheckReport {
 }
 
 #[test]
+fn imported_structural_equality_requires_every_payload() {
+    struct Resolver(crate::ExportedNames);
+    impl crate::ImportResolver for Resolver {
+        fn resolve(&self, _: &[&str]) -> crate::ImportModuleResolution {
+            crate::ImportModuleResolution::Resolved(self.0.clone())
+        }
+    }
+    for (model, subject, accepted) in [
+        ("type Box = Box Bytes", "Box", false),
+        ("type Box = Box (Int -> Int)", "Box", false),
+        ("type Box = Box (List Bytes)", "Box", false),
+        ("type Box = Box (Option Int) Text", "Box", true),
+        ("type Box A = Box A", "Box Int", true),
+        ("type Box A = Box A", "Box Bytes", false),
+        ("type Box A = Box Int", "Box Bytes", true),
+        ("type Box A = Box A", "Box A", true),
+        ("type Box A = Here A | Next (Box A)", "Box Int", true),
+        ("type Box A = Here A | Next (Box Bytes)", "Box Int", false),
+        ("type Box A = End | Next (Box Int)", "Box Text", true),
+        ("type Box = { payload : Bytes }", "Box", false),
+        ("type Box = { payload : Int }", "Box", true),
+        ("domain Box over Bytes", "Box", false),
+        ("domain Box over Int", "Box", true),
+        (
+            "type Box = Box Bytes\ninstance Eq Box = { (==) = left right => True }",
+            "Box",
+            true,
+        ),
+    ] {
+        let mut sources = SourceDatabase::new();
+        let owner = sources.add_file("models.aivi", format!("{model}\nexport Box\n"));
+        let parsed = parse_module(&sources[owner]);
+        assert!(!parsed.has_errors(), "{model}");
+        let lowered = lower_module(&parsed.module);
+        assert!(
+            !lowered.has_errors(),
+            "{model}: {:?}",
+            lowered.diagnostics()
+        );
+        assert!(
+            lowered
+                .module()
+                .validate(crate::ValidationMode::RequireResolvedNames)
+                .is_ok(),
+            "{model}: {:?}",
+            lowered
+                .module()
+                .validate(crate::ValidationMode::RequireResolvedNames)
+        );
+        let resolver = Resolver(crate::exports(lowered.module()));
+        let left = subject.replacen("Box", "Original", 1);
+        let right = subject.replacen("Box", "Alias", 1);
+        let context = if subject == "Box A" { "Eq A => " } else { "" };
+        let consumer = sources.add_file(
+            "consumer.aivi",
+            format!("use models (Box as Original)\nuse models (Box as Alias)\ntype {context}{left} -> {right} -> Bool\nfunc same = left right => left == right\n"),
+        );
+        let parsed = parse_module(&sources[consumer]);
+        assert!(!parsed.has_errors(), "{model}");
+        let lowered = crate::lower_module_with_resolver(&parsed.module, Some(&resolver));
+        assert!(
+            !lowered.has_errors(),
+            "{model}: {:?}",
+            lowered.diagnostics()
+        );
+        let report = typecheck_module(lowered.module());
+        assert_eq!(
+            report.is_ok(),
+            accepted,
+            "{model}: {:?}",
+            report.diagnostics()
+        );
+        if !accepted {
+            assert!(
+                report
+                    .diagnostics()
+                    .iter()
+                    .any(|d| d.code == Some(code("missing-eq-instance"))),
+                "{model}: {:?}",
+                report.diagnostics()
+            );
+        }
+    }
+}
+
+#[test]
+fn derived_inequality_is_optional_only_for_the_standard_eq_class() {
+    for (declaration, accepted) in [
+        ("", true),
+        (
+            "class Eq A = {\n    (==) : A -> A -> Bool\n    (!=) : A -> A -> Bool\n}\n",
+            false,
+        ),
+    ] {
+        let module = lowered_module_text(
+            "eq-inventory-validation.aivi",
+            &format!(
+                "{declaration}type Box = Box Int\ninstance Eq Box = {{ (==) = left right => True }}\n"
+            ),
+        );
+        if !accepted {
+            let (_, class) = module
+                .items()
+                .iter()
+                .find_map(|(id, item)| match item {
+                    Item::Class(class) if module.root_items().contains(&id) => Some((id, class)),
+                    _ => None,
+                })
+                .expect("authored class");
+            assert!(matches!(
+                class.identity,
+                crate::ClassIdentity::Source { .. }
+            ));
+            assert_eq!(
+                class
+                    .members
+                    .iter()
+                    .map(|member| member.name.text())
+                    .collect::<Vec<_>>(),
+                vec!["==", "!="]
+            );
+        }
+        let report = module.validate(crate::ValidationMode::RequireResolvedNames);
+        assert_eq!(report.is_ok(), accepted, "{report:?}");
+        if !accepted {
+            assert!(format!("{report:?}").contains("missing-instance-member"));
+        }
+    }
+}
+
+#[test]
+fn structural_equality_tracks_changed_recursive_arguments() {
+    let report = typecheck_text(
+        "changed-recursive-equality.aivi",
+        "type Box A = Here A | Next (Box Bytes)\ntype Box Int -> Box Int -> Bool\nfunc same = left right => left == right\n",
+    );
+    assert!(!report.is_ok(), "{:?}", report.diagnostics());
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code == Some(code("missing-eq-instance")))
+    );
+}
+
+#[test]
+fn structural_equality_bounds_growing_proofs_and_restores_its_path() {
+    let report = typecheck_text(
+        "growing-recursive-equality.aivi",
+        "type Box A = End | Next (Box (List A))\ntype Box Int -> Box Int -> Bool\nfunc same = left right => left == right\n",
+    );
+    assert!(!report.is_ok());
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code == Some(code("equality-proof-complexity"))),
+        "{:?}",
+        report.diagnostics()
+    );
+    let module = lowered_module_text("wide-equality-proof.aivi", "");
+    let mut checker = TypeChecker::new(&module);
+    let mut path = EqualityProofPath::default();
+    let too_wide = GateType::Tuple(vec![GateType::Primitive(BuiltinType::Int); 4096]);
+    assert!(matches!(
+        checker.require_compiler_derived_eq(&too_wide, &mut path),
+        Err(ComparisonError::Complexity)
+    ));
+    assert!(path.active.is_empty());
+    assert_eq!(checker.equality_proof_depth, 0);
+    assert!(
+        checker
+            .require_compiler_derived_eq(
+                &GateType::Primitive(BuiltinType::Int),
+                &mut EqualityProofPath::default()
+            )
+            .is_ok()
+    );
+}
+
+#[test]
+fn structural_equality_rejects_unknown_import_representations() {
+    let module = lowered_module_text("unknown-import-equality.aivi", "");
+    let mut checker = TypeChecker::new(&module);
+    let subject = GateType::OpaqueImport {
+        origin: Some(Box::new(crate::TypeIdentity::Source {
+            file: FileId::new(100),
+            name: "Unknown".into(),
+        })),
+        import: ImportId::from_raw(u32::MAX),
+        name: "Unknown".into(),
+        arguments: Vec::new(),
+        definition: None,
+    };
+    let mut path = EqualityProofPath::default();
+    let error = checker
+        .require_compiler_derived_eq(&subject, &mut path)
+        .unwrap_err();
+    assert!(error.to_string().contains("closed representation"));
+    assert!(path.active.is_empty());
+    assert_eq!(checker.equality_proof_depth, 0);
+}
+
+#[test]
+fn private_imported_recursive_types_preserve_payload_proofs() {
+    struct Resolver(crate::ExportedNames);
+    impl crate::ImportResolver for Resolver {
+        fn resolve(&self, _: &[&str]) -> crate::ImportModuleResolution {
+            crate::ImportModuleResolution::Resolved(self.0.clone())
+        }
+    }
+    for (recursive, accepted) in [("Box A", true), ("Box Bytes", false)] {
+        let mut sources = SourceDatabase::new();
+        let owner = sources.add_file("private-models.aivi", format!("type Box A = Here A | Next ({recursive})\nvalue left : Box Int = Here 1\nvalue right : Box Int = Here 2\nexport left\nexport right\n"));
+        let parsed = parse_module(&sources[owner]);
+        assert!(!parsed.has_errors());
+        let lowered = lower_module(&parsed.module);
+        assert!(!lowered.has_errors());
+        let resolver = Resolver(crate::exports(lowered.module()));
+        assert!(resolver.0.find("Box").is_none());
+        let consumer = sources.add_file(
+            "consumer.aivi",
+            "use models (left, right)\nvalue same : Bool = left == right\n",
+        );
+        let parsed = parse_module(&sources[consumer]);
+        assert!(!parsed.has_errors());
+        let lowered = crate::lower_module_with_resolver(&parsed.module, Some(&resolver));
+        assert!(!lowered.has_errors());
+        let report = typecheck_module(lowered.module());
+        assert_eq!(
+            report.is_ok(),
+            accepted,
+            "{recursive}: {:?}",
+            report.diagnostics()
+        );
+    }
+}
+
+#[test]
 fn authored_class_names_do_not_inherit_compiler_instances() {
     let report = typecheck_text(
         "authored-functor-shadow.aivi",

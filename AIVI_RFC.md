@@ -893,6 +893,16 @@ Compiler-derived `Eq` is required for:
 - `Result E A` and `Validation E A` when both `E` and `A` are `Eq`
 - domains whose underlying carrier supports `Eq`, preserving domain identity
 
+These payload requirements also apply to imported declarations, using their closed representation
+metadata. An imported name alone is not evidence. Recursive proof identity includes the declaring
+type and its instantiated arguments; encountering the same declaration with different arguments
+must check those payloads independently. Missing representation metadata requires explicit
+equality evidence. Proofs exceeding compiler resource limits report
+`hir::equality-proof-complexity` instead of assuming equality or recursing without a bound.
+
+The standard `Eq` dictionary requires only `(==)`; `!=` is derived from that evidence.
+Authored class dictionaries require every declared member, independent of the class name.
+
 Derived equality is structural and type-directed:
 
 - tuple equality: position-by-position

@@ -4139,6 +4139,62 @@ impl<S> Module<S> {
         &self.root_items
     }
 
+    /// Members stored in executable dictionaries. Standard inequality is derived;
+    /// authored classes retain every declared member regardless of spelling.
+    pub(crate) fn class_dictionary_members(
+        &self,
+        class_item_id: ItemId,
+    ) -> Vec<(ClassMemberResolution, u8)> {
+        let Item::Class(class_item) = &self.items()[class_item_id] else {
+            return Vec::new();
+        };
+        let standard_name = match &class_item.identity {
+            crate::ClassIdentity::Standard(name) => Some(name.as_ref()),
+            crate::ClassIdentity::Source { .. } => None,
+        };
+        // Only compiler-owned identities use the canonical operator dictionary ABI.
+        // Authored declarations carry all members, regardless of their spelling.
+        let members: &[(&str, u8)] = match standard_name {
+            Some("Eq") => &[("==", 0)],
+            Some("Setoid") => &[("equals", 1)],
+            Some("Ord") => &[("compare", 0)],
+            _ => {
+                return class_item
+                    .members
+                    .iter()
+                    .enumerate()
+                    .map(|(member_index, _)| {
+                        (
+                            ClassMemberResolution {
+                                class: class_item_id,
+                                member_index,
+                            },
+                            0,
+                        )
+                    })
+                    .collect();
+            }
+        };
+        members
+            .iter()
+            .filter_map(|(member_name, priority)| {
+                class_item
+                    .members
+                    .iter()
+                    .position(|member| member.name.text() == *member_name)
+                    .map(|member_index| {
+                        (
+                            ClassMemberResolution {
+                                class: class_item_id,
+                                member_index,
+                            },
+                            *priority,
+                        )
+                    })
+            })
+            .collect()
+    }
+
     /// Class members opened in this module. Private imported projections do not
     /// open their original names; aliases open the original declaration's members.
     pub(crate) fn class_members_in_scope(&self, name: &str) -> Vec<ClassMemberResolution> {

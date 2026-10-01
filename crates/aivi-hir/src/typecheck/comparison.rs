@@ -9,6 +9,7 @@ pub(crate) enum ComparisonKind {
 #[derive(Clone, Debug)]
 enum ComparisonError {
     Missing(String),
+    Complexity,
     Ambiguous {
         member: &'static str,
         subject: GateType,
@@ -26,6 +27,9 @@ impl std::fmt::Display for ComparisonError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Missing(reason) => f.write_str(reason),
+            Self::Complexity => {
+                f.write_str("structural equality proof exceeded its compiler complexity limit")
+            }
             Self::Ambiguous {
                 member,
                 subject,
@@ -71,7 +75,7 @@ pub(crate) fn resolve_comparison_member_in_scope(
     let mut checker = TypeChecker::new(module);
     checker.with_class_constraint_scope(evidence_scope_constraints(env), |checker| {
         checker
-            .select_comparison_member(kind, subject, &mut Vec::new())
+            .select_comparison_member(kind, subject, &mut EqualityProofPath::default())
             .ok()
     })
 }
@@ -85,6 +89,15 @@ impl TypeChecker<'_> {
         error: &ComparisonError,
     ) {
         let diagnostic = match error {
+            ComparisonError::Complexity => {
+                Diagnostic::error("structural equality proof is too complex")
+                    .with_code(code("equality-proof-complexity"))
+                    .with_primary_label(
+                        span,
+                        "this structural proof exceeds the compiler's resource limit",
+                    )
+                    .with_help("simplify the recursive type or provide explicit equality evidence")
+            }
             ComparisonError::Ambiguous { .. } => Diagnostic::error(
                 "comparison evidence is ambiguous",
             )
@@ -139,7 +152,7 @@ impl TypeChecker<'_> {
         &mut self,
         kind: ComparisonKind,
         matched: &ClassMemberCallMatch,
-        item_stack: &mut Vec<ItemId>,
+        path: &mut EqualityProofPath,
     ) -> Result<(), ComparisonError> {
         let standard_equality = kind == ComparisonKind::Equality
             && matches!(&self.module.items()[matched.resolution.class], Item::Class(class) if matches!(&class.identity, crate::ClassIdentity::Standard(name) if matches!(name.as_ref(), "Eq" | "Setoid")));
@@ -159,10 +172,10 @@ impl TypeChecker<'_> {
                 .is_none()
             && let TypeBinding::Type(subject) = &matched.evidence.subject
         {
-            // Preserve the same recursive-type stack through structural proof.
+            // Preserve the same instantiated-type path through structural proof.
             // Starting another class search here would lose its cycle boundary.
             let scope = self.current_eq_constraint_scope();
-            self.require_compiler_derived_eq_with_scope(subject, &scope, item_stack)?;
+            self.require_compiler_derived_eq_with_scope(subject, &scope, path)?;
             for requirement in &matched.constraints {
                 self.require_class_binding(requirement)?;
             }
@@ -179,7 +192,7 @@ impl TypeChecker<'_> {
         &mut self,
         kind: ComparisonKind,
         subject: &GateType,
-        item_stack: &mut Vec<ItemId>,
+        path: &mut EqualityProofPath,
     ) -> Result<ClassMemberCallMatch, ComparisonError> {
         // A dictionary already in scope carries its original lexical identity,
         // including the compiler-owned helpers checked under local shadowing.
@@ -219,8 +232,11 @@ impl TypeChecker<'_> {
                 if let Some(matched) = self.match_comparison_member(kind, candidate, subject)
                     && self.in_scope_class_constraints.contains(&matched.evidence)
                 {
-                    match self.prove_comparison_member(kind, &matched, item_stack) {
+                    match self.prove_comparison_member(kind, &matched, path) {
                         Ok(()) => matches.push(matched),
+                        Err(ComparisonError::Complexity) => {
+                            return Err(ComparisonError::Complexity);
+                        }
                         Err(reason) => failure = Some(reason),
                     }
                 }
@@ -243,8 +259,9 @@ impl TypeChecker<'_> {
                 let Some(matched) = self.match_comparison_member(kind, candidate, subject) else {
                     continue;
                 };
-                match self.prove_comparison_member(kind, &matched, item_stack) {
+                match self.prove_comparison_member(kind, &matched, path) {
                     Ok(()) => matches.push(matched),
+                    Err(ComparisonError::Complexity) => return Err(ComparisonError::Complexity),
                     Err(reason) => {
                         if self
                             .resolve_same_module_instance_binding_with_id(

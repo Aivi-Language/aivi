@@ -2038,9 +2038,11 @@ impl Validator<'_> {
                 }
             }
 
-            let missing_members = class_item
-                .members
-                .iter()
+            let missing_members = self
+                .module
+                .class_dictionary_members(class_item_id)
+                .into_iter()
+                .map(|(resolution, _)| &class_item.members[resolution.member_index])
                 .filter(|class_member| !seen_members.contains_key(class_member.name.text()))
                 .map(|class_member| format!("`{}`", class_member.name.text()))
                 .collect::<Vec<_>>();
@@ -2054,7 +2056,7 @@ impl Validator<'_> {
                     .with_code(code("missing-instance-member"))
                     .with_primary_label(
                         item.header.span,
-                        "every class member must be implemented exactly once",
+                        "implement every required class member exactly once",
                     ),
                 );
             }

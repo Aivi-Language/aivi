@@ -469,7 +469,7 @@ fn snake_serialized_frozen_image_reloads_frozen_catalog_without_backend_program(
 }
 
 #[test]
-fn source_run_cache_discards_keys_from_before_typed_comparison_evidence() {
+fn source_run_cache_discards_keys_from_before_imported_equality_payload_checks() {
     use std::{
         collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
@@ -484,7 +484,7 @@ fn source_run_cache_discards_keys_from_before_typed_comparison_evidence() {
     let mut legacy = DefaultHasher::new();
     "aivi.source-run-cache".hash(&mut legacy);
     5_u32.hash(&mut legacy);
-    "18".hash(&mut legacy);
+    "19".hash(&mut legacy);
     env!("CARGO_PKG_VERSION").hash(&mut legacy);
     super::normalize_source_run_cache_path(&entry)
         .to_string_lossy()

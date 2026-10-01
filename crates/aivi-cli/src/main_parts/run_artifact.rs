@@ -5,8 +5,8 @@ const BACKEND_PAYLOAD_FORMAT: &str = "aivi.backend-payload";
 const BACKEND_PAYLOAD_VERSION: u32 = 6;
 const SOURCE_RUN_CACHE_FORMAT: &str = "aivi.source-run-cache";
 const SOURCE_RUN_CACHE_VERSION: u32 = 5;
-// Revision 19 resolves comparison operators through typed member evidence.
-const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "19";
+// Revision 20 verifies imported equality payloads and required dictionary members.
+const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "20";
 const SOURCE_RUN_CACHE_DIR: &str = "run-cache";
 const SOURCE_RUN_CACHE_METADATA_FILE_NAME: &str = "source-run-cache.json";
 const MAX_BINARY_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;
