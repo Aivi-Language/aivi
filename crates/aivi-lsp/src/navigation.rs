@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use aivi_base::{ByteIndex, LspPosition, SourceSpan, Span};
 use aivi_hir::{
@@ -79,13 +79,24 @@ pub struct NavigationAnalysis {
     file: SourceFile,
     hir: Arc<HirModuleResult>,
     source: Arc<aivi_base::SourceFile>,
+    files_by_id: HashMap<aivi_base::FileId, SourceFile>,
 }
 
 impl NavigationAnalysis {
     pub fn load(db: &RootDatabase, file: SourceFile) -> Self {
         let hir = aivi_query::hir_module(db, file);
         let source = hir.source_arc();
-        Self { file, hir, source }
+        let files_by_id = db
+            .files()
+            .into_iter()
+            .map(|file| (file.source(db).id(), file))
+            .collect();
+        Self {
+            file,
+            hir,
+            source,
+            files_by_id,
+        }
     }
 
     pub(crate) fn reference_range_at_lsp_position(
@@ -1055,13 +1066,21 @@ impl NavigationAnalysis {
 
     fn item_targets(&self, item: ItemId, referenced_name: Option<&str>) -> Vec<NavigationTarget> {
         self.item_selection_span(item, referenced_name)
-            .map(|span| vec![NavigationTarget::new(self.file, span)])
+            .and_then(|span| {
+                self.files_by_id
+                    .get(&span.file())
+                    .map(|file| vec![NavigationTarget::new(*file, span)])
+            })
             .unwrap_or_default()
     }
 
     fn class_member_targets(&self, resolution: ClassMemberResolution) -> Vec<NavigationTarget> {
         self.class_member_selection_span(resolution)
-            .map(|span| vec![NavigationTarget::new(self.file, span)])
+            .and_then(|span| {
+                self.files_by_id
+                    .get(&span.file())
+                    .map(|file| vec![NavigationTarget::new(*file, span)])
+            })
             .unwrap_or_default()
     }
 
@@ -1101,7 +1120,11 @@ impl NavigationAnalysis {
             Item::Value(item) => Some(item.name.span()),
             Item::Function(item) => Some(item.name.span()),
             Item::Signal(item) => Some(item.name.span()),
-            Item::Class(item) => Some(item.name.span()),
+            Item::Class(item) => Some(
+                self.module()
+                    .imported_class_definition(&item.identity)
+                    .map_or_else(|| item.name.span(), |definition| definition.selection_span),
+            ),
             Item::Domain(item) => Some(item.name.span()),
             Item::Instance(_)
             | Item::Use(_)
@@ -1115,6 +1138,17 @@ impl NavigationAnalysis {
         let Item::Class(class_item) = self.module().items().get(resolution.class)? else {
             return None;
         };
+        if let Some(definition) = self
+            .module()
+            .imported_class_definition(&class_item.identity)
+        {
+            return Some(
+                definition
+                    .members
+                    .get(resolution.member_index)?
+                    .selection_span,
+            );
+        }
         Some(class_item.members.get(resolution.member_index)?.name.span())
     }
 
@@ -1224,6 +1258,7 @@ impl NavigationAnalysis {
         let imported = Self::load(db, target_file);
         match &import_binding.metadata {
             ImportBindingMetadata::TypeConstructor { .. }
+            | ImportBindingMetadata::Class { .. }
             | ImportBindingMetadata::Domain { .. }
             | ImportBindingMetadata::BuiltinType(_)
             | ImportBindingMetadata::AmbientType => {

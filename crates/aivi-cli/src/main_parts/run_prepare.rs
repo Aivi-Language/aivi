@@ -1862,7 +1862,11 @@ fn import_value_type_to_gate_type(ty: &ImportValueType) -> Option<GateType> {
             type_name,
             arguments,
             definition,
+            origin,
         } => GateType::OpaqueImport {
+            origin: origin
+                .as_ref()
+                .map(|origin| Box::new(origin.identity.clone())),
             import: aivi_hir::ImportId::from_raw(u32::MAX),
             name: type_name.clone(),
             arguments: arguments

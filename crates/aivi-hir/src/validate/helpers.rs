@@ -197,35 +197,66 @@ fn item_name(item: Option<&Item>) -> Option<String> {
     }
 }
 
-/// Levenshtein edit distance between two strings.
-fn levenshtein(a: &str, b: &str) -> usize {
-    let a_len = a.len();
-    let b_len = b.len();
-    if a_len == 0 {
-        return b_len;
+/// Character edit distance, limited to the maximum useful suggestion distance.
+fn levenshtein(a: &str, b: &str, max_distance: usize) -> Option<usize> {
+    if a == b {
+        return Some(0);
     }
-    if b_len == 0 {
-        return a_len;
+    if a.is_ascii() && b.is_ascii() {
+        return bounded_edit_distance(a.as_bytes(), b.as_bytes(), max_distance);
     }
+    let a = a.chars().collect::<Vec<_>>();
+    let b = b.chars().collect::<Vec<_>>();
+    bounded_edit_distance(&a, &b, max_distance)
+}
 
-    let mut prev: Vec<usize> = (0..=b_len).collect();
-    let mut curr = vec![0; b_len + 1];
-
-    for (i, a_char) in a.chars().enumerate() {
-        curr[0] = i + 1;
-        for (j, b_char) in b.chars().enumerate() {
-            let cost = if a_char == b_char { 0 } else { 1 };
-            curr[j + 1] = (prev[j + 1] + 1).min(curr[j] + 1).min(prev[j] + cost);
+/// Only cells within the allowed distance of the diagonal can contribute to
+/// a suggestion. A row with no such proof ends the search immediately.
+fn bounded_edit_distance<T: Eq>(a: &[T], b: &[T], max_distance: usize) -> Option<usize> {
+    if a.len().abs_diff(b.len()) > max_distance {
+        return None;
+    }
+    if a.is_empty() {
+        return Some(b.len());
+    }
+    if b.is_empty() {
+        return Some(a.len());
+    }
+    let limit = max_distance.min(a.len().max(b.len()));
+    let infinity = limit + 1;
+    let mut previous = vec![infinity; b.len() + 1];
+    for (index, distance) in previous.iter_mut().enumerate().take(limit + 1) {
+        *distance = index;
+    }
+    let mut current = vec![infinity; b.len() + 1];
+    for (index, left) in a.iter().enumerate() {
+        let row = index + 1;
+        current.fill(infinity);
+        current[0] = row.min(infinity);
+        let start = row.saturating_sub(limit).max(1);
+        let end = row.saturating_add(limit).min(b.len());
+        let mut minimum = current[0];
+        for column in start..=end {
+            let cost = usize::from(left != &b[column - 1]);
+            let distance = (previous[column] + 1)
+                .min(current[column - 1] + 1)
+                .min(previous[column - 1] + cost)
+                .min(infinity);
+            current[column] = distance;
+            minimum = minimum.min(distance);
         }
-        std::mem::swap(&mut prev, &mut curr);
+        if minimum > limit {
+            return None;
+        }
+        std::mem::swap(&mut previous, &mut current);
     }
-    prev[b_len]
+    (previous[b.len()] <= max_distance).then_some(previous[b.len()])
 }
 
 /// Collect all available names in a module (items + imports) and suggest
 /// the closest match to `target` within a maximum edit distance.
 fn suggest_similar_name(module: &Module, target: &str) -> Option<String> {
-    let max_distance = match target.len() {
+    let max_distance = match target.chars().count() {
         0..=2 => 1,
         3..=5 => 2,
         _ => 3,
@@ -236,22 +267,24 @@ fn suggest_similar_name(module: &Module, target: &str) -> Option<String> {
     // Check module items.
     for (_, item) in module.items().iter() {
         if let Some(name) = item_name(Some(item)) {
-            let d = levenshtein(target, &name);
-            if d > 0 && d <= max_distance
-                && best.as_ref().is_none_or(|(bd, _)| d < *bd) {
-                    best = Some((d, name));
-                }
+            let Some(d) = levenshtein(target, &name, max_distance) else {
+                continue;
+            };
+            if d > 0 && d <= max_distance && best.as_ref().is_none_or(|(bd, _)| d < *bd) {
+                best = Some((d, name));
+            }
         }
     }
 
     // Check imports.
     for (_, import) in module.imports().iter() {
         let name = import.local_name.text();
-        let d = levenshtein(target, name);
-        if d > 0 && d <= max_distance
-            && best.as_ref().is_none_or(|(bd, _)| d < *bd) {
-                best = Some((d, name.to_owned()));
-            }
+        let Some(d) = levenshtein(target, name, max_distance) else {
+            continue;
+        };
+        if d > 0 && d <= max_distance && best.as_ref().is_none_or(|(bd, _)| d < *bd) {
+            best = Some((d, name.to_owned()));
+        }
     }
 
     best.map(|(_, name)| name)

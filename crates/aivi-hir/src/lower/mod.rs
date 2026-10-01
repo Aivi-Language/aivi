@@ -36,6 +36,8 @@ include!("ambient.rs");
 
 include!("lowerer.rs");
 
+include!("imported_classes.rs");
+
 include!("helpers.rs");
 
 #[cfg(test)]

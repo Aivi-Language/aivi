@@ -119,8 +119,11 @@ enum LoweredMarkup {
 
 impl<'a> Lowerer<'a> {
     fn new(file: aivi_base::FileId, resolver: &'a dyn crate::resolver::ImportResolver) -> Self {
+        let mut module = Module::new(file);
+        module.builtin_instance_provider = resolver.current_builtin_instance_provider();
+        module.source_module = resolver.current_module_path().map(Into::into);
         Self {
-            module: Module::new(file),
+            module,
             diagnostics: Vec::new(),
             resolver,
             next_lambda_id: 0,
@@ -221,7 +224,10 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    fn store_item(&mut self, item: Item, ambient: bool) {
+    fn store_item(&mut self, mut item: Item, ambient: bool) {
+        if ambient && let Item::Class(class) = &mut item {
+            class.identity = crate::ClassIdentity::Standard(class.name.text().into());
+        }
         if ambient {
             if self.module.push_ambient_item(item).is_err() {
                 self.emit_arena_overflow("HIR ambient item arena");
@@ -893,6 +899,10 @@ impl<'a> Lowerer<'a> {
 
         ClassItem {
             header,
+            identity: crate::ClassIdentity::Source {
+                file: self.module.file(),
+                name: name.text().into(),
+            },
             name,
             parameters,
             superclasses,
@@ -1588,6 +1598,7 @@ impl<'a> Lowerer<'a> {
         // Auto-register imported instance member bindings so cross-module instance
         // resolution can find them without the user explicitly importing by name.
         if let ImportModuleResolution::Resolved(exports) = &module_resolution {
+            self.register_class_catalog(exports);
             self.register_instance_type_imports(&module_name, exports, item.base.span);
             for instance_decl in &exports.instances {
                 for member in &instance_decl.members {
@@ -1606,6 +1617,7 @@ impl<'a> Lowerer<'a> {
                         local_name: name,
                         resolution: ImportBindingResolution::Resolved,
                         metadata: ImportBindingMetadata::InstanceMember {
+                            class_identity: instance_decl.class_identity.clone(),
                             class_name: instance_decl.class_name.clone(),
                             member_name: member.name.clone(),
                             subject: instance_decl.subject.clone(),
@@ -4612,6 +4624,7 @@ impl<'a> Lowerer<'a> {
 
     fn build_namespaces(&mut self) -> Namespaces {
         let mut namespaces = Namespaces::default();
+        self.project_imported_classes();
         let root_ids = self.module.root_items().to_vec();
         for item_id in root_ids {
             let item = self.module.items()[item_id].clone();
@@ -4915,6 +4928,21 @@ impl<'a> Lowerer<'a> {
         namespaces
     }
 
+    fn register_class_catalog(&mut self, exports: &crate::ExportedNames) {
+        for definition in &exports.classes {
+            if !self
+                .module
+                .imported_class_definitions
+                .iter()
+                .any(|existing| existing.identity == definition.identity)
+            {
+                self.module
+                    .imported_class_definitions
+                    .push(definition.clone());
+            }
+        }
+    }
+
     fn register_use_item(&mut self, item: &UseItem, namespaces: &mut Namespaces) {
         let module_name = path_text(&item.module);
         for import_id in item.imports.iter() {
@@ -4954,9 +4982,13 @@ impl<'a> Lowerer<'a> {
             // A same-named sum constructor occupies the term namespace while
             // its type occupies the type namespace (for example Date).
             if let ImportBindingMetadata::TypeConstructor {
-                kind, definition: Some(crate::ImportTypeDefinition::Sum(variants)), ..
+                kind,
+                definition: Some(crate::ImportTypeDefinition::Sum(variants)),
+                ..
             } = &import.metadata
-                && let Some(variant) = variants.iter().find(|variant| variant.name.as_ref() == import.imported_name.text())
+                && let Some(variant) = variants
+                    .iter()
+                    .find(|variant| variant.name.as_ref() == import.imported_name.text())
             {
                 let mut arity = 0;
                 let mut result_kind = kind;
@@ -4965,22 +4997,45 @@ impl<'a> Lowerer<'a> {
                     result_kind = result;
                 }
                 let mut ty = ImportValueType::Named {
+                    origin: None,
                     type_name: import.imported_name.text().to_owned(),
-                    arguments: (0..arity).map(|index| ImportValueType::TypeVariable { index, name: format!("T{index}") }).collect(),
+                    arguments: (0..arity)
+                        .map(|index| ImportValueType::TypeVariable {
+                            index,
+                            name: format!("T{index}"),
+                        })
+                        .collect(),
                     definition: Some(Box::new(crate::ImportTypeDefinition::Sum(variants.clone()))),
                 };
                 for field in variant.fields.iter().rev() {
-                    ty = ImportValueType::Arrow { parameter: Box::new(field.clone()), result: Box::new(ty) };
+                    ty = ImportValueType::Arrow {
+                        parameter: Box::new(field.clone()),
+                        result: Box::new(ty),
+                    };
                 }
                 let mut constructor = import.clone();
                 constructor.metadata = ImportBindingMetadata::Value { ty };
                 constructor.source_module = Some(module_name.clone().into());
                 let constructor_id = self.alloc_import(constructor);
-                insert_site(&mut namespaces.term_imports, import.local_name.text(), constructor_id, import.span);
+                insert_site(
+                    &mut namespaces.term_imports,
+                    import.local_name.text(),
+                    constructor_id,
+                    import.span,
+                );
             }
 
             match import.metadata.clone() {
-                ImportBindingMetadata::Value { .. } | ImportBindingMetadata::ConstrainedValue { .. }
+                ImportBindingMetadata::Class { identity } => {
+                    self.register_imported_class(
+                        &identity,
+                        &import.local_name,
+                        import.span,
+                        namespaces,
+                    );
+                }
+                ImportBindingMetadata::Value { .. }
+                | ImportBindingMetadata::ConstrainedValue { .. }
                 | ImportBindingMetadata::IntrinsicValue { .. }
                 | ImportBindingMetadata::OpaqueValue
                 | ImportBindingMetadata::AmbientValue { .. }
@@ -5019,8 +5074,7 @@ impl<'a> Lowerer<'a> {
                 }
                 ImportBindingMetadata::Bundle(_)
                 | ImportBindingMetadata::DomainSuffix { .. }
-                | ImportBindingMetadata::InstanceMember { .. } => {
-                }
+                | ImportBindingMetadata::InstanceMember { .. } => {}
                 ImportBindingMetadata::Unknown => {
                     self.diagnostics.push(
                         Diagnostic::error(format!(
@@ -5138,6 +5192,7 @@ impl<'a> Lowerer<'a> {
         use crate::exports::ExportedNameKind;
         use crate::resolver::ImportModuleResolution;
 
+        self.register_class_catalog(exports);
         let wrapped = ImportModuleResolution::Resolved(exports.clone());
 
         for exported in exports.names.iter() {
@@ -5182,6 +5237,9 @@ impl<'a> Lowerer<'a> {
             });
 
             match &metadata {
+                ImportBindingMetadata::Class { identity } => {
+                    self.register_imported_class(identity, &imported_name, span, namespaces);
+                }
                 ImportBindingMetadata::TypeConstructor { .. }
                 | ImportBindingMetadata::BuiltinType(_)
                 | ImportBindingMetadata::AmbientType => insert_site(
@@ -5222,6 +5280,7 @@ impl<'a> Lowerer<'a> {
         }
 
         // Auto-register instance members for class dispatch.
+        self.register_class_catalog(exports);
         self.register_instance_type_imports(module_name, exports, span);
         for instance_decl in &exports.instances {
             for member in &instance_decl.members {
@@ -5240,6 +5299,7 @@ impl<'a> Lowerer<'a> {
                     local_name: name,
                     resolution: ImportBindingResolution::Resolved,
                     metadata: ImportBindingMetadata::InstanceMember {
+                        class_identity: instance_decl.class_identity.clone(),
                         class_name: instance_decl.class_name.clone(),
                         member_name: member.name.clone(),
                         subject: instance_decl.subject.clone(),
@@ -5265,22 +5325,6 @@ impl<'a> Lowerer<'a> {
         span: SourceSpan,
     ) {
         use crate::{ImportTypeDefinition, ImportedTypeBinding, ImportedTypeConstructor};
-        let mut known = self
-            .module
-            .imports()
-            .iter()
-            .filter(|(_, binding)| {
-                binding.source_module.as_deref() == Some(module_name)
-                    && matches!(
-                        binding.metadata,
-                        ImportBindingMetadata::TypeConstructor { .. }
-                            | ImportBindingMetadata::Domain { .. }
-                            | ImportBindingMetadata::AmbientType
-                            | ImportBindingMetadata::BuiltinType(_)
-                    )
-            })
-            .map(|(_, binding)| binding.imported_name.text().to_owned())
-            .collect::<HashSet<_>>();
         let mut named = Vec::new();
         let mut values = Vec::new();
         for instance in &exports.instances {
@@ -5303,9 +5347,15 @@ impl<'a> Lowerer<'a> {
                             name,
                             arity,
                             definition,
+                            origin,
                         } = head
                         {
-                            named.push((name.to_string(), *arity, definition.clone()));
+                            named.push((
+                                name.to_string(),
+                                *arity,
+                                definition.clone(),
+                                origin.clone(),
+                            ));
                         }
                         values.extend(arguments);
                     }
@@ -5319,8 +5369,14 @@ impl<'a> Lowerer<'a> {
                     type_name,
                     arguments,
                     definition,
+                    origin,
                 } => {
-                    named.push((type_name.clone(), arguments.len(), definition.clone()));
+                    named.push((
+                        type_name.clone(),
+                        arguments.len(),
+                        definition.clone(),
+                        origin.clone(),
+                    ));
                     values.extend(arguments);
                 }
                 ImportValueType::Tuple(elements)
@@ -5349,46 +5405,85 @@ impl<'a> Lowerer<'a> {
                 ImportValueType::Primitive(_) | ImportValueType::TypeVariable { .. } => {}
             }
         }
-        for (name, arity, definition) in named {
-            if !known.insert(name.clone()) {
+        for (name, arity, definition, origin) in named {
+            let name = origin
+                .as_ref()
+                .map_or(name.as_str(), |origin| origin.name());
+            let source_module = origin
+                .as_ref()
+                .and_then(|origin| origin.source_module.as_deref())
+                .unwrap_or(module_name);
+            if self.module.imports().iter().any(|(_, binding)| {
+                if let Some(origin) = &origin {
+                    binding
+                        .metadata
+                        .type_origin()
+                        .is_some_and(|candidate| candidate.identity == origin.identity)
+                } else {
+                    binding.source_module.as_deref() == Some(source_module)
+                        && binding.imported_name.text() == name
+                        && matches!(
+                            binding.metadata,
+                            ImportBindingMetadata::TypeConstructor { .. }
+                                | ImportBindingMetadata::Domain { .. }
+                                | ImportBindingMetadata::AmbientType
+                                | ImportBindingMetadata::BuiltinType(_)
+                        )
+                }
+            }) {
                 continue;
             }
+            let exported = exports.find(name).filter(|export| {
+                match (&origin, export.metadata.type_origin()) {
+                    (Some(origin), Some(candidate)) => origin.identity == candidate.identity,
+                    (None, _) => source_module == module_name,
+                    _ => false,
+                }
+            });
             let metadata = if let Some(
                 metadata @ (ImportBindingMetadata::AmbientType
                 | ImportBindingMetadata::BuiltinType(_)),
-            ) = known_import_metadata(module_name, &name)
+            ) = known_import_metadata(source_module, name)
             {
                 metadata
             } else {
-                match exports.find(&name).map(|export| &export.metadata) {
+                match exported.map(|export| &export.metadata) {
                     Some(ImportBindingMetadata::TypeConstructor {
                         kind,
                         fields,
                         definition,
+                        origin,
                         ..
                     }) => ImportBindingMetadata::TypeConstructor {
+                        origin: origin.clone(),
                         type_item: None,
                         constructors: None,
                         kind: kind.clone(),
                         fields: fields.clone(),
                         definition: definition.clone(),
                     },
-                    Some(ImportBindingMetadata::Domain { kind, carrier, .. }) => {
-                        ImportBindingMetadata::Domain {
-                            kind: kind.clone(),
-                            literal_suffixes: Vec::new(),
-                            carrier: carrier.clone(),
-                        }
-                    }
+                    Some(ImportBindingMetadata::Domain {
+                        kind,
+                        carrier,
+                        origin,
+                        ..
+                    }) => ImportBindingMetadata::Domain {
+                        origin: origin.clone(),
+                        kind: kind.clone(),
+                        literal_suffixes: Vec::new(),
+                        carrier: carrier.clone(),
+                    },
                     _ => match definition.as_deref() {
                         Some(ImportTypeDefinition::Domain(carrier)) => {
                             ImportBindingMetadata::Domain {
+                                origin: origin.clone(),
                                 kind: Kind::constructor(arity),
                                 literal_suffixes: Vec::new(),
                                 carrier: Some(carrier.clone()),
                             }
                         }
                         _ => ImportBindingMetadata::TypeConstructor {
+                            origin: origin.clone(),
                             type_item: None,
                             constructors: None,
                             kind: Kind::constructor(arity),
@@ -5400,10 +5495,14 @@ impl<'a> Lowerer<'a> {
             };
             self.alloc_import(ImportBinding {
                 span,
-                source_module: Some(module_name.into()),
-                imported_name: self.make_name(&name, span),
+                source_module: Some(source_module.into()),
+                imported_name: self.make_name(name, span),
                 local_name: self.make_name(
-                    &format!("__instance_type_{}_{}", module_name.replace('.', "_"), name),
+                    &format!(
+                        "__instance_type_{}_{}",
+                        source_module.replace('.', "_"),
+                        name
+                    ),
                     span,
                 ),
                 resolution: ImportBindingResolution::Resolved,
@@ -5425,8 +5524,15 @@ impl<'a> Lowerer<'a> {
         target: &mut HashMap<String, Vec<NamedSite<LiteralSuffixResolution>>>,
     ) {
         for suffix in literal_suffixes {
-            let synthetic_key =
-                format!("__domain_suffix_{}_{}", domain_name.text(), suffix.name);
+            if let Some((id, _)) = self.module.imports().iter().find(|(_, binding)| {
+                binding.source_module.as_deref() == source_module
+                    && matches!(&binding.metadata, ImportBindingMetadata::DomainSuffix { domain_name: existing_domain, suffix_name, .. } if existing_domain.as_ref() == domain_name.text() && suffix_name == &suffix.name)
+            }) {
+                insert_site(target, &suffix.name, LiteralSuffixResolution::Import(id), span);
+                continue;
+            }
+
+            let synthetic_key = format!("__domain_suffix_{}_{}", domain_name.text(), suffix.name);
             let hidden_name = self.make_name(&synthetic_key, span);
             let imported_name = self.make_name(&synthetic_key, span);
             let import = ImportBinding {
@@ -9245,22 +9351,6 @@ impl<'a> Lowerer<'a> {
             }
             LookupResult::Missing => {}
         }
-        match lookup_item(&namespaces.ambient_type_items, name) {
-            LookupResult::Unique(item) => {
-                reference.resolution = ResolutionState::Resolved(TypeResolution::Item(item));
-                return;
-            }
-            LookupResult::Ambiguous => {
-                self.emit_error(
-                    reference.span(),
-                    format!("ambient type `{name}` is ambiguous"),
-                    code("ambiguous-type-name"),
-                );
-                reference.resolution = ResolutionState::Unresolved;
-                return;
-            }
-            LookupResult::Missing => {}
-        }
         match lookup_item(&namespaces.type_imports, name) {
             LookupResult::Unique(import) => {
                 let import_binding = &self.module.imports()[import];
@@ -9363,6 +9453,22 @@ impl<'a> Lowerer<'a> {
                         code("ambiguous-hoisted-type"),
                     );
                 }
+                reference.resolution = ResolutionState::Unresolved;
+                return;
+            }
+            LookupResult::Missing => {}
+        }
+        match lookup_item(&namespaces.ambient_type_items, name) {
+            LookupResult::Unique(item) => {
+                reference.resolution = ResolutionState::Resolved(TypeResolution::Item(item));
+                return;
+            }
+            LookupResult::Ambiguous => {
+                self.emit_error(
+                    reference.span(),
+                    format!("ambient type `{name}` is ambiguous"),
+                    code("ambiguous-type-name"),
+                );
                 reference.resolution = ResolutionState::Unresolved;
                 return;
             }

@@ -1016,6 +1016,7 @@ impl<'a> DecodeTypeLowerer<'a> {
             }
             | ImportBindingMetadata::Domain { carrier: None, .. }
             | ImportBindingMetadata::BuiltinTerm(_)
+            | ImportBindingMetadata::Class { .. }
             | ImportBindingMetadata::AmbientType
             | ImportBindingMetadata::Bundle(_)
             | ImportBindingMetadata::DomainSuffix { .. }
@@ -1150,6 +1151,7 @@ impl<'a> DecodeTypeLowerer<'a> {
                 type_name,
                 arguments: nested_arguments,
                 definition,
+                ..
             } => {
                 let lowered_arguments = nested_arguments
                     .iter()

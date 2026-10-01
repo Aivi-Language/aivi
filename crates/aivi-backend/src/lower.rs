@@ -4001,7 +4001,9 @@ fn hir_gate_type_for_core_type(ty: &core::Type) -> HirGateType {
             name,
             arguments,
             definition,
+            origin,
         } => HirGateType::OpaqueImport {
+            origin: origin.clone(),
             import: *import,
             name: name.to_string(),
             arguments: arguments.iter().map(hir_gate_type_for_core_type).collect(),

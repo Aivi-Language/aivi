@@ -37,6 +37,7 @@ pub struct ExportedName {
 pub struct ExportedNames {
     pub names: Vec<ExportedName>,
     pub instances: Vec<ExportedInstanceDeclaration>,
+    pub classes: Vec<crate::ImportedClassDefinition>,
 }
 
 impl ExportedNames {
@@ -74,6 +75,7 @@ fn domain_suffix_base(module: &Module, annotation: TypeId) -> Option<LiteralSuff
 /// metadata for the importing module to resolve cross-module class instances.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExportedInstanceDeclaration {
+    pub class_identity: crate::ClassIdentity,
     pub class_name: Box<str>,
     pub subject: Box<str>,
     pub head: crate::ImportedTypeBinding,
@@ -111,7 +113,109 @@ pub fn exports(module: &Module) -> ExportedNames {
             .then_with(|| exported_kind_rank(left.kind).cmp(&exported_kind_rank(right.kind)))
     });
     let instances = collect_instance_declarations(module);
-    ExportedNames { names, instances }
+    let classes = collect_class_definitions(module);
+    ExportedNames {
+        names,
+        instances,
+        classes,
+    }
+}
+
+fn collect_class_definitions(module: &Module) -> Vec<crate::ImportedClassDefinition> {
+    let mut definitions = module.imported_class_definitions.clone();
+    if !module
+        .root_items()
+        .iter()
+        .any(|id| matches!(module.items()[*id], Item::Class(_)))
+    {
+        return definitions;
+    }
+    let mut typing = crate::validate::GateTypeContext::new(module);
+    for id in module.root_items() {
+        let Item::Class(class) = &module.items()[*id] else {
+            continue;
+        };
+        let parameters = class
+            .parameters
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(index, parameter)| (parameter, index))
+            .collect::<TypeParamMap>();
+        let export_constraints = |typing: &mut crate::validate::GateTypeContext<'_>,
+                                  constraints: &[TypeId],
+                                  parameters: &TypeParamMap| {
+            constraints
+                .iter()
+                .map(|constraint| {
+                    let binding =
+                        typing.open_class_constraint_binding(*constraint, &HashMap::new())?;
+                    let Item::Class(required) = &module.items()[binding.class_item] else {
+                        return None;
+                    };
+                    Some(crate::ImportedClassConstraint {
+                        class_identity: required.identity.clone(),
+                        class_name: required.name.text().into(),
+                        subject: export_type_binding(module, &binding.subject, parameters)?,
+                    })
+                })
+                .collect::<Option<Vec<_>>>()
+        };
+        let Some(superclasses) = export_constraints(&mut typing, &class.superclasses, &parameters)
+        else {
+            continue;
+        };
+        let Some(param_constraints) =
+            export_constraints(&mut typing, &class.param_constraints, &parameters)
+        else {
+            continue;
+        };
+        let members = class
+            .members
+            .iter()
+            .map(|member| {
+                let mut parameters = parameters.clone();
+                for parameter in &member.type_parameters {
+                    let index = parameters.len();
+                    parameters.insert(*parameter, index);
+                }
+                Some(crate::ImportedClassMember {
+                    selection_span: member.name.span(),
+                    name: member.name.text().into(),
+                    type_parameters: member
+                        .type_parameters
+                        .iter()
+                        .map(|id| module.type_parameters()[*id].name.text().into())
+                        .collect(),
+                    context: export_constraints(&mut typing, &member.context, &parameters)?,
+                    ty: poly_import_value_type(module, member.annotation, &parameters)?,
+                })
+            })
+            .collect::<Option<Vec<_>>>();
+        let Some(members) = members else {
+            continue;
+        };
+        if !definitions
+            .iter()
+            .any(|definition| definition.identity == class.identity)
+        {
+            definitions.push(crate::ImportedClassDefinition {
+                identity: class.identity.clone(),
+                selection_span: class.name.span(),
+                source_module: module.source_module.clone(),
+                name: class.name.text().into(),
+                parameters: class
+                    .parameters
+                    .iter()
+                    .map(|id| module.type_parameters()[*id].name.text().into())
+                    .collect(),
+                superclasses,
+                param_constraints,
+                members,
+            });
+        }
+    }
+    definitions
 }
 
 fn explicit_exported_names(module: &Module) -> Vec<ExportedName> {
@@ -169,6 +273,7 @@ fn implicit_exported_names(module: &Module) -> Vec<ExportedName> {
                     if variant.fields.is_empty() {
                         ImportBindingMetadata::Value {
                             ty: ImportValueType::Named {
+                                origin: module.type_origin(id),
                                 type_name: owner_type_name,
                                 arguments: result_args.clone(),
                                 definition: None,
@@ -176,6 +281,7 @@ fn implicit_exported_names(module: &Module) -> Vec<ExportedName> {
                         }
                     } else {
                         let result = ImportValueType::Named {
+                            origin: module.type_origin(id),
                             type_name: owner_type_name,
                             arguments: result_args.clone(),
                             definition: None,
@@ -184,6 +290,7 @@ fn implicit_exported_names(module: &Module) -> Vec<ExportedName> {
                             let param_ty =
                                 poly_import_value_type(module, field.ty, &type_param_map)
                                     .unwrap_or(ImportValueType::Named {
+                                        origin: None,
                                         type_name: "Unknown".into(),
                                         arguments: Vec::new(),
                                         definition: None,
@@ -258,6 +365,7 @@ fn re_exported_import_name(
 ) -> Option<ExportedName> {
     let import = module.imports().get(import_id)?;
     let kind = match &import.metadata {
+        ImportBindingMetadata::Class { .. } => ExportedNameKind::Class,
         ImportBindingMetadata::TypeConstructor { .. }
         | ImportBindingMetadata::Domain { .. }
         | ImportBindingMetadata::BuiltinType(_)
@@ -293,6 +401,7 @@ fn explicit_item_exported_name(
                     let fields = extract_type_record_fields(module, item_id, item);
                     let definition = extract_type_definition(module, item_id, item);
                     ImportBindingMetadata::TypeConstructor {
+                        origin: module.type_origin(item_id),
                         type_item: Some(item_id),
                         constructors: extract_type_sum_constructors(module, item_id, item),
                         kind: aivi_typing::Kind::constructor(item.parameters.len()),
@@ -344,6 +453,7 @@ fn explicit_item_exported_name(
                         if variant.fields.is_empty() {
                             ImportBindingMetadata::Value {
                                 ty: ImportValueType::Named {
+                                    origin: module.type_origin(item_id),
                                     type_name: owner_type_name,
                                     arguments: result_args.clone(),
                                     definition: None,
@@ -353,6 +463,7 @@ fn explicit_item_exported_name(
                             // Multi-field constructors: build Arrow chain over field types,
                             // returning the owner Named type with proper type-variable arguments.
                             let result = ImportValueType::Named {
+                                origin: module.type_origin(item_id),
                                 type_name: owner_type_name,
                                 arguments: result_args.clone(),
                                 definition: None,
@@ -361,6 +472,7 @@ fn explicit_item_exported_name(
                                 let param_ty =
                                     poly_import_value_type(module, field.ty, &type_param_map)
                                         .unwrap_or(ImportValueType::Named {
+                                            origin: module.type_origin(item_id),
                                             type_name: "Unknown".into(),
                                             arguments: Vec::new(),
                                             definition: None,
@@ -382,18 +494,14 @@ fn explicit_item_exported_name(
                     }
                 })
         }
-        Item::Class(item) => (item.name.text() == exported_name).then(|| ExportedName {
+        Item::Class(item) => Some(ExportedName {
             name: exported_name.to_owned(),
             kind: ExportedNameKind::Class,
             metadata: if ambient {
                 ImportBindingMetadata::AmbientType
             } else {
-                ImportBindingMetadata::TypeConstructor {
-                    type_item: Some(item_id),
-                    constructors: None,
-                    kind: aivi_typing::Kind::constructor(item.parameters.len()),
-                    fields: None,
-                    definition: None,
+                ImportBindingMetadata::Class {
+                    identity: item.identity.clone(),
                 }
             },
             callable_type: None,
@@ -422,6 +530,7 @@ fn explicit_item_exported_name(
                     })
                     .collect();
                 ImportBindingMetadata::Domain {
+                    origin: module.type_origin(item_id),
                     kind: aivi_typing::Kind::constructor(item.parameters.len()),
                     literal_suffixes,
                     carrier: import_value_type(module, item.carrier),
@@ -489,6 +598,7 @@ fn item_to_exported_name(module: &Module, item_id: ItemId, item: &Item) -> Optio
             name: item.name.text().to_owned(),
             kind: ExportedNameKind::Type,
             metadata: ImportBindingMetadata::TypeConstructor {
+                origin: module.type_origin(item_id),
                 type_item: Some(item_id),
                 constructors: extract_type_sum_constructors(module, item_id, item),
                 kind: aivi_typing::Kind::constructor(item.parameters.len()),
@@ -540,12 +650,8 @@ fn item_to_exported_name(module: &Module, item_id: ItemId, item: &Item) -> Optio
         Item::Class(item) => Some(ExportedName {
             name: item.name.text().to_owned(),
             kind: ExportedNameKind::Class,
-            metadata: ImportBindingMetadata::TypeConstructor {
-                type_item: Some(item_id),
-                constructors: None,
-                kind: aivi_typing::Kind::constructor(item.parameters.len()),
-                fields: None,
-                definition: None,
+            metadata: ImportBindingMetadata::Class {
+                identity: item.identity.clone(),
             },
             callable_type: None,
             deprecation,
@@ -571,6 +677,7 @@ fn item_to_exported_name(module: &Module, item_id: ItemId, item: &Item) -> Optio
                     })
                     .collect();
                 ImportBindingMetadata::Domain {
+                    origin: module.type_origin(item_id),
                     kind: aivi_typing::Kind::constructor(item.parameters.len()),
                     literal_suffixes,
                     carrier: import_value_type(module, item.carrier),
@@ -602,14 +709,15 @@ fn exported_value_metadata(
 fn inferred_item_import_value_type(module: &Module, item_id: ItemId) -> Option<ImportValueType> {
     let mut typing = crate::typecheck_context::GateTypeContext::new(module);
     let ty = typing.item_value_type(item_id)?;
-    gate_type_import_value_type(&ty)
+    gate_type_import_value_type(module, &ty)
 }
 
-fn gate_type_import_value_type(ty: &crate::GateType) -> Option<ImportValueType> {
-    poly_gate_type_import_value_type(ty, &HashMap::new())
+fn gate_type_import_value_type(module: &Module, ty: &crate::GateType) -> Option<ImportValueType> {
+    poly_gate_type_import_value_type(module, ty, &HashMap::new())
 }
 
 pub(crate) fn poly_gate_type_import_value_type(
+    module: &Module,
     ty: &crate::GateType,
     parameters: &HashMap<TypeParameterId, usize>,
 ) -> Option<ImportValueType> {
@@ -623,7 +731,7 @@ pub(crate) fn poly_gate_type_import_value_type(
             name: name.clone(),
             arguments: arguments
                 .iter()
-                .map(|a| poly_gate_type_import_value_type(a, parameters))
+                .map(|a| poly_gate_type_import_value_type(module, a, parameters))
                 .collect::<Option<Vec<_>>>()?,
         }),
         crate::GateType::Primitive(builtin) => primitive_import_value_type_from_builtin(*builtin),
@@ -634,7 +742,7 @@ pub(crate) fn poly_gate_type_import_value_type(
         crate::GateType::Tuple(elements) => Some(ImportValueType::Tuple(
             elements
                 .iter()
-                .map(|ty| poly_gate_type_import_value_type(ty, parameters))
+                .map(|ty| poly_gate_type_import_value_type(module, ty, parameters))
                 .collect::<Option<Vec<_>>>()?,
         )),
         crate::GateType::Record(fields) => Some(ImportValueType::Record(
@@ -643,66 +751,88 @@ pub(crate) fn poly_gate_type_import_value_type(
                 .map(|field| {
                     Some(ImportRecordField {
                         name: field.name.clone().into_boxed_str(),
-                        ty: poly_gate_type_import_value_type(&field.ty, parameters)?,
+                        ty: poly_gate_type_import_value_type(module, &field.ty, parameters)?,
                     })
                 })
                 .collect::<Option<Vec<_>>>()?,
         )),
         crate::GateType::Arrow { parameter, result } => Some(ImportValueType::Arrow {
-            parameter: Box::new(poly_gate_type_import_value_type(parameter, parameters)?),
-            result: Box::new(poly_gate_type_import_value_type(result, parameters)?),
+            parameter: Box::new(poly_gate_type_import_value_type(
+                module, parameter, parameters,
+            )?),
+            result: Box::new(poly_gate_type_import_value_type(
+                module, result, parameters,
+            )?),
         }),
         crate::GateType::List(element) => Some(ImportValueType::List(Box::new(
-            poly_gate_type_import_value_type(element, parameters)?,
+            poly_gate_type_import_value_type(module, element, parameters)?,
         ))),
         crate::GateType::Map { key, value } => Some(ImportValueType::Map {
-            key: Box::new(poly_gate_type_import_value_type(key, parameters)?),
-            value: Box::new(poly_gate_type_import_value_type(value, parameters)?),
+            key: Box::new(poly_gate_type_import_value_type(module, key, parameters)?),
+            value: Box::new(poly_gate_type_import_value_type(module, value, parameters)?),
         }),
         crate::GateType::Set(element) => Some(ImportValueType::Set(Box::new(
-            poly_gate_type_import_value_type(element, parameters)?,
+            poly_gate_type_import_value_type(module, element, parameters)?,
         ))),
         crate::GateType::Option(element) => Some(ImportValueType::Option(Box::new(
-            poly_gate_type_import_value_type(element, parameters)?,
+            poly_gate_type_import_value_type(module, element, parameters)?,
         ))),
         crate::GateType::Result { error, value } => Some(ImportValueType::Result {
-            error: Box::new(poly_gate_type_import_value_type(error, parameters)?),
-            value: Box::new(poly_gate_type_import_value_type(value, parameters)?),
+            error: Box::new(poly_gate_type_import_value_type(module, error, parameters)?),
+            value: Box::new(poly_gate_type_import_value_type(module, value, parameters)?),
         }),
         crate::GateType::Validation { error, value } => Some(ImportValueType::Validation {
-            error: Box::new(poly_gate_type_import_value_type(error, parameters)?),
-            value: Box::new(poly_gate_type_import_value_type(value, parameters)?),
+            error: Box::new(poly_gate_type_import_value_type(module, error, parameters)?),
+            value: Box::new(poly_gate_type_import_value_type(module, value, parameters)?),
         }),
         crate::GateType::Signal(payload) => Some(ImportValueType::Signal(Box::new(
-            poly_gate_type_import_value_type(payload, parameters)?,
+            poly_gate_type_import_value_type(module, payload, parameters)?,
         ))),
         crate::GateType::Task { error, value } => Some(ImportValueType::Task {
-            error: Box::new(poly_gate_type_import_value_type(error, parameters)?),
-            value: Box::new(poly_gate_type_import_value_type(value, parameters)?),
+            error: Box::new(poly_gate_type_import_value_type(module, error, parameters)?),
+            value: Box::new(poly_gate_type_import_value_type(module, value, parameters)?),
         }),
         crate::GateType::Domain {
-            name, arguments, ..
+            item,
+            name,
+            arguments,
+            ..
         }
         | crate::GateType::OpaqueItem {
-            name, arguments, ..
+            item,
+            name,
+            arguments,
+            ..
         } => Some(ImportValueType::Named {
+            origin: module.type_origin(*item),
             type_name: name.clone(),
             arguments: arguments
                 .iter()
-                .map(|ty| poly_gate_type_import_value_type(ty, parameters))
+                .map(|ty| poly_gate_type_import_value_type(module, ty, parameters))
                 .collect::<Option<Vec<_>>>()?,
             definition: None,
         }),
         crate::GateType::OpaqueImport {
+            import,
             name,
             arguments,
             definition,
-            ..
+            origin,
         } => Some(ImportValueType::Named {
+            origin: module
+                .imports()
+                .get(*import)
+                .and_then(|binding| binding.metadata.type_origin().cloned())
+                .or_else(|| {
+                    origin.as_ref().map(|identity| crate::ImportedTypeOrigin {
+                        identity: identity.as_ref().clone(),
+                        source_module: None,
+                    })
+                }),
             type_name: name.clone(),
             arguments: arguments
                 .iter()
-                .map(|ty| poly_gate_type_import_value_type(ty, parameters))
+                .map(|ty| poly_gate_type_import_value_type(module, ty, parameters))
                 .collect::<Option<Vec<_>>>()?,
             definition: definition.clone(),
         }),
@@ -772,6 +902,7 @@ fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclara
                     return None;
                 };
                 Some(crate::ImportedClassConstraint {
+                    class_identity: class.identity.clone(),
                     class_name: class.name.text().into(),
                     subject: export_type_binding(module, &binding.subject, &parameters)?,
                 })
@@ -828,6 +959,7 @@ fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclara
             })
             .collect();
         declarations.push(ExportedInstanceDeclaration {
+            class_identity: class_item.identity.clone(),
             class_name,
             subject,
             head,
@@ -854,11 +986,11 @@ pub(crate) fn export_type_binding(
             } => {
                 let arguments = arguments
                     .iter()
-                    .map(|ty| poly_gate_type_import_value_type(ty, parameters))
+                    .map(|ty| poly_gate_type_import_value_type(module, ty, parameters))
                     .collect::<Option<Vec<_>>>()?;
                 named_import_value_type_from_item(module, *item, arguments, &mut Vec::new())?
             }
-            other => poly_gate_type_import_value_type(other, parameters)?,
+            other => poly_gate_type_import_value_type(module, other, parameters)?,
         }),
         TypeBinding::Constructor(binding) => ImportedTypeBinding::Constructor {
             head: match binding.head() {
@@ -869,12 +1001,14 @@ pub(crate) fn export_type_binding(
                         Item::Domain(domain) => (domain.name.text(), domain.parameters.len()),
                         _ => return None,
                     };
-                    let ImportValueType::Named { definition, .. } =
-                        named_import_value_type_from_item(module, id, Vec::new(), &mut Vec::new())?
+                    let ImportValueType::Named {
+                        origin, definition, ..
+                    } = named_import_value_type_from_item(module, id, Vec::new(), &mut Vec::new())?
                     else {
                         return None;
                     };
                     ImportedTypeConstructor::Named {
+                        origin,
                         name: name.into(),
                         arity,
                         definition,
@@ -887,12 +1021,14 @@ pub(crate) fn export_type_binding(
                         | ImportBindingMetadata::Domain { kind, .. } => kind.arity(),
                         _ => return None,
                     };
-                    let ImportValueType::Named { definition, .. } =
-                        named_import_value_type_from_import(module, id, Vec::new())?
+                    let ImportValueType::Named {
+                        origin, definition, ..
+                    } = named_import_value_type_from_import(module, id, Vec::new())?
                     else {
                         return None;
                     };
                     ImportedTypeConstructor::Named {
+                        origin,
                         name: import.imported_name.text().into(),
                         arity,
                         definition,
@@ -909,7 +1045,7 @@ pub(crate) fn export_type_binding(
             arguments: binding
                 .arguments()
                 .iter()
-                .map(|ty| poly_gate_type_import_value_type(ty, parameters))
+                .map(|ty| poly_gate_type_import_value_type(module, ty, parameters))
                 .collect::<Option<Vec<_>>>()?,
         },
     })
@@ -1472,6 +1608,7 @@ fn named_import_value_type_from_item(
         }
     };
     Some(ImportValueType::Named {
+        origin: module.type_origin(item_id),
         type_name,
         arguments,
         definition,
@@ -1496,7 +1633,11 @@ fn named_import_value_type_from_import(
         _ => None,
     };
     Some(ImportValueType::Named {
-        type_name: binding.imported_name.text().to_owned(),
+        origin: binding.metadata.type_origin().cloned(),
+        type_name: binding.metadata.type_origin().map_or_else(
+            || binding.imported_name.text().to_owned(),
+            |origin| origin.name().to_owned(),
+        ),
         arguments,
         definition,
     })
@@ -1811,6 +1952,7 @@ fn resolve_type_constructor(
             | ImportBindingMetadata::AmbientValue { .. }
             | ImportBindingMetadata::DomainSuffix { .. }
             | ImportBindingMetadata::BuiltinTerm(_)
+            | ImportBindingMetadata::Class { .. }
             | ImportBindingMetadata::InstanceMember { .. } => None,
         },
         ResolutionState::Resolved(TypeResolution::TypeParameter(_))
@@ -2052,6 +2194,7 @@ fn poly_applied_import_value_type_with_stack(
             named_import_value_type_from_import(module, import, args)
         }
         PolyTypeConstructor::Named(type_name) => Some(ImportValueType::Named {
+            origin: None,
             type_name,
             arguments: args,
             definition: None,

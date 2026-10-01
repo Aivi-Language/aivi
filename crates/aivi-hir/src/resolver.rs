@@ -46,6 +46,12 @@ pub struct RawHoistItem {
 /// Implementors inject cross-file resolution into the HIR lowering pipeline
 /// without creating a direct dependency on the incremental database layer.
 pub trait ImportResolver {
+    /// Authority of a registered shipped instance implementation module.
+    /// Project overrides must return `None`, even for an `aivi.*` module name.
+    fn current_builtin_instance_provider(&self) -> Option<crate::BuiltinInstanceProvider> {
+        None
+    }
+
     /// Resolve a dotted module path (e.g. `["aivi", "network"]`) to the set of
     /// names exported by that module.
     fn resolve(&self, path: &[&str]) -> ImportModuleResolution;

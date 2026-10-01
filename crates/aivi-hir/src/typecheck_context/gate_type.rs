@@ -50,6 +50,7 @@ pub enum GateType {
     },
     /// An imported type constructor or domain from another module.
     OpaqueImport {
+        origin: Option<Box<crate::TypeIdentity>>,
         import: ImportId,
         name: String,
         arguments: Vec<GateType>,
@@ -199,35 +200,62 @@ impl GateType {
     }
 
     pub fn same_shape(&self, other: &Self) -> bool {
-        let mut left_to_right = HashMap::new();
-        let mut right_to_left = HashMap::new();
-        Self::same_shape_inner(
-            self,
-            other,
-            &mut left_to_right,
-            &mut right_to_left,
-            &[],
-            &|left, right| left == right,
-        )
+        self.same_shape_with_nominal_identity(other, &[], &Self::nominal_heads_equal)
     }
 
-    /// Definition quantifiers denote fixed, independent types. Other signature
-    /// parameters may still be alpha-renamed while comparing polymorphic shapes.
     pub(crate) fn same_shape_with_rigid_parameters(
         &self,
         other: &Self,
         rigid: &[TypeParameterId],
     ) -> bool {
-        let mut left_to_right = HashMap::new();
-        let mut right_to_left = HashMap::new();
+        self.same_shape_with_nominal_identity(other, rigid, &Self::nominal_heads_equal)
+    }
+
+    pub(crate) fn same_shape_with_nominal_identity(
+        &self,
+        other: &Self,
+        rigid: &[TypeParameterId],
+        nominals_equal: &impl Fn(&GateType, &GateType) -> bool,
+    ) -> bool {
         Self::same_shape_inner(
             self,
             other,
-            &mut left_to_right,
-            &mut right_to_left,
+            &mut HashMap::new(),
+            &mut HashMap::new(),
             rigid,
-            &|left, right| left == right,
+            nominals_equal,
         )
+    }
+
+    fn nominal_heads_equal(left: &Self, right: &Self) -> bool {
+        match (left, right) {
+            (
+                Self::OpaqueImport {
+                    origin: Some(left), ..
+                },
+                Self::OpaqueImport {
+                    origin: Some(right),
+                    ..
+                },
+            ) => left == right,
+            (
+                Self::OpaqueImport {
+                    import: left,
+                    name: ln,
+                    ..
+                },
+                Self::OpaqueImport {
+                    import: right,
+                    name: rn,
+                    ..
+                },
+            ) => left == right && ln == rn,
+            (
+                Self::Domain { item: left, .. } | Self::OpaqueItem { item: left, .. },
+                Self::Domain { item: right, .. } | Self::OpaqueItem { item: right, .. },
+            ) => left == right,
+            _ => false,
+        }
     }
 
     /// Compare portable member quantifiers while retaining the source identity
@@ -237,14 +265,21 @@ impl GateType {
         other: &Self,
         imports_equal: impl Fn(ImportId, ImportId) -> bool,
     ) -> bool {
-        Self::same_shape_inner(
-            self,
-            other,
-            &mut HashMap::new(),
-            &mut HashMap::new(),
-            &[],
-            &imports_equal,
-        )
+        self.same_shape_with_nominal_identity(other, &[], &|left, right| match (left, right) {
+            (
+                Self::OpaqueImport {
+                    origin: Some(left), ..
+                },
+                Self::OpaqueImport {
+                    origin: Some(right),
+                    ..
+                },
+            ) => left == right,
+            (Self::OpaqueImport { import: left, .. }, Self::OpaqueImport { import: right, .. }) => {
+                imports_equal(*left, *right)
+            }
+            _ => Self::nominal_heads_equal(left, right),
+        })
     }
 
     /// Substitute every occurrence of `param` with `replacement` throughout this type.
@@ -357,11 +392,13 @@ impl GateType {
                     .collect(),
             },
             Self::OpaqueImport {
+                origin,
                 import,
                 name,
                 arguments,
                 definition,
             } => Self::OpaqueImport {
+                origin: origin.clone(),
                 import: *import,
                 name: name.clone(),
                 arguments: arguments
@@ -627,10 +664,24 @@ impl GateType {
                     .collect();
                 Some(GateType::Record(lowered?))
             }
-            ImportValueType::Named { type_name, arguments: type_args, definition } => {
-                let arguments = type_args.iter().map(|ty| Self::expand_import_alias_type(ty, arguments)).collect::<Option<Vec<_>>>()?;
+            ImportValueType::Named {
+                type_name,
+                arguments: type_args,
+                definition,
+                origin,
+            } => {
+                let arguments = type_args
+                    .iter()
+                    .map(|ty| Self::expand_import_alias_type(ty, arguments))
+                    .collect::<Option<Vec<_>>>()?;
                 Some(GateType::OpaqueImport {
-                    import: ImportId::from_raw(u32::MAX), name: type_name.clone(), arguments, definition: definition.clone(),
+                    origin: origin
+                        .as_ref()
+                        .map(|origin| Box::new(origin.identity.clone())),
+                    import: ImportId::from_raw(u32::MAX),
+                    name: type_name.clone(),
+                    arguments,
+                    definition: definition.clone(),
                 })
             }
         }
@@ -642,9 +693,9 @@ impl GateType {
         left_to_right: &mut HashMap<TypeParameterId, TypeParameterId>,
         right_to_left: &mut HashMap<TypeParameterId, TypeParameterId>,
         rigid: &[TypeParameterId],
-        imports_equal: &impl Fn(ImportId, ImportId) -> bool,
+        nominals_equal: &impl Fn(&GateType, &GateType) -> bool,
     ) -> bool {
-        let same_named_constructor = matches!((left.named_type_parts(), right.named_type_parts()), (Some((left, _)), Some((right, _))) if left == right);
+        let same_named_constructor = nominals_equal(left, right);
         if !same_named_constructor {
             // Expand transparent imported type aliases (e.g. `type Envelope A = A`)
             // so that `Envelope Text` is recognised as the same shape as `Text`.
@@ -662,7 +713,7 @@ impl GateType {
                     left_to_right,
                     right_to_left,
                     rigid,
-                    imports_equal,
+                    nominals_equal,
                 );
             }
             if let Self::OpaqueImport {
@@ -679,7 +730,7 @@ impl GateType {
                     left_to_right,
                     right_to_left,
                     rigid,
-                    imports_equal,
+                    nominals_equal,
                 );
             }
         }
@@ -708,7 +759,7 @@ impl GateType {
                     left_to_right,
                     right_to_left,
                     rigid,
-                    imports_equal,
+                    nominals_equal,
                 ) && la.len() == ra.len()
                     && la.iter().zip(ra).all(|(l, r)| {
                         Self::same_shape_inner(
@@ -717,7 +768,7 @@ impl GateType {
                             left_to_right,
                             right_to_left,
                             rigid,
-                            imports_equal,
+                            nominals_equal,
                         )
                     })
             }
@@ -766,7 +817,7 @@ impl GateType {
                             left_to_right,
                             right_to_left,
                             rigid,
-                            imports_equal,
+                            nominals_equal,
                         )
                     })
             }
@@ -780,7 +831,7 @@ impl GateType {
                                 left_to_right,
                                 right_to_left,
                                 rigid,
-                                imports_equal,
+                                nominals_equal,
                             )
                     })
             }
@@ -800,14 +851,14 @@ impl GateType {
                     left_to_right,
                     right_to_left,
                     rigid,
-                    imports_equal,
+                    nominals_equal,
                 ) && Self::same_shape_inner(
                     left_result,
                     right_result,
                     left_to_right,
                     right_to_left,
                     rigid,
-                    imports_equal,
+                    nominals_equal,
                 )
             }
             (Self::List(left), Self::List(right))
@@ -819,7 +870,7 @@ impl GateType {
                 left_to_right,
                 right_to_left,
                 rigid,
-                imports_equal,
+                nominals_equal,
             ),
             (
                 Self::Map {
@@ -837,14 +888,14 @@ impl GateType {
                     left_to_right,
                     right_to_left,
                     rigid,
-                    imports_equal,
+                    nominals_equal,
                 ) && Self::same_shape_inner(
                     left_value,
                     right_value,
                     left_to_right,
                     right_to_left,
                     rigid,
-                    imports_equal,
+                    nominals_equal,
                 )
             }
             (
@@ -883,14 +934,14 @@ impl GateType {
                     left_to_right,
                     right_to_left,
                     rigid,
-                    imports_equal,
+                    nominals_equal,
                 ) && Self::same_shape_inner(
                     left_value,
                     right_value,
                     left_to_right,
                     right_to_left,
                     rigid,
-                    imports_equal,
+                    nominals_equal,
                 )
             }
             (
@@ -917,7 +968,7 @@ impl GateType {
                                 left_to_right,
                                 right_to_left,
                                 rigid,
-                                imports_equal,
+                                nominals_equal,
                             )
                         })
             }
@@ -945,71 +996,28 @@ impl GateType {
                                 left_to_right,
                                 right_to_left,
                                 rigid,
-                                imports_equal,
+                                nominals_equal,
                             )
                         })
             }
-            (
-                Self::OpaqueImport {
-                    import: left_import,
-                    name: left_name,
-                    arguments: left_arguments,
-                    ..
-                },
-                Self::OpaqueImport {
-                    import: right_import,
-                    name: right_name,
-                    arguments: right_arguments,
-                    ..
-                },
-            ) => {
-                // Allow matching by name when either side has a sentinel import ID
-                // (u32::MAX), which is used when expanding type aliases without
-                // full module context (e.g. Named references in expand_import_alias_type).
-                let sentinel = ImportId::from_raw(u32::MAX);
-                let ids_match = imports_equal(*left_import, *right_import)
-                    || *left_import == sentinel
-                    || *right_import == sentinel;
-                ids_match
-                    && left_name == right_name
-                    && left_arguments.len() == right_arguments.len()
-                    && left_arguments
-                        .iter()
-                        .zip(right_arguments.iter())
-                        .all(|(left, right)| {
-                            Self::same_shape_inner(
-                                left,
-                                right,
-                                left_to_right,
-                                right_to_left,
-                                rigid,
-                                imports_equal,
-                            )
-                        })
-            }
-            // Cross-variant name-based equivalence: Domain, OpaqueItem, and
-            // OpaqueImport all represent the same logical type when their canonical
-            // names and argument shapes agree.  This covers ambient-prelude types
-            // versus stdlib-imported types across all variant combinations.
             _ => {
-                if let (Some((ln, la)), Some((rn, ra))) =
-                    (left.named_type_parts(), right.named_type_parts())
-                    && ln == rn
-                    && la.len() == ra.len()
-                    && la.iter().zip(ra.iter()).all(|(l, r)| {
-                        Self::same_shape_inner(
-                            l,
-                            r,
-                            left_to_right,
-                            right_to_left,
-                            rigid,
-                            imports_equal,
-                        )
-                    })
-                {
-                    return true;
-                }
-                false
+                nominals_equal(left, right)
+                    && match (left.named_type_parts(), right.named_type_parts()) {
+                        (Some((_, left)), Some((_, right))) => {
+                            left.len() == right.len()
+                                && left.iter().zip(right).all(|(left, right)| {
+                                    Self::same_shape_inner(
+                                        left,
+                                        right,
+                                        left_to_right,
+                                        right_to_left,
+                                        rigid,
+                                        nominals_equal,
+                                    )
+                                })
+                        }
+                        _ => false,
+                    }
             }
         }
     }
@@ -1060,11 +1068,13 @@ impl GateType {
                 arguments,
             },
             Self::OpaqueImport {
+                origin,
                 import,
                 name,
                 definition,
                 ..
             } => Self::OpaqueImport {
+                origin: origin.clone(),
                 import: *import,
                 name: name.clone(),
                 arguments,

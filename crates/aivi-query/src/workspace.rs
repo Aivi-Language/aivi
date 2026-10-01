@@ -17,6 +17,28 @@ pub(crate) struct Workspace {
 }
 
 impl Workspace {
+    pub(crate) fn builtin_instance_provider(
+        &self,
+        db: &RootDatabase,
+        file: SourceFile,
+    ) -> Option<aivi_hir::BuiltinInstanceProvider> {
+        // Logical module names can be overridden. Only the shipped source
+        // root supplies authority to implement compiler-owned primitive heads.
+        let root = discover_bundled_stdlib_root()?;
+        let path = file.path(db);
+        let path = path.canonicalize().unwrap_or(path);
+        let relative = path.strip_prefix(root).ok()?;
+        if relative == Path::new("aivi/defaults.aivi") {
+            Some(aivi_hir::BuiltinInstanceProvider::Defaults)
+        } else if relative == Path::new("aivi/core/bytes.aivi") {
+            Some(aivi_hir::BuiltinInstanceProvider::Bytes)
+        } else if relative == Path::new("aivi/nonEmpty.aivi") {
+            Some(aivi_hir::BuiltinInstanceProvider::NonEmpty)
+        } else {
+            None
+        }
+    }
+
     pub(crate) fn root(&self) -> &Path {
         &self.root
     }

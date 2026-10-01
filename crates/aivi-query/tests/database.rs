@@ -63,6 +63,233 @@ impl Drop for TempDir {
 }
 
 #[test]
+fn imported_class_identities_survive_aliases_without_name_conflation() {
+    let dir = TempDir::new("class-identities");
+    dir.write(
+        "left.aivi",
+        "class Render A = { left : A -> Text }\nexport Render\n",
+    );
+    dir.write(
+        "right.aivi",
+        "class Render A = { right : A -> Text }\nexport Render\n",
+    );
+    let text = r#"
+use left (Render as LeftRender)
+use right (Render as RightRender)
+type Tag = Tag Int
+instance LeftRender Tag = { left = tag => "left" }
+instance RightRender Tag = { right = tag => "right" }
+value result : Text = left (Tag 1)
+"#;
+    let path = dir.write("main.aivi", text);
+    let db = RootDatabase::new();
+    let file = SourceFile::new(&db, path, text.to_owned());
+    let diagnostics = all_diagnostics(&db, file);
+    assert!(
+        diagnostics
+            .iter()
+            .all(|d| d.severity != aivi_base::Severity::Error),
+        "{diagnostics:?}"
+    );
+    let module = hir_module(&db, file);
+    let classes = module
+        .module()
+        .items()
+        .iter()
+        .filter_map(|(_, item)| match item {
+            aivi_hir::Item::Class(class) if class.name.text() == "Render" => Some(&class.identity),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(classes.len(), 2);
+    assert_ne!(classes[0], classes[1]);
+}
+
+#[test]
+fn nominal_reexports_keep_one_instance_identity() {
+    for head in ["Reexported Int", "Alias Int"] {
+        let dir = TempDir::new("nominal-reexport-coherence");
+        dir.write("models.aivi", "type Box A = MkBox A\nexport Box\n");
+        dir.write("facade.aivi", "use models (Box)\nexport Box\n");
+        let text = format!(
+            "use models (Box as Original)\nuse facade (Box as Reexported)\ntype Alias A = (Reexported A)\nclass Render A = {{ render : A -> Text }}\ninstance Render (Original A) = {{ render = value => \"first\" }}\ninstance Render ({head}) = {{ render = value => \"second\" }}\n"
+        );
+        let path = dir.write("main.aivi", &text);
+        let db = RootDatabase::new();
+        let file = SourceFile::new(&db, path, text);
+        let lowered = hir_module(&db, file);
+        assert!(
+            lowered.diagnostics().is_empty(),
+            "{:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered
+            .module()
+            .validate(aivi_hir::ValidationMode::RequireResolvedNames);
+        let diagnostics = report.diagnostics();
+        assert!(
+            diagnostics.iter().any(|d| d
+                .code
+                .as_ref()
+                .is_some_and(|code| code.name() == "duplicate-instance")),
+            "{head}: {diagnostics:?}"
+        );
+    }
+}
+
+#[test]
+fn distinct_nominal_owners_do_not_overlap_or_unify_by_name() {
+    for (expression, accepted) in [("second (MkRight 1)", true), ("second (MkLeft 1)", false)] {
+        let dir = TempDir::new("nominal-distinct-owners");
+        for name in ["left", "right"] {
+            dir.write(
+                &format!("{name}.aivi"),
+                &format!(
+                    "type Box A = Mk{} A\nexport Box\nexport Mk{}\n",
+                    if name == "left" { "Left" } else { "Right" },
+                    if name == "left" { "Left" } else { "Right" }
+                ),
+            );
+        }
+        let text = format!(
+            "use left (Box as LeftBox, MkLeft)\nuse right (Box as RightBox, MkRight)\nclass Render A = {{ render : A -> Text }}\ninstance Render (LeftBox A) = {{ render = value => \"left\" }}\ninstance Render (RightBox A) = {{ render = value => \"right\" }}\ntype RightBox Int -> Text\nfunc second = value => render value\nvalue answer : Text = {expression}\n"
+        );
+        let path = dir.write("main.aivi", &text);
+        let db = RootDatabase::new();
+        let file = SourceFile::new(&db, path, text);
+        let lowered = hir_module(&db, file);
+        assert!(
+            lowered.diagnostics().is_empty(),
+            "{:?}",
+            lowered.diagnostics()
+        );
+        let report = lowered
+            .module()
+            .validate(aivi_hir::ValidationMode::RequireResolvedNames);
+        let diagnostics = report.diagnostics();
+        assert!(
+            !diagnostics.iter().any(|d| d
+                .code
+                .as_ref()
+                .is_some_and(|code| code.name() == "duplicate-instance")),
+            "{diagnostics:?}"
+        );
+        assert_eq!(
+            diagnostics
+                .iter()
+                .all(|d| d.severity != aivi_base::Severity::Error),
+            accepted,
+            "{expression}: {diagnostics:?}"
+        );
+    }
+}
+
+#[test]
+fn imported_domains_shadow_ambient_fallbacks_and_retain_carriers() {
+    let dir = TempDir::new("ambient-domain-import");
+    dir.write("duration.aivi", "hoist\ndomain Duration over Int = { suffix sec : Int = n => Duration n }\nexport Duration\n");
+    let text = "use duration (Duration)\nvalue timeout : Duration = 5sec\n";
+    let path = dir.write("main.aivi", text);
+    let db = RootDatabase::new();
+    let file = SourceFile::new(&db, path, text.to_owned());
+    let lowered = hir_module(&db, file);
+    assert!(
+        lowered.diagnostics().is_empty(),
+        "{:?}",
+        lowered.diagnostics()
+    );
+    let report = lowered
+        .module()
+        .validate(aivi_hir::ValidationMode::RequireResolvedNames);
+    assert!(report.is_ok(), "{:?}", report.diagnostics());
+    let annotation = lowered
+        .module()
+        .root_items()
+        .iter()
+        .find_map(|id| match &lowered.module().items()[*id] {
+            aivi_hir::Item::Value(value) => value.annotation,
+            _ => None,
+        })
+        .unwrap();
+    let aivi_hir::TypeKind::Name(reference) = &lowered.module().types()[annotation].kind else {
+        panic!("domain annotation")
+    };
+    let aivi_hir::ResolutionState::Resolved(aivi_hir::TypeResolution::Import(import)) =
+        reference.resolution
+    else {
+        panic!("import must shadow ambient domain")
+    };
+    assert!(
+        lowered.module().imports()[import]
+            .metadata
+            .type_origin()
+            .is_some()
+    );
+}
+
+#[test]
+fn shipped_instance_providers_are_recognized_from_relative_paths() {
+    for (relative, expected) in [
+        (
+            "aivi/defaults.aivi",
+            aivi_hir::BuiltinInstanceProvider::Defaults,
+        ),
+        (
+            "aivi/core/bytes.aivi",
+            aivi_hir::BuiltinInstanceProvider::Bytes,
+        ),
+        (
+            "aivi/nonEmpty.aivi",
+            aivi_hir::BuiltinInstanceProvider::NonEmpty,
+        ),
+    ] {
+        let path = PathBuf::from("../../stdlib").join(relative);
+        let db = RootDatabase::new();
+        let file = SourceFile::new(&db, path.clone(), fs::read_to_string(&path).unwrap());
+        let module = hir_module(&db, file);
+        assert_eq!(
+            module.module().builtin_instance_provider(),
+            Some(expected),
+            "{path:?}"
+        );
+        let report = module
+            .module()
+            .validate(aivi_hir::ValidationMode::RequireResolvedNames);
+        assert!(report.is_ok(), "{path:?}: {:?}", report.diagnostics());
+    }
+}
+
+#[test]
+fn workspace_override_cannot_claim_shipped_instance_ownership() {
+    let dir = TempDir::new("orphan-provider-spoof");
+    dir.write("aivi/defaults.aivi", "instance Default Int = { default = 0 }\nvalue defaultInt : Int = default\nexport defaultInt\n");
+    let text = "use aivi.defaults (defaultInt)\nvalue answer : Int = defaultInt\n";
+    let path = dir.write("main.aivi", text);
+    let db = RootDatabase::new();
+    let file = SourceFile::new(&db, path, text.to_owned());
+    let _ = hir_module(&db, file);
+    let provider = db
+        .file_at_path(&dir.path.join("aivi/defaults.aivi"))
+        .expect("override was imported");
+    let diagnostics = hir_module(&db, provider)
+        .module()
+        .validate(aivi_hir::ValidationMode::RequireResolvedNames);
+    assert_eq!(
+        hir_module(&db, provider)
+            .module()
+            .builtin_instance_provider(),
+        None
+    );
+    assert!(
+        diagnostics.diagnostics().iter().any(|d| d
+            .code
+            .as_ref()
+            .is_some_and(|code| code.name() == "orphan-instance")),
+        "{diagnostics:?}"
+    );
+}
+
+#[test]
 fn open_file_reuses_existing_handle_for_the_same_path() {
     let db = RootDatabase::new();
 

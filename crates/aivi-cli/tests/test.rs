@@ -37,6 +37,134 @@ impl Drop for TempDir {
 }
 
 #[test]
+fn imported_authored_classes_execute_through_aliases_and_reexports() {
+    let dir = TempDir::new("imported-authored-classes");
+    dir.write(
+        "classes.aivi",
+        r#"
+class Render A = { render : A -> Text }
+type Render A => A -> Text
+func show = value => render value
+export Render
+export show
+class CompareF F = {
+    with Functor F
+    matches : Eq A => A -> F A -> F Bool
+}
+type (CompareF F, Eq A) => A -> F A -> F Bool
+func matchAll = expected items => matches expected items
+export CompareF
+export matchAll
+"#,
+    );
+    dir.write(
+        "bridge.aivi",
+        "use classes (Render as Display)\nexport Display\n",
+    );
+    dir.write(
+        "carrier.aivi",
+        r#"
+use bridge (Display)
+use classes (CompareF)
+type Box A = Box A
+instance Functor Box = { map = f box => box ||> Box a -> Box (f a) }
+instance CompareF Box = { matches = expected box => box ||> Box a -> Box (a == expected) }
+export Box
+type Tag = Tag Text
+instance Display Tag = { render = tag => tag ||> Tag text -> text }
+type Tag -> Text
+func display = tag => render tag
+export Tag
+export display
+"#,
+    );
+    let path = dir.write(
+        "main.aivi",
+        r#"
+use classes (Render as Rendering, CompareF, show, matchAll)
+use bridge (Display)
+use carrier (Tag, Box, display)
+type Box Bool -> Bool
+func unbox = box => box ||> Box value -> value
+@test
+value direct : Task Text Bool = pure (render (Tag "direct") == "direct")
+@test
+value generic : Task Text Bool = pure (show (Tag "generic") == "generic")
+@test
+value owner : Task Text Bool = pure (display (Tag "owner") == "owner")
+@test
+value methodLocal : Task Text Bool = pure (unbox (matches (Tag "yes") (Box (Tag "yes"))))
+@test
+value genericMethodLocal : Task Text Bool = pure (unbox (matchAll (Tag "yes") (Box (Tag "yes"))))
+"#,
+    );
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("5 passed; 0 failed; 5 total"), "{stdout}");
+    }
+}
+
+#[test]
+fn imported_classes_preserve_foreign_carriers_in_method_signatures() {
+    let dir = TempDir::new("class-foreign-carriers");
+    dir.write(
+        "models.aivi",
+        "type Box A = MkBox A\nexport Box\nexport MkBox\n",
+    );
+    dir.write(
+        "facade.aivi",
+        "use models (Box as Wrapped)\nexport Wrapped\n",
+    );
+    dir.write(
+        "classes.aivi",
+        r#"
+use facade (Wrapped)
+class Transform A = { transform : A -> Wrapped A }
+type Transform A => A -> Wrapped A
+func wrapped = value => transform value
+export Transform
+export wrapped
+"#,
+    );
+    let path = dir.write(
+        "main.aivi",
+        r#"
+use models (Box, MkBox)
+use facade (Wrapped)
+use classes (Transform, wrapped)
+type Tag = Tag Text
+instance Transform Tag = { transform = value => MkBox value }
+type Box Tag -> Tag
+func unbox = box => box ||> MkBox tag -> tag
+type Tag -> Text
+func label = tag => tag ||> Tag text -> text
+@test
+value direct : Task Text Bool = pure (label (unbox (transform (Tag "direct"))) == "direct")
+@test
+value generic : Task Text Bool = pure (label (unbox (wrapped (Tag "generic"))) == "generic")
+"#,
+    );
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("2 passed; 0 failed; 2 total"), "{stdout}");
+    }
+}
+
+#[test]
 fn generic_inline_callbacks_execute_with_lexical_dictionary_evidence() {
     let dir = TempDir::new("generic-inline-callbacks");
     dir.write(

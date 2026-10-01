@@ -1,13 +1,13 @@
 const FROZEN_RUN_IMAGE_FORMAT: &str = "aivi.frozen-run-image";
-const FROZEN_RUN_IMAGE_VERSION: u32 = 7;
+const FROZEN_RUN_IMAGE_VERSION: u32 = 8;
 const FROZEN_RUN_IMAGE_FILE_NAME: &str = "frozen-run-image.bin";
 const BACKEND_PAYLOAD_FORMAT: &str = "aivi.backend-payload";
-const BACKEND_PAYLOAD_VERSION: u32 = 4;
+const BACKEND_PAYLOAD_VERSION: u32 = 5;
 const SOURCE_RUN_CACHE_FORMAT: &str = "aivi.source-run-cache";
 const SOURCE_RUN_CACHE_VERSION: u32 = 5;
-// Revision 15 infers hoisted callbacks in their owner's rigid lexical scope
-// and retains the inherited class dictionaries in their executable signatures.
-const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "15";
+// Revision 16 validates declaration-time instance coherence and carries
+// imported class identity through signatures and executable dictionaries.
+const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "16";
 const SOURCE_RUN_CACHE_DIR: &str = "run-cache";
 const SOURCE_RUN_CACHE_METADATA_FILE_NAME: &str = "source-run-cache.json";
 const MAX_BINARY_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;

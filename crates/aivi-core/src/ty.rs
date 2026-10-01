@@ -62,6 +62,7 @@ pub enum Type {
         arguments: Vec<Type>,
     },
     OpaqueImport {
+        origin: Option<Box<aivi_hir::TypeIdentity>>,
         import: HirImportId,
         name: Box<str>,
         arguments: Vec<Type>,
@@ -115,6 +116,7 @@ impl Type {
                 arguments: usize,
             },
             BuildOpaqueImport {
+                origin: Option<Box<aivi_hir::TypeIdentity>>,
                 import: HirImportId,
                 name: Box<str>,
                 arguments: usize,
@@ -249,6 +251,7 @@ impl Type {
                         }
                     }
                     HirGateType::OpaqueImport {
+                        origin,
                         import,
                         name,
                         arguments,
@@ -278,6 +281,7 @@ impl Type {
                         }
                         Some(ImportTypeDefinition::Sum(_)) | None => {
                             tasks.push(Task::BuildOpaqueImport {
+                                origin: origin.clone(),
                                 import,
                                 name: name.clone().into_boxed_str(),
                                 definition: definition.clone(),
@@ -424,6 +428,7 @@ impl Type {
                     });
                 }
                 Task::BuildOpaqueImport {
+                    origin,
                     import,
                     name,
                     arguments,
@@ -431,6 +436,7 @@ impl Type {
                 } => {
                     let arguments = drain_tail(&mut values, arguments);
                     values.push(Self::OpaqueImport {
+                        origin,
                         import,
                         name,
                         arguments,
@@ -470,6 +476,7 @@ impl Type {
             BuildSignal,
             BuildTask,
             BuildOpaqueImport {
+                origin: Option<Box<aivi_hir::TypeIdentity>>,
                 name: Box<str>,
                 arguments: usize,
                 definition: Option<Box<ImportTypeDefinition>>,
@@ -579,6 +586,7 @@ impl Type {
                         type_name,
                         arguments,
                         definition,
+                        origin,
                     } => match definition.as_deref() {
                         Some(ImportTypeDefinition::Alias(alias)) => {
                             tasks.push(Task::EnterAlias {
@@ -601,6 +609,9 @@ impl Type {
                         }
                         Some(ImportTypeDefinition::Sum(_)) | None => {
                             tasks.push(Task::BuildOpaqueImport {
+                                origin: origin
+                                    .as_ref()
+                                    .map(|origin| Box::new(origin.identity.clone())),
                                 name: type_name.clone().into_boxed_str(),
                                 definition: definition.clone(),
                                 arguments: arguments.len(),
@@ -700,12 +711,14 @@ impl Type {
                     });
                 }
                 Task::BuildOpaqueImport {
+                    origin,
                     name,
                     arguments,
                     definition,
                 } => {
                     let arguments = drain_tail(&mut values, arguments);
                     values.push(Self::OpaqueImport {
+                        origin,
                         import: aivi_hir::ImportId::from_raw(u32::MAX),
                         name,
                         arguments,
@@ -876,13 +889,19 @@ mod tests {
                 fields: vec![ImportValueType::Primitive(BuiltinType::Int)],
             },
         ])));
+        let origin = Some(Box::new(aivi_hir::TypeIdentity::Source {
+            file: aivi_base::FileId::new(7),
+            name: "Container".into(),
+        }));
         let gate = HirGateType::OpaqueImport {
+            origin: origin.clone(),
             import: ImportId::from_raw(0),
             name: "Container".into(),
             arguments: vec![],
             definition: definition.clone(),
         };
         let Type::OpaqueImport {
+            origin: lowered_origin,
             definition: lowered,
             ..
         } = Type::lower(&gate)
@@ -890,12 +909,18 @@ mod tests {
             panic!("sum must retain its nominal type");
         };
         assert_eq!(lowered, definition);
+        assert_eq!(lowered_origin, origin);
         let portable = ImportValueType::Named {
+            origin: origin.clone().map(|identity| aivi_hir::ImportedTypeOrigin {
+                identity: *identity,
+                source_module: Some("owner".into()),
+            }),
             type_name: "Container".into(),
             arguments: vec![],
             definition: definition.clone(),
         };
         let Type::OpaqueImport {
+            origin: lowered_origin,
             definition: lowered,
             ..
         } = Type::lower_import(&portable)
@@ -903,11 +928,13 @@ mod tests {
             panic!("portable sum must retain its nominal type");
         };
         assert_eq!(lowered, definition);
+        assert_eq!(lowered_origin, origin);
     }
 
     #[test]
     fn lower_hir_import_alias_substitutes_type_arguments() {
         let ty = HirGateType::OpaqueImport {
+            origin: None,
             import: ImportId::from_raw(0),
             name: "Envelope".into(),
             arguments: vec![HirGateType::Option(Box::new(HirGateType::Primitive(
@@ -930,6 +957,7 @@ mod tests {
     #[test]
     fn lower_import_alias_substitutes_direct_arguments() {
         let ty = ImportValueType::Named {
+            origin: None,
             type_name: "Envelope".into(),
             arguments: vec![ImportValueType::Primitive(BuiltinType::Int)],
             definition: Some(Box::new(ImportTypeDefinition::Alias(
@@ -946,10 +974,12 @@ mod tests {
     #[test]
     fn lower_import_alias_substitutes_outer_arguments_inside_nested_aliases() {
         let ty = ImportValueType::Named {
+            origin: None,
             type_name: "Wrap".into(),
             arguments: vec![ImportValueType::Primitive(BuiltinType::Int)],
             definition: Some(Box::new(ImportTypeDefinition::Alias(
                 ImportValueType::Named {
+                    origin: None,
                     type_name: "Envelope".into(),
                     arguments: vec![ImportValueType::TypeVariable {
                         index: 0,

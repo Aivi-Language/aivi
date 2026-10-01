@@ -787,9 +787,13 @@ Parser-accurate rules:
 - instance resolution is coherent
 - overlapping instances are not allowed
 - orphan instances are **fully disallowed**
+- instance ownership is defined by the declaring module of the class or the outer carrier: a sum, domain, or named record declaration owns its carrier; transparent aliases of imported or primitive carriers do not confer ownership
+- registered shipped providers own the standard primitive instance declarations in `aivi.defaults` and `aivi.core.bytes`, and the compiler-declared `NonEmptyList` instance declarations in `aivi.nonEmpty`; logical module-name overrides do not grant provider authority
+- declaration-time overlap checks expand transparent aliases and unify fresh instance variables independently of prerequisites; closed record field order does not distinguish heads
+- imported class declarations retain their original identity through aliases and re-exports, including superclass and method-local constraints; nominal carrier re-exports also retain their declaring identity, while unrelated declarations with the same spelling remain distinct
 - instance search is compile-time only
 - user-authored instance lookup is implemented for imported unary heads that lower to authored executable evidence; multi-parameter indexed heads remain deferred
-- unary `instance` blocks with indented member bindings are the implemented surface, including constraint-prefixed instance heads such as `instance Eq A => Eq (Option A)`; imported unary evidence selection works when the checker can choose one concrete candidate
+- unary `instance` blocks with indented member bindings are the implemented surface, including constraint-prefixed instance heads for local carriers such as `instance Eq A => Eq (Box A)`; imported unary evidence selection works when the checker can choose one concrete candidate
 - instance bodies are checked directly against the class-member arrow types with explicit local parameter bindings
 
 ### 7.1.1 Overloaded term lookup

@@ -6,6 +6,9 @@ Module {
     file: FileId(
         0,
     ),
+    builtin_instance_provider: None,
+    source_module: None,
+    imported_class_definitions: [],
     root_items: [
         ItemId(
             0,
@@ -696,6 +699,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Setoid",
+                        ),
                         name: Name {
                             text: "Setoid",
                             span: SourceSpan {
@@ -778,6 +784,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Semigroupoid",
+                        ),
                         name: Name {
                             text: "Semigroupoid",
                             span: SourceSpan {
@@ -867,6 +876,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Semigroup",
+                        ),
                         name: Name {
                             text: "Semigroup",
                             span: SourceSpan {
@@ -949,6 +961,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Foldable",
+                        ),
                         name: Name {
                             text: "Foldable",
                             span: SourceSpan {
@@ -1038,6 +1053,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Functor",
+                        ),
                         name: Name {
                             text: "Functor",
                             span: SourceSpan {
@@ -1127,6 +1145,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Contravariant",
+                        ),
                         name: Name {
                             text: "Contravariant",
                             span: SourceSpan {
@@ -1216,6 +1237,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Filterable",
+                        ),
                         name: Name {
                             text: "Filterable",
                             span: SourceSpan {
@@ -1309,6 +1333,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Eq",
+                        ),
                         name: Name {
                             text: "Eq",
                             span: SourceSpan {
@@ -1427,6 +1454,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Default",
+                        ),
                         name: Name {
                             text: "Default",
                             span: SourceSpan {
@@ -1509,6 +1539,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Ord",
+                        ),
                         name: Name {
                             text: "Ord",
                             span: SourceSpan {
@@ -1595,6 +1628,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Category",
+                        ),
                         name: Name {
                             text: "Category",
                             span: SourceSpan {
@@ -1685,6 +1721,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Monoid",
+                        ),
                         name: Name {
                             text: "Monoid",
                             span: SourceSpan {
@@ -1771,6 +1810,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Traversable",
+                        ),
                         name: Name {
                             text: "Traversable",
                             span: SourceSpan {
@@ -1874,6 +1916,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Profunctor",
+                        ),
                         name: Name {
                             text: "Profunctor",
                             span: SourceSpan {
@@ -1969,6 +2014,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Bifunctor",
+                        ),
                         name: Name {
                             text: "Bifunctor",
                             span: SourceSpan {
@@ -2064,6 +2112,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Group",
+                        ),
                         name: Name {
                             text: "Group",
                             span: SourceSpan {
@@ -2150,6 +2201,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Alt",
+                        ),
                         name: Name {
                             text: "Alt",
                             span: SourceSpan {
@@ -2240,6 +2294,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Apply",
+                        ),
                         name: Name {
                             text: "Apply",
                             span: SourceSpan {
@@ -2333,6 +2390,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Extend",
+                        ),
                         name: Name {
                             text: "Extend",
                             span: SourceSpan {
@@ -2426,6 +2486,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Plus",
+                        ),
                         name: Name {
                             text: "Plus",
                             span: SourceSpan {
@@ -2516,6 +2579,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Applicative",
+                        ),
                         name: Name {
                             text: "Applicative",
                             span: SourceSpan {
@@ -2606,6 +2672,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Chain",
+                        ),
                         name: Name {
                             text: "Chain",
                             span: SourceSpan {
@@ -2699,6 +2768,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Comonad",
+                        ),
                         name: Name {
                             text: "Comonad",
                             span: SourceSpan {
@@ -2789,6 +2861,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Alternative",
+                        ),
                         name: Name {
                             text: "Alternative",
                             span: SourceSpan {
@@ -2878,6 +2953,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "Monad",
+                        ),
                         name: Name {
                             text: "Monad",
                             span: SourceSpan {
@@ -2971,6 +3049,9 @@ Module {
                             },
                             decorators: [],
                         },
+                        identity: Standard(
+                            "ChainRec",
+                        ),
                         name: Name {
                             text: "ChainRec",
                             span: SourceSpan {

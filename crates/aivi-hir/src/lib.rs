@@ -18,6 +18,7 @@ mod gate_elaboration;
 mod general_expr_elaboration;
 mod hir;
 mod ids;
+mod instance_coherence;
 mod lower;
 mod recurrence_elaboration;
 pub mod resolver;
@@ -79,24 +80,25 @@ pub use general_expr_elaboration::{
 };
 pub use hir::{
     ApplicativeCluster, ApplicativeSpine, ApplicativeSpineHead, BigIntLiteral, BinaryOperator,
-    Binding, BindingKind, BindingPattern, BuiltinTerm, BuiltinType, CaseControl, ClassItem,
-    ClassMember, ClassMemberResolution, ClusterFinalizer, ClusterPresentation, ControlNode,
-    ControlNodeKind, CustomCapabilityCommandSpec, CustomSourceArgumentSchema,
-    CustomSourceCapabilityMember, CustomSourceContractMetadata, CustomSourceOptionSchema,
-    CustomSourceRecurrenceWakeup, DebugDecorator, DecimalLiteral, Decorator, DecoratorCall,
-    DecoratorPayload, DeprecatedDecorator, DeprecationNotice, DomainItem, DomainMember,
-    DomainMemberHandle, DomainMemberKind, DomainMemberResolution, EachControl, EmptyControl,
-    ExportItem, ExportResolution, Expr, ExprKind, FloatLiteral, FragmentControl, FunctionItem,
-    FunctionOrigin, FunctionParameter, HoistItem, HoistKindFilter, ImportBinding,
+    Binding, BindingKind, BindingPattern, BuiltinInstanceProvider, BuiltinTerm, BuiltinType,
+    CaseControl, ClassIdentity, ClassItem, ClassMember, ClassMemberResolution, ClusterFinalizer,
+    ClusterPresentation, ControlNode, ControlNodeKind, CustomCapabilityCommandSpec,
+    CustomSourceArgumentSchema, CustomSourceCapabilityMember, CustomSourceContractMetadata,
+    CustomSourceOptionSchema, CustomSourceRecurrenceWakeup, DebugDecorator, DecimalLiteral,
+    Decorator, DecoratorCall, DecoratorPayload, DeprecatedDecorator, DeprecationNotice, DomainItem,
+    DomainMember, DomainMemberHandle, DomainMemberKind, DomainMemberResolution, EachControl,
+    EmptyControl, ExportItem, ExportResolution, Expr, ExprKind, FloatLiteral, FragmentControl,
+    FunctionItem, FunctionOrigin, FunctionParameter, HoistItem, HoistKindFilter, ImportBinding,
     ImportBindingMetadata, ImportBindingResolution, ImportBundleKind, ImportRecordField,
     ImportSumVariant, ImportTypeDefinition, ImportValueType, ImportedClassConstraint,
-    ImportedClassEvidence, ImportedDomainLiteralSuffix, ImportedTypeBinding,
-    ImportedTypeConstructor, InstanceItem, InstanceMember, IntegerLiteral, IntrinsicValue, Item,
-    ItemHeader, ItemKind, LiteralSuffixBase, LiteralSuffixResolution, MapExpr, MapExprEntry,
-    MarkupAttribute, MarkupAttributeValue, MarkupElement, MarkupNode, MarkupNodeKind, MatchControl,
-    MockDecorator, Module, ModuleArenas, Name, NameError, NamePath, NamePathError, PatchBlock,
-    PatchEntry, PatchInstruction, PatchInstructionKind, PatchSelector, PatchSelectorSegment,
-    Pattern, PatternKind, PipeApplyStageRun, PipeCaseStageRun, PipeExpr, PipeFanoutSegment,
+    ImportedClassDefinition, ImportedClassEvidence, ImportedClassMember,
+    ImportedDomainLiteralSuffix, ImportedTypeBinding, ImportedTypeConstructor, ImportedTypeOrigin,
+    InstanceItem, InstanceMember, IntegerLiteral, IntrinsicValue, Item, ItemHeader, ItemKind,
+    LiteralSuffixBase, LiteralSuffixResolution, MapExpr, MapExprEntry, MarkupAttribute,
+    MarkupAttributeValue, MarkupElement, MarkupNode, MarkupNodeKind, MatchControl, MockDecorator,
+    Module, ModuleArenas, Name, NameError, NamePath, NamePathError, PatchBlock, PatchEntry,
+    PatchInstruction, PatchInstructionKind, PatchSelector, PatchSelectorSegment, Pattern,
+    PatternKind, PipeApplyStageRun, PipeCaseStageRun, PipeExpr, PipeFanoutSegment,
     PipeRecurrenceShapeError, PipeRecurrenceSuffix, PipeSemanticStage, PipeStage, PipeStageKind,
     PipeSubjectStage, PipeTransformMode, PipeTruthyFalsyPair, ProjectionBase,
     ReactiveUpdateBodyMode, ReactiveUpdateClause, RecordExpr, RecordExprField, RecordFieldSurface,
@@ -105,9 +107,9 @@ pub use hir::{
     ShowControl, SignalItem, SourceDecorator, SourceLifecycleDependencies, SourceMetadata,
     SourceProviderContractItem, SourceProviderRef, SuffixedIntegerLiteral, SumConstructorHandle,
     TermReference, TermResolution, TestDecorator, TextFragment, TextInterpolation, TextLiteral,
-    TextSegment, TupleConstructorArity, TypeField, TypeItem, TypeItemBody, TypeKind, TypeNode,
-    TypeParameter, TypeReference, TypeResolution, TypeVariant, UnaryOperator, Unresolved, UseItem,
-    ValueItem, WithControl,
+    TextSegment, TupleConstructorArity, TypeField, TypeIdentity, TypeItem, TypeItemBody, TypeKind,
+    TypeNode, TypeParameter, TypeReference, TypeResolution, TypeVariant, UnaryOperator, Unresolved,
+    UseItem, ValueItem, WithControl,
 };
 pub use ids::{
     BindingId, ClusterId, ControlNodeId, DecoratorId, ExprId, ImportId, ItemId, MarkupNodeId,

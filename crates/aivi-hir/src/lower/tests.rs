@@ -3652,6 +3652,7 @@ fn bare_use_imports_all_resolved_module_exports() {
         fn resolve(&self, path: &[&str]) -> ImportModuleResolution {
             if path == ["shared", "catalog"] {
                 return ImportModuleResolution::Resolved(ExportedNames {
+                    classes: Vec::new(),
                     names: vec![
                         ExportedName {
                             name: "primaryLabel".to_owned(),
@@ -3666,6 +3667,7 @@ fn bare_use_imports_all_resolved_module_exports() {
                             name: "Request".to_owned(),
                             kind: ExportedNameKind::Type,
                             metadata: ImportBindingMetadata::TypeConstructor {
+                                origin: None,
                                 type_item: None,
                                 constructors: None,
                                 kind: Kind::constructor(1),

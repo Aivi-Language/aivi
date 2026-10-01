@@ -152,6 +152,35 @@ Keep constraints explicit. A `Functor` constraint does not imply `Monad`, and a 
 does not imply that a collection can be empty. Class resolution must select one instance; it does
 not choose between overlapping instance implementations by import order.
 
+## Instance coherence and ownership
+
+The compiler checks instance declarations even when no expression uses them. Two heads conflict
+when their type variables can be unified after expanding transparent aliases. Record field order
+does not distinguish instances. Prerequisites such as `Eq A` and `Ord A` do not make otherwise
+overlapping heads disjoint. Constructor aliases are compared with shared rigid arguments, so
+their behavior must agree for every argument rather than for one chosen concrete type.
+
+An instance belongs in the module declaring its class or its outer carrier. Local sums, domains,
+and named record declarations own their carriers. An alias of a primitive or imported carrier
+does not create ownership; wrapping a local type in `List` does not make that module own `List`.
+
+Shipped providers implement the standard primitive instances in `aivi.defaults` and
+`aivi.core.bytes`, and the compiler-declared `NonEmptyList` instances in `aivi.nonEmpty`.
+Provider authority follows the registered shipped source, so overriding an `aivi.*` module in
+a project does not grant it ownership. Existing import-sensitive record defaults retain their
+scope rules.
+
+Imported authored classes retain their declaration identity, superclass requirements, method
+signatures, and method-local constraints. Importing a class opens its methods for type-directed
+lookup. Aliases and re-exports keep that identity, while separate classes with the same name
+remain separate declarations. Nominal carriers retain their declaration identity across aliases
+and re-exports as well; unrelated carriers with the same name remain distinct. Compiler-provided
+instances belong to the standard class
+declarations; declaring another class named `Functor` does not provide instances for it.
+
+The compiler bounds alias normalization and instance unification with explicit complexity
+diagnostics. It does not select an instance when coherence cannot be established.
+
 ## Execution boundary: builtin carriers vs authored instances
 
 AIVI has two executable higher-kinded paths today, and they are intentionally different:

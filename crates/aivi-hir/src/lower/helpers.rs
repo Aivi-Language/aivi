@@ -376,6 +376,7 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
             })
         }
         ("aivi.network", "Request") => Some(ImportBindingMetadata::TypeConstructor {
+            origin: None,
             type_item: None,
             constructors: None,
             kind: Kind::constructor(1),
@@ -383,6 +384,7 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
             definition: None,
         }),
         ("aivi.network", "Channel") => Some(ImportBindingMetadata::TypeConstructor {
+            origin: None,
             type_item: None,
             constructors: None,
             kind: Kind::constructor(2),
@@ -519,6 +521,7 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
             ),
         )),
         ("aivi.random", "RandomError") => Some(ImportBindingMetadata::TypeConstructor {
+            origin: None,
             type_item: None,
             constructors: None,
             kind: Kind::constructor(0),
@@ -1277,7 +1280,10 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
             IntrinsicValue::UrlParse,
             arrow_import_type(
                 primitive_import_type(BuiltinType::Text),
-                ImportValueType::Result { error: Box::new(primitive_import_type(BuiltinType::Text)), value: Box::new(primitive_import_type(BuiltinType::Text)) },
+                ImportValueType::Result {
+                    error: Box::new(primitive_import_type(BuiltinType::Text)),
+                    value: Box::new(primitive_import_type(BuiltinType::Text)),
+                },
             ),
         )),
         ("aivi.bigint", "fromInt") => Some(intrinsic_import_value(

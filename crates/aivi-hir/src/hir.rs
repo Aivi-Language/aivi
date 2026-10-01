@@ -889,6 +889,7 @@ pub enum ImportBindingMetadata {
         name: Box<str>,
     },
     TypeConstructor {
+        origin: Option<ImportedTypeOrigin>,
         type_item: Option<ItemId>,
         constructors: Option<Vec<SumConstructorHandle>>,
         kind: Kind,
@@ -904,6 +905,7 @@ pub enum ImportBindingMetadata {
     /// re-parsing the source module, and the carrier type so `.unwrap`/`.value` projections on
     /// domain-typed fields can be type-checked in importing modules.
     Domain {
+        origin: Option<ImportedTypeOrigin>,
         kind: Kind,
         literal_suffixes: Vec<ImportedDomainLiteralSuffix>,
         /// The carrier type (e.g. `Text` for `domain Foo over Text`). `None` when the carrier
@@ -919,10 +921,16 @@ pub enum ImportBindingMetadata {
     BuiltinType(BuiltinType),
     BuiltinTerm(BuiltinTerm),
     AmbientType,
+    /// An imported class declaration, with a portable definition in the
+    /// module's class catalog. It is not an ordinary data constructor.
+    Class {
+        identity: ClassIdentity,
+    },
     Bundle(ImportBundleKind),
     /// An imported class instance member, auto-registered so cross-module instance
     /// resolution can locate it without the user explicitly importing it by name.
     InstanceMember {
+        class_identity: ClassIdentity,
         class_name: Box<str>,
         member_name: Box<str>,
         subject: Box<str>,
@@ -932,6 +940,37 @@ pub enum ImportBindingMetadata {
         instance_evidence_count: usize,
         ty: ImportValueType,
     },
+}
+
+impl ImportBindingMetadata {
+    pub fn type_origin(&self) -> Option<&ImportedTypeOrigin> {
+        match self {
+            Self::TypeConstructor { origin, .. } | Self::Domain { origin, .. } => origin.as_ref(),
+            _ => None,
+        }
+    }
+}
+
+/// Data declaration identity survives aliases and facade re-exports. A
+/// consumer's local import ID is only a reference to this original identity.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum TypeIdentity {
+    Standard(Box<str>),
+    Source { file: FileId, name: Box<str> },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct ImportedTypeOrigin {
+    pub identity: TypeIdentity,
+    pub source_module: Option<Box<str>>,
+}
+
+impl ImportedTypeOrigin {
+    pub fn name(&self) -> &str {
+        match &self.identity {
+            TypeIdentity::Standard(name) | TypeIdentity::Source { name, .. } => name,
+        }
+    }
 }
 
 /// A literal-suffix member of an imported domain type, carried through the export/import
@@ -976,6 +1015,7 @@ pub enum ImportTypeDefinition {
 /// Ordered hidden callable arguments, with type variables indexed by the exported signature.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ImportedClassEvidence {
+    pub class_identity: ClassIdentity,
     pub class_name: Box<str>,
     pub member_name: Box<str>,
     pub subject: ImportedTypeBinding,
@@ -985,8 +1025,32 @@ pub struct ImportedClassEvidence {
 /// its head and member signatures; this is a proof obligation, not a callable.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ImportedClassConstraint {
+    pub class_identity: ClassIdentity,
     pub class_name: Box<str>,
     pub subject: ImportedTypeBinding,
+}
+
+/// Portable class signatures retain declaration identity and separate each
+/// method's universally quantified binders from the class parameters.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImportedClassDefinition {
+    pub identity: ClassIdentity,
+    pub selection_span: SourceSpan,
+    pub source_module: Option<Box<str>>,
+    pub name: Box<str>,
+    pub parameters: Vec<Box<str>>,
+    pub superclasses: Vec<ImportedClassConstraint>,
+    pub param_constraints: Vec<ImportedClassConstraint>,
+    pub members: Vec<ImportedClassMember>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ImportedClassMember {
+    pub selection_span: SourceSpan,
+    pub name: Box<str>,
+    pub type_parameters: Vec<Box<str>>,
+    pub context: Vec<ImportedClassConstraint>,
+    pub ty: ImportValueType,
 }
 
 /// Portable type and constructor bindings retain the distinction between a
@@ -1004,6 +1068,7 @@ pub enum ImportedTypeBinding {
 pub enum ImportedTypeConstructor {
     Builtin(BuiltinType),
     Named {
+        origin: Option<ImportedTypeOrigin>,
         name: Box<str>,
         arity: usize,
         definition: Option<Box<ImportTypeDefinition>>,
@@ -1065,6 +1130,8 @@ pub enum ImportValueType {
     /// A user-defined (non-builtin) type constructor applied to arguments.
     /// The `type_name` is the name in the source module.
     Named {
+        #[serde(default)]
+        origin: Option<ImportedTypeOrigin>,
         type_name: String,
         arguments: Vec<Self>,
         /// Inline structural definition when the named type can be serialised
@@ -1515,10 +1582,29 @@ pub struct CustomSourceCapabilityMember {
     pub annotation: TypeId,
 }
 
-/// One `class` declaration.
+/// Semantic identity of a class declaration, independent of import spelling.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum ClassIdentity {
+    /// A compiler-supplied standard declaration, shared by every source module.
+    Standard(Box<str>),
+    /// File identities belong to the source database; aliases retain this key.
+    Source { file: FileId, name: Box<str> },
+}
+
+/// Shipped modules which implement primitive instances for the compiler's
+/// standard declarations. This authority comes from source provenance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BuiltinInstanceProvider {
+    Defaults,
+    Bytes,
+    NonEmpty,
+}
+
+/// One `class` declaration or an imported signature projection.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ClassItem {
     pub header: ItemHeader,
+    pub identity: ClassIdentity,
     pub name: Name,
     pub parameters: NonEmpty<TypeParameterId>,
     /// Superclass constraints from body-level `with X Param` declarations.
@@ -3941,6 +4027,9 @@ pub struct Resolved;
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Module<S = Resolved> {
     pub(crate) file: FileId,
+    pub(crate) builtin_instance_provider: Option<BuiltinInstanceProvider>,
+    pub(crate) source_module: Option<Box<str>>,
+    pub(crate) imported_class_definitions: Vec<ImportedClassDefinition>,
     pub(crate) root_items: Vec<ItemId>,
     pub(crate) ambient_items: Vec<ItemId>,
     pub(crate) arenas: ModuleArenas,
@@ -3975,6 +4064,9 @@ impl Module {
     pub fn new(file: FileId) -> Self {
         Self {
             file,
+            builtin_instance_provider: None,
+            source_module: None,
+            imported_class_definitions: Vec::new(),
             root_items: Vec::new(),
             ambient_items: Vec::new(),
             arenas: ModuleArenas::default(),
@@ -3996,6 +4088,9 @@ impl Module {
     pub(crate) fn into_unresolved(self) -> Module<Unresolved> {
         Module {
             file: self.file,
+            builtin_instance_provider: self.builtin_instance_provider,
+            source_module: self.source_module,
+            imported_class_definitions: self.imported_class_definitions,
             root_items: self.root_items,
             ambient_items: self.ambient_items,
             arenas: self.arenas,
@@ -4020,6 +4115,9 @@ impl Module<Unresolved> {
     pub fn mark_resolved(self) -> Module<Resolved> {
         Module {
             file: self.file,
+            builtin_instance_provider: self.builtin_instance_provider,
+            source_module: self.source_module,
+            imported_class_definitions: self.imported_class_definitions,
             root_items: self.root_items,
             ambient_items: self.ambient_items,
             arenas: self.arenas,
@@ -4029,12 +4127,45 @@ impl Module<Unresolved> {
 }
 
 impl<S> Module<S> {
+    pub fn builtin_instance_provider(&self) -> Option<BuiltinInstanceProvider> {
+        self.builtin_instance_provider
+    }
+
     pub const fn file(&self) -> FileId {
         self.file
     }
 
     pub fn root_items(&self) -> &[ItemId] {
         &self.root_items
+    }
+
+    pub fn imported_class_definition(
+        &self,
+        identity: &ClassIdentity,
+    ) -> Option<&ImportedClassDefinition> {
+        self.imported_class_definitions
+            .iter()
+            .find(|definition| &definition.identity == identity)
+    }
+
+    pub fn type_origin(&self, id: ItemId) -> Option<ImportedTypeOrigin> {
+        let name = match self.items().get(id)? {
+            Item::Type(item) => item.name.text(),
+            Item::Domain(item) => item.name.text(),
+            _ => return None,
+        };
+        let identity = if self.ambient_items().contains(&id) {
+            TypeIdentity::Standard(name.into())
+        } else {
+            TypeIdentity::Source {
+                file: self.file(),
+                name: name.into(),
+            }
+        };
+        Some(ImportedTypeOrigin {
+            identity,
+            source_module: self.source_module.clone(),
+        })
     }
 
     pub fn ambient_items(&self) -> &[ItemId] {

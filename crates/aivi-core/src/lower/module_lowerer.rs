@@ -3013,6 +3013,7 @@ impl<'a> ModuleLowerer<'a> {
             | ImportBindingMetadata::Domain { .. }
             | ImportBindingMetadata::BuiltinType(_)
             | ImportBindingMetadata::BuiltinTerm(_)
+            | ImportBindingMetadata::Class { .. }
             | ImportBindingMetadata::AmbientType
             | ImportBindingMetadata::Bundle(_) => {
                 return Err(unsupported(

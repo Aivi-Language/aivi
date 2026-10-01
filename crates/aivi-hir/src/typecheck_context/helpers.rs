@@ -814,7 +814,9 @@ pub(crate) fn lower_import_value_type_with_substitutions(
         ImportValueType::Tuple(elements) => GateType::Tuple(
             elements
                 .iter()
-                .map(|element| lower_import_value_type_with_substitutions(module, element, substitutions))
+                .map(|element| {
+                    lower_import_value_type_with_substitutions(module, element, substitutions)
+                })
                 .collect(),
         ),
         ImportValueType::Record(fields) => GateType::Record(
@@ -913,6 +915,7 @@ pub(crate) fn lower_import_value_type_with_substitutions(
             type_name,
             arguments,
             definition,
+            origin,
         } => {
             let lowered_args = arguments
                 .iter()
@@ -929,7 +932,12 @@ pub(crate) fn lower_import_value_type_with_substitutions(
                         .imports()
                         .iter()
                         .find(|(_, binding)| {
-                            binding.imported_name.text() == type_name
+                            (origin.as_ref().is_some_and(|origin| {
+                                binding
+                                    .metadata
+                                    .type_origin()
+                                    .is_some_and(|candidate| candidate.identity == origin.identity)
+                            }) || (origin.is_none() && binding.imported_name.text() == type_name))
                                 && matches!(
                                     &binding.metadata,
                                     ImportBindingMetadata::TypeConstructor { .. }
@@ -940,6 +948,9 @@ pub(crate) fn lower_import_value_type_with_substitutions(
                         })
                         .map(|(id, _)| id);
                     GateType::OpaqueImport {
+                        origin: origin
+                            .as_ref()
+                            .map(|origin| Box::new(origin.identity.clone())),
                         import: import_id.unwrap_or_else(|| ImportId::from_raw(u32::MAX)),
                         name: type_name.clone(),
                         arguments: lowered_args,

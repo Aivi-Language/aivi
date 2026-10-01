@@ -25,6 +25,27 @@ fn typecheck_text(path: &str, text: &str) -> TypeCheckReport {
 }
 
 #[test]
+fn authored_class_names_do_not_inherit_compiler_instances() {
+    let report = typecheck_text(
+        "authored-functor-shadow.aivi",
+        r#"
+class Functor F = { map : (A -> B) -> F A -> F B }
+type List Int -> List Int
+func missing = values => map (n => n + 1) values
+"#,
+    );
+    assert!(!report.is_ok(), "{:?}", report.diagnostics());
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .any(|d| d.code == Some(code("missing-class-instance"))),
+        "{:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
 fn conditional_instances_discharge_concrete_and_inferred_prerequisites() {
     for (name, source, accepted) in [
         (
@@ -166,6 +187,7 @@ value renderFn : Pair (List (List Int)) Text -> Text = render
 #[test]
 fn portable_member_shapes_preserve_import_identity_and_quantifier_sharing() {
     let carrier = |import, parameter| GateType::OpaqueImport {
+        origin: None,
         import: crate::ImportId::from_raw(import),
         name: "Carrier".into(),
         arguments: vec![GateType::TypeParameter {
@@ -188,6 +210,59 @@ fn portable_member_shapes_preserve_import_identity_and_quantifier_sharing() {
     assert!(expected.same_shape_with_import_identity(&aliased, same_source));
     assert!(!expected.same_shape_with_import_identity(&split_quantifiers, same_source));
     assert!(!expected.same_shape_with_import_identity(&aliased, |left, right| left == right));
+}
+
+#[test]
+fn nominal_origins_survive_alias_expansion_and_rigid_shapes() {
+    let parameter = crate::TypeParameterId::from_raw(7);
+    let variable = GateType::TypeParameter {
+        parameter,
+        name: "A".into(),
+    };
+    let identity = |file| crate::TypeIdentity::Source {
+        file: aivi_base::FileId::new(file),
+        name: "Carrier".into(),
+    };
+    let carrier = |file, import| GateType::OpaqueImport {
+        origin: Some(Box::new(identity(file))),
+        import: crate::ImportId::from_raw(import),
+        name: "Carrier".into(),
+        arguments: vec![variable.clone()],
+        definition: None,
+    };
+    let alias = GateType::OpaqueImport {
+        origin: Some(Box::new(crate::TypeIdentity::Source {
+            file: aivi_base::FileId::new(3),
+            name: "Alias".into(),
+        })),
+        import: crate::ImportId::from_raw(4),
+        name: "Alias".into(),
+        arguments: vec![variable.clone()],
+        definition: Some(Box::new(crate::ImportTypeDefinition::Alias(
+            crate::ImportValueType::Named {
+                origin: Some(crate::ImportedTypeOrigin {
+                    identity: identity(1),
+                    source_module: Some("owner".into()),
+                }),
+                type_name: "Carrier".into(),
+                arguments: vec![crate::ImportValueType::TypeVariable {
+                    index: 0,
+                    name: "A".into(),
+                }],
+                definition: None,
+            },
+        ))),
+    };
+    assert!(alias.same_shape_with_rigid_parameters(&carrier(1, 9), &[parameter]));
+    assert!(!alias.same_shape_with_rigid_parameters(&carrier(2, 9), &[parameter]));
+    let distinct_parameter = carrier(1, 9).substitute_type_parameter(
+        parameter,
+        &GateType::TypeParameter {
+            parameter: crate::TypeParameterId::from_raw(8),
+            name: "B".into(),
+        },
+    );
+    assert!(!alias.same_shape_with_rigid_parameters(&distinct_parameter, &[parameter]));
 }
 
 #[test]
@@ -346,6 +421,7 @@ fn imported_constructor_identity_preserves_transparent_alias_parameter_order() {
     ] {
         let owner = lowered_module_text("owner.aivi", definition);
         let mut sources = SourceDatabase::new();
+        sources.add_file("owner.aivi", definition);
         let file = sources.add_file(
             "consumer.aivi",
             "use owner (Pair as ImportedPair)\ntype Pair A B = { left : A, right : B }\n",
@@ -365,6 +441,7 @@ fn imported_constructor_identity_preserves_transparent_alias_parameter_order() {
         let typing = GateTypeContext::new(module);
         let template = crate::ImportedTypeBinding::Constructor {
             head: crate::ImportedTypeConstructor::Named {
+                origin: None,
                 name: "Pair".into(),
                 arity: 2,
                 definition: None,

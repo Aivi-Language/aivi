@@ -103,11 +103,32 @@ impl<'a> GateTypeContext<'a> {
         if left == right {
             return true;
         }
-        if self.rigid_type_parameters.is_empty() {
-            left.same_shape(right)
-        } else {
-            left.same_shape_with_rigid_parameters(right, &self.rigid_type_parameters)
-        }
+        left.same_shape_with_nominal_identity(right, &self.rigid_type_parameters, &|left, right| {
+            let identity = |ty: &GateType| match ty {
+                GateType::Domain { item, .. } | GateType::OpaqueItem { item, .. } => self
+                    .module
+                    .type_origin(*item)
+                    .map(|origin| Box::new(origin.identity)),
+                GateType::OpaqueImport { origin, import, .. } => origin.clone().or_else(|| {
+                    self.module
+                        .imports()
+                        .get(*import)
+                        .and_then(|binding| binding.metadata.type_origin())
+                        .map(|origin| Box::new(origin.identity.clone()))
+                }),
+                _ => None,
+            };
+            match (identity(left), identity(right)) {
+                (Some(left), Some(right)) => left == right,
+                _ => match (left, right) {
+                    (
+                        GateType::OpaqueImport { import: left, .. },
+                        GateType::OpaqueImport { import: right, .. },
+                    ) => self.import_type_identities_match(*left, *right),
+                    _ => false,
+                },
+            }
+        })
     }
 
     pub(crate) fn type_bindings_match(&self, left: &TypeBinding, right: &TypeBinding) -> bool {
@@ -136,9 +157,14 @@ impl<'a> GateTypeContext<'a> {
         ) else {
             return false;
         };
-        left.source_module.is_some()
-            && left.source_module == right.source_module
-            && left.imported_name.text() == right.imported_name.text()
+        match (left.metadata.type_origin(), right.metadata.type_origin()) {
+            (Some(left), Some(right)) => left.identity == right.identity,
+            _ => {
+                left.source_module.is_some()
+                    && left.source_module == right.source_module
+                    && left.imported_name.text() == right.imported_name.text()
+            }
+        }
     }
 
     fn constructor_heads_match(
@@ -158,6 +184,17 @@ impl<'a> GateTypeContext<'a> {
             }
             _ => return false,
         };
+        if self.module.imports()[import]
+            .metadata
+            .type_origin()
+            .is_some_and(|origin| {
+                self.module
+                    .type_origin(item)
+                    .is_some_and(|actual| actual.identity == origin.identity)
+            })
+        {
+            return true;
+        }
         // Linking can replace a portable transparent alias with its local HIR
         // item. Compare type functions with identical rigid arguments;
         // nominal declarations retain their owner identity.
@@ -1180,7 +1217,8 @@ impl<'a> GateTypeContext<'a> {
             return Some(self.lower_import_value_type(ty));
         }
         match &import.metadata {
-            ImportBindingMetadata::Value { ty } | ImportBindingMetadata::ConstrainedValue { ty, .. }
+            ImportBindingMetadata::Value { ty }
+            | ImportBindingMetadata::ConstrainedValue { ty, .. }
             | ImportBindingMetadata::IntrinsicValue { ty, .. } => {
                 Some(self.lower_import_value_type(ty))
             }
@@ -1194,6 +1232,7 @@ impl<'a> GateTypeContext<'a> {
             | ImportBindingMetadata::OpaqueValue
             | ImportBindingMetadata::BuiltinType(_)
             | ImportBindingMetadata::BuiltinTerm(_)
+            | ImportBindingMetadata::Class { .. }
             | ImportBindingMetadata::AmbientType
             | ImportBindingMetadata::Bundle(_)
             | ImportBindingMetadata::Unknown => None,
@@ -1235,6 +1274,10 @@ impl<'a> GateTypeContext<'a> {
                 definition: Some(definition),
                 ..
             } => Some(Box::new(definition.clone())),
+            ImportBindingMetadata::Domain {
+                carrier: Some(carrier),
+                ..
+            } => Some(Box::new(ImportTypeDefinition::Domain(carrier.clone()))),
             _ => None,
         }
     }
@@ -1245,7 +1288,15 @@ impl<'a> GateTypeContext<'a> {
         name: String,
         arguments: Vec<GateType>,
     ) -> GateType {
+        let name = self.module.imports()[import]
+            .metadata
+            .type_origin()
+            .map_or(name, |origin| origin.name().to_owned());
         GateType::OpaqueImport {
+            origin: self.module.imports()[import]
+                .metadata
+                .type_origin()
+                .map(|origin| Box::new(origin.identity.clone())),
             import,
             name,
             arguments,
@@ -1264,6 +1315,10 @@ impl<'a> GateTypeContext<'a> {
         arguments: Vec<GateType>,
     ) -> GateType {
         let binding = &self.module.imports()[import_id];
+        let name = binding
+            .metadata
+            .type_origin()
+            .map_or(name, |origin| origin.name().to_owned());
         if matches!(&binding.metadata, ImportBindingMetadata::Domain { .. }) {
             let domain_item = self
                 .module
@@ -1271,7 +1326,7 @@ impl<'a> GateTypeContext<'a> {
                 .iter()
                 .chain(self.module.ambient_items().iter())
                 .copied()
-                .find(|&id| matches!(&self.module.items()[id], Item::Domain(d) if d.name.text() == name));
+                .find(|&id| matches!(&self.module.items()[id], Item::Domain(d) if binding.metadata.type_origin().map_or(d.name.text() == name, |origin| self.module.type_origin(id).is_some_and(|candidate| candidate.identity == origin.identity))));
             if let Some(item_id) = domain_item {
                 return GateType::Domain {
                     item: item_id,
@@ -1353,18 +1408,38 @@ impl<'a> GateTypeContext<'a> {
                 type_name,
                 arguments,
                 definition,
+                origin,
             } => {
                 let lowered_args: Vec<GateType> = arguments
                     .iter()
                     .map(|arg| self.lower_import_value_type(arg))
                     .collect();
-                // Find the import that provides this type name.
+                if let Some(origin) = origin
+                    && let Some((item, _)) = self.module.items().iter().find(|(id, _)| {
+                        self.module
+                            .type_origin(*id)
+                            .is_some_and(|candidate| candidate.identity == origin.identity)
+                    })
+                    && let Some(ty) = self.contextual_probe().apply_type_constructor(
+                        TypeConstructorHead::Item(item),
+                        &lowered_args,
+                        &mut Vec::new(),
+                    )
+                {
+                    return ty;
+                }
+                // Find the import that provides this type identity.
                 let import_id = self
                     .module
                     .imports()
                     .iter()
                     .find(|(_, binding)| {
-                        binding.imported_name.text() == type_name
+                        (origin.as_ref().is_some_and(|origin| {
+                            binding
+                                .metadata
+                                .type_origin()
+                                .is_some_and(|candidate| candidate.identity == origin.identity)
+                        }) || (origin.is_none() && binding.imported_name.text() == type_name))
                             && matches!(
                                 &binding.metadata,
                                 ImportBindingMetadata::TypeConstructor { .. }
@@ -1399,6 +1474,9 @@ impl<'a> GateTypeContext<'a> {
                     // Fallback: create an opaque import with a sentinel; the type checker
                     // will treat this as an unknown opaque type.
                     GateType::OpaqueImport {
+                        origin: origin
+                            .as_ref()
+                            .map(|origin| Box::new(origin.identity.clone())),
                         import: ImportId::from_raw(u32::MAX),
                         name: type_name.clone(),
                         arguments: lowered_args,
@@ -1443,9 +1521,14 @@ impl<'a> GateTypeContext<'a> {
             GateType::List(Box::new(element))
         }
 
-        let named = |name: &str| self.lower_import_value_type(&ImportValueType::Named {
-            type_name: name.to_owned(), arguments: Vec::new(), definition: None,
-        });
+        let named = |name: &str| {
+            self.lower_import_value_type(&ImportValueType::Named {
+                origin: None,
+                type_name: name.to_owned(),
+                arguments: Vec::new(),
+                definition: None,
+            })
+        };
 
         fn map(key: GateType, value: GateType) -> GateType {
             GateType::Map {
@@ -1924,14 +2007,8 @@ impl<'a> GateTypeContext<'a> {
             IntrinsicValue::SecretLookup => arrow(
                 primitive(BuiltinType::Text),
                 arrow(
-                    map(
-                        primitive(BuiltinType::Text),
-                        primitive(BuiltinType::Text),
-                    ),
-                    task(
-                        secret_error_type(),
-                        option(primitive(BuiltinType::Text)),
-                    ),
+                    map(primitive(BuiltinType::Text), primitive(BuiltinType::Text)),
+                    task(secret_error_type(), option(primitive(BuiltinType::Text))),
                 ),
             ),
             IntrinsicValue::SecretStore => arrow(
@@ -1939,10 +2016,7 @@ impl<'a> GateTypeContext<'a> {
                 arrow(
                     primitive(BuiltinType::Text),
                     arrow(
-                        map(
-                            primitive(BuiltinType::Text),
-                            primitive(BuiltinType::Text),
-                        ),
+                        map(primitive(BuiltinType::Text), primitive(BuiltinType::Text)),
                         arrow(
                             primitive(BuiltinType::Text),
                             task(secret_error_type(), primitive(BuiltinType::Unit)),
@@ -1953,10 +2027,7 @@ impl<'a> GateTypeContext<'a> {
             IntrinsicValue::SecretDelete => arrow(
                 primitive(BuiltinType::Text),
                 arrow(
-                    map(
-                        primitive(BuiltinType::Text),
-                        primitive(BuiltinType::Text),
-                    ),
+                    map(primitive(BuiltinType::Text), primitive(BuiltinType::Text)),
                     task(secret_error_type(), primitive(BuiltinType::Bool)),
                 ),
             ),
@@ -1986,9 +2057,10 @@ impl<'a> GateTypeContext<'a> {
                     ),
                 ),
             ),
-            IntrinsicValue::AuthPkce => {
-                arrow(pkce_config_type(), task(pkce_error_type(), pkce_token_type()))
-            }
+            IntrinsicValue::AuthPkce => arrow(
+                pkce_config_type(),
+                task(pkce_error_type(), pkce_token_type()),
+            ),
             IntrinsicValue::AuthRefresh => arrow(
                 pkce_config_type(),
                 arrow(
@@ -2085,7 +2157,10 @@ impl<'a> GateTypeContext<'a> {
             ),
             IntrinsicValue::UrlParse => arrow(
                 primitive(BuiltinType::Text),
-                GateType::Result { error: Box::new(primitive(BuiltinType::Text)), value: Box::new(primitive(BuiltinType::Text)) },
+                GateType::Result {
+                    error: Box::new(primitive(BuiltinType::Text)),
+                    value: Box::new(primitive(BuiltinType::Text)),
+                },
             ),
             IntrinsicValue::BigIntFromInt => {
                 arrow(primitive(BuiltinType::Int), primitive(BuiltinType::BigInt))
@@ -3673,11 +3748,13 @@ impl<'a> GateTypeContext<'a> {
                     .collect(),
             },
             GateType::OpaqueImport {
+                origin,
                 import,
                 name,
                 arguments,
                 definition,
             } => GateType::OpaqueImport {
+                origin: origin.clone(),
                 import: *import,
                 name: name.clone(),
                 arguments: arguments
@@ -4485,7 +4562,7 @@ impl<'a> GateTypeContext<'a> {
                     return false;
                 };
                 let heads_match = expected_head == actual_head
-                    || self.constructor_heads_same_name(&expected_head, actual);
+                    || self.constructor_matches_nominal_type(&expected_head, actual);
                 heads_match
                     && actual_arguments.len() >= arguments.len()
                     && arguments.iter().zip(actual_arguments.iter()).all(
@@ -4615,30 +4692,14 @@ impl<'a> GateTypeContext<'a> {
         }
     }
 
-    /// Check whether an expected TypeConstructorHead matches an actual GateType
-    /// by canonical name, handling cross-variant cases (Item vs Import).
-    fn constructor_heads_same_name(
+    fn constructor_matches_nominal_type(
         &self,
         expected: &TypeConstructorHead,
         actual: &GateType,
     ) -> bool {
-        let expected_name = match expected {
-            TypeConstructorHead::Parameter { .. } => return false,
-            TypeConstructorHead::Item(item_id) => {
-                Some(item_type_name(&self.module.items()[*item_id]))
-            }
-            TypeConstructorHead::Import(import_id) => self
-                .module
-                .imports()
-                .get(*import_id)
-                .map(|imp| imp.imported_name.text().to_owned()),
-            TypeConstructorHead::Builtin(_) => None,
-        };
-        let actual_name = actual.named_type_parts().map(|(n, _)| n);
-        match (expected_name, actual_name) {
-            (Some(en), Some(an)) => en == an,
-            _ => false,
-        }
+        actual
+            .constructor_view()
+            .is_some_and(|(head, _)| self.constructor_heads_match(*expected, head))
     }
 
     pub(crate) fn apply_builtin_type_constructor(

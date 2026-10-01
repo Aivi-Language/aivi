@@ -63,6 +63,7 @@ pub(crate) enum SourceOptionActualType {
         arguments: Vec<Self>,
     },
     OpaqueImport {
+        origin: Option<Box<crate::TypeIdentity>>,
         import: ImportId,
         name: String,
         arguments: Vec<Self>,
@@ -455,11 +456,13 @@ impl SourceOptionActualType {
                 arguments: arguments.iter().map(Self::from_gate_type).collect(),
             },
             GateType::OpaqueImport {
+                origin,
                 import,
                 name,
                 arguments,
                 definition,
             } => Self::OpaqueImport {
+                origin: origin.clone(),
                 import: *import,
                 name: name.clone(),
                 arguments: arguments.iter().map(Self::from_gate_type).collect(),
@@ -538,11 +541,13 @@ impl SourceOptionActualType {
                     .collect::<Option<Vec<_>>>()?,
             }),
             Self::OpaqueImport {
+                origin,
                 import,
                 name,
                 arguments,
                 definition,
             } => Some(GateType::OpaqueImport {
+                origin: origin.clone(),
                 import: *import,
                 name: name.clone(),
                 arguments: arguments
@@ -702,6 +707,7 @@ impl SourceOptionActualType {
             }
             (
                 Self::OpaqueImport {
+                    origin,
                     import: left_import,
                     name,
                     arguments: left_arguments,
@@ -714,6 +720,7 @@ impl SourceOptionActualType {
                 },
             ) if left_import == right_import && left_arguments.len() == right_arguments.len() => {
                 Some(Self::OpaqueImport {
+                    origin: origin.clone(),
                     import: *left_import,
                     name: name.clone(),
                     arguments: left_arguments
@@ -1179,6 +1186,7 @@ mod tests {
     #[test]
     fn constructor_view_expands_transparent_import_aliases_before_matching_heads() {
         let envelope = GateType::OpaqueImport {
+            origin: None,
             import: ImportId::from_raw(7),
             name: "Envelope".into(),
             arguments: vec![GateType::Option(Box::new(GateType::Primitive(
@@ -1202,6 +1210,7 @@ mod tests {
     #[test]
     fn fits_template_accepts_transparent_import_aliases_of_builtin_carriers() {
         let envelope_option = GateType::OpaqueImport {
+            origin: None,
             import: ImportId::from_raw(7),
             name: "Envelope".into(),
             arguments: vec![GateType::Option(Box::new(GateType::Primitive(

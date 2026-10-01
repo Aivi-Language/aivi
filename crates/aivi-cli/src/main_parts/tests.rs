@@ -372,6 +372,7 @@ fn backend_payload_decoder_rejects_old_envelope_versions_actionably() {
 #[test]
 fn stub_signal_defaults_skip_named_payloads() {
     let named = ImportValueType::Named {
+        origin: None,
         type_name: "Message".into(),
         arguments: Vec::new(),
         definition: None,
@@ -468,13 +469,13 @@ fn snake_serialized_frozen_image_reloads_frozen_catalog_without_backend_program(
 }
 
 #[test]
-fn source_run_cache_discards_keys_from_before_lexical_callback_inference() {
+fn source_run_cache_discards_keys_from_before_instance_coherence() {
     use std::{
         collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
     };
 
-    let temp = TempDir::new("source-run-cache-lexical-callback-revision");
+    let temp = TempDir::new("source-run-cache-instance-coherence-revision");
     let entry = repo_path("demos/snake.aivi");
     let cache_home = temp.path().join("cache-home");
     let requested_view = Some("main");
@@ -483,7 +484,7 @@ fn source_run_cache_discards_keys_from_before_lexical_callback_inference() {
     let mut legacy = DefaultHasher::new();
     "aivi.source-run-cache".hash(&mut legacy);
     5_u32.hash(&mut legacy);
-    "14".hash(&mut legacy);
+    "15".hash(&mut legacy);
     env!("CARGO_PKG_VERSION").hash(&mut legacy);
     super::normalize_source_run_cache_path(&entry)
         .to_string_lossy()

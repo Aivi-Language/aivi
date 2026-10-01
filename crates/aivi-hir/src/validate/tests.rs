@@ -16,6 +16,54 @@ use crate::source_contract_resolution::{
     ResolvedSourceContractType, ResolvedSourceTypeConstructor,
 };
 
+#[test]
+fn bounded_name_distance_matches_unicode_reference() {
+    let mut words = vec![String::new()];
+    for _ in 0..3 {
+        let previous = words.clone();
+        for word in previous {
+            for suffix in ['a', 'b', 'é'] {
+                let next = format!("{word}{suffix}");
+                if !words.contains(&next) {
+                    words.push(next);
+                }
+            }
+        }
+    }
+    for left in &words {
+        for right in &words {
+            let a = left.chars().collect::<Vec<_>>();
+            let b = right.chars().collect::<Vec<_>>();
+            let mut matrix = vec![vec![0; b.len() + 1]; a.len() + 1];
+            for (i, row) in matrix.iter_mut().enumerate() {
+                row[0] = i;
+            }
+            for (j, cell) in matrix[0].iter_mut().enumerate() {
+                *cell = j;
+            }
+            for i in 1..=a.len() {
+                for j in 1..=b.len() {
+                    matrix[i][j] = (matrix[i - 1][j] + 1)
+                        .min(matrix[i][j - 1] + 1)
+                        .min(matrix[i - 1][j - 1] + usize::from(a[i - 1] != b[j - 1]));
+                }
+            }
+            let distance = matrix[a.len()][b.len()];
+            for limit in 0..=3 {
+                assert_eq!(
+                    levenshtein(left, right, limit),
+                    (distance <= limit).then_some(distance),
+                    "{left:?}, {right:?}, {limit}"
+                );
+            }
+        }
+    }
+    assert_eq!(levenshtein("kitten", "sitting", 2), None);
+    assert_eq!(levenshtein("kitten", "sitting", 3), Some(3));
+    assert_eq!(levenshtein("café", "cafe", 1), Some(1));
+    assert_eq!(levenshtein("a", "__instance_type_foreign_Carrier", 3), None);
+}
+
 fn span(file: u32, start: u32, end: u32) -> SourceSpan {
     SourceSpan::new(
         FileId::new(file),
@@ -61,6 +109,141 @@ fn validate_resolved_text(path: &str, text: &str) -> ValidationReport {
         lowered.diagnostics()
     );
     validate_module(lowered.module(), ValidationMode::RequireResolvedNames)
+}
+
+#[test]
+fn instance_coherence_checks_unused_heads_and_normalizes_aliases() {
+    for (name, declarations, overlaps) in [
+        (
+            "specialized",
+            "type Box A = Box A\ninstance Render (Box A) = { render = x => \"a\" }\ninstance Render (Box Int) = { render = x => \"b\" }",
+            true,
+        ),
+        (
+            "prerequisites",
+            "type Box A = Box A\ninstance Eq A => Render (Box A) = { render = x => \"a\" }\ninstance Ord A => Render (Box A) = { render = x => \"b\" }",
+            true,
+        ),
+        (
+            "repeated-variable-disjoint",
+            "type Pair A B = Pair A B\ninstance Render (Pair A A) = { render = x => \"a\" }\ninstance Render (Pair Int Text) = { render = x => \"b\" }",
+            false,
+        ),
+        (
+            "repeated-variable-overlap",
+            "type Pair A B = Pair A B\ninstance Render (Pair A A) = { render = x => \"a\" }\ninstance Render (Pair Int Int) = { render = x => \"b\" }",
+            true,
+        ),
+        (
+            "occurs-check",
+            "type Pair A B = Pair A B\ninstance Render (Pair A A) = { render = x => \"a\" }\ninstance Render (Pair B (List B)) = { render = x => \"b\" }",
+            false,
+        ),
+        (
+            "aliases",
+            "type Box A = Box A\ntype Wrapped A = (Box A)\ninstance Render (Box A) = { render = x => \"a\" }\ninstance Render (Wrapped Int) = { render = x => \"b\" }",
+            true,
+        ),
+        (
+            "record-label-order",
+            "type Left = { a: Int, b: Text }\ntype Right = { b: Text, a: Int }\ninstance Render Left = { render = x => \"a\" }\ninstance Render Right = { render = x => \"b\" }",
+            true,
+        ),
+    ] {
+        let source = format!("class Render A = {{ render : A -> Text }}\n{declarations}\n");
+        let report = validate_resolved_text(name, &source);
+        assert_eq!(
+            report
+                .diagnostics()
+                .iter()
+                .any(|d| d.code == Some(code("duplicate-instance"))),
+            overlaps,
+            "{name}: {:?}",
+            report.diagnostics()
+        );
+        if !overlaps {
+            assert!(report.is_ok(), "{name}: {:?}", report.diagnostics());
+        }
+    }
+}
+
+#[test]
+fn constructor_alias_coherence_uses_rigid_eta_witnesses() {
+    for (second, overlaps) in [("Identical", true), ("Prefix", false)] {
+        let source = format!(
+            r#"
+class Label F = {{ label : F Int -> Text }}
+type Duplicated A = (A, A)
+type Identical B = (B, B)
+type Prefix B = (Unit, B)
+instance Label Duplicated = {{ label = x => "a" }}
+instance Label {second} = {{ label = x => "b" }}
+"#
+        );
+        let report = validate_resolved_text(second, &source);
+        assert_eq!(
+            report
+                .diagnostics()
+                .iter()
+                .any(|d| d.code == Some(code("duplicate-instance"))),
+            overlaps,
+            "{:?}",
+            report.diagnostics()
+        );
+        if !overlaps {
+            assert!(report.is_ok(), "{:?}", report.diagnostics());
+        }
+    }
+}
+
+#[test]
+fn orphan_instances_require_class_or_outer_carrier_ownership() {
+    for (name, source, orphan) in [
+        (
+            "primitive",
+            "instance Eq Int = {\n(==) = x y => True\n(!=) = x y => False\n}",
+            true,
+        ),
+        (
+            "primitive-alias",
+            "type Counter = Int\ninstance Default Counter = { default = 0 }",
+            true,
+        ),
+        (
+            "nested-local",
+            "type Tag = Tag Int\ninstance Default (List Tag) = { default = [] }",
+            true,
+        ),
+        (
+            "local-nominal",
+            "type Tag = Tag Int\ninstance Default Tag = { default = Tag 0 }",
+            false,
+        ),
+        (
+            "local-record",
+            "type Settings = { count: Int }\ninstance Default Settings = { default = { count: 0 } }",
+            false,
+        ),
+        (
+            "local-class",
+            "class Default A = { default : A }\ninstance Default Int = { default = 0 }",
+            false,
+        ),
+    ] {
+        let report = validate_resolved_text(name, source);
+        assert_eq!(
+            report
+                .diagnostics()
+                .iter()
+                .any(|d| d.code == Some(code("orphan-instance"))),
+            orphan,
+            "{name}: {:?}",
+            report.diagnostics()
+        );
+        if !orphan {
+            assert!(report.is_ok(), "{name}: {:?}", report.diagnostics());
+        }
+    }
 }
 
 #[test]
@@ -642,6 +825,7 @@ fn imported_type(module: &mut Module, text: &str, kind: Kind) -> crate::TypeId {
             local_name: name(text),
             resolution: ImportBindingResolution::Resolved,
             metadata: ImportBindingMetadata::TypeConstructor {
+                origin: None,
                 type_item: None,
                 constructors: None,
                 kind,

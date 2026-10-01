@@ -636,11 +636,13 @@ fn substitute_gate_type(
                 .collect(),
         },
         GateType::OpaqueImport {
+            origin,
             import,
             name,
             arguments,
             definition,
         } => GateType::OpaqueImport {
+            origin: origin.clone(),
             import: *import,
             name: name.clone(),
             arguments: arguments
@@ -997,6 +999,7 @@ fn export_class_requirements(
                 return None;
             };
             Some(crate::ImportedClassEvidence {
+                class_identity: class.identity.clone(),
                 class_name: class.name.text().into(),
                 member_name: class.members[requirement.member.member_index]
                     .name
@@ -1443,7 +1446,7 @@ fn imported_evidence_requirements(
         .iter()
         .map(|required| {
             let (class_id, class) = module.items().iter().find_map(|(id, item)| match item {
-                Item::Class(class) if class.name.text() == required.class_name.as_ref() => {
+                Item::Class(class) if class.identity == required.class_identity => {
                     Some((id, class))
                 }
                 _ => None,

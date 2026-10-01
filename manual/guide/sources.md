@@ -183,15 +183,21 @@ value view =
 
 You can also declare a provider contract. Argument and option declarations still describe the
 `@source` boundary itself; `operation` and `command` declarations preserve the capability-member
-surface in HIR so later custom-provider handle lowering can target one provider-owned API:
+surface in HIR so later custom-provider handle lowering can target one provider-owned API.
+Contract schemas currently accept primitives and types or domains declared in the same module,
+including those shapes under `List` or `Signal`:
 
 ```aivi
 type Mode =
   | Stream
 
+domain Timeout over Int = {
+    suffix ms : Int = value => Timeout value
+}
+
 provider custom.feed
     argument path : Text
-    option timeout : Duration
+    option timeout : Timeout
     option mode : Mode
     operation read : Text -> Signal Int
     command delete : Text -> Task Text Unit

@@ -75,6 +75,72 @@ impl Drop for TempDir {
 }
 
 #[test]
+fn check_rejects_unused_overlapping_and_orphan_instances() {
+    for (name, source, diagnostic) in [
+        (
+            "overlap",
+            "class Render A = { render : A -> Text }\ntype Box A = Box A\ninstance Render (Box A) = { render = x => \"a\" }\ninstance Render (Box Int) = { render = x => \"b\" }\n",
+            "duplicate-instance",
+        ),
+        (
+            "orphan",
+            "instance Eq Int = {\n(==) = x y => True\n(!=) = x y => False\n}\n",
+            "orphan-instance",
+        ),
+    ] {
+        let dir = TempDir::new(name);
+        let path = dir.write("main.aivi", source);
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("check")
+            .arg(path)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "{stderr}");
+        assert!(stderr.contains(diagnostic), "{stderr}");
+    }
+    let dir = TempDir::new("spoofed-instance-provider");
+    dir.write("aivi/defaults.aivi", "instance Default Int = { default = 0 }\nvalue defaultInt : Int = default\nexport defaultInt\n");
+    let path = dir.write(
+        "main.aivi",
+        "use aivi.defaults (defaultInt)\nvalue answer : Int = defaultInt\n",
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(path)
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "{stderr}");
+    assert!(stderr.contains("orphan-instance"), "{stderr}");
+}
+
+#[test]
+fn check_rejects_overlaps_through_nominal_reexports() {
+    let dir = TempDir::new("nominal-reexport-overlap");
+    dir.write("models.aivi", "type Box A = MkBox A\nexport Box\n");
+    dir.write("facade.aivi", "use models (Box)\nexport Box\n");
+    let path = dir.write(
+        "main.aivi",
+        r#"
+use models (Box as Original)
+use facade (Box as Reexported)
+class Render A = { render : A -> Text }
+instance Render (Original A) = { render = value => "first" }
+instance Render (Reexported Int) = { render = value => "second" }
+"#,
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(path)
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "{stderr}");
+    assert!(stderr.contains("duplicate-instance"), "{stderr}");
+}
+
+#[test]
 fn check_rejects_unsound_polymorphic_definitions() {
     for (name, text) in [
         (

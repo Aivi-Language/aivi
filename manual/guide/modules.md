@@ -194,6 +194,10 @@ local definitions > use imports > class methods > hoisted globals > other ambien
 An explicit `use aivi.list (map)` selects the list helper in that file. Without that import,
 `map` remains class-polymorphic even when list helpers are hoisted.
 
+Type names follow the same local/import/hoist priority before ambient fallback. An imported domain
+therefore retains its own declaration identity and carrier even when the ambient prelude supplies
+a domain with the same name.
+
 `use` always wins over `hoist` for the same name, so you can override a hoisted name locally for a specific file.
 
 ## Summary

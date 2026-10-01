@@ -136,6 +136,11 @@ impl<'a> WorkspaceImportResolver<'a> {
 }
 
 impl ImportResolver for WorkspaceImportResolver<'_> {
+    fn current_builtin_instance_provider(&self) -> Option<aivi_hir::BuiltinInstanceProvider> {
+        self.workspace
+            .builtin_instance_provider(self.db, self.stack.last()?.file)
+    }
+
     fn resolve(&self, path: &[&str]) -> ImportModuleResolution {
         let Some(file) = self.workspace.resolve_module_file(self.db, path) else {
             return ImportModuleResolution::Missing;

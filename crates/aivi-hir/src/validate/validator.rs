@@ -1876,7 +1876,77 @@ impl Validator<'_> {
                 _ => None,
             })
             .collect::<Vec<_>>();
-        let mut seen_instances = Vec::<(ItemId, TypeId, SourceSpan)>::new();
+        let mut terms = crate::instance_coherence::CoherenceTerms::default();
+        let mut seen_instances = Vec::<(crate::ClassIdentity, usize, SourceSpan)>::new();
+        let mut arities = HashMap::new();
+        for (_, candidate) in self.module.imports().iter() {
+            let ImportBindingMetadata::InstanceMember {
+                class_identity,
+                member_name,
+                head,
+                ..
+            } = &candidate.metadata
+            else {
+                continue;
+            };
+            let Some((id, class)) = self
+                .module
+                .items()
+                .iter()
+                .find_map(|(id, item)| match item {
+                    Item::Class(class) if &class.identity == class_identity => Some((id, class)),
+                    _ => None,
+                })
+            else {
+                continue;
+            };
+            if !class
+                .members
+                .first()
+                .is_some_and(|member| member.name.text() == member_name.as_ref())
+            {
+                continue;
+            }
+            // Repeated imports of one declaration share its source and head.
+            if self
+                .module
+                .imports()
+                .iter()
+                .take_while(|(_, previous)| !std::ptr::eq(*previous, candidate))
+                .any(|(_, previous)| {
+                    previous.source_module == candidate.source_module
+                        && previous.metadata == candidate.metadata
+                })
+            {
+                continue;
+            }
+            let arity = match self.kind_for_item(id) {
+                Some(Kind::Arrow(parameter, _)) => parameter.arity(),
+                _ => continue,
+            };
+            arities.insert(id, arity);
+            match terms.imported_head(self.module, head, candidate.source_module.as_deref(), arity)
+            {
+                Ok(term) => {
+                    self.check_instance_overlap(
+                        &terms,
+                        &seen_instances,
+                        class_identity,
+                        term,
+                        candidate.span,
+                    );
+                    seen_instances.push((class_identity.clone(), term, candidate.span));
+                }
+                Err(reason) => self.diagnostics.push(
+                    Diagnostic::error(reason)
+                        .with_code(code("instance-coherence-limit"))
+                        .with_primary_label(
+                            candidate.span,
+                            "cannot establish coherence for this imported instance",
+                        ),
+                ),
+            }
+        }
 
         for item in instances {
             let Some(class_item_id) = self.instance_class_item_id(&item) else {
@@ -1886,28 +1956,54 @@ impl Validator<'_> {
                 unreachable!("instance class helper should only return class items");
             };
             let argument = *item.arguments.first();
-            if let Some((_, _, previous_span)) =
-                seen_instances
-                    .iter()
-                    .find(|(seen_class, seen_argument, _)| {
-                        *seen_class == class_item_id
-                            && self.same_instance_argument_type(*seen_argument, argument)
-                    })
+            if !self.module.root_items().contains(&class_item_id)
+                && !crate::instance_coherence::owns_carrier(self.module, argument)
+                && !crate::instance_coherence::provider_owns(
+                    self.module,
+                    &class_item.identity,
+                    argument,
+                )
             {
-                self.diagnostics.push(
-                    Diagnostic::error(format!(
-                        "duplicate instance for class `{}`",
-                        class_item.name.text()
-                    ))
-                    .with_code(code("duplicate-instance"))
-                    .with_primary_label(
-                        item.header.span,
-                        "this instance head duplicates an earlier same-module instance",
-                    )
-                    .with_secondary_label(*previous_span, "previous instance here"),
-                );
+                self.diagnostics.push(Diagnostic::error(format!("orphan instance for class `{}`", class_item.name.text()))
+                    .with_code(code("orphan-instance"))
+                    .with_primary_label(item.header.span, "define this instance in the module which declares the class or its outer carrier")
+                    .with_note("transparent aliases do not grant ownership of imported or primitive carriers"));
             }
-            seen_instances.push((class_item_id, argument, item.header.span));
+            let identity = class_item.identity.clone();
+            let arity = arities.get(&class_item_id).copied().or_else(|| {
+                match self.kind_for_item(class_item_id) {
+                    Some(Kind::Arrow(parameter, _)) => Some(parameter.arity()),
+                    _ => None,
+                }
+            });
+            if item.arguments.len() == 1
+                && let Some(arity) = arity
+            {
+                arities.insert(class_item_id, arity);
+                match terms.hir_head(self.module, argument, &item.type_parameters, arity) {
+                    Ok(term) => {
+                        self.check_instance_overlap(
+                            &terms,
+                            &seen_instances,
+                            &identity,
+                            term,
+                            item.header.span,
+                        );
+                        seen_instances.push((identity, term, item.header.span));
+                    }
+                    Err(reason) => self.diagnostics.push(
+                        Diagnostic::error(reason)
+                            .with_code(code("instance-coherence-limit"))
+                            .with_primary_label(
+                                item.header.span,
+                                "cannot establish coherence for this instance",
+                            ),
+                    ),
+                }
+            }
+            let Item::Class(class_item) = &self.module.items()[class_item_id] else {
+                unreachable!()
+            };
 
             let mut seen_members = HashMap::<String, SourceSpan>::new();
             for member in &item.members {
@@ -7561,7 +7657,7 @@ impl Validator<'_> {
                 } else {
                     self.diagnostics.push(
                         Diagnostic::error(format!(
-                            "instance class `{}` must resolve to a same-module `class` declaration",
+                            "instance class `{}` must resolve to a `class` declaration",
                             item.class.path
                         ))
                         .with_code(code("invalid-instance-class"))
@@ -7578,13 +7674,13 @@ impl Validator<'_> {
             | ResolutionState::Resolved(TypeResolution::TypeParameter(_)) => {
                 self.diagnostics.push(
                     Diagnostic::error(format!(
-                        "instance class `{}` must resolve to a same-module `class` declaration",
+                        "instance class `{}` must resolve to a `class` declaration",
                         item.class.path
                     ))
                     .with_code(code("invalid-instance-class"))
                     .with_primary_label(
                         item.class.span(),
-                        "instance heads cannot target imported, builtin, or type-parameter classes in this slice",
+                        "imported classes require signature metadata; builtin data types and type parameters are not classes",
                     ),
                 );
                 None
@@ -7593,84 +7689,43 @@ impl Validator<'_> {
         }
     }
 
-    fn same_instance_argument_type(&self, left: TypeId, right: TypeId) -> bool {
-        let mut work = vec![(left, right)];
-        while let Some((left, right)) = work.pop() {
-            let left = &self.module.types()[left].kind;
-            let right = &self.module.types()[right].kind;
-            match (left, right) {
-                (TypeKind::Name(left), TypeKind::Name(right)) => {
-                    if left.resolution != right.resolution
-                        || left.path.segments().len() != right.path.segments().len()
-                        || left
-                            .path
-                            .segments()
-                            .iter()
-                            .zip(right.path.segments().iter())
-                            .any(|(left, right)| left.text() != right.text())
-                    {
-                        return false;
-                    }
-                }
-                (TypeKind::Tuple(left), TypeKind::Tuple(right)) => {
-                    if left.len() != right.len() {
-                        return false;
-                    }
-                    work.extend(
-                        left.iter()
-                            .zip(right.iter())
-                            .map(|(left, right)| (*left, *right)),
-                    );
-                }
-                (TypeKind::Record(left), TypeKind::Record(right)) => {
-                    if left.len() != right.len() {
-                        return false;
-                    }
-                    for (left, right) in left.iter().zip(right.iter()) {
-                        if left.label.text() != right.label.text() {
-                            return false;
-                        }
-                        work.push((left.ty, right.ty));
-                    }
-                }
-                (
-                    TypeKind::Arrow {
-                        parameter: left_parameter,
-                        result: left_result,
-                    },
-                    TypeKind::Arrow {
-                        parameter: right_parameter,
-                        result: right_result,
-                    },
-                ) => {
-                    work.push((*left_parameter, *right_parameter));
-                    work.push((*left_result, *right_result));
-                }
-                (
-                    TypeKind::Apply {
-                        callee: left_callee,
-                        arguments: left_arguments,
-                    },
-                    TypeKind::Apply {
-                        callee: right_callee,
-                        arguments: right_arguments,
-                    },
-                ) => {
-                    if left_arguments.len() != right_arguments.len() {
-                        return false;
-                    }
-                    work.push((*left_callee, *right_callee));
-                    work.extend(
-                        left_arguments
-                            .iter()
-                            .zip(right_arguments.iter())
-                            .map(|(left, right)| (*left, *right)),
-                    );
-                }
-                _ => return false,
+    fn check_instance_overlap(
+        &mut self,
+        terms: &crate::instance_coherence::CoherenceTerms,
+        previous: &[(crate::ClassIdentity, usize, SourceSpan)],
+        identity: &crate::ClassIdentity,
+        term: usize,
+        span: SourceSpan,
+    ) {
+        for (class, previous_term, previous_span) in previous {
+            if class != identity {
+                continue;
+            }
+            match terms.overlap(*previous_term, term) {
+                Ok(false) => {}
+                Ok(true) => self.diagnostics.push(
+                    Diagnostic::error("overlapping class instances are not allowed")
+                        .with_code(code("duplicate-instance"))
+                        .with_primary_label(
+                            span,
+                            "this head can match the same type as another instance",
+                        )
+                        .with_secondary_label(
+                            *previous_span,
+                            "conflicting instance declared or imported here",
+                        )
+                        .with_note("instance prerequisites do not make unifiable heads disjoint"),
+                ),
+                Err(reason) => self.diagnostics.push(
+                    Diagnostic::error(reason)
+                        .with_code(code("instance-coherence-limit"))
+                        .with_primary_label(
+                            span,
+                            "coherence could not be established within the compiler resource limit",
+                        ),
+                ),
             }
         }
-        true
     }
 
     fn build_kind_graph_for_type(
@@ -7992,11 +8047,13 @@ impl Validator<'_> {
             ImportBindingMetadata::TypeConstructor { kind, .. } => Some(kind.clone()),
             ImportBindingMetadata::Domain { kind, .. } => Some(kind.clone()),
             ImportBindingMetadata::BuiltinType(builtin) => Some(builtin_kind(*builtin)),
-            ImportBindingMetadata::Value { .. } | ImportBindingMetadata::ConstrainedValue { .. }
+            ImportBindingMetadata::Value { .. }
+            | ImportBindingMetadata::ConstrainedValue { .. }
             | ImportBindingMetadata::IntrinsicValue { .. }
             | ImportBindingMetadata::OpaqueValue
             | ImportBindingMetadata::AmbientValue { .. }
             | ImportBindingMetadata::BuiltinTerm(_)
+            | ImportBindingMetadata::Class { .. }
             | ImportBindingMetadata::AmbientType
             | ImportBindingMetadata::Bundle(_)
             | ImportBindingMetadata::DomainSuffix { .. }

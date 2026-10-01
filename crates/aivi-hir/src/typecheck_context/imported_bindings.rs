@@ -51,9 +51,23 @@ impl GateTypeContext<'_> {
                     arity: *arity,
                 }
             }
-            crate::ImportedTypeConstructor::Named { name, .. } => {
+            crate::ImportedTypeConstructor::Named { name, origin, .. } => {
+                if let Some(origin) = origin
+                    && let Some((id, _)) = self.module.items().iter().find(|(id, _)| {
+                        self.module
+                            .type_origin(*id)
+                            .is_some_and(|candidate| candidate.identity == origin.identity)
+                    })
+                {
+                    return Some(TypeConstructorHead::Item(id));
+                }
                 let (id, _) = self.module.imports().iter().find(|(_, binding)| {
-                    binding.imported_name.text() == name.as_ref()
+                    (origin.as_ref().is_some_and(|origin| {
+                        binding
+                            .metadata
+                            .type_origin()
+                            .is_some_and(|candidate| candidate.identity == origin.identity)
+                    }) || (origin.is_none() && binding.imported_name.text() == name.as_ref()))
                         && matches!(
                             binding.metadata,
                             ImportBindingMetadata::TypeConstructor { .. }

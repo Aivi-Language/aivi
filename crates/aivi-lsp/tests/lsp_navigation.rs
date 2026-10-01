@@ -111,6 +111,43 @@ fn open_fixture_document(relative: &str) -> (Arc<ServerState>, Url, String) {
 }
 
 #[test]
+fn imported_class_alias_and_member_navigate_to_original_declarations() {
+    let state = Arc::new(ServerState::new());
+    let root = std::env::temp_dir().join(format!("aivi-class-navigation-{}", std::process::id()));
+    let class_uri = Url::from_file_path(root.join("classes.aivi")).unwrap();
+    let bridge_uri = Url::from_file_path(root.join("bridge.aivi")).unwrap();
+    let main_uri = Url::from_file_path(root.join("main.aivi")).unwrap();
+    let classes = "class Render A = { render : A -> Text }\nexport Render\n";
+    open_document(&state, &class_uri, 1, classes.to_owned());
+    open_document(
+        &state,
+        &bridge_uri,
+        1,
+        "use classes (Render as Rendering)\nexport Rendering\n".to_owned(),
+    );
+    let main = "use bridge (Rendering)\ntype Rendering A => A -> Text\nfunc show = value => render value\n";
+    open_document(&state, &main_uri, 1, main.to_owned());
+    for (reference, occurrence, declaration) in
+        [("Rendering", 1, "Render"), ("render", 0, "render")]
+    {
+        let response = definition(
+            definition_params(
+                main_uri.clone(),
+                position_of_nth(main, reference, occurrence),
+            ),
+            state.clone(),
+        )
+        .expect("imported class reference has a definition");
+        let locations = response_locations(response);
+        assert!(
+            locations.iter().any(|location| location.uri == class_uri
+                && location.range.start == position_of_nth(classes, declaration, 0)),
+            "{locations:?}"
+        );
+    }
+}
+
+#[test]
 fn definition_resolves_local_binding_use_site() {
     let text = "type Int -> Int\nfunc id x =>\n    x\n";
     let (state, uri, text) = open_inline_document("local-binding-nav.aivi", text);

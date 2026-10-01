@@ -3836,13 +3836,35 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn class_item_id_by_name(&self, class_name: &str) -> Option<ItemId> {
+        if let Some(id) = self.module.root_items().iter().find(|id| matches!(&self.module.items()[**id], Item::Class(class) if class.name.text() == class_name)) {
+            return Some(*id);
+        }
+        if let Some(identity) = self.module.imports().iter().find_map(|(_, import)| {
+            if import.local_name.text() != class_name {
+                return None;
+            }
+            match &import.metadata {
+                ImportBindingMetadata::Class { identity } => Some(identity),
+                _ => None,
+            }
+        }) {
+            return self.class_item_id_by_identity(identity);
+        }
+        self.class_item_id_by_identity(&crate::ClassIdentity::Standard(class_name.into()))
+    }
+
+    fn class_item_id_by_identity(&self, identity: &crate::ClassIdentity) -> Option<ItemId> {
         self.module
             .items()
             .iter()
-            .find_map(|(item_id, item)| match item {
-                Item::Class(class_item) if class_item.name.text() == class_name => Some(item_id),
+            .find_map(|(id, item)| match item {
+                Item::Class(class) if &class.identity == identity => Some(id),
                 _ => None,
             })
+    }
+
+    fn is_standard_class(&self, id: ItemId) -> bool {
+        matches!(&self.module.items()[id], Item::Class(class) if matches!(class.identity, crate::ClassIdentity::Standard(_)))
     }
 
     fn class_name(&self, class_item_id: ItemId) -> Option<&str> {
@@ -3949,14 +3971,17 @@ impl<'a> TypeChecker<'a> {
                 member_index,
             });
         }
-        if self.has_builtin_class_instance_binding(class_name.as_str(), subject) {
+        if self.is_standard_class(resolution.class)
+            && self.has_builtin_class_instance_binding(class_name.as_str(), subject)
+        {
             return Some(ClassMemberImplementation::Builtin);
         }
         // Check imported instances from other modules.
         if let Some(import) = self.resolve_imported_instance_member(resolution, subject) {
             return Some(ClassMemberImplementation::ImportedInstance { import });
         }
-        if matches!(class_name.as_str(), "Eq" | "Setoid")
+        if self.is_standard_class(resolution.class)
+            && matches!(class_name.as_str(), "Eq" | "Setoid")
             && matches!(subject, TypeBinding::Type(ty) if self.require_compiler_derived_eq(ty, &mut Vec::new()).is_ok())
         {
             return Some(ClassMemberImplementation::Builtin);
@@ -3977,7 +4002,7 @@ impl<'a> TypeChecker<'a> {
         };
         let member = class.members.get(resolution.member_index)?;
         let ImportBindingMetadata::InstanceMember {
-            class_name,
+            class_identity,
             member_name,
             head,
             ty,
@@ -3986,7 +4011,7 @@ impl<'a> TypeChecker<'a> {
         else {
             return None;
         };
-        if class_name.as_ref() != class.name.text() || member_name.as_ref() != member.name.text() {
+        if *class_identity != class.identity || member_name.as_ref() != member.name.text() {
             return None;
         }
         let mut bindings = PolyTypeBindings::new();
@@ -4061,8 +4086,8 @@ impl<'a> TypeChecker<'a> {
             // an instance from unrelated imported implementations.
             if !class.members.iter().all(|member| self.module.imports().iter().any(|(_, candidate)| {
                 candidate.source_module == import.source_module
-                    && matches!(&candidate.metadata, ImportBindingMetadata::InstanceMember { class_name, member_name, head: candidate_head, context: candidate_context, .. }
-                        if class_name.as_ref() == class.name.text() && member_name.as_ref() == member.name.text()
+                    && matches!(&candidate.metadata, ImportBindingMetadata::InstanceMember { class_identity, member_name, head: candidate_head, context: candidate_context, .. }
+                        if *class_identity == class.identity && member_name.as_ref() == member.name.text()
                             && candidate_head == head && candidate_context == context)
             })) { continue; }
             if let Some((previous, _)) = &selected {
@@ -4168,13 +4193,14 @@ impl<'a> TypeChecker<'a> {
                         unreachable!();
                     };
                     context.iter().map(|constraint| {
-                        let class_item = self.class_item_id_by_name(&constraint.class_name).ok_or_else(|| format!("imported prerequisite class `{}` is unavailable", constraint.class_name))?;
+                        let class_item = self.class_item_id_by_identity(&constraint.class_identity).ok_or_else(|| format!("imported prerequisite class `{}` is unavailable", constraint.class_name))?;
                         let subject = self.typing.instantiate_import_type_binding(&constraint.subject, &bindings).ok_or_else(|| format!("cannot infer imported prerequisite `{}` from the instance head", constraint.class_name))?;
                         Ok(ClassConstraintBinding { class_item, subject })
                     }).collect::<Result<Vec<_>, String>>()?
-                } else if self.has_builtin_class_instance_binding(&class_name, &goal.subject)
-                    || (matches!(class_name.as_str(), "Eq" | "Setoid")
-                        && matches!(&goal.subject, TypeBinding::Type(ty) if self.require_compiler_derived_eq(ty, &mut Vec::new()).is_ok()))
+                } else if self.is_standard_class(goal.class_item)
+                    && (self.has_builtin_class_instance_binding(&class_name, &goal.subject)
+                        || (matches!(class_name.as_str(), "Eq" | "Setoid")
+                            && matches!(&goal.subject, TypeBinding::Type(ty) if self.require_compiler_derived_eq(ty, &mut Vec::new()).is_ok())))
                 {
                     proven.push(goal);
                     continue;

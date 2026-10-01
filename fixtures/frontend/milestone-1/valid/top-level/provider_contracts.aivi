@@ -1,6 +1,8 @@
+domain Timeout over Int
+
 provider custom.feed
     argument path : Text
-    option timeout : Duration
+    option timeout : Timeout
     operation read : Text -> Signal Text
     command delete : Text -> Task Text Unit
     wakeup: providerTrigger
