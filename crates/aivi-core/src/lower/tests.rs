@@ -357,6 +357,7 @@ fn lowers_transform_stage_modes_into_core_pipe_nodes() {
         .expect("local expression allocation should fit");
     let add_one = module
         .push_item(aivi_hir::Item::Function(aivi_hir::FunctionItem {
+            origin: aivi_hir::FunctionOrigin::Declared,
             header: aivi_hir::ItemHeader {
                 span: unit_span(),
                 decorators: Vec::new(),

@@ -25,6 +25,18 @@ type Int -> Int
 func increment = n =>
     n + 1
 
+type Functor F => F Int -> F Int
+func incrementInline = values =>
+    map (n => n + 1) values
+
+type Functor F => A -> F Int -> F A
+func replaceInline = captured values =>
+    map (n => captured) values
+
+type (Functor F, Eq A) => A -> F A -> F Bool
+func matchesInline = captured values =>
+    map (n => n == captured) values
+
 type Int -> Int -> Int
 func accumulate = total n =>
     total * 10 + n
@@ -80,6 +92,18 @@ value dictFoldable : Task Text Bool = pure (reduce accumulate 0 dictionary == 12
 
 @test
 value nelFunctor : Task Text Bool = pure (nelToList mappedItems == [2, 3, 4])
+
+@test
+value nelInlineFunctor : Task Text Bool = pure (nelToList (incrementInline items) == [2, 3, 4])
+
+@test
+value dictInlineFunctor : Task Text Bool = pure (dictToList (incrementInline dictionary) == [("a", 2), ("b", 3)])
+
+@test
+value eitherInlineCapture : Task Text Bool = pure (replaceInline "kept" right == Right "kept")
+
+@test
+value nelInlineEvidence : Task Text Bool = pure (nelToList (matchesInline 2 items) == [False, True, False])
 
 @test
 value nelFoldable : Task Text Bool = pure (reduce accumulate 0 items == 123)

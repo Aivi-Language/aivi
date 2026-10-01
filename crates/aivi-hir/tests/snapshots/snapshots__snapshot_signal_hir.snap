@@ -3118,6 +3118,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_option_getOrElse",
                             span: SourceSpan {
@@ -3216,6 +3217,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_keepSome",
                             span: SourceSpan {
@@ -3291,6 +3293,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_result_withDefault",
                             span: SourceSpan {
@@ -3392,6 +3395,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_keepFirst",
                             span: SourceSpan {
@@ -3490,6 +3494,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_lengthStep",
                             span: SourceSpan {
@@ -3588,6 +3593,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_length",
                             span: SourceSpan {
@@ -3663,6 +3669,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_head",
                             span: SourceSpan {
@@ -3738,6 +3745,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_tailState",
                             span: SourceSpan {
@@ -3859,6 +3867,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_tailStep",
                             span: SourceSpan {
@@ -3957,6 +3966,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_tailItems",
                             span: SourceSpan {
@@ -4055,6 +4065,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_tailFromState",
                             span: SourceSpan {
@@ -4130,6 +4141,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_tail",
                             span: SourceSpan {
@@ -4205,6 +4217,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_tailOrEmpty",
                             span: SourceSpan {
@@ -4280,6 +4293,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_nonEmpty",
                             span: SourceSpan {
@@ -4355,6 +4369,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_anyStep",
                             span: SourceSpan {
@@ -4476,6 +4491,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_any",
                             span: SourceSpan {
@@ -4574,6 +4590,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_binary_eq",
                             span: SourceSpan {
@@ -4676,6 +4693,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_binary_neq",
                             span: SourceSpan {
@@ -4778,6 +4796,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_binary_lt",
                             span: SourceSpan {
@@ -4880,6 +4899,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_binary_gt",
                             span: SourceSpan {
@@ -4982,6 +5002,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_binary_lte",
                             span: SourceSpan {
@@ -5084,6 +5105,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_binary_gte",
                             span: SourceSpan {
@@ -5186,6 +5208,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_order_min",
                             span: SourceSpan {
@@ -5288,6 +5311,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_order_max",
                             span: SourceSpan {
@@ -5390,6 +5414,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_order_minOf",
                             span: SourceSpan {
@@ -5492,6 +5517,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_order_maxOf",
                             span: SourceSpan {
@@ -5594,6 +5620,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_order_clampToMax",
                             span: SourceSpan {
@@ -5696,6 +5723,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_order_clamp",
                             span: SourceSpan {
@@ -5821,6 +5849,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "min",
                             span: SourceSpan {
@@ -5923,6 +5952,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "max",
                             span: SourceSpan {
@@ -6025,6 +6055,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "minOf",
                             span: SourceSpan {
@@ -6127,6 +6158,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "maxOf",
                             span: SourceSpan {
@@ -6229,6 +6261,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "clamp",
                             span: SourceSpan {
@@ -6522,6 +6555,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_singleton",
                             span: SourceSpan {
@@ -6597,6 +6631,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_cons",
                             span: SourceSpan {
@@ -6695,6 +6730,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_head",
                             span: SourceSpan {
@@ -6770,6 +6806,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_toList",
                             span: SourceSpan {
@@ -6845,6 +6882,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_fromHeadTail",
                             span: SourceSpan {
@@ -6943,6 +6981,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_length",
                             span: SourceSpan {
@@ -7018,6 +7057,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_lastStep",
                             span: SourceSpan {
@@ -7116,6 +7156,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_lastOf",
                             span: SourceSpan {
@@ -7214,6 +7255,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_last",
                             span: SourceSpan {
@@ -7289,6 +7331,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_mapNel",
                             span: SourceSpan {
@@ -7390,6 +7433,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_appendNel",
                             span: SourceSpan {
@@ -7488,6 +7532,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_initAppendPrev",
                             span: SourceSpan {
@@ -7586,6 +7631,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_initAccum",
                             span: SourceSpan {
@@ -7707,6 +7753,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_initStep",
                             span: SourceSpan {
@@ -7805,6 +7852,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_initExtract",
                             span: SourceSpan {
@@ -7880,6 +7928,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_init",
                             span: SourceSpan {
@@ -7955,6 +8004,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_fromListStep",
                             span: SourceSpan {
@@ -8053,6 +8103,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_nel_fromList",
                             span: SourceSpan {
@@ -8128,6 +8179,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_option_map",
                             span: SourceSpan {
@@ -8229,6 +8281,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_contains",
                             span: SourceSpan {
@@ -8331,6 +8384,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_uniqueByStep",
                             span: SourceSpan {
@@ -8452,6 +8506,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_uniqueBy",
                             span: SourceSpan {
@@ -8550,6 +8605,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_containsEqStep",
                             span: SourceSpan {
@@ -8675,6 +8731,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_containsEq",
                             span: SourceSpan {
@@ -8777,6 +8834,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_uniqueEqStep",
                             span: SourceSpan {
@@ -8879,6 +8937,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_unique",
                             span: SourceSpan {
@@ -8958,6 +9017,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "unique",
                             span: SourceSpan {
@@ -9037,6 +9097,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_mapStep",
                             span: SourceSpan {
@@ -9161,6 +9222,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_map",
                             span: SourceSpan {
@@ -9262,6 +9324,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_flatMapStep",
                             span: SourceSpan {
@@ -9386,6 +9449,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_flatMap",
                             span: SourceSpan {
@@ -9487,6 +9551,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_filterAppend",
                             span: SourceSpan {
@@ -9608,6 +9673,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_filter",
                             span: SourceSpan {
@@ -9706,6 +9772,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_countStep",
                             span: SourceSpan {
@@ -9827,6 +9894,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_count",
                             span: SourceSpan {
@@ -9925,6 +9993,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_sumStep",
                             span: SourceSpan {
@@ -10019,6 +10088,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_sum",
                             span: SourceSpan {
@@ -10090,6 +10160,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_maxPick",
                             span: SourceSpan {
@@ -10211,6 +10282,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_maximumStep",
                             span: SourceSpan {
@@ -10332,6 +10404,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_maximum",
                             span: SourceSpan {
@@ -10430,6 +10503,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_maximumOrdPick",
                             span: SourceSpan {
@@ -10532,6 +10606,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_maximumOrdStep",
                             span: SourceSpan {
@@ -10634,6 +10709,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_maximumFromStep",
                             span: SourceSpan {
@@ -10736,6 +10812,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_maximumFrom",
                             span: SourceSpan {
@@ -10838,6 +10915,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_minimumOrdPick",
                             span: SourceSpan {
@@ -10940,6 +11018,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_minimumOrdStep",
                             span: SourceSpan {
@@ -11042,6 +11121,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_minimumFromStep",
                             span: SourceSpan {
@@ -11144,6 +11224,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_minimumFrom",
                             span: SourceSpan {
@@ -11246,6 +11327,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "maximum",
                             span: SourceSpan {
@@ -11325,6 +11407,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "minimum",
                             span: SourceSpan {
@@ -11404,6 +11487,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_rangeDesc",
                             span: SourceSpan {
@@ -11498,6 +11582,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_range",
                             span: SourceSpan {
@@ -11569,6 +11654,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_text_joinFirst",
                             span: SourceSpan {
@@ -11686,6 +11772,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_text_joinNext",
                             span: SourceSpan {
@@ -11803,6 +11890,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_text_joinPick",
                             span: SourceSpan {
@@ -11943,6 +12031,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_text_joinStep",
                             span: SourceSpan {
@@ -12060,6 +12149,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_text_joinExtract",
                             span: SourceSpan {
@@ -12131,6 +12221,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_text_join",
                             span: SourceSpan {
@@ -12225,6 +12316,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_listAt_match",
                             span: SourceSpan {
@@ -12346,6 +12438,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_listAt_check",
                             span: SourceSpan {
@@ -12490,6 +12583,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_listAt_step",
                             span: SourceSpan {
@@ -12611,6 +12705,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_listAt_extract",
                             span: SourceSpan {
@@ -12686,6 +12781,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_listAt",
                             span: SourceSpan {
@@ -12784,6 +12880,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_listReplace_pick",
                             span: SourceSpan {
@@ -12951,6 +13048,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_listReplace_check",
                             span: SourceSpan {
@@ -13118,6 +13216,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_listReplace_step",
                             span: SourceSpan {
@@ -13262,6 +13361,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_listReplace_extract",
                             span: SourceSpan {
@@ -13337,6 +13437,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_listReplace",
                             span: SourceSpan {
@@ -13458,6 +13559,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_findTry",
                             span: SourceSpan {
@@ -13556,6 +13658,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_findStep",
                             span: SourceSpan {
@@ -13677,6 +13780,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_find",
                             span: SourceSpan {
@@ -13775,6 +13879,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_takeHelp",
                             span: SourceSpan {
@@ -13919,6 +14024,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_takeStep",
                             span: SourceSpan {
@@ -14040,6 +14146,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_takeExtract",
                             span: SourceSpan {
@@ -14115,6 +14222,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_take",
                             span: SourceSpan {
@@ -14213,6 +14321,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_sortByInsertFalse",
                             span: SourceSpan {
@@ -14357,6 +14466,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_sortByInsertStep",
                             span: SourceSpan {
@@ -14501,6 +14611,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_sortByInsertFinish",
                             span: SourceSpan {
@@ -14622,6 +14733,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_sortByInsert",
                             span: SourceSpan {
@@ -14743,6 +14855,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_sortByStep",
                             span: SourceSpan {
@@ -14864,6 +14977,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_sortBy",
                             span: SourceSpan {
@@ -14962,6 +15076,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_insertSortedOrdFalse",
                             span: SourceSpan {
@@ -15087,6 +15202,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_insertSortedOrdStep",
                             span: SourceSpan {
@@ -15212,6 +15328,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_insertSortedOrdFinish",
                             span: SourceSpan {
@@ -15314,6 +15431,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_insertSortedOrd",
                             span: SourceSpan {
@@ -15416,6 +15534,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_list_sortOrdStep",
                             span: SourceSpan {
@@ -15518,6 +15637,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "sort",
                             span: SourceSpan {
@@ -15597,6 +15717,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_text_isEmpty",
                             span: SourceSpan {
@@ -15668,6 +15789,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_text_nonEmpty",
                             span: SourceSpan {
@@ -15905,6 +16027,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_pair_first",
                             span: SourceSpan {
@@ -15983,6 +16106,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_pair_second",
                             span: SourceSpan {
@@ -16061,6 +16185,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_pair_swap",
                             span: SourceSpan {
@@ -16139,6 +16264,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_pair_mapFirst",
                             span: SourceSpan {
@@ -16243,6 +16369,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_pair_mapSecond",
                             span: SourceSpan {
@@ -16347,6 +16474,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_pair_mapBoth",
                             span: SourceSpan {
@@ -16477,6 +16605,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_pair_toPair",
                             span: SourceSpan {
@@ -16578,6 +16707,7 @@ Module {
                             },
                             decorators: [],
                         },
+                        origin: Declared,
                         name: Name {
                             text: "__aivi_pair_duplicate",
                             span: SourceSpan {

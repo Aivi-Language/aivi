@@ -3212,6 +3212,7 @@ fn source_option_root_contract_parameters_bind_arrow_constructor_fields() {
     let body = builtin_expr(&mut module, BuiltinTerm::True, "True");
     let function_item = module
         .push_item(Item::Function(FunctionItem {
+            origin: crate::FunctionOrigin::Declared,
             header: ItemHeader {
                 span: unit_span(),
                 decorators: Vec::new(),

@@ -504,6 +504,80 @@ value number : Int = apply (n => n + 1) 2
 }
 
 #[test]
+fn generic_inline_callbacks_inherit_lexical_types_and_class_evidence() {
+    for (name, source) in [
+        (
+            "concrete-input",
+            "type Functor F => F Int -> F Int\nfunc copy = value => map (n => n + 1) value\n",
+        ),
+        (
+            "closed-capture",
+            "type Functor F => Int -> F Int -> F Int\nfunc offset = amount value => map (n => n + amount) value\n",
+        ),
+        (
+            "rigid-capture",
+            "type Functor F => A -> F Int -> F A\nfunc replace = captured value => map (n => captured) value\n",
+        ),
+        (
+            "rigid-input",
+            "type Functor F => F A -> F A\nfunc copy = value => map (n => n) value\n",
+        ),
+        (
+            "class-capture",
+            "type (Functor F, Eq A) => A -> F A -> F Bool\nfunc matches = captured value => map (n => n == captured) value\n",
+        ),
+        (
+            "nested",
+            "type Functor F => F (List Int) -> F (List Int)\nfunc copy = value => map (items => map (n => n + 1) items) value\n",
+        ),
+        (
+            "curried-result",
+            "type Functor F => F Int -> F (Int -> Int)\nfunc copy = value => map (n => m => n + m) value\n",
+        ),
+        (
+            "rigid-curried-result",
+            "type Functor F => F (A -> A) -> F (A -> A)\nfunc copy = value => map (f => n => f n) value\n",
+        ),
+    ] {
+        let report = typecheck_text(name, source);
+        assert!(report.is_ok(), "{name}: {:?}", report.diagnostics());
+    }
+}
+
+#[test]
+fn generic_inline_callbacks_cannot_specialize_lexical_types_or_invent_evidence() {
+    for (name, source) in [
+        (
+            "rigid-capture",
+            "type Functor F => A -> F Int -> F A\nfunc replace = captured value => map (n => captured + 1) value\n",
+        ),
+        (
+            "rigid-input",
+            "type Functor F => F A -> F A\nfunc copy = value => map (n => n + 1) value\n",
+        ),
+        (
+            "distinct-parameters",
+            "type Functor F => A -> F B -> F A\nfunc replace = captured value => map (n => n) value\n",
+        ),
+        (
+            "missing-evidence",
+            "type Functor F => A -> F A -> F Bool\nfunc matches = captured value => map (n => n == captured) value\n",
+        ),
+        (
+            "wrong-result",
+            "type Functor F => F Int -> F Int\nfunc copy = value => map (n => \"wrong\") value\n",
+        ),
+    ] {
+        let report = typecheck_text(name, source);
+        assert!(
+            !report.is_ok(),
+            "{name} must reject an invalid lexical callback"
+        );
+        assert!(!report.diagnostics().is_empty());
+    }
+}
+
+#[test]
 fn typecheck_instantiates_generic_callbacks_from_known_container_types() {
     let report = typecheck_text(
         "generic-callback-instantiation.aivi",
@@ -2142,6 +2216,7 @@ fn typecheck_accepts_polymorphic_pipe_transforms() {
         .expect("wrap body allocation should fit");
     let wrap = module
         .push_item(crate::Item::Function(crate::FunctionItem {
+            origin: crate::FunctionOrigin::Declared,
             header: crate::ItemHeader {
                 span: unit_span(),
                 decorators: Vec::new(),
@@ -2288,6 +2363,7 @@ fn typecheck_infers_callable_and_replacement_pipe_transforms() {
         .expect("local expression allocation should fit");
     let add_one = module
         .push_item(crate::Item::Function(crate::FunctionItem {
+            origin: crate::FunctionOrigin::Declared,
             header: crate::ItemHeader {
                 span: unit_span(),
                 decorators: Vec::new(),
@@ -2384,6 +2460,7 @@ fn typecheck_accepts_polymorphic_function_application() {
         .expect("wrap body allocation should fit");
     let wrap = module
         .push_item(crate::Item::Function(crate::FunctionItem {
+            origin: crate::FunctionOrigin::Declared,
             header: crate::ItemHeader {
                 span: unit_span(),
                 decorators: Vec::new(),

@@ -26,7 +26,7 @@ struct InferenceSlot {
 }
 
 impl InferenceSlot {
-    fn record(&mut self, candidate: GateType) -> bool {
+    fn record(&mut self, candidate: GateType, rigid: &[crate::TypeParameterId]) -> bool {
         if self.conflict {
             return false;
         }
@@ -35,7 +35,7 @@ impl InferenceSlot {
                 self.ty = Some(candidate);
                 true
             }
-            Some(existing) if existing.same_shape(&candidate) => false,
+            Some(existing) if existing.same_shape_with_rigid_parameters(&candidate, rigid) => false,
             Some(_) => {
                 self.conflict = true;
                 self.ty = None;
@@ -53,6 +53,7 @@ impl InferenceSlot {
 struct FunctionInferenceState {
     parameter_slots: Vec<InferenceSlot>,
     result_slot: InferenceSlot,
+    rigid_type_parameters: Vec<crate::TypeParameterId>,
 }
 
 impl FunctionInferenceState {
@@ -67,7 +68,7 @@ impl FunctionInferenceState {
                 ty: parameter
                     .annotation
                     .and_then(|annotation| typing.lower_open_annotation(annotation))
-                    .filter(|ty| !ty.has_type_params()),
+                    .filter(|ty| function_accepts_inference_type(function, ty)),
                 conflict: false,
             })
             .collect();
@@ -75,12 +76,13 @@ impl FunctionInferenceState {
             ty: function
                 .annotation
                 .and_then(|annotation| typing.lower_open_annotation(annotation))
-                .filter(|ty| !ty.has_type_params()),
+                .filter(|ty| function_accepts_inference_type(function, ty)),
             conflict: false,
         };
         Self {
             parameter_slots,
             result_slot,
+            rigid_type_parameters: function.type_parameters.clone(),
         }
     }
 
@@ -105,10 +107,24 @@ impl FunctionInferenceState {
     fn record_call(&mut self, argument_types: &[GateType], result_type: Option<&GateType>) -> bool {
         let mut changed = false;
         for (slot, argument_ty) in self.parameter_slots.iter_mut().zip(argument_types.iter()) {
-            changed |= slot.record(argument_ty.clone());
+            changed |= slot.record(argument_ty.clone(), &self.rigid_type_parameters);
         }
-        if let Some(result_ty) = result_type {
-            changed |= self.result_slot.record(result_ty.clone());
+        if let Some(mut result_ty) = result_type
+            && argument_types.len() <= self.parameter_slots.len()
+        {
+            // A partial application returns the remaining arrows, not the
+            // declared function's result. Preserve each remaining parameter
+            // before recording the result slot.
+            for slot in self.parameter_slots.iter_mut().skip(argument_types.len()) {
+                let GateType::Arrow { parameter, result } = result_ty else {
+                    return changed;
+                };
+                changed |= slot.record(parameter.as_ref().clone(), &self.rigid_type_parameters);
+                result_ty = result;
+            }
+            changed |= self
+                .result_slot
+                .record(result_ty.clone(), &self.rigid_type_parameters);
         }
         changed
     }
@@ -119,15 +135,82 @@ impl FunctionInferenceState {
         }
         let mut changed = false;
         for (slot, parameter_ty) in self.parameter_slots.iter_mut().zip(parameter_types.iter()) {
-            changed |= slot.record(parameter_ty.clone());
+            changed |= slot.record(parameter_ty.clone(), &self.rigid_type_parameters);
         }
-        changed |= self.result_slot.record(result_type.clone());
+        changed |= self
+            .result_slot
+            .record(result_type.clone(), &self.rigid_type_parameters);
         changed
     }
 }
 
 pub(crate) fn supports_same_module_function_inference(function: &crate::hir::FunctionItem) -> bool {
-    function.type_parameters.is_empty() && function.context.is_empty()
+    function.origin == crate::FunctionOrigin::HoistedLambda
+        || (function.type_parameters.is_empty() && function.context.is_empty())
+}
+
+/// Inferred callback types may mention their owner's rigid binders, but may not
+/// acquire variables from a callee's still-unresolved polymorphic signature.
+pub(crate) fn function_accepts_inference_type(
+    function: &crate::FunctionItem,
+    ty: &GateType,
+) -> bool {
+    if matches!(ty, GateType::Primitive(_)) {
+        return true;
+    }
+    let lexical_parameters = match function.origin {
+        crate::FunctionOrigin::HoistedLambda => function.type_parameters.as_slice(),
+        crate::FunctionOrigin::Declared => &[],
+    };
+    let mut pending = vec![ty];
+    while let Some(ty) = pending.pop() {
+        match ty {
+            GateType::TypeParameter { parameter, .. } => {
+                if !lexical_parameters.contains(parameter) {
+                    return false;
+                }
+            }
+            GateType::TypeApplication {
+                parameter,
+                arguments,
+                ..
+            } => {
+                if !lexical_parameters.contains(parameter) {
+                    return false;
+                }
+                pending.extend(arguments);
+            }
+            GateType::Tuple(elements) => pending.extend(elements),
+            GateType::Record(fields) => pending.extend(fields.iter().map(|field| &field.ty)),
+            GateType::Arrow { parameter, result } => {
+                pending.extend([parameter.as_ref(), result.as_ref()])
+            }
+            GateType::List(inner)
+            | GateType::Set(inner)
+            | GateType::Option(inner)
+            | GateType::Signal(inner) => pending.push(inner),
+            GateType::Map { key, value } => pending.extend([key.as_ref(), value.as_ref()]),
+            GateType::Result { error, value }
+            | GateType::Validation { error, value }
+            | GateType::Task { error, value } => pending.extend([error.as_ref(), value.as_ref()]),
+            GateType::Domain { arguments, .. }
+            | GateType::OpaqueItem { arguments, .. }
+            | GateType::OpaqueImport { arguments, .. } => pending.extend(arguments),
+            GateType::Primitive(_) => {}
+        }
+    }
+    true
+}
+
+fn accepts_signature_evidence(module: &Module, evidence: &FunctionSignatureEvidence) -> bool {
+    let Item::Function(function) = &module.items()[evidence.item_id] else {
+        return false;
+    };
+    function_accepts_inference_type(function, &evidence.result_type)
+        && evidence
+            .parameter_types
+            .iter()
+            .all(|ty| function_accepts_inference_type(function, ty))
 }
 
 pub(crate) fn infer_same_module_function_types(module: &Module) -> HashMap<ItemId, GateType> {
@@ -215,6 +298,7 @@ fn collect_call_evidence(
             .get(item_id)
             .and_then(|ty| parameter_types_from_signature(ty, function.parameters.len()));
         let mut env = GateExprEnv::default();
+        let previous_rigid = typing.replace_rigid_type_parameters(function.type_parameters.clone());
         for (index, parameter) in function.parameters.iter().enumerate() {
             let parameter_ty = parameter
                 .annotation
@@ -229,19 +313,14 @@ fn collect_call_evidence(
             }
         }
         let _ = typing.infer_expr(function.body, &env, None);
+        typing.replace_rigid_type_parameters(previous_rigid);
     }
     let mut evidence = typing.take_function_call_evidence();
     evidence.extend(
         typing
             .take_function_signature_evidence()
             .into_iter()
-            .filter(|evidence| {
-                !evidence.result_type.has_type_params()
-                    && evidence
-                        .parameter_types
-                        .iter()
-                        .all(|parameter| !parameter.has_type_params())
-            })
+            .filter(|evidence| accepts_signature_evidence(module, evidence))
             .map(|evidence| FunctionCallEvidence {
                 item_id: evidence.item_id,
                 argument_types: evidence.parameter_types,
@@ -265,13 +344,7 @@ fn collect_contextual_signature_evidence(
         function_set,
     )
     .into_iter()
-    .filter(|evidence| {
-        !evidence.result_type.has_type_params()
-            && evidence
-                .parameter_types
-                .iter()
-                .all(|parameter| !parameter.has_type_params())
-    })
+    .filter(|evidence| accepts_signature_evidence(module, evidence))
     .collect()
 }
 
@@ -309,11 +382,114 @@ fn infer_body_results(
         for (parameter, parameter_ty) in function.parameters.iter().zip(parameter_types.iter()) {
             env.locals.insert(parameter.binding, parameter_ty.clone());
         }
+        let previous_rigid = typing.replace_rigid_type_parameters(function.type_parameters.clone());
         let body_info = typing.infer_expr(function.body, &env, None);
+        typing.replace_rigid_type_parameters(previous_rigid);
         let Some(result_ty) = body_info.actual_gate_type().or(body_info.ty) else {
             continue;
         };
-        changed |= state.result_slot.record(result_ty);
+        if function_accepts_inference_type(function, &result_ty) {
+            changed |= state
+                .result_slot
+                .record(result_ty, &state.rigid_type_parameters);
+        }
     }
     changed
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn arrow(parameter: GateType, result: GateType) -> GateType {
+        GateType::Arrow {
+            parameter: Box::new(parameter),
+            result: Box::new(result),
+        }
+    }
+
+    #[test]
+    fn partial_call_evidence_preserves_remaining_parameters_and_returned_functions() {
+        let int = GateType::Primitive(crate::BuiltinType::Int);
+        let text = GateType::Primitive(crate::BuiltinType::Text);
+        let returned = arrow(text.clone(), int.clone());
+        let mut state = FunctionInferenceState {
+            parameter_slots: vec![InferenceSlot::default(), InferenceSlot::default()],
+            result_slot: InferenceSlot::default(),
+            rigid_type_parameters: Vec::new(),
+        };
+        let partial = arrow(text.clone(), returned.clone());
+        assert!(state.record_call(std::slice::from_ref(&int), Some(&partial)));
+        assert_eq!(
+            state.parameter_types(),
+            Some(vec![int.clone(), text.clone()])
+        );
+        assert_eq!(state.result_slot.value(), Some(returned.clone()));
+        assert!(!state.record_call(&[int.clone(), text.clone()], Some(&returned)));
+        // Arguments applied to the returned function do not describe its result.
+        assert!(!state.record_call(&[int.clone(), text.clone(), text], Some(&int)));
+        assert_eq!(state.result_slot.value(), Some(returned));
+    }
+
+    #[test]
+    fn lexical_inference_rejects_foreign_variables_and_preserves_rigid_identity() {
+        let mut sources = aivi_base::SourceDatabase::new();
+        let file = sources.add_file(
+            "lexical.aivi",
+            "type A -> A\nfunc declared = x => (y => x)\n",
+        );
+        let parsed = aivi_syntax::parse_module(&sources[file]);
+        let lowered = crate::lower_module(&parsed.module);
+        assert!(!lowered.has_errors());
+        let function = lowered
+            .module()
+            .items()
+            .iter()
+            .find_map(|(_, item)| match item {
+                Item::Function(function)
+                    if function.origin == crate::FunctionOrigin::HoistedLambda =>
+                {
+                    Some(function)
+                }
+                _ => None,
+            })
+            .unwrap();
+        let lexical = GateType::TypeParameter {
+            parameter: function.type_parameters[0],
+            name: "A".into(),
+        };
+        let foreign = GateType::TypeParameter {
+            parameter: crate::TypeParameterId::from_raw(u32::MAX),
+            name: "A".into(),
+        };
+        assert!(supports_same_module_function_inference(function));
+        assert!(function_accepts_inference_type(
+            function,
+            &arrow(lexical.clone(), lexical.clone())
+        ));
+        assert!(!function_accepts_inference_type(
+            function,
+            &arrow(lexical.clone(), foreign.clone())
+        ));
+        let mut declared = function.clone();
+        declared.origin = crate::FunctionOrigin::Declared;
+        assert!(!supports_same_module_function_inference(&declared));
+        assert!(!function_accepts_inference_type(&declared, &lexical));
+        let mut deep = lexical.clone();
+        for _ in 0..20_000 {
+            deep = GateType::List(Box::new(deep));
+        }
+        assert!(function_accepts_inference_type(function, &deep));
+        assert!(!function_accepts_inference_type(&declared, &deep));
+        // GateType owns boxes; dismantle this adversarial fixture iteratively.
+        while let GateType::List(inner) = deep {
+            deep = *inner;
+        }
+        let mut slot = InferenceSlot::default();
+        assert!(slot.record(lexical.clone(), &function.type_parameters));
+        assert!(!slot.record(lexical, &function.type_parameters));
+        assert!(slot.record(foreign, &function.type_parameters));
+        assert!(slot.conflict);
+        assert_eq!(slot.value(), None);
+    }
 }

@@ -86,6 +86,32 @@ declarations when nearby callsites, partial applications, parameter annotations,
 expectations provide enough information to prove one concrete signature. Underconstrained helpers
 like `func id = x => x` still need an explicit `type` line.
 
+Inline callbacks also receive their input and result types from the operation that uses them.
+Inside a generic function, the callback keeps the enclosing function's type parameters and class
+constraints:
+
+```aivi
+type Functor F => F Int -> F Int
+func increment = values =>
+    map (n => n + 1) values
+
+type Functor F => A -> F Int -> F A
+func replace = captured values =>
+    map (n => captured) values
+
+type (Functor F, Eq A) => A -> F A -> F Bool
+func matches = captured values =>
+    map (n => n == captured) values
+
+value incremented : List Int = increment [1, 2]
+value replaced : Option Text = replace "kept" (Some 1)
+value matched : List Bool = matches "yes" ["yes", "no"]
+```
+
+Here `n` is inferred as `Int` in `increment` and as the enclosing `A` in `matches`.
+The `Eq A` constraint supplies equality inside the callback. An enclosing type parameter stays
+rigid: using `n + 1` in a callback whose input is `A` does not specialize the function to `Int`.
+
 ## Multiple parameters
 
 Parameters are separated by spaces, not commas:

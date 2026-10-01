@@ -6384,6 +6384,7 @@ func transform = f xs => xs |> map f
             .expect("local expression allocation should fit");
         let add_one = module
             .push_item(crate::Item::Function(crate::FunctionItem {
+                origin: crate::FunctionOrigin::Declared,
                 header: crate::ItemHeader {
                     span: unit_span(),
                     decorators: Vec::new(),

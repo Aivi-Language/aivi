@@ -5049,12 +5049,13 @@ impl<'a> GateTypeContext<'a> {
                             argument_info.actual_gate_type().or(argument_info.ty)
                         })
                         .collect::<Option<Vec<_>>>()
-                    && argument_types
-                        .iter()
-                        .all(|argument_ty| !argument_ty.has_type_params())
-                    && current
-                        .as_ref()
-                        .is_none_or(|result_ty| !result_ty.has_type_params())
+                    && let Item::Function(function) = &self.module.items()[item_id]
+                    && argument_types.iter().all(|ty| {
+                        crate::function_inference::function_accepts_inference_type(function, ty)
+                    })
+                    && current.as_ref().is_none_or(|ty| {
+                        crate::function_inference::function_accepts_inference_type(function, ty)
+                    })
                 {
                     self.record_function_call_evidence(FunctionCallEvidence {
                         item_id,
@@ -6790,7 +6791,9 @@ impl<'a> GateTypeContext<'a> {
         let Item::Function(function) = &self.module.items()[*item_id] else {
             return None;
         };
-        if function.type_parameters.is_empty() {
+        if function.type_parameters.is_empty()
+            || function.origin == crate::FunctionOrigin::HoistedLambda
+        {
             return None;
         }
         if let Some(signature) = self.item_value_type(*item_id)

@@ -37,6 +37,83 @@ impl Drop for TempDir {
 }
 
 #[test]
+fn generic_inline_callbacks_execute_with_lexical_dictionary_evidence() {
+    let dir = TempDir::new("generic-inline-callbacks");
+    dir.write(
+        "callbacks.aivi",
+        r#"
+type Functor F => F Int -> F Int
+func increment = value => map (n => n + 1) value
+type Functor F => Int -> F Int -> F Int
+func offset = amount value => map (n => n + amount) value
+type Functor F => A -> F Int -> F A
+func replace = captured value => map (n => captured) value
+type (Functor F, Eq A) => A -> F A -> F Bool
+func matches = captured value => map (n => n == captured) value
+type Functor F => F (List Int) -> F (List Int)
+func nested = value => map (items => map (n => n + 1) items) value
+type Functor F => F Int -> F (Int -> Int)
+func curried = value => map (n => m => n + m) value
+export increment
+export offset
+export replace
+export matches
+export nested
+export curried
+"#,
+    );
+    let path = dir.write(
+        "main.aivi",
+        r#"
+use callbacks (increment, offset, replace, matches, nested, curried)
+type Box A = Box A
+instance Functor Box = { map = f box => box ||> Box a -> Box (f a) }
+type Tag = Tag Text
+instance Eq Tag = {
+    (==) = left right => (left, right) ||> (Tag a, Tag b) -> a == b
+    (!=) = left right => (left, right) ||> (Tag a, Tag b) -> a != b
+}
+type (Int -> Int) -> Int
+func invoke = f => f 10
+type Box Int -> Bool
+func boxIsThree = box => box ||> Box n -> n == 3
+@test
+value listInput : Task Text Bool = pure (increment [1, 2] == [2, 3])
+@test
+value optionInput : Task Text Bool = pure (increment (Some 1) == Some 2)
+@test
+value closedCapture : Task Text Bool = pure (offset 10 [1, 2] == [11, 12])
+@test
+value rigidCapture : Task Text Bool = pure (replace "kept" [1, 2] == ["kept", "kept"])
+@test
+value optionCapture : Task Text Bool = pure (replace "kept" (Some 1) == Some "kept")
+@test
+value eqCapture : Task Text Bool = pure (matches "yes" ["yes", "no"] == [True, False])
+@test
+value nestedCapture : Task Text Bool = pure (nested [[1, 2], [3]] == [[2, 3], [4]])
+@test
+value returnedLambda : Task Text Bool = pure (map invoke (curried [1, 2]) == [11, 12])
+@test
+value authoredFunctor : Task Text Bool = pure (boxIsThree (increment (Box 2)))
+@test
+value authoredEq : Task Text Bool = pure (matches (Tag "yes") [Tag "yes", Tag "no"] == [True, False])
+"#,
+    );
+    // Independent compiler runs must preserve the same lexical dictionary scope.
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("10 passed; 0 failed; 10 total"), "{stdout}");
+    }
+}
+
+#[test]
 fn headless_commands_execute_effectful_task_composition() {
     let dir = TempDir::new("task-composition");
     let path = dir.write(

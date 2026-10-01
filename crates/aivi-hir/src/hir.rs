@@ -1302,10 +1302,18 @@ pub struct ValueItem {
     pub body: ExprId,
 }
 
-/// One `func` declaration.
+/// Whether a function owns universal binders or inherits a lambda's lexical scope.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FunctionOrigin {
+    Declared,
+    HoistedLambda,
+}
+
+/// One `func` declaration or a hoisted lexical lambda.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FunctionItem {
     pub header: ItemHeader,
+    pub origin: FunctionOrigin,
     pub name: Name,
     pub type_parameters: Vec<TypeParameterId>,
     pub context: Vec<TypeId>,

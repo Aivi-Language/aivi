@@ -376,6 +376,7 @@ impl<'a> Lowerer<'a> {
             });
 
         FunctionItem {
+            origin: crate::FunctionOrigin::Declared,
             header,
             name,
             type_parameters: Vec::new(),
@@ -1083,6 +1084,7 @@ impl<'a> Lowerer<'a> {
             });
 
         FunctionItem {
+            origin: crate::FunctionOrigin::Declared,
             header,
             name,
             type_parameters: owner_parameter_ids.to_vec(),
@@ -6095,6 +6097,7 @@ impl<'a> Lowerer<'a> {
 
         let item_name = self.synthetic_lambda_name(span);
         let item_id = self.push_root_item(Item::Function(FunctionItem {
+            origin: crate::FunctionOrigin::HoistedLambda,
             header: ItemHeader {
                 span,
                 decorators: Vec::new(),

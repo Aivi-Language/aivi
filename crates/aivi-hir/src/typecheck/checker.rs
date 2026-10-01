@@ -1773,7 +1773,7 @@ impl<'a> TypeChecker<'a> {
         let mut env = GateExprEnv::default();
         for (parameter, expected_parameter_ty) in parameters.iter().zip(parameter_types.iter()) {
             if let Some(annotation) = parameter.annotation {
-                let parameter_ty = self.typing.lower_annotation(annotation)?;
+                let parameter_ty = self.typing.lower_open_annotation(annotation)?;
                 if !self
                     .typing
                     .types_match(&parameter_ty, expected_parameter_ty)
@@ -1886,10 +1886,13 @@ impl<'a> TypeChecker<'a> {
         parameter_types: &[GateType],
         result_type: &GateType,
     ) {
-        if result_type.has_type_params()
-            || parameter_types
-                .iter()
-                .any(|parameter| parameter.has_type_params())
+        let Item::Function(function) = &self.module.items()[item_id] else {
+            return;
+        };
+        if !crate::function_inference::function_accepts_inference_type(function, result_type)
+            || parameter_types.iter().any(|ty| {
+                !crate::function_inference::function_accepts_inference_type(function, ty)
+            })
         {
             return;
         }
