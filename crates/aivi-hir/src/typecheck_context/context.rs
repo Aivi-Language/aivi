@@ -2396,6 +2396,9 @@ impl<'a> GateTypeContext<'a> {
             {
                 self.types_match(template, actual)
             }
+            GateType::TypeParameter { parameter, .. } if matches!(actual, GateType::TypeParameter { parameter: other, .. } if parameter == other) => {
+                true
+            }
             GateType::TypeParameter { parameter, .. } => match substitutions.entry(*parameter) {
                 Entry::Occupied(existing) => self.types_match(existing.get(), actual),
                 Entry::Vacant(slot) => {
@@ -2640,6 +2643,16 @@ impl<'a> GateTypeContext<'a> {
                 continue;
             }
             match (template, actual) {
+                (template @ GateType::TypeApplication { .. }, actual) => {
+                    let Some(witness) =
+                        self.contextual_builtin_constructor_witness(&template, &actual, &candidate)
+                    else {
+                        return false;
+                    };
+                    if !self.match_gate_type_template(&template, &witness, &mut candidate) {
+                        return false;
+                    }
+                }
                 (GateType::TypeParameter { parameter, .. }, actual) => {
                     if self.rigid_type_parameters.contains(&parameter) {
                         return false;
@@ -2776,6 +2789,70 @@ impl<'a> GateTypeContext<'a> {
         self.match_gate_type_template(template, expected, &mut substitutions)
             .then(|| template.substitute_type_parameters(&substitutions))
             .filter(|specialized| self.types_match(specialized, expected))
+    }
+
+    /// An empty constructor still proves its head. Context may supply its
+    /// applied payloads; unknown fixed arguments require an earlier binding.
+    fn contextual_builtin_constructor_witness(
+        &self,
+        template: &GateType,
+        actual: &SourceOptionActualType,
+        substitutions: &HashMap<TypeParameterId, GateType>,
+    ) -> Option<GateType> {
+        let GateType::TypeApplication {
+            parameter,
+            arguments,
+            ..
+        } = template
+        else {
+            return None;
+        };
+        let (builtin, actual_arguments): (_, Vec<&SourceOptionActualType>) = match actual {
+            SourceOptionActualType::List(value) => (BuiltinType::List, vec![value]),
+            SourceOptionActualType::Set(value) => (BuiltinType::Set, vec![value]),
+            SourceOptionActualType::Option(value) => (BuiltinType::Option, vec![value]),
+            SourceOptionActualType::Signal(value) => (BuiltinType::Signal, vec![value]),
+            SourceOptionActualType::Map { key, value } => (BuiltinType::Map, vec![key, value]),
+            SourceOptionActualType::Result { error, value } => {
+                (BuiltinType::Result, vec![error, value])
+            }
+            SourceOptionActualType::Validation { error, value } => {
+                (BuiltinType::Validation, vec![error, value])
+            }
+            SourceOptionActualType::Task { error, value } => {
+                (BuiltinType::Task, vec![error, value])
+            }
+            _ => return None,
+        };
+        let fixed = actual_arguments.len().checked_sub(arguments.len())?;
+        let previous = substitutions
+            .get(parameter)
+            .and_then(GateType::constructor_view)
+            .filter(|(head, previous)| {
+                *head == TypeConstructorHead::Builtin(builtin)
+                    && previous.len() == actual_arguments.len()
+            })
+            .map(|(_, arguments)| arguments);
+        let mut completed = Vec::with_capacity(actual_arguments.len());
+        for (index, actual) in actual_arguments.into_iter().enumerate() {
+            if let Some(known) = actual.to_gate_type() {
+                completed.push(known);
+                continue;
+            }
+            let contextual = if index < fixed {
+                previous.as_ref()?.get(index)?.clone()
+            } else {
+                arguments[index - fixed].substitute_type_parameters(substitutions)
+            };
+            let partial = SourceOptionActualType::from_gate_type(&contextual);
+            let refined = actual.unify(&partial)?;
+            completed.push(
+                refined
+                    .to_gate_type()
+                    .or_else(|| (refined == partial).then_some(contextual))?,
+            );
+        }
+        self.apply_builtin_type_constructor(builtin, &completed)
     }
 
     /// Instantiate a polymorphic callback from its known input contract before

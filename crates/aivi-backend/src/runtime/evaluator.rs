@@ -10,6 +10,14 @@ struct BuiltinCallSite {
     intrinsic: BuiltinClassMemberIntrinsic,
 }
 
+/// Method-local Applicative evidence, including its inherited operations.
+/// This is the same prefix received by authored `Traversable` members.
+struct ApplicativeEvidence {
+    pure: RuntimeValue,
+    apply: RuntimeValue,
+    map: RuntimeValue,
+}
+
 pub struct KernelEvaluator<'a> {
     program: &'a Program,
     item_cache: BTreeMap<ItemId, DetachedRuntimeValue>,
@@ -1729,7 +1737,7 @@ impl<'a> KernelEvaluator<'a> {
                     })?;
                 self.reduce_builtin_carrier(call_site, carrier, function, initial, subject, globals)
             }
-            BuiltinClassMemberIntrinsic::Traverse {
+            BuiltinClassMemberIntrinsic::TraverseCollected {
                 traversable,
                 applicative,
             } => {
@@ -1741,10 +1749,29 @@ impl<'a> KernelEvaluator<'a> {
                         reason,
                     }
                 })?;
-                self.traverse_builtin_carrier(
+                self.traverse_standard_applicative(
                     call_site,
                     traversable,
                     applicative,
+                    function,
+                    subject,
+                    globals,
+                )
+            }
+            BuiltinClassMemberIntrinsic::Traverse { traversable } => {
+                let [pure, apply, map, function, subject] =
+                    expect_arity::<5>(arguments).map_err(|reason| {
+                        EvaluationError::UnsupportedBuiltinClassMember {
+                            kernel: kernel_id,
+                            expr,
+                            intrinsic,
+                            reason,
+                        }
+                    })?;
+                self.traverse_with_evidence(
+                    call_site,
+                    traversable,
+                    ApplicativeEvidence { pure, apply, map },
                     function,
                     subject,
                     globals,
@@ -2532,11 +2559,188 @@ impl<'a> KernelEvaluator<'a> {
         }
     }
 
-    fn traverse_builtin_carrier(
+    /// Recognize only an unbound intrinsic or a validated, exact forwarding
+    /// body. Names and result layouts never establish builtin authority.
+    fn forwarded_builtin_intrinsic(
+        &self,
+        value: &RuntimeValue,
+    ) -> Option<BuiltinClassMemberIntrinsic> {
+        match value {
+            RuntimeValue::Callable(RuntimeCallable::BuiltinClassMember {
+                intrinsic,
+                bound_arguments,
+            }) if bound_arguments.is_empty() => Some(*intrinsic),
+            RuntimeValue::Callable(RuntimeCallable::ItemBody {
+                item,
+                kernel,
+                parameters,
+                bound_arguments,
+            }) if bound_arguments.is_empty() => {
+                let item = self.program.items().get(*item)?;
+                if item.body != Some(*kernel) || item.parameters != *parameters {
+                    return None;
+                }
+                let kernel = self.program.kernels().get(*kernel)?;
+                let KernelExprKind::Apply { callee, arguments } = &kernel.exprs()[kernel.root].kind
+                else {
+                    return None;
+                };
+                let KernelExprKind::BuiltinClassMember(intrinsic) = kernel.exprs()[*callee].kind
+                else {
+                    return None;
+                };
+                if arguments.len() != builtin_class_member_arity(intrinsic)
+                    || arguments.len() != kernel.convention.parameters.len()
+                {
+                    return None;
+                }
+                arguments
+                    .iter()
+                    .zip(&kernel.convention.parameters)
+                    .all(|(argument, parameter)| {
+                        matches!(
+                            (&kernel.exprs()[*argument].kind, parameter.role),
+                            (KernelExprKind::Environment(actual), crate::ParameterRole::Environment(expected))
+                                if *actual == expected
+                        )
+                    })
+                    .then_some(intrinsic)
+            }
+            _ => None,
+        }
+    }
+
+    fn apply_applicative_operation(
+        &mut self,
+        call_site: BuiltinCallSite,
+        operation: &RuntimeValue,
+        arguments: Vec<RuntimeValue>,
+        globals: &BTreeMap<ItemId, RuntimeValue>,
+    ) -> Result<RuntimeValue, EvaluationError> {
+        let EvaluationLocation { kernel, expr } = call_site.location;
+        if let Some(intrinsic) = self.forwarded_builtin_intrinsic(operation) {
+            self.evaluate_builtin_class_member(kernel, expr, intrinsic, arguments, globals)
+        } else {
+            self.apply_callable(kernel, expr, operation.clone(), arguments, globals)
+        }
+    }
+
+    fn traverse_with_evidence(
         &mut self,
         call_site: BuiltinCallSite,
         traversable: BuiltinTraversableCarrier,
-        applicative: BuiltinApplicativeCarrier,
+        evidence: ApplicativeEvidence,
+        function: RuntimeValue,
+        subject: RuntimeValue,
+        globals: &BTreeMap<ItemId, RuntimeValue>,
+    ) -> Result<RuntimeValue, EvaluationError> {
+        // Keep the existing linear collectors for standard dictionaries. All
+        // three operations must agree; a concrete value shape is insufficient.
+        let standard = (|| {
+            CollectedApplicative::from_evidence(
+                self.forwarded_builtin_intrinsic(&evidence.pure)?,
+                self.forwarded_builtin_intrinsic(&evidence.apply)?,
+                self.forwarded_builtin_intrinsic(&evidence.map)?,
+            )
+        })();
+        if let Some(applicative) = standard {
+            return self.traverse_standard_applicative(
+                call_site,
+                traversable,
+                applicative,
+                function,
+                subject,
+                globals,
+            );
+        }
+
+        let EvaluationLocation { kernel, expr } = call_site.location;
+        let pure = |this: &mut Self, value| {
+            this.apply_applicative_operation(call_site, &evidence.pure, vec![value], globals)
+        };
+        let (payload, constructor) = match (traversable, strip_signal(subject)) {
+            (BuiltinTraversableCarrier::List, RuntimeValue::List(values)) => {
+                let mut accumulated = DetachedRuntimeValue::from_runtime_owned(pure(
+                    self,
+                    RuntimeValue::List(Vec::new()),
+                )?);
+                for value in values {
+                    let mapped =
+                        self.apply_callable(kernel, expr, function.clone(), vec![value], globals)?;
+                    let singleton = self.apply_applicative_operation(
+                        call_site,
+                        &evidence.map,
+                        vec![
+                            runtime_class_member_value(BuiltinClassMemberIntrinsic::Pure(
+                                BuiltinApplicativeCarrier::List,
+                            )),
+                            mapped,
+                        ],
+                        globals,
+                    )?;
+                    let functions = self.apply_applicative_operation(
+                        call_site,
+                        &evidence.map,
+                        vec![
+                            runtime_class_member_value(BuiltinClassMemberIntrinsic::Append(
+                                BuiltinAppendCarrier::List,
+                            )),
+                            accumulated.into_runtime(),
+                        ],
+                        globals,
+                    )?;
+                    accumulated = DetachedRuntimeValue::from_runtime_owned(
+                        self.apply_applicative_operation(
+                            call_site,
+                            &evidence.apply,
+                            vec![functions, singleton],
+                            globals,
+                        )?,
+                    );
+                }
+                return Ok(accumulated.into_runtime());
+            }
+            (BuiltinTraversableCarrier::Option, RuntimeValue::OptionNone) => {
+                return pure(self, RuntimeValue::OptionNone);
+            }
+            (BuiltinTraversableCarrier::Option, RuntimeValue::OptionSome(value)) => {
+                (*value, BuiltinTerm::Some)
+            }
+            (BuiltinTraversableCarrier::Result, RuntimeValue::ResultErr(error)) => {
+                return pure(self, RuntimeValue::ResultErr(error));
+            }
+            (BuiltinTraversableCarrier::Result, RuntimeValue::ResultOk(value)) => {
+                (*value, BuiltinTerm::Ok)
+            }
+            (BuiltinTraversableCarrier::Validation, RuntimeValue::ValidationInvalid(error)) => {
+                return pure(self, RuntimeValue::ValidationInvalid(error));
+            }
+            (BuiltinTraversableCarrier::Validation, RuntimeValue::ValidationValid(value)) => {
+                (*value, BuiltinTerm::Valid)
+            }
+            _ => {
+                return Err(EvaluationError::UnsupportedBuiltinClassMember {
+                    kernel,
+                    expr,
+                    intrinsic: call_site.intrinsic,
+                    reason: "traverse received values outside the supported runtime carriers",
+                });
+            }
+        };
+        let mapped = self.apply_callable(kernel, expr, function, vec![payload], globals)?;
+        self.apply_applicative_operation(
+            call_site,
+            &evidence.map,
+            vec![map_builtin(constructor), mapped],
+            globals,
+        )
+    }
+
+    fn traverse_standard_applicative(
+        &mut self,
+        call_site: BuiltinCallSite,
+        traversable: BuiltinTraversableCarrier,
+        applicative: CollectedApplicative,
         function: RuntimeValue,
         subject: RuntimeValue,
         globals: &BTreeMap<ItemId, RuntimeValue>,
@@ -2580,7 +2784,7 @@ impl<'a> KernelEvaluator<'a> {
             },
             BuiltinTraversableCarrier::Option => match strip_signal(subject) {
                 RuntimeValue::OptionNone => Ok(pure_applicative_value(
-                    applicative,
+                    applicative.builtin(),
                     RuntimeValue::OptionNone,
                 )),
                 RuntimeValue::OptionSome(value) => {
@@ -2604,7 +2808,7 @@ impl<'a> KernelEvaluator<'a> {
             },
             BuiltinTraversableCarrier::Result => match strip_signal(subject) {
                 RuntimeValue::ResultErr(error) => Ok(pure_applicative_value(
-                    applicative,
+                    applicative.builtin(),
                     RuntimeValue::ResultErr(error),
                 )),
                 RuntimeValue::ResultOk(value) => {
@@ -2628,7 +2832,7 @@ impl<'a> KernelEvaluator<'a> {
             },
             BuiltinTraversableCarrier::Validation => match strip_signal(subject) {
                 RuntimeValue::ValidationInvalid(error) => Ok(pure_applicative_value(
-                    applicative,
+                    applicative.builtin(),
                     RuntimeValue::ValidationInvalid(error),
                 )),
                 RuntimeValue::ValidationValid(value) => {

@@ -119,15 +119,6 @@ pub const HIGHER_KINDED_DOC_CARRIERS: [BuiltinExecutableCarrier; 6] = [
     BuiltinExecutableCarrier::Task,
 ];
 
-pub const TRAVERSE_RESULT_APPLICATIVE_CARRIERS: [BuiltinExecutableCarrier; 6] = [
-    BuiltinExecutableCarrier::List,
-    BuiltinExecutableCarrier::Option,
-    BuiltinExecutableCarrier::Result,
-    BuiltinExecutableCarrier::Validation,
-    BuiltinExecutableCarrier::Signal,
-    BuiltinExecutableCarrier::Task,
-];
-
 pub const fn builtin_executable_class_support(
     class: BuiltinExecutableClass,
     carrier: BuiltinExecutableCarrier,
@@ -247,21 +238,6 @@ pub const fn builtin_executable_class_support(
                 "runtime lowering only supports filterMap for List and Option",
             ),
         },
-    }
-}
-
-pub const fn builtin_traverse_result_applicative_support(
-    carrier: BuiltinExecutableCarrier,
-) -> BuiltinExecutableClassSupport {
-    match carrier {
-        BuiltinExecutableCarrier::List
-        | BuiltinExecutableCarrier::Option
-        | BuiltinExecutableCarrier::Result
-        | BuiltinExecutableCarrier::Validation
-        | BuiltinExecutableCarrier::Signal => BuiltinExecutableClassSupport::Supported,
-        _ => BuiltinExecutableClassSupport::Unsupported(
-            "runtime lowering only supports traverse results in List, Option, Result, Validation, and Signal applicatives",
-        ),
     }
 }
 
@@ -433,21 +409,15 @@ pub fn builtin_reduce_intrinsic(
 
 pub fn builtin_traverse_intrinsic(
     traversable: BuiltinExecutableCarrier,
-    applicative: BuiltinExecutableCarrier,
 ) -> Result<BuiltinClassMemberIntrinsic, &'static str> {
     if let Some(reason) =
         builtin_executable_class_support(BuiltinExecutableClass::Traversable, traversable).reason()
     {
         return Err(reason);
     }
-    if let Some(reason) = builtin_traverse_result_applicative_support(applicative).reason() {
-        return Err(reason);
-    }
     Ok(BuiltinClassMemberIntrinsic::Traverse {
         traversable: builtin_traversable_carrier(traversable)
             .expect("supported traverse carriers always map to builtin traversable carriers"),
-        applicative: builtin_applicative_carrier(applicative)
-            .expect("supported traverse applicatives always map to builtin applicative carriers"),
     })
 }
 
@@ -508,7 +478,7 @@ pub fn render_higher_kinded_builtin_support_markdown() -> String {
     markdown.push_str("- `—` means the canonical executable-support registry marks that builtin class/carrier pair unsupported.\n");
     markdown.push_str("- `Signal` is intentionally **not** a `Monad`: executable signals keep a static dependency graph.\n");
     markdown.push_str("- `Validation E` is intentionally **not** a `Monad`: independent accumulation uses the applicative `&|>` pipe, while dependent `!|>` checks are a dedicated pipe primitive rather than class-backed `bind`.\n");
-    markdown.push_str("- `Traversable` support and traverse-result applicative support are distinct registry checks: `traverse` itself is builtin-supported for `List`, `Option`, `Result`, and `Validation`, while traverse results may use `List`, `Option`, `Result`, `Validation`, or `Signal` applicatives, but not `Task`.\n");
+    markdown.push_str("- `traverse` is builtin-supported for `List`, `Option`, `Result`, and `Validation`. Its result uses explicit `Applicative` evidence, including builtin `List`, `Option`, `Result`, `Validation`, `Signal`, and `Task`, or an authored applicative instance.\n");
     markdown
 }
 
@@ -625,8 +595,7 @@ fn builtin_filterable_carrier(
 mod tests {
     use super::{
         BuiltinExecutableCarrier, BuiltinExecutableClass, BuiltinExecutableClassSupport,
-        builtin_executable_class_support, builtin_traverse_result_applicative_support,
-        render_higher_kinded_builtin_support_markdown,
+        builtin_executable_class_support, render_higher_kinded_builtin_support_markdown,
     };
 
     const TYPECLASSES_MANUAL: &str = include_str!("../../../manual/guide/typeclasses.md");
@@ -680,10 +649,11 @@ mod tests {
             BuiltinExecutableClassSupport::Supported
         );
         assert_eq!(
-            builtin_traverse_result_applicative_support(BuiltinExecutableCarrier::Task),
-            BuiltinExecutableClassSupport::Unsupported(
-                "runtime lowering only supports traverse results in List, Option, Result, Validation, and Signal applicatives",
-            )
+            builtin_executable_class_support(
+                BuiltinExecutableClass::Applicative,
+                BuiltinExecutableCarrier::Task
+            ),
+            BuiltinExecutableClassSupport::Supported
         );
     }
 

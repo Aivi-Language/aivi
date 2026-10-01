@@ -779,15 +779,15 @@ value filteredMissing:Option Int =
     match &traversed_list_kernel.exprs()[traversed_list_kernel.root].kind {
         KernelExprKind::Apply { callee, arguments } => {
             assert_eq!(arguments.len(), 2);
-            expect_backend_builtin_evidence_item(
-                &backend,
-                &traversed_list_kernel,
-                *callee,
-                BuiltinClassMemberIntrinsic::Traverse {
-                    traversable: BuiltinTraversableCarrier::List,
-                    applicative: BuiltinApplicativeCarrier::Option,
-                },
-            );
+            assert!(matches!(
+                traversed_list_kernel.exprs()[*callee].kind,
+                KernelExprKind::BuiltinClassMember(
+                    BuiltinClassMemberIntrinsic::TraverseCollected {
+                        traversable: BuiltinTraversableCarrier::List,
+                        applicative: aivi_core::BuiltinCollectedApplicativeCarrier::Option,
+                    }
+                )
+            ));
         }
         other => panic!("expected traverse body to lower into an apply tree, found {other:?}"),
     }

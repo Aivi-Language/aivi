@@ -1596,14 +1596,15 @@ value filtered:List Int =
         panic!("traversed should lower to an apply expression");
     };
     assert_eq!(arguments.len(), 2);
-    expect_builtin_evidence_item(
-        &core,
-        *callee,
-        BuiltinClassMemberIntrinsic::Traverse {
-            traversable: BuiltinTraversableCarrier::List,
-            applicative: BuiltinApplicativeCarrier::Option,
-        },
-    );
+    assert!(matches!(
+        core.exprs()[*callee].kind,
+        crate::ExprKind::Reference(Reference::BuiltinClassMember(
+            BuiltinClassMemberIntrinsic::TraverseCollected {
+                traversable: BuiltinTraversableCarrier::List,
+                applicative: crate::BuiltinCollectedApplicativeCarrier::Option,
+            }
+        ))
+    ));
 
     let filtered = core
         .items()
@@ -1815,7 +1816,7 @@ value joinedTask:Task Text Int =
 }
 
 #[test]
-fn rejects_task_as_a_traverse_result_applicative() {
+fn lowers_task_traversal_with_explicit_applicative_evidence() {
     let lowered = lower_text(
         "typed-core-traverse-task-result.aivi",
         r#"
@@ -1831,13 +1832,112 @@ value traversedTask:Task Text (List Int) =
         lowered.diagnostics()
     );
 
-    let errors = lower_module(lowered.module()).expect_err("task traverse should stay unsupported");
-    assert!(errors.errors().iter().any(|error| matches!(
-        error,
-        LoweringError::UnsupportedClassMemberDispatch { reason, .. }
-            if *reason
-                == "runtime lowering only supports traverse results in List, Option, Result, Validation, and Signal applicatives"
+    let core = lower_module(lowered.module()).expect("task traversal should lower with evidence");
+    crate::validate_module(&core).expect("task traversal core should validate");
+    let body = core
+        .items()
+        .iter()
+        .find_map(|(_, item)| {
+            (item.name.as_ref() == "traversedTask")
+                .then_some(item.body)
+                .flatten()
+        })
+        .unwrap();
+    let crate::ExprKind::Apply { callee, arguments } = &core.exprs()[body].kind else {
+        panic!("traversal should retain two visible arguments");
+    };
+    assert_eq!(arguments.len(), 2);
+    let crate::ExprKind::Apply { callee, arguments } = &core.exprs()[*callee].kind else {
+        panic!("traversal should bind its Applicative prefix");
+    };
+    assert_eq!(arguments.len(), 3);
+    expect_builtin_evidence_item(
+        &core,
+        *callee,
+        BuiltinClassMemberIntrinsic::Traverse {
+            traversable: BuiltinTraversableCarrier::List,
+        },
+    );
+    for (argument, intrinsic) in arguments.iter().zip([
+        BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::Task),
+        BuiltinClassMemberIntrinsic::Apply(BuiltinApplyCarrier::Task),
+        BuiltinClassMemberIntrinsic::Map(BuiltinFunctorCarrier::Task),
+    ]) {
+        expect_builtin_evidence_item(&core, *argument, intrinsic);
+    }
+}
+
+#[test]
+fn abstract_traversal_keeps_its_applicative_evidence_prefix() {
+    let lowered = lower_text(
+        "abstract-traversal-evidence.aivi",
+        r#"
+type Applicative G => (Int -> G Int) -> List Int -> G (List Int)
+func collect = f values => traverse f values
+"#,
+    );
+    assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+    let core = lower_module(lowered.module()).unwrap();
+    crate::validate_module(&core).unwrap();
+    let (_, collect) = core
+        .items()
+        .iter()
+        .find(|(_, item)| item.name.as_ref() == "collect")
+        .unwrap();
+    let mut expression = collect.body.unwrap();
+    let mut visible_arguments = 0;
+    let (callee, arguments) = loop {
+        let crate::ExprKind::Apply { callee, arguments } = &core.exprs()[expression].kind else {
+            panic!("abstract evidence must remain callable arguments");
+        };
+        if arguments.len() == 3 {
+            break (callee, arguments);
+        }
+        visible_arguments += arguments.len();
+        expression = *callee;
+    };
+    assert_eq!(visible_arguments, 2);
+    assert_eq!(arguments.len(), 3);
+    assert!(arguments.iter().all(|argument| matches!(
+        core.exprs()[*argument].kind,
+        crate::ExprKind::Reference(Reference::Local(_))
     )));
+    expect_builtin_evidence_item(
+        &core,
+        *callee,
+        BuiltinClassMemberIntrinsic::Traverse {
+            traversable: BuiltinTraversableCarrier::List,
+        },
+    );
+}
+
+#[test]
+fn traversal_collectors_require_three_matching_eager_operations() {
+    use crate::BuiltinCollectedApplicativeCarrier as Collector;
+    assert_eq!(
+        Collector::from_evidence(
+            BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::Option),
+            BuiltinClassMemberIntrinsic::Apply(BuiltinApplyCarrier::Option),
+            BuiltinClassMemberIntrinsic::Map(BuiltinFunctorCarrier::Option),
+        ),
+        Some(Collector::Option)
+    );
+    assert_eq!(
+        Collector::from_evidence(
+            BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::Option),
+            BuiltinClassMemberIntrinsic::Apply(BuiltinApplyCarrier::List),
+            BuiltinClassMemberIntrinsic::Map(BuiltinFunctorCarrier::Option),
+        ),
+        None
+    );
+    assert_eq!(
+        Collector::from_evidence(
+            BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::Task),
+            BuiltinClassMemberIntrinsic::Apply(BuiltinApplyCarrier::Task),
+            BuiltinClassMemberIntrinsic::Map(BuiltinFunctorCarrier::Task),
+        ),
+        None
+    );
 }
 
 #[test]

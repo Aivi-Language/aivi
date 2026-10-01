@@ -29,21 +29,20 @@ mod validate;
 pub use arena::{Arena, ArenaId, ArenaOverflow, alloc_or_diag};
 pub use class_support::{
     BuiltinExecutableCarrier, BuiltinExecutableClass, BuiltinExecutableClassSupport,
-    HIGHER_KINDED_DOC_CARRIERS, HIGHER_KINDED_DOC_CLASSES, TRAVERSE_RESULT_APPLICATIVE_CARRIERS,
-    builtin_append_intrinsic, builtin_apply_intrinsic, builtin_bimap_intrinsic,
-    builtin_chain_intrinsic, builtin_compare_intrinsic, builtin_empty_intrinsic,
-    builtin_executable_class_support, builtin_filter_map_intrinsic, builtin_join_intrinsic,
-    builtin_map_intrinsic, builtin_pure_intrinsic, builtin_reduce_intrinsic,
-    builtin_traverse_intrinsic, builtin_traverse_result_applicative_support,
+    HIGHER_KINDED_DOC_CARRIERS, HIGHER_KINDED_DOC_CLASSES, builtin_append_intrinsic,
+    builtin_apply_intrinsic, builtin_bimap_intrinsic, builtin_chain_intrinsic,
+    builtin_compare_intrinsic, builtin_empty_intrinsic, builtin_executable_class_support,
+    builtin_filter_map_intrinsic, builtin_join_intrinsic, builtin_map_intrinsic,
+    builtin_pure_intrinsic, builtin_reduce_intrinsic, builtin_traverse_intrinsic,
     render_higher_kinded_builtin_support_markdown,
 };
 pub use expr::{
     BuiltinAppendCarrier, BuiltinApplicativeCarrier, BuiltinApplyCarrier, BuiltinBifunctorCarrier,
-    BuiltinClassMemberIntrinsic, BuiltinFilterableCarrier, BuiltinFoldableCarrier,
-    BuiltinFunctorCarrier, BuiltinMonadCarrier, BuiltinOrdSubject, BuiltinTraversableCarrier,
-    ExecutableClassMember, ExecutableEvidence, Expr, ExprKind, MapEntry, Pattern, PatternBinding,
-    PatternConstructor, PatternKind, PipeCaseArm, PipeExpr, PipeStage, PipeStageKind,
-    PipeTruthyFalsyBranch, PipeTruthyFalsyStage, ProjectionBase, RecordExprField,
+    BuiltinClassMemberIntrinsic, BuiltinCollectedApplicativeCarrier, BuiltinFilterableCarrier,
+    BuiltinFoldableCarrier, BuiltinFunctorCarrier, BuiltinMonadCarrier, BuiltinOrdSubject,
+    BuiltinTraversableCarrier, ExecutableClassMember, ExecutableEvidence, Expr, ExprKind, MapEntry,
+    Pattern, PatternBinding, PatternConstructor, PatternKind, PipeCaseArm, PipeExpr, PipeStage,
+    PipeStageKind, PipeTruthyFalsyBranch, PipeTruthyFalsyStage, ProjectionBase, RecordExprField,
     RecordPatternField, Reference, TextLiteral, TextSegment,
 };
 pub use ids::{DecodeProgramId, DecodeStepId, ExprId, ItemId, PipeId, SourceId, StageId};

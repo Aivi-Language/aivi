@@ -1485,7 +1485,28 @@ fn instantiated_dispatch_requirements(
     span: SourceSpan,
 ) -> Option<Vec<ClassEvidenceRequirement>> {
     let (template, requirements) = match dispatch.implementation {
-        crate::ClassMemberImplementation::Builtin => return Some(Vec::new()),
+        crate::ClassMemberImplementation::Builtin => {
+            let Item::Class(class) = &module.items()[dispatch.member.class] else {
+                return None;
+            };
+            let signature = class.members.get(dispatch.member.member_index)?;
+            (
+                instantiate_class_member_type_for_binding(
+                    module,
+                    typing,
+                    dispatch.member,
+                    &dispatch.subject,
+                )?,
+                collect_owner_class_requirements(
+                    module,
+                    typing,
+                    &signature.context,
+                    &HashMap::from([(*class.parameters.first(), dispatch.subject.clone())]),
+                    span,
+                    &mut 0,
+                )?,
+            )
+        }
         crate::ClassMemberImplementation::SameModuleInstance {
             instance,
             member_index,
@@ -3292,6 +3313,11 @@ impl<'a> GeneralExprElaborator<'a> {
                 ) {
                     return Ok(lowered);
                 }
+                if self.reference_requires_class_evidence(&reference, &ty) {
+                    return Err(vec![GeneralExprBlocker::UnknownExprType {
+                        span: expr.span,
+                    }]);
+                }
                 GateRuntimeExprKind::Reference(
                     self.runtime_reference_for_name(expr.span, &reference, &ty)?,
                 )
@@ -3904,6 +3930,30 @@ impl<'a> GeneralExprElaborator<'a> {
             span,
             ty: result_ty,
             kind: GateRuntimeExprKind::Record(result_fields),
+        })
+    }
+
+    fn reference_requires_class_evidence(
+        &mut self,
+        reference: &TermReference,
+        visible_ty: &GateType,
+    ) -> bool {
+        let requires_item = |item| {
+            !self.class_evidence.requirements_for(item).is_empty()
+                || self.class_evidence.invalid_owners.contains(&item)
+        };
+        let import = match reference.resolution.as_ref() {
+            ResolutionState::Resolved(TermResolution::Item(item)) => return requires_item(*item),
+            ResolutionState::Resolved(TermResolution::Import(import)) => Some(*import),
+            ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(_)) => self
+                .typing
+                .select_hoisted_import(reference, Some(visible_ty)),
+            _ => None,
+        };
+        import.is_some_and(|import| {
+            matches!(&self.module.imports()[import].metadata,
+                ImportBindingMetadata::ConstrainedValue { evidence, .. } if !evidence.is_empty())
+                || ambient_item_for_import(self.module, import).is_some_and(requires_item)
         })
     }
 
@@ -6058,6 +6108,30 @@ mod tests {
         typecheck::resolve_class_member_dispatch,
         validate::{GateExprEnv, GateType, GateTypeContext, gate_env_for_function},
     };
+
+    #[test]
+    fn missing_function_evidence_is_blocked_instead_of_omitted() {
+        let lowered = lower_text(
+            "missing-function-evidence.aivi",
+            r#"
+type Functor F => F Int -> F Int
+func identityMap = values => map (n => n) values
+type F Int -> F Int
+func missing = values => identityMap values
+"#,
+        );
+        let report = elaborate_general_expressions(lowered.module());
+        let outcome = &report
+            .items()
+            .iter()
+            .find(|item| item_name(lowered.module(), item.owner) == Some("missing"))
+            .unwrap()
+            .outcome;
+        assert!(
+            matches!(outcome, GeneralExprOutcome::Blocked(_)),
+            "{outcome:?}"
+        );
+    }
 
     #[test]
     fn recursive_method_evidence_is_blocked_instead_of_omitted() {

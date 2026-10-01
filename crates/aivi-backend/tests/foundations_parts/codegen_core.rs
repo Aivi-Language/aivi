@@ -1062,6 +1062,117 @@ value piped : Bool = (Box 2 |> traverse increment) == Some (Box 3)
 }
 
 #[test]
+fn runtime_executes_builtin_traversal_with_abstract_and_authored_applicatives() {
+    let backend = lower_text(
+        "builtin-traversal-evidence.aivi",
+        r#"
+type Logged A = Logged Text A
+instance Functor Logged = { map = f logged => logged ||> Logged log value -> Logged log (f value) }
+instance Apply Logged = { apply = functions values => functions ||> Logged first f -> values ||> Logged second value -> Logged (append first second) (f value) }
+instance Applicative Logged = { pure = value => Logged "" value }
+type Int -> Logged Int
+func loggedIncrement = n => n
+ ||> 2 -> Logged "first" 3
+ ||> _ -> Logged "second" 4
+type Int -> Option Int
+func increment = n => Some (n + 1)
+type Int -> List Int
+func expand = n => [n, n + 1]
+type Traversable F => F Int -> Option (F Int)
+func advance = values => traverse increment values
+type Traversable F => F Int -> Option (F Int)
+func forward = values => advance values
+type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)
+func traverseWith = f values => traverse f values
+value sourceError : Result Text Int = Err "source"
+value sourceInvalid : Validation Text Int = Invalid "source"
+value optionGeneric : Bool = forward (Some 2) == Some (Some 3)
+value listGeneric : Bool = advance [2, 3] == Some [3, 4]
+value emptyListGeneric : Bool = advance [] == Some []
+value emptyOptionGeneric : Bool = advance None == Some None
+value errorGeneric : Bool = advance sourceError == Some sourceError
+value invalidGeneric : Bool = advance sourceInvalid == Some sourceInvalid
+value cartesian : Bool = traverseWith expand [2, 3] == [[2, 3], [2, 4], [3, 3], [3, 4]]
+value logged : Bool = traverseWith loggedIncrement [2, 3] == Logged "firstsecond" [3, 4]
+value loggedSome : Bool = traverseWith loggedIncrement (Some 2) == Logged "first" (Some 3)
+value loggedEmpty : Bool = traverseWith loggedIncrement [] == Logged "" []
+value loggedNone : Bool = traverseWith loggedIncrement None == Logged "" None
+value loggedError : Bool = traverseWith loggedIncrement sourceError == Logged "" sourceError
+value loggedInvalid : Bool = traverseWith loggedIncrement sourceInvalid == Logged "" sourceInvalid
+value partial : List Int -> Logged (List Int) = traverse loggedIncrement
+value partiallyApplied : Bool = partial [2, 3] == Logged "firstsecond" [3, 4]
+value piped : Bool = ([2, 3] |> traverse loggedIncrement) == Logged "firstsecond" [3, 4]
+"#,
+    );
+    let mut interpreter = KernelEvaluator::new(&backend);
+    let executable = aivi_backend::BackendExecutableProgram::interpreted(&backend);
+    let mut engine = executable.create_engine();
+    for name in [
+        "optionGeneric",
+        "listGeneric",
+        "emptyListGeneric",
+        "emptyOptionGeneric",
+        "errorGeneric",
+        "invalidGeneric",
+        "cartesian",
+        "logged",
+        "loggedSome",
+        "loggedEmpty",
+        "loggedNone",
+        "loggedError",
+        "loggedInvalid",
+        "partiallyApplied",
+        "piped",
+    ] {
+        let item = find_item(&backend, name);
+        assert_eq!(
+            interpreter.evaluate_item(item, &BTreeMap::new()).unwrap(),
+            RuntimeValue::Bool(true),
+            "{name}"
+        );
+        assert_eq!(
+            engine.evaluate_item(item, &BTreeMap::new()).unwrap(),
+            RuntimeValue::Bool(true),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn task_traversal_builds_and_abandons_deep_plans_without_recursion() {
+    let backend = lower_text(
+        "task-traversal-depth.aivi",
+        r#"
+type Int -> Task Text Int
+func step = n => pure (100 / n)
+type List Int -> Task Text (List Int)
+func scheduled = values => traverse step values
+"#,
+    );
+    let item = find_item(&backend, "scheduled");
+    let kernel = backend.items()[item].body.unwrap();
+    let globals = BTreeMap::new();
+    let mut evaluator = KernelEvaluator::new(&backend);
+    let callable = evaluator.evaluate_item(item, &globals).unwrap();
+    let plan = evaluator
+        .apply_runtime_callable(
+            kernel,
+            callable.clone(),
+            vec![RuntimeValue::List(vec![RuntimeValue::Int(1); 20_000])],
+            &globals,
+        )
+        .unwrap();
+    assert!(matches!(&plan, RuntimeValue::Task(_)));
+    plan.discard();
+    let mut values = vec![RuntimeValue::Int(1); 20_000];
+    values.push(RuntimeValue::Int(0));
+    let error = evaluator
+        .apply_runtime_callable(kernel, callable, vec![RuntimeValue::List(values)], &globals)
+        .unwrap_err();
+    assert!(error.to_string().contains("division by zero"), "{error}");
+}
+
+#[test]
 fn runtime_passes_conditional_equality_evidence_to_authored_members() {
     let backend = lower_text(
         "conditional-equality-evidence.aivi",

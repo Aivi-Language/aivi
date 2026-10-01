@@ -515,6 +515,74 @@ fn typecheck_rejects_specialization_of_quantified_local_values() {
 }
 
 #[test]
+fn partial_constructor_evidence_retains_its_higher_kinded_head() {
+    let module = Module::default();
+    let mut typing = GateTypeContext::new(&module);
+    let constructor = crate::TypeParameterId::from_raw(0);
+    let payload = crate::TypeParameterId::from_raw(1);
+    let int = GateType::Primitive(BuiltinType::Int);
+    let template = |argument| GateType::TypeApplication {
+        parameter: constructor,
+        name: "F".to_owned(),
+        arguments: vec![argument],
+    };
+    let info = |actual| crate::typecheck_context::GateExprInfo {
+        actual: Some(actual),
+        ..Default::default()
+    };
+    let list = info(SourceOptionActualType::List(Box::new(
+        SourceOptionActualType::Hole,
+    )));
+    let none = info(SourceOptionActualType::Option(Box::new(
+        SourceOptionActualType::Hole,
+    )));
+    let mut bindings = HashMap::new();
+    assert!(typing.match_gate_expr_template(&template(int.clone()), &list, &mut bindings));
+    assert_eq!(
+        bindings.get(&constructor),
+        Some(&GateType::List(Box::new(int.clone())))
+    );
+    assert!(!typing.match_gate_expr_template(&template(int.clone()), &none, &mut bindings));
+
+    let unknown_error = info(SourceOptionActualType::Result {
+        error: Box::new(SourceOptionActualType::Hole),
+        value: Box::new(SourceOptionActualType::Hole),
+    });
+    assert!(!typing.match_gate_expr_template(
+        &template(int.clone()),
+        &unknown_error,
+        &mut HashMap::new()
+    ));
+    let result = GateType::Result {
+        error: Box::new(GateType::Primitive(BuiltinType::Text)),
+        value: Box::new(int.clone()),
+    };
+    let mut bindings = HashMap::from([(constructor, result.clone())]);
+    assert!(typing.match_gate_expr_template(&template(int), &unknown_error, &mut bindings));
+    assert_eq!(bindings.get(&constructor), Some(&result));
+
+    let mut bindings = HashMap::new();
+    assert!(typing.match_gate_expr_template(
+        &template(GateType::TypeParameter {
+            parameter: payload,
+            name: "A".to_owned(),
+        }),
+        &list,
+        &mut bindings
+    ));
+    assert!(
+        !bindings.contains_key(&payload),
+        "a hole cannot establish a payload binding"
+    );
+    typing.replace_rigid_type_parameters(vec![constructor]);
+    assert!(!typing.match_gate_expr_template(
+        &template(GateType::Primitive(BuiltinType::Int)),
+        &list,
+        &mut HashMap::new()
+    ));
+}
+
+#[test]
 fn contextual_type_templates_preserve_constructor_quantifiers() {
     let module = Module::default();
     let mut typing = GateTypeContext::new(&module);

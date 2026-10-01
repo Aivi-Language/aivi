@@ -97,6 +97,19 @@ value bounded : Int = clamp 0 100 140
 
 ## Owning modules
 
+`traverse` sequences a fixed `Traversable` structure through any available `Applicative` instance.
+The source and result carriers are independent: a list can produce an `Option`, an authored
+`Either E`, or a `Task E`, for example. Generic functions retain the required dictionaries.
+
+```aivi
+type Traversable F => F Int -> Task Text (F Int)
+func incrementAll = values => traverse (n => pure (n + 1)) values
+
+value scheduled : Task Text (List Int) = incrementAll [1, 2]
+```
+
+The task remains a plan until executed. Empty structures use the result instance's `pure`.
+
 Import carrier-specific functions from these modules:
 
 | Values | Module |

@@ -94,7 +94,7 @@ This registry-backed table is the canonical documentation source for builtin exe
 - `—` means the canonical executable-support registry marks that builtin class/carrier pair unsupported.
 - `Signal` is intentionally **not** a `Monad`: executable signals keep a static dependency graph.
 - `Validation E` is intentionally **not** a `Monad`: independent accumulation uses the applicative `&|>` pipe, while dependent `!|>` checks are a dedicated pipe primitive rather than class-backed `bind`.
-- `Traversable` support and traverse-result applicative support are distinct registry checks: `traverse` itself is builtin-supported for `List`, `Option`, `Result`, and `Validation`, while traverse results may use `List`, `Option`, `Result`, `Validation`, or `Signal` applicatives, but not `Task`.
+- `traverse` is builtin-supported for `List`, `Option`, `Result`, and `Validation`. Its result uses explicit `Applicative` evidence, including builtin `List`, `Option`, `Result`, `Validation`, `Signal`, and `Task`, or an authored applicative instance.
 <!-- END builtin-executable-support -->
 
 For the law contract behind this hierarchy and the rationale for why `Signal` and `Validation`
@@ -218,10 +218,11 @@ func advance = box => traverse increment box
 value advanced : Option (Box Int) = advance (Box 2)
 ```
 
-An authored instance can supply a generic `Traversable F` dictionary as shown above. Builtin
-traversal currently requires a concrete result applicative when its intrinsic is selected, so passing
-a builtin `Traversable` dictionary with an abstract method-local `G` remains unsupported. Direct
-builtin `traverse` calls with known result applicatives retain the support listed above. Native
+Both authored and builtin instances supply generic `Traversable F` dictionaries. Their `traverse`
+callables receive `Applicative G` evidence before the visible mapper and source arguments; `G` can
+remain abstract in a generic function. Empty inputs and error alternatives use that dictionary's
+`pure`, and successful payloads use its `map` and `apply`. Traversal into `Task` constructs task
+plans; execution stays at the task boundary. Native
 compilation of authored evidence remains limited to the callable and constructor shapes supported
 by the backend; interpreter or lazy JIT execution does not prove strict AOT support.
 

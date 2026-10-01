@@ -249,3 +249,37 @@ value eitherBifunctor : Task Text Bool = pure (bothMapped == eitherBimapExpected
 
 @test
 value nonEmptyAppendAssociative : Task Text Bool = pure (nelToList appendLeft == nelToList appendRight)
+
+type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)
+func traverseGeneric = f values => traverse f values
+
+type Int -> Either Text Int
+func incrementRight = n => Right (n + 1)
+
+type Int -> Task Text Int
+func incrementTask = n => pure (n + 1)
+
+value emptyRight : Either Text (List Int) = Right []
+value sourceError : Result Text Int = Err "source"
+value sourceInvalid : Validation Text Int = Invalid "source"
+
+@test
+value traverseBuiltinDictionary : Task Text Bool = pure (traverseGeneric keepPositive (Some 2) == Some (Some 3))
+
+@test
+value traverseAuthoredApplicative : Task Text Bool = pure (traverseGeneric incrementRight [1, 2] == Right [2, 3])
+
+@test
+value traverseEmptyApplicative : Task Text Bool = pure (traverseGeneric incrementRight [] == emptyRight)
+
+@test
+value traverseTask : Task Text Bool = map (values => values == [2, 3]) (traverseGeneric incrementTask [1, 2])
+
+@test
+value traverseEmptyTask : Task Text Bool = map (values => values == []) (traverseGeneric incrementTask [])
+
+@test
+value traverseSourceError : Task Text Bool = pure (traverseGeneric incrementRight sourceError == Right sourceError)
+
+@test
+value traverseSourceInvalid : Task Text Bool = pure (traverseGeneric incrementRight sourceInvalid == Right sourceInvalid)

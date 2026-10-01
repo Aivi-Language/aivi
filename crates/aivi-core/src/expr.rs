@@ -85,11 +85,76 @@ pub enum BuiltinClassMemberIntrinsic {
     Chain(BuiltinMonadCarrier),
     Join(BuiltinMonadCarrier),
     Reduce(BuiltinFoldableCarrier),
+    /// Callable ABI: Applicative `pure`, superclass `apply` and `map`, then
+    /// the mapper and source carrier. The result constructor stays abstract.
     Traverse {
         traversable: BuiltinTraversableCarrier,
-        applicative: BuiltinApplicativeCarrier,
+    },
+    /// Partial evaluation of `Traverse` after its three evidence arguments
+    /// prove one standard eager dictionary. Callable ABI: mapper, source.
+    TraverseCollected {
+        traversable: BuiltinTraversableCarrier,
+        applicative: BuiltinCollectedApplicativeCarrier,
     },
     FilterMap(BuiltinFilterableCarrier),
+}
+
+/// Standard dictionaries whose traversal admits a linear eager collector.
+/// Task and authored dictionaries retain their explicit callable operations.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub enum BuiltinCollectedApplicativeCarrier {
+    List,
+    Option,
+    Result,
+    Validation,
+    Signal,
+}
+
+impl BuiltinCollectedApplicativeCarrier {
+    pub fn from_evidence(
+        pure: BuiltinClassMemberIntrinsic,
+        apply: BuiltinClassMemberIntrinsic,
+        map: BuiltinClassMemberIntrinsic,
+    ) -> Option<Self> {
+        match (pure, apply, map) {
+            (
+                BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::List),
+                BuiltinClassMemberIntrinsic::Apply(BuiltinApplyCarrier::List),
+                BuiltinClassMemberIntrinsic::Map(BuiltinFunctorCarrier::List),
+            ) => Some(Self::List),
+            (
+                BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::Option),
+                BuiltinClassMemberIntrinsic::Apply(BuiltinApplyCarrier::Option),
+                BuiltinClassMemberIntrinsic::Map(BuiltinFunctorCarrier::Option),
+            ) => Some(Self::Option),
+            (
+                BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::Result),
+                BuiltinClassMemberIntrinsic::Apply(BuiltinApplyCarrier::Result),
+                BuiltinClassMemberIntrinsic::Map(BuiltinFunctorCarrier::Result),
+            ) => Some(Self::Result),
+            (
+                BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::Validation),
+                BuiltinClassMemberIntrinsic::Apply(BuiltinApplyCarrier::Validation),
+                BuiltinClassMemberIntrinsic::Map(BuiltinFunctorCarrier::Validation),
+            ) => Some(Self::Validation),
+            (
+                BuiltinClassMemberIntrinsic::Pure(BuiltinApplicativeCarrier::Signal),
+                BuiltinClassMemberIntrinsic::Apply(BuiltinApplyCarrier::Signal),
+                BuiltinClassMemberIntrinsic::Map(BuiltinFunctorCarrier::Signal),
+            ) => Some(Self::Signal),
+            _ => None,
+        }
+    }
+
+    pub fn builtin(self) -> BuiltinApplicativeCarrier {
+        match self {
+            Self::List => BuiltinApplicativeCarrier::List,
+            Self::Option => BuiltinApplicativeCarrier::Option,
+            Self::Result => BuiltinApplicativeCarrier::Result,
+            Self::Validation => BuiltinApplicativeCarrier::Validation,
+            Self::Signal => BuiltinApplicativeCarrier::Signal,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]

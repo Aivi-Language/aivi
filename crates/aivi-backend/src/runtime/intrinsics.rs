@@ -1266,12 +1266,13 @@ fn builtin_class_member_arity(intrinsic: BuiltinClassMemberIntrinsic) -> usize {
         BuiltinClassMemberIntrinsic::Empty(_) => 0,
         BuiltinClassMemberIntrinsic::Pure(_) | BuiltinClassMemberIntrinsic::Join(_) => 1,
         BuiltinClassMemberIntrinsic::Bimap(_) | BuiltinClassMemberIntrinsic::Reduce(_) => 3,
+        BuiltinClassMemberIntrinsic::Traverse { .. } => 5,
         BuiltinClassMemberIntrinsic::StructuralEq
         | BuiltinClassMemberIntrinsic::Compare { .. }
         | BuiltinClassMemberIntrinsic::Append(_)
         | BuiltinClassMemberIntrinsic::Map(_)
         | BuiltinClassMemberIntrinsic::Apply(_)
-        | BuiltinClassMemberIntrinsic::Traverse { .. }
+        | BuiltinClassMemberIntrinsic::TraverseCollected { .. }
         | BuiltinClassMemberIntrinsic::FilterMap(_)
         | BuiltinClassMemberIntrinsic::Chain(_) => 2,
     }
@@ -1293,12 +1294,16 @@ fn pure_applicative_value(
     }
 }
 
+/// Eager collectors are valid only for these verified standard dictionaries.
+/// Task and authored dictionaries use their callable operations instead.
+type CollectedApplicative = aivi_core::BuiltinCollectedApplicativeCarrier;
+
 fn wrap_option_in_applicative(
-    carrier: BuiltinApplicativeCarrier,
+    carrier: CollectedApplicative,
     mapped: RuntimeValue,
 ) -> Result<RuntimeValue, &'static str> {
     match carrier {
-        BuiltinApplicativeCarrier::List => match strip_signal(mapped) {
+        CollectedApplicative::List => match strip_signal(mapped) {
             RuntimeValue::List(values) => Ok(RuntimeValue::List(
                 values
                     .into_iter()
@@ -1307,48 +1312,42 @@ fn wrap_option_in_applicative(
             )),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
-        BuiltinApplicativeCarrier::Option => match strip_signal(mapped) {
+        CollectedApplicative::Option => match strip_signal(mapped) {
             RuntimeValue::OptionNone => Ok(RuntimeValue::OptionNone),
             RuntimeValue::OptionSome(value) => Ok(RuntimeValue::OptionSome(Box::new(
                 RuntimeValue::OptionSome(value),
             ))),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
-        BuiltinApplicativeCarrier::Result => match strip_signal(mapped) {
+        CollectedApplicative::Result => match strip_signal(mapped) {
             RuntimeValue::ResultErr(error) => Ok(RuntimeValue::ResultErr(error)),
             RuntimeValue::ResultOk(value) => Ok(RuntimeValue::ResultOk(Box::new(
                 RuntimeValue::OptionSome(value),
             ))),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
-        BuiltinApplicativeCarrier::Validation => match strip_signal(mapped) {
+        CollectedApplicative::Validation => match strip_signal(mapped) {
             RuntimeValue::ValidationInvalid(error) => Ok(RuntimeValue::ValidationInvalid(error)),
             RuntimeValue::ValidationValid(value) => Ok(RuntimeValue::ValidationValid(Box::new(
                 RuntimeValue::OptionSome(value),
             ))),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
-        BuiltinApplicativeCarrier::Signal => match mapped {
+        CollectedApplicative::Signal => match mapped {
             RuntimeValue::Signal(value) => Ok(RuntimeValue::Signal(Box::new(
                 RuntimeValue::OptionSome(value),
             ))),
-            _ => Err("traverse expected the mapped value to stay in the target applicative"),
-        },
-        BuiltinApplicativeCarrier::Task => match strip_signal(mapped) {
-            RuntimeValue::Task(plan) => Ok(RuntimeValue::Task(RuntimeTaskPlan::Pure {
-                value: Box::new(RuntimeValue::OptionSome(Box::new(RuntimeValue::Task(plan)))),
-            })),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
     }
 }
 
 fn wrap_result_ok_in_applicative(
-    carrier: BuiltinApplicativeCarrier,
+    carrier: CollectedApplicative,
     mapped: RuntimeValue,
 ) -> Result<RuntimeValue, &'static str> {
     match carrier {
-        BuiltinApplicativeCarrier::List => match strip_signal(mapped) {
+        CollectedApplicative::List => match strip_signal(mapped) {
             RuntimeValue::List(values) => Ok(RuntimeValue::List(
                 values
                     .into_iter()
@@ -1357,48 +1356,42 @@ fn wrap_result_ok_in_applicative(
             )),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
-        BuiltinApplicativeCarrier::Option => match strip_signal(mapped) {
+        CollectedApplicative::Option => match strip_signal(mapped) {
             RuntimeValue::OptionNone => Ok(RuntimeValue::OptionNone),
             RuntimeValue::OptionSome(value) => Ok(RuntimeValue::OptionSome(Box::new(
                 RuntimeValue::ResultOk(value),
             ))),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
-        BuiltinApplicativeCarrier::Result => match strip_signal(mapped) {
+        CollectedApplicative::Result => match strip_signal(mapped) {
             RuntimeValue::ResultErr(error) => Ok(RuntimeValue::ResultErr(error)),
             RuntimeValue::ResultOk(value) => Ok(RuntimeValue::ResultOk(Box::new(
                 RuntimeValue::ResultOk(value),
             ))),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
-        BuiltinApplicativeCarrier::Validation => match strip_signal(mapped) {
+        CollectedApplicative::Validation => match strip_signal(mapped) {
             RuntimeValue::ValidationInvalid(error) => Ok(RuntimeValue::ValidationInvalid(error)),
             RuntimeValue::ValidationValid(value) => Ok(RuntimeValue::ValidationValid(Box::new(
                 RuntimeValue::ResultOk(value),
             ))),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
-        BuiltinApplicativeCarrier::Signal => match mapped {
+        CollectedApplicative::Signal => match mapped {
             RuntimeValue::Signal(value) => Ok(RuntimeValue::Signal(Box::new(
                 RuntimeValue::ResultOk(value),
             ))),
-            _ => Err("traverse expected the mapped value to stay in the target applicative"),
-        },
-        BuiltinApplicativeCarrier::Task => match strip_signal(mapped) {
-            RuntimeValue::Task(plan) => Ok(RuntimeValue::Task(RuntimeTaskPlan::Pure {
-                value: Box::new(RuntimeValue::ResultOk(Box::new(RuntimeValue::Task(plan)))),
-            })),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
     }
 }
 
 fn wrap_validation_valid_in_applicative(
-    carrier: BuiltinApplicativeCarrier,
+    carrier: CollectedApplicative,
     mapped: RuntimeValue,
 ) -> Result<RuntimeValue, &'static str> {
     match carrier {
-        BuiltinApplicativeCarrier::List => match strip_signal(mapped) {
+        CollectedApplicative::List => match strip_signal(mapped) {
             RuntimeValue::List(values) => Ok(RuntimeValue::List(
                 values
                     .into_iter()
@@ -1407,50 +1400,42 @@ fn wrap_validation_valid_in_applicative(
             )),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
-        BuiltinApplicativeCarrier::Option => match strip_signal(mapped) {
+        CollectedApplicative::Option => match strip_signal(mapped) {
             RuntimeValue::OptionNone => Ok(RuntimeValue::OptionNone),
             RuntimeValue::OptionSome(value) => Ok(RuntimeValue::OptionSome(Box::new(
                 RuntimeValue::ValidationValid(value),
             ))),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
-        BuiltinApplicativeCarrier::Result => match strip_signal(mapped) {
+        CollectedApplicative::Result => match strip_signal(mapped) {
             RuntimeValue::ResultErr(error) => Ok(RuntimeValue::ResultErr(error)),
             RuntimeValue::ResultOk(value) => Ok(RuntimeValue::ResultOk(Box::new(
                 RuntimeValue::ValidationValid(value),
             ))),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
-        BuiltinApplicativeCarrier::Validation => match strip_signal(mapped) {
+        CollectedApplicative::Validation => match strip_signal(mapped) {
             RuntimeValue::ValidationInvalid(error) => Ok(RuntimeValue::ValidationInvalid(error)),
             RuntimeValue::ValidationValid(value) => Ok(RuntimeValue::ValidationValid(Box::new(
                 RuntimeValue::ValidationValid(value),
             ))),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
-        BuiltinApplicativeCarrier::Signal => match mapped {
+        CollectedApplicative::Signal => match mapped {
             RuntimeValue::Signal(value) => Ok(RuntimeValue::Signal(Box::new(
                 RuntimeValue::ValidationValid(value),
             ))),
-            _ => Err("traverse expected the mapped value to stay in the target applicative"),
-        },
-        BuiltinApplicativeCarrier::Task => match strip_signal(mapped) {
-            RuntimeValue::Task(plan) => Ok(RuntimeValue::Task(RuntimeTaskPlan::Pure {
-                value: Box::new(RuntimeValue::ValidationValid(Box::new(RuntimeValue::Task(
-                    plan,
-                )))),
-            })),
             _ => Err("traverse expected the mapped value to stay in the target applicative"),
         },
     }
 }
 
 fn sequence_traverse_results(
-    carrier: BuiltinApplicativeCarrier,
+    carrier: CollectedApplicative,
     mapped: Vec<RuntimeValue>,
 ) -> Result<RuntimeValue, &'static str> {
     match carrier {
-        BuiltinApplicativeCarrier::List => {
+        CollectedApplicative::List => {
             let mut accumulated = vec![Vec::new()];
             for value in mapped {
                 let RuntimeValue::List(values) = strip_signal(value) else {
@@ -1472,7 +1457,7 @@ fn sequence_traverse_results(
                 accumulated.into_iter().map(RuntimeValue::List).collect(),
             ))
         }
-        BuiltinApplicativeCarrier::Option => {
+        CollectedApplicative::Option => {
             let mut collected = Vec::with_capacity(mapped.len());
             for value in mapped {
                 match strip_signal(value) {
@@ -1489,7 +1474,7 @@ fn sequence_traverse_results(
                 collected,
             ))))
         }
-        BuiltinApplicativeCarrier::Result => {
+        CollectedApplicative::Result => {
             let mut collected = Vec::with_capacity(mapped.len());
             for value in mapped {
                 match strip_signal(value) {
@@ -1506,7 +1491,7 @@ fn sequence_traverse_results(
                 collected,
             ))))
         }
-        BuiltinApplicativeCarrier::Validation => {
+        CollectedApplicative::Validation => {
             let mut collected = Vec::with_capacity(mapped.len());
             let mut invalid: Option<RuntimeValue> = None;
             for value in mapped {
@@ -1536,7 +1521,7 @@ fn sequence_traverse_results(
                 )))),
             }
         }
-        BuiltinApplicativeCarrier::Signal => {
+        CollectedApplicative::Signal => {
             let mut collected = Vec::with_capacity(mapped.len());
             for value in mapped {
                 match value {
@@ -1551,22 +1536,6 @@ fn sequence_traverse_results(
             Ok(RuntimeValue::Signal(Box::new(RuntimeValue::List(
                 collected,
             ))))
-        }
-        BuiltinApplicativeCarrier::Task => {
-            let mut collected = Vec::with_capacity(mapped.len());
-            for value in mapped {
-                match strip_signal(value) {
-                    RuntimeValue::Task(plan) => collected.push(RuntimeValue::Task(plan)),
-                    _ => {
-                        return Err(
-                            "traverse expected the mapped value to stay in the target applicative",
-                        );
-                    }
-                }
-            }
-            Ok(RuntimeValue::Task(RuntimeTaskPlan::Pure {
-                value: Box::new(RuntimeValue::List(collected)),
-            }))
         }
     }
 }

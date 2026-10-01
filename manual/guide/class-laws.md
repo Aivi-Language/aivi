@@ -62,6 +62,10 @@ and dependent monadic sequencing.
 That division is why the current builtin executable support includes `Functor`, `Apply`,
 `Applicative`, `Chain`, and `Monad` for `Task E`.
 
+`traverse` can sequence a fixed structure into `Task E` through its `Applicative` dictionary.
+Constructing that traversal creates a plan; it does not perform the task effects. The plan preserves
+the structure's declared element order, and empty structures are lifted with `pure`.
+
 `aivi execute`, `aivi test`, linked task workers, `db.live`, and D-Bus reply-task workers retain
 the task's code and globals while running deferred callbacks. Task application runs the function-producing task before
 the value-producing task; a failure stops the remaining effects. Composition is driven by an

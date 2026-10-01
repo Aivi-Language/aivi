@@ -2620,10 +2620,6 @@ impl<'a> ModuleLowerer<'a> {
                     .ok_or_else(|| unsupported(
                         "runtime lowering only supports traverse for List, Option, Result, and Validation",
                     ))?,
-                self.builtin_executable_carrier_from_gate_type(expr_ty)
-                    .ok_or_else(|| unsupported(
-                        "runtime lowering only supports traverse results in List, Option, Result, Validation, and Signal applicatives",
-                    ))?,
             )
             .map_err(unsupported)?,
             ("Filterable", "filterMap", _) => crate::builtin_filter_map_intrinsic(
@@ -2772,27 +2768,6 @@ impl<'a> ModuleLowerer<'a> {
                 }
                 _ => None,
             },
-            _ => None,
-        }
-    }
-
-    fn builtin_executable_carrier_from_gate_type(
-        &self,
-        ty: &aivi_hir::GateType,
-    ) -> Option<crate::BuiltinExecutableCarrier> {
-        let mut current = ty;
-        while let aivi_hir::GateType::Arrow { result, .. } = current {
-            current = result.as_ref();
-        }
-        match current {
-            aivi_hir::GateType::List(_) => Some(crate::BuiltinExecutableCarrier::List),
-            aivi_hir::GateType::Option(_) => Some(crate::BuiltinExecutableCarrier::Option),
-            aivi_hir::GateType::Result { .. } => Some(crate::BuiltinExecutableCarrier::Result),
-            aivi_hir::GateType::Validation { .. } => {
-                Some(crate::BuiltinExecutableCarrier::Validation)
-            }
-            aivi_hir::GateType::Signal(_) => Some(crate::BuiltinExecutableCarrier::Signal),
-            aivi_hir::GateType::Task { .. } => Some(crate::BuiltinExecutableCarrier::Task),
             _ => None,
         }
     }
@@ -2952,6 +2927,61 @@ impl<'a> ModuleLowerer<'a> {
         Ok((parameters, current))
     }
 
+    /// Evidence authority comes from an exact intrinsic forwarding body and
+    /// its parameter bindings, never an item name or a concrete result type.
+    fn builtin_evidence_intrinsic(
+        &self,
+        expression: ExprId,
+    ) -> Option<BuiltinClassMemberIntrinsic> {
+        let ExprKind::Reference(Reference::ExecutableEvidence(item)) =
+            self.module.exprs()[expression].kind
+        else {
+            return None;
+        };
+        let item = self.module.items().get(item)?;
+        let ExprKind::Apply { callee, arguments } = &self.module.exprs()[item.body?].kind else {
+            return None;
+        };
+        let ExprKind::Reference(Reference::BuiltinClassMember(intrinsic)) =
+            self.module.exprs()[*callee].kind
+        else {
+            return None;
+        };
+        (arguments.len() == item.parameters.len()
+            && arguments
+                .iter()
+                .zip(&item.parameters)
+                .all(|(argument, parameter)| {
+                    matches!(self.module.exprs()[*argument].kind,
+                    ExprKind::Reference(Reference::Local(binding)) if binding == parameter.binding)
+                }))
+        .then_some(intrinsic)
+    }
+
+    fn specialize_traverse_evidence(
+        &self,
+        callee: ExprId,
+        arguments: &[ExprId],
+    ) -> Option<BuiltinClassMemberIntrinsic> {
+        let [pure, apply, map] = arguments else {
+            return None;
+        };
+        let BuiltinClassMemberIntrinsic::Traverse { traversable } =
+            self.builtin_evidence_intrinsic(callee)?
+        else {
+            return None;
+        };
+        let applicative = crate::BuiltinCollectedApplicativeCarrier::from_evidence(
+            self.builtin_evidence_intrinsic(*pure)?,
+            self.builtin_evidence_intrinsic(*apply)?,
+            self.builtin_evidence_intrinsic(*map)?,
+        )?;
+        Some(BuiltinClassMemberIntrinsic::TraverseCollected {
+            traversable,
+            applicative,
+        })
+    }
+
     fn builtin_evidence_name(&self, intrinsic: BuiltinClassMemberIntrinsic) -> &'static str {
         match intrinsic {
             BuiltinClassMemberIntrinsic::StructuralEq => "structural-eq",
@@ -2965,7 +2995,8 @@ impl<'a> ModuleLowerer<'a> {
             BuiltinClassMemberIntrinsic::Chain(_) => "chain",
             BuiltinClassMemberIntrinsic::Join(_) => "join",
             BuiltinClassMemberIntrinsic::Reduce(_) => "reduce",
-            BuiltinClassMemberIntrinsic::Traverse { .. } => "traverse",
+            BuiltinClassMemberIntrinsic::Traverse { .. }
+            | BuiltinClassMemberIntrinsic::TraverseCollected { .. } => "traverse",
             BuiltinClassMemberIntrinsic::FilterMap(_) => "filter-map",
         }
     }
@@ -3961,7 +3992,19 @@ impl<'a> ModuleLowerer<'a> {
                     let lowered = drain_tail(&mut values, arguments + 1);
                     let mut iter = lowered.into_iter();
                     let callee = iter.next().expect("apply callee should exist");
-                    let arguments = iter.collect();
+                    let arguments: Vec<_> = iter.collect();
+                    if let Some(intrinsic) = self.specialize_traverse_evidence(callee, &arguments) {
+                        values.push(self.alloc_expr(
+                            owner,
+                            span,
+                            Expr {
+                                span,
+                                ty,
+                                kind: ExprKind::Reference(Reference::BuiltinClassMember(intrinsic)),
+                            },
+                        )?);
+                        continue;
+                    }
                     values.push(self.alloc_expr(
                         owner,
                         span,

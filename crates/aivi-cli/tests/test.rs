@@ -242,6 +242,70 @@ value authoredEq : Task Text Bool = pure (matches (Tag "yes") [Tag "yes", Tag "n
 }
 
 #[test]
+fn headless_traversal_forwards_imported_evidence_and_task_effects() {
+    let dir = TempDir::new("traversal-evidence");
+    dir.write(
+        "operations.aivi",
+        r#"
+type Traversable F => F Int -> Option (F Int)
+func advance = values => traverse (n => Some (n + 1)) values
+type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)
+func traverseWith = f values => traverse f values
+export advance
+export traverseWith
+"#,
+    );
+    let path = dir.write("main.aivi", r#"
+use operations (advance, traverseWith)
+use aivi.core.either (Either, Left, Right)
+use aivi.stdio (stdoutWrite)
+type Int -> Either Text Int
+func incrementRight = n => Right (n + 1)
+type Unit -> Int
+func firstValue = unit => 3
+type Unit -> Int
+func secondValue = unit => 4
+type Int -> Task Text Int
+func emitIncrement = n => n
+ ||> 2 -> map firstValue (stdoutWrite "first|")
+ ||> _ -> map secondValue (stdoutWrite "second|")
+type List Int -> Int
+func total = values => reduce (sum n => sum + n) 0 values
+value main : Task Text Int = map total (traverseWith emitIncrement [2, 3])
+value emptyRight : Either Text (List Int) = Right []
+@test
+value genericOption : Task Text Bool = pure (advance (Some 2) == Some (Some 3))
+@test
+value genericEmpty : Task Text Bool = pure (advance [] == Some [])
+@test
+value importedApplicative : Task Text Bool = pure (traverseWith incrementRight [2, 3] == Right [3, 4])
+@test
+value authoredEmpty : Task Text Bool = pure (traverseWith incrementRight [] == emptyRight)
+@test
+value effects : Task Text Bool = map (n => n == 7) main
+"#);
+    for _ in 0..2 {
+        for (command, expected) in [
+            ("execute", "first|second|7\n"),
+            ("test", "test result: ok. 5 passed; 0 failed; 5 total"),
+        ] {
+            let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+                .arg(command)
+                .arg(&path)
+                .output()
+                .unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(output.status.success(), "{command}: {stdout}\n{stderr}");
+            assert!(stdout.contains(expected), "{command}: {stdout}");
+            assert_eq!(stdout.matches("first|").count(), 1, "{command}: {stdout}");
+            assert_eq!(stdout.matches("second|").count(), 1, "{command}: {stdout}");
+            assert!(stdout.contains("first|second|"), "{command}: {stdout}");
+        }
+    }
+}
+
+#[test]
 fn headless_commands_execute_effectful_task_composition() {
     let dir = TempDir::new("task-composition");
     let path = dir.write(
