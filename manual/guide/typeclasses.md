@@ -185,6 +185,32 @@ the standard class’s filtered executable dictionary layout merely by sharing i
 The compiler bounds alias normalization and instance unification with explicit complexity
 diagnostics. It does not select an instance when coherence cannot be established.
 
+## Comparison evidence
+
+Comparison operators select executable members by their types and declaration identities.
+Equality requires `A -> A -> Bool`, using `(==)` before `equals`. Ordering requires
+`compare : A -> A -> Ordering`, where `Ordering` is the standard ordering type. `!=` negates
+the selected equality operation; it does not select a separate inequality member.
+
+Function constraints supply comparison dictionaries first. Otherwise, the compiler considers
+members opened by local class declarations and explicit class imports, then ambient members.
+Class aliases and re-exports retain the original operation and instance identity. Importing only
+a helper function does not open its private class's members. An authored class named `Eq` or
+`Ord` must still supply a member with the required type; the name alone supplies no evidence.
+
+For example, this class supports the ordinary equality operators:
+
+```aivi
+class Same A = { (==) : A -> A -> Bool }
+
+type Same A => A -> A -> Bool
+func equivalent = left right => left == right
+```
+
+Instance prerequisites and method-local constraints must be available for the selected member.
+Multiple matching dictionaries produce an ambiguity diagnostic, including candidate class names;
+narrow the function's constraints or call the desired member explicitly.
+
 ## Execution boundary: builtin carriers vs authored instances
 
 AIVI has two executable higher-kinded paths today, and they are intentionally different:

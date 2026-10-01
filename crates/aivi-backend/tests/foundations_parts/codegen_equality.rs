@@ -382,21 +382,80 @@ fun sameLabels:Bool = left:Labels right:Labels=>    left == right
 
 #[test]
 fn cranelift_codegen_compiles_bytes_equality_kernels() {
-    let backend = lower_text(
-        "backend-bytes-equality-codegen.aivi",
-        r#"
-fun sameBytes:Bool = left:Bytes right:Bytes=>    left == right
-
-fun differentBytes:Bool = left:Bytes right:Bytes=>    left != right
-
-type Blobs = {
-    primary: Bytes,
-    alias: Option Bytes
-}
-
-fun sameBlobs:Bool = left:Blobs right:Blobs=>    left == right
-"#,
-    );
+    // Native equality supports Bytes layouts, but surface Bytes has no derived
+    // Eq instance. Exercise the backend representation with validated core IR.
+    let span = SourceSpan::default();
+    let bytes = CoreType::Primitive(BuiltinType::Bytes);
+    let blobs = CoreType::Record(vec![
+        CoreRecordField {
+            name: "primary".into(),
+            ty: bytes.clone(),
+        },
+        CoreRecordField {
+            name: "alias".into(),
+            ty: CoreType::Option(Box::new(bytes.clone())),
+        },
+    ]);
+    let mut core = CoreModule::new();
+    for (index, (name, subject, operator)) in [
+        ("sameBytes", bytes.clone(), HirBinaryOperator::Equals),
+        ("differentBytes", bytes, HirBinaryOperator::NotEquals),
+        ("sameBlobs", blobs, HirBinaryOperator::Equals),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let parameters = ["left", "right"]
+            .into_iter()
+            .enumerate()
+            .map(|(parameter, name)| CoreItemParameter {
+                binding: HirBindingId::from_raw((index * 2 + parameter) as u32),
+                span,
+                name: name.into(),
+                ty: subject.clone(),
+            })
+            .collect::<Vec<_>>();
+        let operands = parameters
+            .iter()
+            .map(|parameter| {
+                core.exprs_mut()
+                    .alloc(CoreExpr {
+                        span,
+                        ty: subject.clone(),
+                        kind: CoreExprKind::Reference(CoreReference::Local(parameter.binding)),
+                    })
+                    .expect("operand allocation should fit")
+            })
+            .collect::<Vec<_>>();
+        let body = core
+            .exprs_mut()
+            .alloc(CoreExpr {
+                span,
+                ty: CoreType::Primitive(BuiltinType::Bool),
+                kind: CoreExprKind::Binary {
+                    left: operands[0],
+                    operator,
+                    right: operands[1],
+                },
+            })
+            .expect("comparison allocation should fit");
+        core.items_mut()
+            .alloc(CoreItem {
+                origin: HirItemId::from_raw(index as u32),
+                span,
+                name: name.into(),
+                kind: CoreItemKind::Function,
+                parameters,
+                body: Some(body),
+                pipes: Vec::new(),
+            })
+            .expect("function allocation should fit");
+    }
+    validate_core_module(&core).expect("native equality core fixture should validate");
+    let lambda = lower_lambda_module(&core).expect("typed lambda lowering should succeed");
+    validate_lambda_module(&lambda).expect("typed lambda should validate");
+    let backend = lower_backend_module(&lambda).expect("native equality should lower");
+    validate_program(&backend).expect("native equality backend should validate");
 
     let ptr = clif_pointer_ty();
     let same_bytes_body = backend.items()[find_item(&backend, "sameBytes")]

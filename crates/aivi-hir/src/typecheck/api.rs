@@ -39,7 +39,6 @@ struct DefaultRecordElision {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 struct EqConstraintScope {
-    constrained_parameters: HashSet<TypeParameterId>,
     class_constraints: Vec<ClassConstraintBinding>,
 }
 
@@ -328,64 +327,4 @@ pub(crate) fn resolve_class_member_dispatch_for_binding(
             implementation,
         })
     })
-}
-
-fn resolve_named_class_member_dispatch_in_scope(
-    module: &Module,
-    subject: &GateType,
-    class_name: &str,
-    member_name: &str,
-    env: &GateExprEnv,
-) -> Option<ResolvedClassMemberDispatch> {
-    let checker = TypeChecker::new(module);
-    let class = checker.class_item_id_by_name(class_name)?;
-    let Item::Class(class_item) = &module.items()[class] else {
-        return None;
-    };
-    let member_index = class_item
-        .members
-        .iter()
-        .position(|member| member.name.text() == member_name)?;
-    let member = ClassMemberResolution {
-        class,
-        member_index,
-    };
-    let subject = checker
-        .typing
-        .class_member_subject_binding(member, subject)?;
-    resolve_class_member_dispatch_for_binding(module, member, &subject, env)
-}
-
-pub(crate) fn resolve_equality_dispatch_in_scope(
-    module: &Module,
-    subject: &GateType,
-    env: &GateExprEnv,
-) -> Option<ResolvedClassMemberDispatch> {
-    for (class_name, member_name) in [("Eq", "=="), ("Setoid", "equals")] {
-        if let Some(dispatch) = resolve_named_class_member_dispatch_in_scope(
-            module,
-            subject,
-            class_name,
-            member_name,
-            env,
-        ) {
-            return Some(dispatch);
-        }
-    }
-    None
-}
-
-pub(crate) fn resolve_ordering_dispatch(
-    module: &Module,
-    subject: &GateType,
-) -> Option<ResolvedClassMemberDispatch> {
-    resolve_ordering_dispatch_in_scope(module, subject, &GateExprEnv::default())
-}
-
-pub(crate) fn resolve_ordering_dispatch_in_scope(
-    module: &Module,
-    subject: &GateType,
-    env: &GateExprEnv,
-) -> Option<ResolvedClassMemberDispatch> {
-    resolve_named_class_member_dispatch_in_scope(module, subject, "Ord", "compare", env)
 }

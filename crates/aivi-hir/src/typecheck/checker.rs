@@ -6,9 +6,6 @@ struct TypeChecker<'a> {
     imported_default_values: Vec<ImportedDefaultValue>,
     default_record_elisions: Vec<DefaultRecordElision>,
     pending_eq_constraints: Vec<PendingEqConstraint>,
-    /// Eq-like constraints available in the current checking scope after expanding
-    /// any in-scope class evidence through `with` / `require`.
-    eq_constrained_parameters: HashSet<TypeParameterId>,
     in_scope_class_constraints: Vec<ClassConstraintBinding>,
     active_instance_constraints: Vec<ClassConstraintBinding>,
     instance_resolution_calls: usize,
@@ -77,7 +74,6 @@ impl<'a> TypeChecker<'a> {
             imported_default_values,
             default_record_elisions: Vec::new(),
             pending_eq_constraints: Vec::new(),
-            eq_constrained_parameters: HashSet::new(),
             in_scope_class_constraints: Vec::new(),
             active_instance_constraints: Vec::new(),
             instance_resolution_calls: 0,
@@ -96,7 +92,6 @@ impl<'a> TypeChecker<'a> {
             imported_default_values,
             default_record_elisions: Vec::new(),
             pending_eq_constraints: Vec::new(),
-            eq_constrained_parameters: HashSet::new(),
             in_scope_class_constraints: Vec::new(),
             active_instance_constraints: Vec::new(),
             instance_resolution_calls: 0,
@@ -533,12 +528,9 @@ impl<'a> TypeChecker<'a> {
         f: impl FnOnce(&mut Self) -> T,
     ) -> T {
         let expanded = self.expand_class_constraint_bindings(seeds);
-        let eq_context = self.eq_constrained_parameters_from_bindings(&expanded);
         let prev_constraints =
             std::mem::replace(&mut self.in_scope_class_constraints, expanded.clone());
-        let prev_eq_context = std::mem::replace(&mut self.eq_constrained_parameters, eq_context);
         let result = f(self);
-        self.eq_constrained_parameters = prev_eq_context;
         self.in_scope_class_constraints = prev_constraints;
         result
     }
@@ -613,25 +605,6 @@ impl<'a> TypeChecker<'a> {
             .filter_map(|constraint| {
                 self.typing
                     .open_class_constraint_binding(*constraint, &substitutions)
-            })
-            .collect()
-    }
-
-    fn eq_constrained_parameters_from_bindings(
-        &self,
-        bindings: &[ClassConstraintBinding],
-    ) -> HashSet<TypeParameterId> {
-        bindings
-            .iter()
-            .filter(|binding| {
-                matches!(
-                    self.class_name(binding.class_item),
-                    Some("Eq") | Some("Setoid")
-                )
-            })
-            .filter_map(|binding| match &binding.subject {
-                TypeBinding::Type(GateType::TypeParameter { parameter, .. }) => Some(*parameter),
-                _ => None,
             })
             .collect()
     }
@@ -1009,17 +982,18 @@ impl<'a> TypeChecker<'a> {
             }
             return false;
         };
-        if self.require_class_named("Ord", operand_ty).is_err() {
+        if let Err(reason) =
+            self.select_comparison_member(ComparisonKind::Ordering, operand_ty, &mut Vec::new())
+        {
             let checkpoint = self.diagnostics.len();
             self.check_expr(left, env, Some(operand_ty), value_stack);
             self.check_expr(right, env, Some(operand_ty), value_stack);
             if self.diagnostics.len() == checkpoint {
-                self.emit_invalid_binary_operator(
+                self.emit_comparison_error(
                     self.module.exprs()[expr_id].span,
-                    operator,
-                    left_actual.as_ref(),
-                    right_actual.as_ref(),
-                    BinaryOperatorExpectation::MatchingOrdered,
+                    ComparisonKind::Ordering,
+                    operand_ty,
+                    &reason,
                 );
             }
             return false;
@@ -3442,7 +3416,6 @@ impl<'a> TypeChecker<'a> {
 
     fn current_eq_constraint_scope(&self) -> EqConstraintScope {
         EqConstraintScope {
-            constrained_parameters: self.eq_constrained_parameters.clone(),
             class_constraints: self.in_scope_class_constraints.clone(),
         }
     }
@@ -3455,20 +3428,11 @@ impl<'a> TypeChecker<'a> {
                 &pending.scope,
                 &mut Vec::new(),
             ) {
-                self.diagnostics.push(
-                    Diagnostic::error(format!(
-                        "this expression requires `Eq` for `{}`",
-                        pending.constraint.subject()
-                    ))
-                    .with_code(code("missing-eq-instance"))
-                    .with_primary_label(
-                        pending.constraint.span(),
-                        format!(
-                            "`{}` does not currently have `Eq` evidence",
-                            pending.constraint.subject()
-                        ),
-                    )
-                    .with_note(reason),
+                self.emit_comparison_error(
+                    pending.constraint.span(),
+                    ComparisonKind::Equality,
+                    pending.constraint.subject(),
+                    &reason,
                 );
             }
         }
@@ -3671,37 +3635,18 @@ impl<'a> TypeChecker<'a> {
         ty: &GateType,
         scope: &EqConstraintScope,
         item_stack: &mut Vec<ItemId>,
-    ) -> Result<(), String> {
-        if let Some(class_item_id) = self.class_item_id_by_name("Eq")
-            && (self
-                .resolve_same_module_instance_binding_with_id(
-                    class_item_id,
-                    &TypeBinding::Type(ty.clone()),
-                )?
-                .is_some()
-                || self
-                    .resolve_imported_instance_binding(
-                        class_item_id,
-                        &TypeBinding::Type(ty.clone()),
-                    )?
-                    .is_some())
-        {
-            let binding = ClassConstraintBinding {
-                class_item: class_item_id,
-                subject: TypeBinding::Type(ty.clone()),
-            };
-            return self.with_class_constraint_scope(scope.class_constraints.clone(), |this| {
-                this.require_class_binding(&binding)
-            });
-        }
-        self.require_compiler_derived_eq_with_scope(ty, scope, item_stack)
+    ) -> Result<(), ComparisonError> {
+        self.with_class_constraint_scope(scope.class_constraints.clone(), |this| {
+            this.select_comparison_member(ComparisonKind::Equality, ty, item_stack)
+                .map(|_| ())
+        })
     }
 
     fn require_compiler_derived_eq(
         &mut self,
         ty: &GateType,
         item_stack: &mut Vec<ItemId>,
-    ) -> Result<(), String> {
+    ) -> Result<(), ComparisonError> {
         let scope = self.current_eq_constraint_scope();
         self.require_compiler_derived_eq_with_scope(ty, &scope, item_stack)
     }
@@ -3711,128 +3656,144 @@ impl<'a> TypeChecker<'a> {
         ty: &GateType,
         scope: &EqConstraintScope,
         item_stack: &mut Vec<ItemId>,
-    ) -> Result<(), String> {
-        match ty {
-            GateType::TypeApplication { .. } => Err(format!(
-                "open constructor application `{ty}` requires explicit equality evidence"
-            )),
-            GateType::Primitive(BuiltinType::Bytes) => {
-                Err("`Bytes` does not have a compiler-derived `Eq` instance in v1".to_owned())
-            }
-            GateType::Primitive(_) => Ok(()),
-            GateType::TypeParameter { parameter, name } => {
-                if scope.constrained_parameters.contains(parameter) {
+    ) -> Result<(), ComparisonError> {
+        // Every proof restores the caller's active recursive-type path, even
+        // when a payload fails. Subsequent candidates must start from that path.
+        let depth = item_stack.len();
+        let result: Result<(), ComparisonError> = (|| {
+            match ty {
+                GateType::TypeApplication { .. } => Err(format!(
+                    "open constructor application `{ty}` requires explicit equality evidence"
+                )
+                .into()),
+                GateType::Primitive(BuiltinType::Bytes) => Err(
+                    "`Bytes` does not have a compiler-derived `Eq` instance in v1"
+                        .to_owned()
+                        .into(),
+                ),
+                GateType::Primitive(_) => Ok(()),
+                GateType::TypeParameter { name, .. } => Err(format!(
+                    "open type parameter `{name}` does not have a compiler-derived `Eq` \
+                 instance in v1; add `Eq {name} =>` to the function annotation to \
+                 require it"
+                )
+                .into()),
+                GateType::Tuple(elements) => {
+                    for element in elements {
+                        self.require_eq_with_scope(element, scope, item_stack)?;
+                    }
                     Ok(())
-                } else {
-                    Err(format!(
-                        "open type parameter `{name}` does not have a compiler-derived `Eq` \
-                         instance in v1; add `(Eq {name}) ->` to the function annotation to \
-                         require it"
-                    ))
                 }
-            }
-            GateType::Tuple(elements) => {
-                for element in elements {
-                    self.require_eq_with_scope(element, scope, item_stack)?;
-                }
-                Ok(())
-            }
-            GateType::Record(fields) => {
-                for field in fields {
-                    self.require_eq_with_scope(&field.ty, scope, item_stack)?;
-                }
-                Ok(())
-            }
-            GateType::List(element) | GateType::Option(element) => {
-                self.require_eq_with_scope(element, scope, item_stack)
-            }
-            GateType::Result { error, value } | GateType::Validation { error, value } => {
-                self.require_eq_with_scope(error, scope, item_stack)?;
-                self.require_eq_with_scope(value, scope, item_stack)
-            }
-            GateType::Domain {
-                item, arguments, ..
-            } => {
-                if item_stack.contains(item) {
-                    return Ok(());
-                }
-                let (parameters, carrier) = match &self.module.items()[*item] {
-                    Item::Domain(domain) => (domain.parameters.clone(), domain.carrier),
-                    _ => return Err(format!("`{ty}` does not refer to a domain declaration")),
-                };
-                let substitutions = parameters
-                    .iter()
-                    .copied()
-                    .zip(arguments.iter().cloned())
-                    .collect::<HashMap<TypeParameterId, GateType>>();
-                let Some(carrier) = self.typing.lower_hir_type(carrier, &substitutions) else {
-                    return Err(format!(
-                        "the carrier type for `{ty}` could not be lowered for Eq checking"
-                    ));
-                };
-                item_stack.push(*item);
-                let result = self.require_eq_with_scope(&carrier, scope, item_stack);
-                let popped = item_stack.pop();
-                debug_assert_eq!(popped, Some(*item));
-                result
-            }
-            GateType::OpaqueItem {
-                item, arguments, ..
-            } => {
-                if item_stack.contains(item) {
-                    return Ok(());
-                }
-                let (parameters, body) = match &self.module.items()[*item] {
-                    Item::Type(item_ty) => (item_ty.parameters.clone(), item_ty.body.clone()),
-                    _ => return Err(format!("`{ty}` does not refer to a type declaration")),
-                };
-                let substitutions = parameters
-                    .iter()
-                    .copied()
-                    .zip(arguments.iter().cloned())
-                    .collect::<HashMap<TypeParameterId, GateType>>();
-                item_stack.push(*item);
-                let result = match body {
-                    TypeItemBody::Alias(alias) => {
-                        let Some(lowered) = self.typing.lower_hir_type(alias, &substitutions)
-                        else {
-                            return Err(format!(
-                                "the alias body for `{ty}` could not be lowered for Eq checking"
-                            ));
-                        };
-                        self.require_eq_with_scope(&lowered, scope, item_stack)
+                GateType::Record(fields) => {
+                    for field in fields {
+                        self.require_eq_with_scope(&field.ty, scope, item_stack)?;
                     }
-                    TypeItemBody::Sum(variants) => {
-                        for variant in variants.iter() {
-                            for field in &variant.fields {
-                                let Some(lowered) =
-                                    self.typing.lower_hir_type(field.ty, &substitutions)
-                                else {
-                                    return Err(format!(
-                                        "constructor payloads for `{ty}` could not be lowered for Eq checking"
-                                    ));
-                                };
-                                self.require_eq_with_scope(&lowered, scope, item_stack)?;
-                            }
+                    Ok(())
+                }
+                GateType::List(element) | GateType::Option(element) => {
+                    self.require_eq_with_scope(element, scope, item_stack)
+                }
+                GateType::Result { error, value } | GateType::Validation { error, value } => {
+                    self.require_eq_with_scope(error, scope, item_stack)?;
+                    self.require_eq_with_scope(value, scope, item_stack)
+                }
+                GateType::Domain {
+                    item, arguments, ..
+                } => {
+                    if item_stack.contains(item) {
+                        return Ok(());
+                    }
+                    let (parameters, carrier) = match &self.module.items()[*item] {
+                        Item::Domain(domain) => (domain.parameters.clone(), domain.carrier),
+                        _ => {
+                            return Err(
+                                format!("`{ty}` does not refer to a domain declaration").into()
+                            );
                         }
-                        Ok(())
+                    };
+                    let substitutions = parameters
+                        .iter()
+                        .copied()
+                        .zip(arguments.iter().cloned())
+                        .collect::<HashMap<TypeParameterId, GateType>>();
+                    let Some(carrier) = self.typing.lower_hir_type(carrier, &substitutions) else {
+                        return Err(format!(
+                            "the carrier type for `{ty}` could not be lowered for Eq checking"
+                        )
+                        .into());
+                    };
+                    item_stack.push(*item);
+                    let result = self.require_eq_with_scope(&carrier, scope, item_stack);
+                    let popped = item_stack.pop();
+                    debug_assert_eq!(popped, Some(*item));
+                    result
+                }
+                GateType::OpaqueItem {
+                    item, arguments, ..
+                } => {
+                    if item_stack.contains(item) {
+                        return Ok(());
                     }
-                };
-                let popped = item_stack.pop();
-                debug_assert_eq!(popped, Some(*item));
-                result
+                    let (parameters, body) = match &self.module.items()[*item] {
+                        Item::Type(item_ty) => (item_ty.parameters.clone(), item_ty.body.clone()),
+                        _ => {
+                            return Err(
+                                format!("`{ty}` does not refer to a type declaration").into()
+                            );
+                        }
+                    };
+                    let substitutions = parameters
+                        .iter()
+                        .copied()
+                        .zip(arguments.iter().cloned())
+                        .collect::<HashMap<TypeParameterId, GateType>>();
+                    item_stack.push(*item);
+                    let result = match body {
+                        TypeItemBody::Alias(alias) => {
+                            let Some(lowered) = self.typing.lower_hir_type(alias, &substitutions)
+                            else {
+                                return Err(format!(
+                                    "the alias body for `{ty}` could not be lowered for Eq checking"
+                                )
+                                .into());
+                            };
+                            self.require_eq_with_scope(&lowered, scope, item_stack)
+                        }
+                        TypeItemBody::Sum(variants) => {
+                            for variant in variants.iter() {
+                                for field in &variant.fields {
+                                    let Some(lowered) =
+                                        self.typing.lower_hir_type(field.ty, &substitutions)
+                                    else {
+                                        return Err(format!(
+                                            "constructor payloads for `{ty}` could not be lowered for Eq checking"
+                                        ).into());
+                                    };
+                                    self.require_eq_with_scope(&lowered, scope, item_stack)?;
+                                }
+                            }
+                            Ok(())
+                        }
+                    };
+                    let popped = item_stack.pop();
+                    debug_assert_eq!(popped, Some(*item));
+                    result
+                }
+                GateType::Arrow { .. }
+                | GateType::Map { .. }
+                | GateType::Set(_)
+                | GateType::Signal(_)
+                | GateType::Task { .. } => Err(format!(
+                    "`{ty}` does not have a compiler-derived `Eq` instance in v1"
+                )
+                .into()),
+                // Imported types are opaque; their Eq derivation is checked in their
+                // defining module, so we optimistically accept them here.
+                GateType::OpaqueImport { .. } => Ok(()),
             }
-            GateType::Arrow { .. }
-            | GateType::Map { .. }
-            | GateType::Set(_)
-            | GateType::Signal(_)
-            | GateType::Task { .. } => Err(format!(
-                "`{ty}` does not have a compiler-derived `Eq` instance in v1"
-            )),
-            // Imported types are opaque; their Eq derivation is checked in their
-            // defining module, so we optimistically accept them here.
-            GateType::OpaqueImport { .. } => Ok(()),
-        }
+        })();
+        item_stack.truncate(depth);
+        result
     }
 
     fn class_item_id_by_name(&self, class_name: &str) -> Option<ItemId> {
@@ -4027,12 +3988,8 @@ impl<'a> TypeChecker<'a> {
             typing.instantiate_poly_hir_type_partially(member.annotation, &class_bindings)?;
         // Member-local binders have module-owned identities. Compare the
         // contract modulo alpha-renaming across the portable import boundary.
-        expected
-            .same_shape_with_import_identity(
-                &typing.instantiate_import_member_type(ty, &bindings)?,
-                |left, right| typing.import_type_identities_match(left, right),
-            )
-            .then_some(bindings)
+        let actual = typing.instantiate_import_member_type(ty, &bindings)?;
+        typing.types_match(&expected, &actual).then_some(bindings)
     }
 
     fn resolve_imported_instance_member(
@@ -4227,25 +4184,6 @@ impl<'a> TypeChecker<'a> {
     }
 
 
-    fn require_class_named(&mut self, class_name: &str, ty: &GateType) -> Result<(), String> {
-        let class_item = self
-            .class_item_id_by_name(class_name)
-            .ok_or_else(|| format!("class `{class_name}` is unavailable"))?;
-        let subject = self
-            .typing
-            .class_member_subject_binding(
-                ClassMemberResolution {
-                    class: class_item,
-                    member_index: 0,
-                },
-                ty,
-            )
-            .ok_or_else(|| format!("cannot infer the `{class_name}` subject from `{ty}`"))?;
-        self.require_class_binding(&ClassConstraintBinding {
-            class_item,
-            subject,
-        })
-    }
 
     fn has_builtin_class_instance(&self, class_name: &str, ty: &GateType) -> bool {
         match class_name {

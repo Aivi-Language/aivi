@@ -1188,6 +1188,89 @@ value piped : Bool = 2 |> accepts 1
 }
 
 #[test]
+fn comparison_operators_use_typed_members_of_authored_classes() {
+    let backend = lower_text(
+        "typed-comparison-members.aivi",
+        r#"
+class Same A = { (==) : A -> A -> Bool }
+class Ranking A = {
+    with Same A
+    compare : A -> A -> Ordering
+}
+type Tag = Tag Int
+instance Same Tag = { (==) = left right => True }
+instance Ranking Tag = { compare = left right => Equal }
+type Same A => A -> A -> Bool
+func equal = left right => left == right
+type Ranking A => A -> A -> Bool
+func ascending = left right => left < right
+value direct : Bool = Tag 1 == Tag 2
+value negated : Bool = (Tag 1 != Tag 2) == False
+value generic : Bool = equal (Tag 1) (Tag 2)
+value ranked : Bool = (Tag 1 < Tag 2) == False
+value nonStrict : Bool = Tag 1 <= Tag 2
+value genericRanked : Bool = ascending (Tag 1) (Tag 2) == False
+"#,
+    );
+    let mut interpreter = KernelEvaluator::new(&backend);
+    let executable = aivi_backend::BackendExecutableProgram::interpreted(&backend);
+    let mut engine = executable.create_engine();
+    for name in [
+        "direct",
+        "negated",
+        "generic",
+        "ranked",
+        "nonStrict",
+        "genericRanked",
+    ] {
+        let item = find_item(&backend, name);
+        assert_eq!(
+            interpreter.evaluate_item(item, &BTreeMap::new()).unwrap(),
+            RuntimeValue::Bool(true),
+            "{name}"
+        );
+        assert_eq!(
+            engine.evaluate_item(item, &BTreeMap::new()).unwrap(),
+            RuntimeValue::Bool(true),
+            "{name}"
+        );
+    }
+}
+
+#[test]
+fn comparison_members_receive_their_method_local_dictionaries() {
+    let backend = lower_text(
+        "comparison-method-evidence.aivi",
+        r#"
+class Same A = { (==) : Setoid A => A -> A -> Bool }
+type Tag = Tag Int
+instance Setoid Tag = { equals = left right => True }
+instance Same Tag = { (==) = left right => equals left right }
+type (Same A, Setoid A) => A -> A -> Bool
+func equal = left right => left == right
+value direct : Bool = Tag 1 == Tag 2
+value generic : Bool = equal (Tag 1) (Tag 2)
+"#,
+    );
+    let mut interpreter = KernelEvaluator::new(&backend);
+    let executable = aivi_backend::BackendExecutableProgram::interpreted(&backend);
+    let mut engine = executable.create_engine();
+    for name in ["direct", "generic"] {
+        let item = find_item(&backend, name);
+        assert_eq!(
+            interpreter.evaluate_item(item, &BTreeMap::new()).unwrap(),
+            RuntimeValue::Bool(true),
+            "{name}"
+        );
+        assert_eq!(
+            engine.evaluate_item(item, &BTreeMap::new()).unwrap(),
+            RuntimeValue::Bool(true),
+            "{name}"
+        );
+    }
+}
+
+#[test]
 fn authored_eq_operator_shadowing_keeps_its_generic_evidence() {
     let backend = lower_text(
         "authored-eq-operator.aivi",

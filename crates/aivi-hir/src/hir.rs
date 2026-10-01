@@ -4139,6 +4139,65 @@ impl<S> Module<S> {
         &self.root_items
     }
 
+    /// Class members opened in this module. Private imported projections do not
+    /// open their original names; aliases open the original declaration's members.
+    pub(crate) fn class_members_in_scope(&self, name: &str) -> Vec<ClassMemberResolution> {
+        let mut classes = self
+            .root_items()
+            .iter()
+            .copied()
+            .filter(|id| matches!(self.items()[*id], Item::Class(_)))
+            .collect::<Vec<_>>();
+        for (_, import) in self.imports().iter() {
+            if !matches!(
+                &import.metadata,
+                ImportBindingMetadata::Class { .. } | ImportBindingMetadata::AmbientType
+            ) {
+                continue;
+            }
+            let class = self.items().iter().find_map(|(id, item)| {
+                let Item::Class(class) = item else { return None; };
+                match &import.metadata {
+                    ImportBindingMetadata::Class { identity } if &class.identity == identity => Some(id),
+                    ImportBindingMetadata::AmbientType if matches!(&class.identity, ClassIdentity::Standard(name) if name.as_ref() == import.imported_name.text()) => Some(id),
+                    _ => None,
+                }
+            });
+            if let Some(class) = class
+                && !classes.contains(&class)
+            {
+                classes.push(class);
+            }
+        }
+        let members =
+            |classes: &[ItemId]| {
+                classes
+                    .iter()
+                    .filter_map(|id| {
+                        let Item::Class(class) = &self.items()[*id] else {
+                            return None;
+                        };
+                        Some((*id, class))
+                    })
+                    .flat_map(|(id, class)| {
+                        class.members.iter().enumerate().filter_map(
+                            move |(member_index, member)| {
+                                (member.name.text() == name).then_some(ClassMemberResolution {
+                                    class: id,
+                                    member_index,
+                                })
+                            },
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            };
+        let explicit = members(&classes);
+        if !explicit.is_empty() {
+            return explicit;
+        }
+        members(self.ambient_items())
+    }
+
     pub fn imported_class_definition(
         &self,
         identity: &ClassIdentity,

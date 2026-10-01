@@ -47,6 +47,7 @@ func missing = values => map (n => n + 1) values
 
 #[test]
 fn conditional_instances_discharge_concrete_and_inferred_prerequisites() {
+    // Existing cases below also lock down failed proof backtracking.
     for (name, source, accepted) in [
         (
             "concrete",
@@ -97,6 +98,109 @@ fn conditional_instances_discharge_concrete_and_inferred_prerequisites() {
                 report.diagnostics()
             );
         }
+    }
+}
+
+#[test]
+fn comparison_constraints_require_matching_executable_members() {
+    for (name, class, member, operator, diagnostic) in [
+        (
+            "eq-missing",
+            "Eq",
+            "same : A -> A -> Bool",
+            "==",
+            "missing-eq-instance",
+        ),
+        (
+            "eq-result",
+            "Eq",
+            "(==) : A -> A -> Int",
+            "==",
+            "missing-eq-instance",
+        ),
+        (
+            "eq-operands",
+            "Eq",
+            "(==) : Int -> Int -> Bool",
+            "==",
+            "missing-eq-instance",
+        ),
+        (
+            "ord-missing",
+            "Ord",
+            "same : A -> A -> Bool",
+            "<",
+            "invalid-binary-operator",
+        ),
+        (
+            "ord-result",
+            "Ord",
+            "compare : A -> A -> Bool",
+            "<",
+            "invalid-binary-operator",
+        ),
+        (
+            "ord-operands",
+            "Ord",
+            "compare : Int -> Int -> Ordering",
+            "<",
+            "invalid-binary-operator",
+        ),
+    ] {
+        let source = format!(
+            "class {class} A = {{ {member} }}\ntype {class} A => A -> A -> Bool\nfunc operation = left right => left {operator} right\n"
+        );
+        let report = typecheck_text(&format!("{name}.aivi"), &source);
+        assert!(!report.is_ok(), "{name}: {:?}", report.diagnostics());
+        assert!(
+            report
+                .diagnostics()
+                .iter()
+                .any(|issue| issue.code == Some(code(diagnostic))),
+            "{name}: {:?}",
+            report.diagnostics()
+        );
+    }
+}
+
+#[test]
+fn comparison_capabilities_follow_member_identity_and_type() {
+    let report = typecheck_text(
+        "comparison-capabilities.aivi",
+        r#"
+class Same A = { (==) : A -> A -> Bool }
+class Ranking A = { compare : A -> A -> Ordering }
+type Same A => A -> A -> Bool
+func equality = left right => left == right
+type Same A => A -> A -> Bool
+func inequality = left right => left != right
+type Ranking A => A -> A -> Bool
+func ascending = left right => left < right
+"#,
+    );
+    assert!(report.is_ok(), "{:?}", report.diagnostics());
+}
+
+#[test]
+fn ambiguous_comparison_dictionaries_have_an_actionable_diagnostic() {
+    for (member, signature, operator) in [("(==)", "Bool", "=="), ("compare", "Ordering", "<")] {
+        let source = format!(
+            "class First A = {{ {member} : A -> A -> {signature} }}\nclass Second A = {{ {member} : A -> A -> {signature} }}\ntype (First A, Second A) => A -> A -> Bool\nfunc ambiguous = left right => left {operator} right\n"
+        );
+        let report = typecheck_text("ambiguous-comparison.aivi", &source);
+        assert!(!report.is_ok());
+        let diagnostic = report
+            .diagnostics()
+            .iter()
+            .find(|diagnostic| diagnostic.code == Some(code("ambiguous-class-member")))
+            .expect("comparison ambiguity must retain its diagnostic category");
+        assert!(
+            diagnostic
+                .notes
+                .iter()
+                .any(|note| note.contains("First") && note.contains("Second")),
+            "{diagnostic:?}"
+        );
     }
 }
 
@@ -186,8 +290,11 @@ value renderFn : Pair (List (List Int)) Text -> Text = render
 
 #[test]
 fn portable_member_shapes_preserve_import_identity_and_quantifier_sharing() {
-    let carrier = |import, parameter| GateType::OpaqueImport {
-        origin: None,
+    let carrier = |file, import, parameter| GateType::OpaqueImport {
+        origin: Some(Box::new(crate::TypeIdentity::Source {
+            file: FileId::new(file),
+            name: "Carrier".into(),
+        })),
         import: crate::ImportId::from_raw(import),
         name: "Carrier".into(),
         arguments: vec![GateType::TypeParameter {
@@ -200,16 +307,15 @@ fn portable_member_shapes_preserve_import_identity_and_quantifier_sharing() {
         parameter: Box::new(parameter),
         result: Box::new(result),
     };
-    let expected = arrow(carrier(1, 10), carrier(1, 10));
-    let aliased = arrow(carrier(2, 20), carrier(2, 20));
-    let split_quantifiers = arrow(carrier(2, 20), carrier(2, 21));
-    let same_source = |left: crate::ImportId, right: crate::ImportId| {
-        left == right || (left.as_raw() == 1 && right.as_raw() == 2)
-    };
-    assert!(!expected.same_shape(&aliased));
-    assert!(expected.same_shape_with_import_identity(&aliased, same_source));
-    assert!(!expected.same_shape_with_import_identity(&split_quantifiers, same_source));
-    assert!(!expected.same_shape_with_import_identity(&aliased, |left, right| left == right));
+    let expected = arrow(carrier(1, 1, 10), carrier(1, 1, 10));
+    let aliased = arrow(carrier(1, 2, 20), carrier(1, 2, 20));
+    let split_quantifiers = arrow(carrier(1, 2, 20), carrier(1, 2, 21));
+    let foreign = arrow(carrier(2, 2, 20), carrier(2, 2, 20));
+    let module = lowered_module_text("member-identities.aivi", "");
+    let typing = GateTypeContext::new(&module);
+    assert!(typing.types_match(&expected, &aliased));
+    assert!(!typing.types_match(&expected, &split_quantifiers));
+    assert!(!typing.types_match(&expected, &foreign));
 }
 
 #[test]
@@ -2819,27 +2925,40 @@ fn typecheck_resolves_partial_same_module_instances_generically() {
              }\n",
     );
     let mut checker = TypeChecker::new(&module);
-    assert!(
-        checker
-            .require_class_named(
-                "Applicative",
-                &GateType::Option(Box::new(GateType::Primitive(BuiltinType::Int)))
-            )
-            .is_ok(),
-        "expected general class resolution to accept same-module `Applicative Option`"
-    );
-    assert!(
-        checker
-            .require_class_named(
-                "Monad",
-                &GateType::Result {
-                    error: Box::new(GateType::Primitive(BuiltinType::Text)),
-                    value: Box::new(GateType::Primitive(BuiltinType::Int)),
+    for (name, carrier) in [
+        (
+            "Applicative",
+            GateType::Option(Box::new(GateType::Primitive(BuiltinType::Int))),
+        ),
+        (
+            "Monad",
+            GateType::Result {
+                error: Box::new(GateType::Primitive(BuiltinType::Text)),
+                value: Box::new(GateType::Primitive(BuiltinType::Int)),
+            },
+        ),
+    ] {
+        let class_item = checker.class_item_id_by_name(name).expect("local class");
+        let subject = checker
+            .typing
+            .class_member_subject_binding(
+                ClassMemberResolution {
+                    class: class_item,
+                    member_index: 0,
                 },
+                &carrier,
             )
-            .is_ok(),
-        "expected general class resolution to accept same-module `Monad (Result Text)`"
-    );
+            .expect("partial constructor subject");
+        assert!(
+            checker
+                .require_class_binding(&ClassConstraintBinding {
+                    class_item,
+                    subject
+                })
+                .is_ok(),
+            "expected general class resolution to accept same-module `{name}` for `{carrier}`"
+        );
+    }
 }
 
 #[test]

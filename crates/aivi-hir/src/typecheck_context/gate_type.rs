@@ -258,30 +258,6 @@ impl GateType {
         }
     }
 
-    /// Compare portable member quantifiers while retaining the source identity
-    /// of nominal imports, including multiple aliases of the same declaration.
-    pub(crate) fn same_shape_with_import_identity(
-        &self,
-        other: &Self,
-        imports_equal: impl Fn(ImportId, ImportId) -> bool,
-    ) -> bool {
-        self.same_shape_with_nominal_identity(other, &[], &|left, right| match (left, right) {
-            (
-                Self::OpaqueImport {
-                    origin: Some(left), ..
-                },
-                Self::OpaqueImport {
-                    origin: Some(right),
-                    ..
-                },
-            ) => left == right,
-            (Self::OpaqueImport { import: left, .. }, Self::OpaqueImport { import: right, .. }) => {
-                imports_equal(*left, *right)
-            }
-            _ => Self::nominal_heads_equal(left, right),
-        })
-    }
-
     /// Substitute every occurrence of `param` with `replacement` throughout this type.
     pub(crate) fn substitute_type_parameter(
         &self,

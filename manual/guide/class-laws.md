@@ -15,6 +15,11 @@ For the current builtin executable support matrix, see
 | `Eq A` | Equality should be reflexive, symmetric, and transitive. Surface `!=` uses the same `Eq` evidence as `==`; document and reason about equality itself, not a second independent notion. |
 | `Ord A` | `compare` should agree with `Eq` and define a total order: every pair is comparable, ordering is antisymmetric, and ordering is transitive. The ordinary `<`, `>`, `<=`, and `>=` operators are just surface forms of this `compare`. |
 
+Comparison capability follows the executable member's type and class identity, including through
+aliases and re-exports. An authored equality or ordering class assumes the same law obligations
+when its members back these operators. See [Comparison evidence](/guide/typeclasses#comparison-evidence)
+for the required signatures, dictionary precedence, and ambiguity behavior.
+
 ## Higher-kinded hierarchy
 
 | Class | Law / guidance |

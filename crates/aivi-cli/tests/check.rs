@@ -75,6 +75,75 @@ impl Drop for TempDir {
 }
 
 #[test]
+fn check_requires_typed_comparison_evidence() {
+    for (name, class, member, operator, diagnostic) in [
+        (
+            "eq-missing",
+            "Eq",
+            "same : A -> A -> Bool",
+            "==",
+            "missing-eq-instance",
+        ),
+        (
+            "eq-result",
+            "Eq",
+            "(==) : A -> A -> Int",
+            "==",
+            "missing-eq-instance",
+        ),
+        (
+            "eq-operands",
+            "Eq",
+            "(==) : Int -> Int -> Bool",
+            "==",
+            "missing-eq-instance",
+        ),
+        (
+            "ord-missing",
+            "Ord",
+            "same : A -> A -> Bool",
+            "<",
+            "invalid-binary-operator",
+        ),
+        (
+            "ord-result",
+            "Ord",
+            "compare : A -> A -> Bool",
+            "<",
+            "invalid-binary-operator",
+        ),
+        (
+            "ord-operands",
+            "Ord",
+            "compare : Int -> Int -> Ordering",
+            "<",
+            "invalid-binary-operator",
+        ),
+        (
+            "member-context",
+            "Same",
+            "(==) : Setoid A => A -> A -> Bool",
+            "==",
+            "missing-eq-instance",
+        ),
+    ] {
+        let dir = TempDir::new(name);
+        let source = format!(
+            "class {class} A = {{ {member} }}\ntype {class} A => A -> A -> Bool\nfunc operation = left right => left {operator} right\n"
+        );
+        let path = dir.write("main.aivi", &source);
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("check")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "{name}: {stderr}");
+        assert!(stderr.contains(diagnostic), "{name}: {stderr}");
+    }
+}
+
+#[test]
 fn check_rejects_unused_overlapping_and_orphan_instances() {
     for (name, source, diagnostic) in [
         (

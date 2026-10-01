@@ -873,7 +873,14 @@ defined as inequality syntax over `==`, so authored instances explain equality o
 implementation may lower `!=` directly, but it must remain semantically equivalent to negated equality
 over the same evidence.
 
-`Eq` uses the ordinary class/instance resolution rules in §7.1. Compiler-derived and builtin evidence covers the executable surface; user-authored `Eq` instances beyond same-module explicit evidence remain deferred.
+`Eq` uses the ordinary class/instance resolution rules in §7.1, including imported authored
+instances and explicit dictionary passing. Comparison operators require executable members with
+matching operand and result types: `(==)` or `equals` must have type `A -> A -> Bool`, and
+`compare` must have type `A -> A -> Ordering` for the standard `Ordering` declaration. A class
+name alone is not comparison evidence. In-scope dictionaries retain their declaration identity;
+otherwise, local declarations and explicit class imports open members before ambient lookup.
+Aliases and re-exports preserve identity, selected members require their prerequisites and
+method-local constraints, and multiple viable dictionaries are diagnosed as ambiguous.
 
 Compiler-derived `Eq` is required for:
 

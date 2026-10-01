@@ -185,6 +185,88 @@ value relationName : Task Text Bool = pure (relationAccepts 1 2)
 }
 
 #[test]
+fn comparison_operators_preserve_imported_class_identity() {
+    for class in ["Eq", "Equality"] {
+        let library = format!(
+            r#"
+class {class} A = {{ (==) : A -> A -> Bool }}
+class Ranking A = {{
+    with {class} A
+    compare : A -> A -> Ordering
+}}
+type Tag = Tag Int
+instance {class} Tag = {{ (==) = left right => True }}
+instance Ranking Tag = {{ compare = left right => Equal }}
+type {class} A => A -> A -> Bool
+func equal = left right => left == right
+export {class}
+export Ranking
+export Tag
+export equal
+"#
+        );
+        let dir = TempDir::new("imported-comparison-evidence");
+        dir.write("classes.aivi", &library);
+        dir.write("bridge.aivi", &format!("use classes ({class} as Forwarded, Ranking as Rank)\nexport Forwarded\nexport Rank\n"));
+        let path = dir.write(
+            "main.aivi",
+            r#"
+use bridge (Forwarded as Matches, Rank as Order)
+use classes (Tag, equal)
+type Matches A => A -> A -> Bool
+func forwarded = left right => left == right
+type Order A => A -> A -> Bool
+func ranked = left right => left <= right
+@test
+value generic : Task Text Bool = pure (equal (Tag 1) (Tag 2))
+@test
+value direct : Task Text Bool = pure (Tag 1 == Tag 2)
+@test
+value negated : Task Text Bool = pure ((Tag 1 != Tag 2) == False)
+@test
+value alias : Task Text Bool = pure (forwarded (Tag 1) (Tag 2))
+@test
+value ordering : Task Text Bool = pure ((Tag 1 < Tag 2) == False)
+@test
+value genericOrdering : Task Text Bool = pure (ranked (Tag 1) (Tag 2))
+"#,
+        );
+        for _ in 0..2 {
+            let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+                .arg("test")
+                .arg(&path)
+                .output()
+                .unwrap();
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(output.status.success(), "{class}: {stdout}\n{stderr}");
+            assert!(stdout.contains("6 passed; 0 failed; 6 total"), "{stdout}");
+        }
+        let private = TempDir::new("private-comparison-projections");
+        private.write("classes.aivi", &library);
+        let path = private.write(
+            "main.aivi",
+            r#"
+use classes (Tag, equal)
+@test
+value generic : Task Text Bool = pure (equal (Tag 1) (Tag 2))
+@test
+value ordinary : Task Text Bool = pure ((Tag 1 == Tag 2) == False)
+"#,
+        );
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{class}: {stdout}\n{stderr}");
+        assert!(stdout.contains("2 passed; 0 failed; 2 total"), "{stdout}");
+    }
+}
+
+#[test]
 fn imported_classes_preserve_foreign_carriers_in_method_signatures() {
     let dir = TempDir::new("class-foreign-carriers");
     dir.write(

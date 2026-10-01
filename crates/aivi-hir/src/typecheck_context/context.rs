@@ -817,8 +817,11 @@ impl<'a> GateTypeContext<'a> {
                 ResolutionState::Resolved(TypeResolution::Item(item_id)) => {
                     self.lower_type_item(*item_id, &[], item_stack, true)
                 }
+                ResolutionState::Resolved(TypeResolution::Import(import)) => {
+                    let name = self.module.imports()[*import].local_name.text().to_owned();
+                    Some(self.import_type_for_domain_or_opaque(*import, name, Vec::new()))
+                }
                 ResolutionState::Resolved(TypeResolution::Builtin(_))
-                | ResolutionState::Resolved(TypeResolution::Import(_))
                 | ResolutionState::Unresolved => None,
             },
             TypeKind::Tuple(elements) => {
@@ -3049,7 +3052,7 @@ impl<'a> GateTypeContext<'a> {
         })
     }
 
-    fn match_class_member_call_candidate_with_hints<'b>(
+    pub(crate) fn match_class_member_call_candidate_with_hints<'b>(
         &mut self,
         resolution: ClassMemberResolution,
         argument_types: impl Clone + ExactSizeIterator<Item = Option<&'b GateType>>,
@@ -4380,9 +4383,13 @@ impl<'a> GateTypeContext<'a> {
             ResolutionState::Resolved(TypeResolution::Item(item_id)) => {
                 self.lower_type_item(*item_id, &[], item_stack, false)
             }
-            ResolutionState::Resolved(TypeResolution::Import(_))
-            | ResolutionState::Resolved(TypeResolution::Builtin(_))
-            | ResolutionState::Unresolved => None,
+            ResolutionState::Resolved(TypeResolution::Import(import)) => {
+                let name = self.module.imports()[*import].local_name.text().to_owned();
+                Some(self.import_type_for_domain_or_opaque(*import, name, Vec::new()))
+            }
+            ResolutionState::Resolved(TypeResolution::Builtin(_)) | ResolutionState::Unresolved => {
+                None
+            }
         }
     }
 
@@ -5285,9 +5292,7 @@ impl<'a> GateTypeContext<'a> {
                     | (Some(left), Some(right), crate::hir::BinaryOperator::LessThan)
                     | (Some(left), Some(right), crate::hir::BinaryOperator::GreaterThanOrEqual)
                     | (Some(left), Some(right), crate::hir::BinaryOperator::LessThanOrEqual)
-                        if self.types_match(left, right)
-                            && crate::typecheck::resolve_ordering_dispatch(self.module, left)
-                                .is_some() =>
+                        if self.types_match(left, right) =>
                     {
                         Some(GateType::Primitive(BuiltinType::Bool))
                     }

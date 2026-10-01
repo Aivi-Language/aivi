@@ -25,6 +25,8 @@ include!("api.rs");
 
 include!("checker.rs");
 
+include!("comparison.rs");
+
 include!("helpers.rs");
 
 #[cfg(test)]

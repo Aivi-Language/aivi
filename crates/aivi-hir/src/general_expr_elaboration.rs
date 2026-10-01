@@ -20,9 +20,9 @@ use crate::{
     TypeResolution, UnaryOperator, ValueItem,
     gate_elaboration::{GateElaborationBlocker, GateRuntimeMapEntry},
     typecheck::{
-        expression_matches, resolve_class_member_dispatch_for_binding,
-        resolve_class_member_dispatch_in_scope, resolve_equality_dispatch_in_scope,
-        resolve_ordering_dispatch_in_scope, signal_payload_type,
+        ComparisonKind, expression_matches, resolve_class_member_dispatch_for_binding,
+        resolve_class_member_dispatch_in_scope, resolve_comparison_member_in_scope,
+        signal_payload_type,
     },
     validate::{
         GateClassEvidence, GateExprEnv, GateIssue, GateProjectionStep, GateRecordField, GateType,
@@ -1185,34 +1185,6 @@ fn supported_evidence_members(
         .collect()
 }
 
-fn is_ordering_member(module: &Module, member: ClassMemberResolution) -> bool {
-    let Item::Class(class_item) = &module.items()[member.class] else {
-        return false;
-    };
-    class_item.name.text() == "Ord"
-        && class_item
-            .members
-            .get(member.member_index)
-            .is_some_and(|candidate| candidate.name.text() == "compare")
-}
-
-fn is_equality_member(module: &Module, member: ClassMemberResolution) -> bool {
-    let Item::Class(class_item) = &module.items()[member.class] else {
-        return false;
-    };
-    match class_item.name.text() {
-        "Eq" => class_item
-            .members
-            .get(member.member_index)
-            .is_some_and(|candidate| candidate.name.text() == "=="),
-        "Setoid" => class_item
-            .members
-            .get(member.member_index)
-            .is_some_and(|candidate| candidate.name.text() == "equals"),
-        _ => false,
-    }
-}
-
 fn instantiate_class_member_type_for_binding(
     module: &Module,
     typing: &mut GateTypeContext<'_>,
@@ -1366,34 +1338,6 @@ fn ordering_constructor_handle(
         _ => ambient_type_item_by_name(module, "Ordering"),
     }?;
     module.sum_constructor_handle(item, variant_name)
-}
-
-fn in_scope_equality_evidence<'a>(
-    env: &'a GateExprEnv,
-    module: &Module,
-    subject: &GateType,
-) -> Option<&'a GateClassEvidence> {
-    env.class_evidence
-        .iter()
-        .filter(|candidate| {
-            candidate.subject == TypeBinding::Type(subject.clone())
-                && is_equality_member(module, candidate.member)
-        })
-        .min_by_key(|candidate| candidate.priority)
-}
-
-fn in_scope_ordering_evidence<'a>(
-    env: &'a GateExprEnv,
-    module: &Module,
-    subject: &GateType,
-) -> Option<&'a GateClassEvidence> {
-    env.class_evidence
-        .iter()
-        .filter(|candidate| {
-            candidate.subject == TypeBinding::Type(subject.clone())
-                && is_ordering_member(module, candidate.member)
-        })
-        .min_by_key(|candidate| candidate.priority)
 }
 
 fn in_scope_class_evidence_by_member<'a>(
@@ -1998,6 +1942,45 @@ pub(crate) fn lower_name_expr_with_class_evidence(
     })
 }
 
+fn lower_comparison_callee(
+    module: &Module,
+    typing: &mut GateTypeContext<'_>,
+    catalog: &ClassEvidenceCatalog,
+    env: &GateExprEnv,
+    span: SourceSpan,
+    kind: ComparisonKind,
+    subject: &GateType,
+) -> Option<GateRuntimeExpr> {
+    let matched = resolve_comparison_member_in_scope(module, kind, subject, env)?;
+    let visible_ty = arrow_type(matched.parameters, matched.result);
+    let Item::Class(class) = &module.items()[matched.resolution.class] else {
+        return None;
+    };
+    let name = Name::new(
+        class.members[matched.resolution.member_index].name.text(),
+        span,
+    )
+    .ok()?;
+    let reference = TermReference::resolved(
+        NamePath::from_vec(vec![name]).ok()?,
+        TermResolution::ClassMember(matched.resolution),
+    );
+    if in_scope_class_evidence_by_member(env, matched.resolution, &matched.evidence.subject)
+        .is_some()
+    {
+        return lower_class_member_callee_with_evidence(
+            module, typing, catalog, env, &reference, visible_ty,
+        );
+    }
+    let dispatch = resolve_class_member_dispatch_for_binding(
+        module,
+        matched.resolution,
+        &matched.evidence.subject,
+        env,
+    )?;
+    lower_class_dispatch_with_evidence(module, typing, catalog, env, span, dispatch, visible_ty)
+}
+
 pub(crate) fn build_equality_runtime_expr(
     module: &Module,
     typing: &mut GateTypeContext<'_>,
@@ -2012,36 +1995,15 @@ pub(crate) fn build_equality_runtime_expr(
         left,
         right,
     } = input;
-    let callee = if let Some(evidence) = in_scope_equality_evidence(env, module, &left.ty) {
-        Some(GateRuntimeExpr {
-            span,
-            ty: evidence.ty.clone(),
-            kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Local(evidence.binding)),
-        })
-    } else if let Some(dispatch) = resolve_equality_dispatch_in_scope(module, &left.ty, env) {
-        Some(lower_class_dispatch_with_evidence(
-            module,
-            typing,
-            catalog,
-            env,
-            span,
-            dispatch,
-            arrow_type(vec![left.ty.clone(), right.ty.clone()], ty.clone()),
-        )?)
-    } else {
-        None
-    };
-    let Some(callee) = callee else {
-        return Some(GateRuntimeExpr {
-            span,
-            ty,
-            kind: GateRuntimeExprKind::Binary {
-                left: Box::new(left),
-                operator,
-                right: Box::new(right),
-            },
-        });
-    };
+    let callee = lower_comparison_callee(
+        module,
+        typing,
+        catalog,
+        env,
+        span,
+        ComparisonKind::Equality,
+        &left.ty,
+    )?;
     let equal = GateRuntimeExpr {
         span,
         ty: ty.clone(),
@@ -2078,36 +2040,15 @@ pub(crate) fn build_ordering_runtime_expr(
         left,
         right,
     } = input;
-    let callee = if let Some(evidence) = in_scope_ordering_evidence(env, module, &left.ty) {
-        Some(GateRuntimeExpr {
-            span,
-            ty: evidence.ty.clone(),
-            kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Local(evidence.binding)),
-        })
-    } else if let Some(dispatch) = resolve_ordering_dispatch_in_scope(module, &left.ty, env) {
-        let callee_ty = instantiate_class_member_type_for_binding(
-            module,
-            typing,
-            dispatch.member,
-            &dispatch.subject,
-        )?;
-        Some(lower_class_dispatch_with_evidence(
-            module, typing, catalog, env, span, dispatch, callee_ty,
-        )?)
-    } else {
-        None
-    };
-    let Some(callee) = callee else {
-        return Some(GateRuntimeExpr {
-            span,
-            ty,
-            kind: GateRuntimeExprKind::Binary {
-                left: Box::new(left),
-                operator,
-                right: Box::new(right),
-            },
-        });
-    };
+    let callee = lower_comparison_callee(
+        module,
+        typing,
+        catalog,
+        env,
+        span,
+        ComparisonKind::Ordering,
+        &left.ty,
+    )?;
     let ordering_ty = strip_leading_arrow_result(&callee.ty, 2)?;
     let (ordering_variant, equality_operator) = match operator {
         BinaryOperator::GreaterThan => ("Greater", BinaryOperator::Equals),
@@ -2130,19 +2071,59 @@ pub(crate) fn build_ordering_runtime_expr(
         ty: ordering_ty,
         kind: GateRuntimeExprKind::Reference(GateRuntimeReference::SumConstructor(constructor)),
     };
-    build_equality_runtime_expr(
+    // Inspect canonical Ordering with compiler-owned equality. A locally opened
+    // equality class must not change which branch the comparison returned.
+    let member = module.items().iter().find_map(|(id, item)| {
+        let Item::Class(class) = item else {
+            return None;
+        };
+        if !matches!(&class.identity, crate::ClassIdentity::Standard(name) if name.as_ref() == "Eq")
+        {
+            return None;
+        }
+        Some(ClassMemberResolution {
+            class: id,
+            member_index: class
+                .members
+                .iter()
+                .position(|member| member.name.text() == "==")?,
+        })
+    })?;
+    let dispatch = resolve_class_member_dispatch_for_binding(
+        module,
+        member,
+        &TypeBinding::Type(compare.ty.clone()),
+        &GateExprEnv::default(),
+    )?;
+    let callee = lower_class_dispatch_with_evidence(
         module,
         typing,
         catalog,
         env,
-        ComparisonRuntimeExprInput {
+        span,
+        dispatch,
+        arrow_type(vec![compare.ty.clone(), target.ty.clone()], ty.clone()),
+    )?;
+    let equal = GateRuntimeExpr {
+        span,
+        ty: ty.clone(),
+        kind: GateRuntimeExprKind::Apply {
+            callee: Box::new(callee),
+            arguments: vec![compare, target],
+        },
+    };
+    Some(if equality_operator == BinaryOperator::NotEquals {
+        GateRuntimeExpr {
             span,
             ty,
-            operator: equality_operator,
-            left: compare,
-            right: target,
-        },
-    )
+            kind: GateRuntimeExprKind::Unary {
+                operator: UnaryOperator::Not,
+                expr: Box::new(equal),
+            },
+        }
+    } else {
+        equal
+    })
 }
 
 pub(crate) struct ComparisonRuntimeExprInput {
