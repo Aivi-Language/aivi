@@ -1737,6 +1737,18 @@ fn scoped_path_argument(
     }
 }
 
+/// The text concat intrinsic accepts one list of parts. Keep synthesized calls
+/// on the same typed ABI as ordinary stdlib calls.
+fn build_text_concat(module: &mut Module, parts: Vec<ExprId>, span: SourceSpan) -> ExprId {
+    let parts = module
+        .alloc_expr(Expr {
+            span,
+            kind: ExprKind::List(parts),
+        })
+        .expect("capability URL parts should fit inside the expression arena");
+    build_intrinsic_call(module, IntrinsicValue::TextConcat, span, vec![parts])
+}
+
 fn scoped_http_url_argument(
     module: &mut Module,
     handle: &CapabilityHandleBinding,
@@ -1747,12 +1759,7 @@ fn scoped_http_url_argument(
     match (handle.arguments.as_slice(), member_argument) {
         ([], Some(argument)) => Some(argument),
         ([], None) => None,
-        ([base], Some(argument)) => Some(build_intrinsic_call(
-            module,
-            IntrinsicValue::TextConcat,
-            span,
-            vec![*base, argument],
-        )),
+        ([base], Some(argument)) => Some(build_text_concat(module, vec![*base, argument], span)),
         ([base], None) => Some(*base),
         ([first, ..], Some(argument)) => {
             diagnostics.push(
@@ -1765,12 +1772,7 @@ fn scoped_http_url_argument(
                     "collapse the base URL to one expression before declaring the handle",
                 )),
             );
-            Some(build_intrinsic_call(
-                module,
-                IntrinsicValue::TextConcat,
-                span,
-                vec![*first, argument],
-            ))
+            Some(build_text_concat(module, vec![*first, argument], span))
         }
         ([first, ..], None) => {
             diagnostics.push(

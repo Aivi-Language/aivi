@@ -107,6 +107,52 @@ fn check_rejects_unsound_polymorphic_definitions() {
 }
 
 #[test]
+fn check_rejects_inconsistent_contextual_class_calls() {
+    for (name, source) in [
+        (
+            "comparison",
+            r#"
+type (E -> B) -> (A -> B) -> Result E A -> B
+func fold = onErr onOk result => result
+ ||> Err error -> onErr error
+ ||> Ok value -> onOk value
+type Text -> Text
+func keepError = text => text
+type Int -> Int
+func increment = n => n + 1
+value result : Task Text Bool = pure (fold keepError increment (Ok 2) == 3)
+"#,
+        ),
+        (
+            "pure-result",
+            "value bad : Task Text Int = pure \"wrong\"\n",
+        ),
+        (
+            "pure-reference",
+            "value bad : Text -> Task Text Int = pure\n",
+        ),
+        (
+            "map-callback",
+            "type Text -> Text\nfunc keep = text => text\nvalue bad : List Int = map keep [1]\n",
+        ),
+    ] {
+        let dir = TempDir::new(name);
+        let path = dir.write("main.aivi", source);
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("check")
+            .arg(path)
+            .output()
+            .expect("check command should run");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !output.status.success(),
+            "invalid class use {name} accepted: {stderr}"
+        );
+        assert!(stderr.contains("hir::type-mismatch"), "{name}: {stderr}");
+    }
+}
+
+#[test]
 fn check_accepts_quantified_instance_constraints_and_generic_callbacks() {
     let dir = TempDir::new("instance-method-constraints");
     let path = dir.write(

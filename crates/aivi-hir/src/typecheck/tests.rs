@@ -4,6 +4,7 @@ use aivi_syntax::parse_module;
 use crate::{BuiltinType, Item, PipeTransformMode, RecordFieldSurface, lower_module};
 
 use super::*;
+use crate::typecheck_context::SourceOptionActualType;
 
 fn typecheck_text(path: &str, text: &str) -> TypeCheckReport {
     let mut sources = SourceDatabase::new();
@@ -1199,6 +1200,243 @@ fn typecheck_reports_invalid_binary_operator_for_non_ord_comparison() {
         "expected invalid binary operator diagnostic, got diagnostics: {:?}",
         report.diagnostics()
     );
+}
+
+#[test]
+fn contextual_comparisons_reject_inconsistent_callback_results() {
+    let prefix = "type (E -> B) -> (A -> B) -> Result E A -> B\n\
+func fold = onErr onOk result => result\n\
+ ||> Err error -> onErr error\n\
+ ||> Ok value -> onOk value\n\
+type Text -> Text\n\
+func keepError = text => text\n\
+type Int -> Int\n\
+func increment = n => n + 1\n";
+    for body in [
+        "value bad : Int = fold keepError increment (Ok 2)\n",
+        "value bad : Bool = fold keepError increment (Ok 2) == 3\n",
+        "value bad : Task Text Bool = pure (fold keepError increment (Ok 2) == 3)\n",
+        "value bad : Task Text Int = pure \"wrong\"\n",
+        "value bad : List Int = map keepError [1]\n",
+        "value bad : (Text -> Task Text Int) = pure\n",
+        "value bad : Task Text Text = pure []\n",
+        "value bad : Task Text Bool = pure (fold keepError increment (Ok \"two\") == 3)\n",
+    ] {
+        let report = typecheck_text("inconsistent-fold-result.aivi", &format!("{prefix}{body}"));
+        assert!(
+            !report.is_ok(),
+            "accepted {body:?}: {:?}",
+            report.diagnostics()
+        );
+        assert!(
+            report
+                .diagnostics()
+                .iter()
+                .any(|d| d.code == Some(crate::codes::TYPE_MISMATCH)),
+            "missing callback type mismatch for {body:?}: {:?}",
+            report.diagnostics()
+        );
+    }
+}
+
+#[test]
+fn scoped_http_task_url_uses_the_list_concat_contract() {
+    let mut sources = SourceDatabase::new();
+    let file = sources.add_file(
+        "http-url-contract.aivi",
+        r#"
+type HttpSource = Unit
+@source http "https://service.example"
+signal api : HttpSource
+value health : Task Text Text = api.get "/health"
+"#,
+    );
+    let parsed = parse_module(&sources[file]);
+    let lowered = lower_module(&parsed.module);
+    assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+    let module = lowered.module();
+    let body = module
+        .items()
+        .iter()
+        .find_map(|(_, item)| match item {
+            Item::Value(value) if value.name.text() == "health" => Some(value.body),
+            _ => None,
+        })
+        .unwrap();
+    let ExprKind::Apply { arguments, .. } = &module.exprs()[body].kind else {
+        panic!("expected an HTTP task application");
+    };
+    let ExprKind::Apply { callee, arguments } = &module.exprs()[*arguments.first()].kind else {
+        panic!("expected scoped URL concatenation");
+    };
+    let ExprKind::Name(reference) = &module.exprs()[*callee].kind else {
+        panic!("expected concat intrinsic");
+    };
+    assert!(matches!(
+        reference.resolution.as_ref(),
+        ResolutionState::Resolved(TermResolution::IntrinsicValue(
+            crate::IntrinsicValue::TextConcat
+        ))
+    ));
+    assert_eq!(arguments.len(), 1, "concat accepts one list, not two texts");
+    let ExprKind::List(parts) = &module.exprs()[*arguments.first()].kind else {
+        panic!("expected URL parts list");
+    };
+    assert_eq!(parts.len(), 2);
+    let report = typecheck_module(module);
+    assert!(
+        report.is_ok(),
+        "generated URL call must check: {:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
+fn empty_list_inference_preserves_its_container_shape() {
+    let mut sources = SourceDatabase::new();
+    let file = sources.add_file("empty-list-shape.aivi", "value items = []\n");
+    let parsed = parse_module(&sources[file]);
+    let lowered = lower_module(&parsed.module);
+    let body = lowered
+        .module()
+        .items()
+        .iter()
+        .find_map(|(_, item)| match item {
+            Item::Value(value) if value.name.text() == "items" => Some(value.body),
+            _ => None,
+        })
+        .unwrap();
+    let mut typing = GateTypeContext::new(lowered.module());
+    let info = typing.infer_expr(body, &GateExprEnv::default(), None);
+    assert!(
+        info.ty.is_none(),
+        "empty lists must not choose an element type"
+    );
+    assert_eq!(
+        info.actual,
+        Some(SourceOptionActualType::List(Box::new(
+            SourceOptionActualType::Hole
+        )))
+    );
+}
+
+#[test]
+fn contextual_comparisons_require_evidence_for_every_sum_payload() {
+    let report = typecheck_text(
+        "ambiguous-sum-comparison.aivi",
+        r#"
+type Either L R = | Left L | Right R
+type (L1 -> L2) -> Either L1 R -> Either L2 R
+func mapLeft = f value => value
+ ||> Left item -> Left (f item)
+ ||> Right item -> Right item
+type Text -> Text
+func mark = text => text
+value bad : Task Text Bool = pure (mapLeft mark (Left "error") == Left "error")
+"#,
+    );
+    assert!(!report.is_ok());
+    assert!(
+        report
+            .diagnostics()
+            .iter()
+            .any(|diagnostic| { diagnostic.code == Some(crate::codes::MISSING_EQ_INSTANCE) }),
+        "missing payload evidence accepted: {:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
+fn contextual_class_calls_preserve_polymorphic_and_alias_contracts() {
+    for (name, source) in [
+        (
+            "consistent-fold",
+            r#"
+type (E -> B) -> (A -> B) -> Result E A -> B
+func fold = onErr onOk result => result
+ ||> Err error -> onErr error
+ ||> Ok value -> onOk value
+type Text -> Int
+func handleError = text => 0
+type Int -> Int
+func increment = n => n + 1
+value good : Task Text Bool = pure (fold handleError increment (Ok 2) == 3)
+"#,
+        ),
+        (
+            "unresolved-predicate",
+            r#"
+type Either L R = | Left L | Right R
+type (L1 -> L2) -> (R1 -> R2) -> Either L1 R1 -> Either L2 R2
+func mapBoth = onLeft onRight value => value
+ ||> Left item -> Left (onLeft item)
+ ||> Right item -> Right (onRight item)
+type Text -> Text
+func mark = text => text
+type Int -> Int
+func double = n => n * 2
+value good : Task Text Bool = pure (mapBoth mark double (Right 2) == Right 4)
+"#,
+        ),
+        (
+            "sum-predicate",
+            r#"
+type Either L R = | Left L | Right R
+type Either L R -> Bool
+func isLeft = value => value
+ ||> Left item -> True
+ ||> Right item -> False
+value good : Task Text Bool = pure (isLeft (Left "error"))
+"#,
+        ),
+        (
+            "sum-map",
+            r#"
+type Either L R = | Left L | Right R
+type (L1 -> L2) -> Either L1 R -> Either L2 R
+func mapLeft = f value => value
+ ||> Left item -> Left (f item)
+ ||> Right item -> Right item
+type Text -> Text
+func mark = text => text
+value left : Either Text Int = Left "error"
+value good : Task Text Bool = pure (mapLeft mark left == Left "error")
+"#,
+        ),
+        (
+            "constructor",
+            "value good : Task Text (Option Int) = pure None\n",
+        ),
+        ("reference", "value good : Text -> Task Text Text = pure\n"),
+        (
+            "callback",
+            "value good : List Bool = map (n => n > 0) [1]\n",
+        ),
+        (
+            "partial",
+            "value good : List Int -> List Int = map (n => n + 1)\n",
+        ),
+        (
+            "generic",
+            "type Int -> Int\nfunc increment = n => n + 1\ntype Functor F => F Int -> F Int\nfunc copy = value => map increment value\n",
+        ),
+        (
+            "alias",
+            r#"
+type Bag A = { items: List A }
+instance Foldable Bag = { reduce = f seed bag => reduce f seed bag.items }
+value bag : Bag Int = { items: [1, 2] }
+value good : Int = reduce (total n => total + n) 0 bag
+"#,
+        ),
+    ] {
+        let report = typecheck_text(name, source);
+        assert!(
+            report.is_ok(),
+            "valid {name} rejected: {:?}",
+            report.diagnostics()
+        );
+    }
 }
 
 #[test]

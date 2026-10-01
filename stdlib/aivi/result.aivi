@@ -102,6 +102,11 @@ func errorValueForTest = text => text == "bad"
  T|> 3
  F|> 0
 
+// Keep both payload types known when deriving Eq for the result.
+value errorResultForTest : Result Text Int = Err "bad"
+value okResultForTest : Result Text Int = Ok 2
+value nestedResultForTest : Result Text (Result Text Int) = Ok (Ok 2)
+
 @test
 value result_isOk : Task Text Bool = pure (isOk (Ok 2))
 
@@ -109,7 +114,7 @@ value result_isOk : Task Text Bool = pure (isOk (Ok 2))
 value result_isErr : Task Text Bool = pure (isErr (Err "bad"))
 
 @test
-value result_mapErr : Task Text Bool = pure (mapErr prefixForTest (Err "bad") == Err "error: bad")
+value result_mapErr : Task Text Bool = pure (mapErr prefixForTest errorResultForTest == Err "error: bad")
 
 @test
 value result_withDefault : Task Text Bool = pure (withDefault 0 (Ok 2) == 2)
@@ -121,7 +126,7 @@ value result_orElse : Task Text Bool = pure (orElse (Ok 3) (Err "bad") == Ok 3)
 value result_flatMap : Task Text Bool = pure (flatMap incrementOkForTest (Ok 2) == Ok 3)
 
 @test
-value result_flatten : Task Text Bool = pure (flatten (Ok (Ok 2)) == Ok 2)
+value result_flatten : Task Text Bool = pure (flatten nestedResultForTest == Ok 2)
 
 @test
 value result_toOption : Task Text Bool = pure (toOption (Ok 2) == Some 2)
@@ -130,7 +135,7 @@ value result_toOption : Task Text Bool = pure (toOption (Ok 2) == Some 2)
 value result_toList : Task Text Bool = pure (toList (Ok 2) == [2])
 
 @test
-value result_map : Task Text Bool = pure (map incrementForTest (Ok 2) == Ok 3)
+value result_map : Task Text Bool = pure (map incrementForTest okResultForTest == Ok 3)
 
 @test
 value result_mapBoth : Task Text Bool = pure (mapBoth prefixForTest incrementForTest (Ok 2) == Ok 3)

@@ -2531,6 +2531,167 @@ impl<'a> GateTypeContext<'a> {
         }
     }
 
+    /// Match only the known portions of constructor evidence. Holes do not bind
+    /// a type parameter; later argument or result contracts must refine them.
+    /// Prefer the full type when present so lexical rigid parameters retain identity.
+    pub(crate) fn match_gate_expr_template(
+        &self,
+        template: &GateType,
+        info: &GateExprInfo,
+        substitutions: &mut HashMap<TypeParameterId, GateType>,
+    ) -> bool {
+        if let Some(actual) = info.ty.as_ref() {
+            return self.match_gate_type_template(template, actual, substitutions);
+        }
+        let Some(actual) = info.actual.as_ref() else {
+            return true;
+        };
+        let mut candidate = substitutions.clone();
+        // Only binding expansions consume this budget. Structural traversal uses
+        // the worklist, and a cyclic substitution cannot revisit more binders than exist.
+        let mut work = vec![(template.clone(), actual.clone(), 0usize)];
+        while let Some((template, actual, expansions)) = work.pop() {
+            if matches!(actual, SourceOptionActualType::Hole) {
+                continue;
+            }
+            if let Some(actual) = actual.to_gate_type() {
+                if !self.match_gate_type_template(&template, &actual, &mut candidate) {
+                    return false;
+                }
+                continue;
+            }
+            if let Some(expanded) = template.expand_transparent_import_alias() {
+                work.push((expanded, actual, expansions));
+                continue;
+            }
+            match (template, actual) {
+                (GateType::TypeParameter { parameter, .. }, actual) => {
+                    if self.rigid_type_parameters.contains(&parameter) {
+                        return false;
+                    }
+                    if let Some(bound) = candidate.get(&parameter) {
+                        if matches!(bound, GateType::TypeParameter { parameter: id, .. } if *id == parameter)
+                        {
+                            continue;
+                        }
+                        if expansions >= candidate.len() {
+                            return false;
+                        }
+                        work.push((bound.clone(), actual, expansions + 1));
+                    }
+                }
+                (GateType::Tuple(types), SourceOptionActualType::Tuple(actuals))
+                    if types.len() == actuals.len() =>
+                {
+                    work.extend(
+                        types
+                            .into_iter()
+                            .zip(actuals)
+                            .map(|(ty, actual)| (ty, actual, expansions)),
+                    )
+                }
+                (GateType::Record(types), SourceOptionActualType::Record(actuals))
+                    if types.len() == actuals.len() =>
+                {
+                    for ty in types {
+                        let Some(actual) = actuals.iter().find(|field| field.name == ty.name)
+                        else {
+                            return false;
+                        };
+                        work.push((ty.ty, actual.ty.clone(), expansions));
+                    }
+                }
+                (
+                    GateType::Arrow { parameter, result },
+                    SourceOptionActualType::Arrow {
+                        parameter: input,
+                        result: output,
+                    },
+                ) => {
+                    work.extend([
+                        (*parameter, *input, expansions),
+                        (*result, *output, expansions),
+                    ]);
+                }
+                (GateType::List(ty), SourceOptionActualType::List(actual))
+                | (GateType::Set(ty), SourceOptionActualType::Set(actual))
+                | (GateType::Option(ty), SourceOptionActualType::Option(actual))
+                | (GateType::Signal(ty), SourceOptionActualType::Signal(actual)) => {
+                    work.push((*ty, *actual, expansions));
+                }
+                (
+                    GateType::Map { key, value },
+                    SourceOptionActualType::Map { key: a, value: b },
+                ) => {
+                    work.extend([(*key, *a, expansions), (*value, *b, expansions)]);
+                }
+                (
+                    GateType::Result { error, value },
+                    SourceOptionActualType::Result { error: a, value: b },
+                )
+                | (
+                    GateType::Validation { error, value },
+                    SourceOptionActualType::Validation { error: a, value: b },
+                )
+                | (
+                    GateType::Task { error, value },
+                    SourceOptionActualType::Task { error: a, value: b },
+                ) => {
+                    work.extend([(*error, *a, expansions), (*value, *b, expansions)]);
+                }
+                (
+                    GateType::OpaqueItem {
+                        item, arguments, ..
+                    },
+                    SourceOptionActualType::OpaqueItem {
+                        item: actual,
+                        arguments: actuals,
+                        ..
+                    },
+                )
+                | (
+                    GateType::Domain {
+                        item, arguments, ..
+                    },
+                    SourceOptionActualType::Domain {
+                        item: actual,
+                        arguments: actuals,
+                        ..
+                    },
+                ) if item == actual && arguments.len() == actuals.len() => {
+                    work.extend(
+                        arguments
+                            .into_iter()
+                            .zip(actuals)
+                            .map(|(ty, actual)| (ty, actual, expansions)),
+                    );
+                }
+                (
+                    GateType::OpaqueImport {
+                        import, arguments, ..
+                    },
+                    SourceOptionActualType::OpaqueImport {
+                        import: actual,
+                        arguments: actuals,
+                        ..
+                    },
+                ) if self.import_type_identities_match(import, actual)
+                    && arguments.len() == actuals.len() =>
+                {
+                    work.extend(
+                        arguments
+                            .into_iter()
+                            .zip(actuals)
+                            .map(|(ty, actual)| (ty, actual, expansions)),
+                    );
+                }
+                _ => return false,
+            }
+        }
+        *substitutions = candidate;
+        true
+    }
+
     fn specialize_gate_type_template(
         &self,
         template: &GateType,
@@ -2688,12 +2849,40 @@ impl<'a> GateTypeContext<'a> {
         argument_types: &[GateType],
         expected_result: Option<&GateType>,
     ) -> Option<DomainMemberSelection<ClassMemberCallMatch>> {
+        self.select_class_member_call_with_hints(
+            reference,
+            argument_types.iter().map(Some),
+            expected_result,
+        )
+    }
+
+    pub(crate) fn select_class_member_call_with_argument_hints(
+        &mut self,
+        reference: &TermReference,
+        argument_types: &[Option<GateType>],
+        expected_result: &GateType,
+    ) -> Option<DomainMemberSelection<ClassMemberCallMatch>> {
+        self.select_class_member_call_with_hints(
+            reference,
+            argument_types.iter().map(Option::as_ref),
+            Some(expected_result),
+        )
+    }
+
+    fn select_class_member_call_with_hints<'b>(
+        &mut self,
+        reference: &TermReference,
+        argument_types: impl Clone + ExactSizeIterator<Item = Option<&'b GateType>>,
+        expected_result: Option<&GateType>,
+    ) -> Option<DomainMemberSelection<ClassMemberCallMatch>> {
         let candidates = self.class_member_candidates(reference)?;
         let mut matches = Vec::new();
         for candidate in candidates {
-            if let Some(matched) =
-                self.match_class_member_call_candidate(candidate, argument_types, expected_result)
-            {
+            if let Some(matched) = self.match_class_member_call_candidate_with_hints(
+                candidate,
+                argument_types.clone(),
+                expected_result,
+            ) {
                 matches.push(matched);
             }
         }
@@ -2702,20 +2891,20 @@ impl<'a> GateTypeContext<'a> {
             1 => DomainMemberSelection::Unique(
                 matches
                     .pop()
-                    .expect("exactly one class member match should be available"),
+                    .expect("exactly one class member match is available"),
             ),
             _ => DomainMemberSelection::Ambiguous,
         })
     }
 
-    pub(crate) fn match_class_member_call_candidate(
+    fn match_class_member_call_candidate_with_hints<'b>(
         &mut self,
         resolution: ClassMemberResolution,
-        argument_types: &[GateType],
+        argument_types: impl Clone + ExactSizeIterator<Item = Option<&'b GateType>>,
         expected_result: Option<&GateType>,
     ) -> Option<ClassMemberCallMatch> {
         if let Some(matched) =
-            self.match_class_member_call_direct(resolution, argument_types, expected_result)
+            self.match_class_member_call_direct(resolution, argument_types.clone(), expected_result)
         {
             return Some(matched);
         }
@@ -2732,11 +2921,12 @@ impl<'a> GateTypeContext<'a> {
         let (class_parameter, annotation, context) = self.class_member_signature(resolution)?;
         let mut current = annotation;
         let mut witnessed = false;
-        for _ in argument_types {
+        for actual in argument_types.clone() {
             let TypeKind::Arrow { parameter, result } = self.module.types()[current].kind else {
                 return None;
             };
-            witnessed |= self.hir_type_mentions_parameter(parameter, class_parameter);
+            witnessed |=
+                actual.is_some() && self.hir_type_mentions_parameter(parameter, class_parameter);
             current = result;
         }
         witnessed |=
@@ -2775,11 +2965,16 @@ impl<'a> GateTypeContext<'a> {
             };
             let mut substitutions = HashMap::new();
             if !argument_types
-                .iter()
+                .clone()
                 .zip(&parameters)
-                .all(|(actual, template)| self.match_gate_type_template(template, actual, &mut substitutions))
-                || expected_result
-                    .is_some_and(|actual| !self.match_gate_type_template(&result, actual, &mut substitutions))
+                .all(|(actual, template)| {
+                    actual.is_none_or(|actual| {
+                        self.match_gate_type_template(template, actual, &mut substitutions)
+                    })
+                })
+                || expected_result.is_some_and(|actual| {
+                    !self.match_gate_type_template(&result, actual, &mut substitutions)
+                })
             {
                 continue;
             }
@@ -2858,10 +3053,10 @@ impl<'a> GateTypeContext<'a> {
         false
     }
 
-    fn match_class_member_call_direct(
+    fn match_class_member_call_direct<'b>(
         &mut self,
         resolution: ClassMemberResolution,
-        argument_types: &[GateType],
+        argument_types: impl Clone + ExactSizeIterator<Item = Option<&'b GateType>>,
         expected_result: Option<&GateType>,
     ) -> Option<ClassMemberCallMatch> {
         let (class_parameter, member_annotation, member_context) =
@@ -2869,7 +3064,7 @@ impl<'a> GateTypeContext<'a> {
         let mut bindings = PolyTypeBindings::new();
         let mut current = member_annotation;
         let mut parameter_type_ids = Vec::with_capacity(argument_types.len());
-        for _ in argument_types {
+        for _ in 0..argument_types.len() {
             let TypeKind::Arrow { parameter, result } = self.module.types()[current].kind else {
                 return None;
             };
@@ -2882,7 +3077,12 @@ impl<'a> GateTypeContext<'a> {
             return None;
         }
         for callbacks in [false, true] {
-            for (annotation, actual) in parameter_type_ids.iter().zip(argument_types) {
+            for (annotation, actual) in parameter_type_ids.iter().zip(argument_types.clone()) {
+                // The caller checks unresolved arguments against the instantiated
+                // contract after the result and known values establish bindings.
+                let Some(actual) = actual else {
+                    continue;
+                };
                 if matches!(actual, GateType::Arrow { .. }) != callbacks {
                     continue;
                 }
@@ -4606,7 +4806,11 @@ impl<'a> GateTypeContext<'a> {
                     info.merge(child);
                 }
                 if consistent {
-                    if let Some(element_type) = element_type {
+                    if elements.is_empty() {
+                        info.set_actual(SourceOptionActualType::List(Box::new(
+                            SourceOptionActualType::Hole,
+                        )));
+                    } else if let Some(element_type) = element_type {
                         info.set_actual(SourceOptionActualType::List(Box::new(element_type)));
                         if info.ty.is_none()
                             && let Some(element_gate_type) = element_gate_type {
@@ -5222,7 +5426,12 @@ impl<'a> GateTypeContext<'a> {
     ) -> GateExprInfo {
         let mut info = match reference.resolution.as_ref() {
             ResolutionState::Resolved(TermResolution::Item(item_id)) => {
-                if let Some(ty) = self.match_item_name_candidate(*item_id, expected) {
+                let constructor = self
+                    .open_same_module_constructor_signature(reference)
+                    .and_then(|signature| self.specialize_gate_type_template(&signature, expected));
+                if let Some(ty) =
+                    constructor.or_else(|| self.match_item_name_candidate(*item_id, expected))
+                {
                     GateExprInfo {
                         actual: Some(SourceOptionActualType::from_gate_type(&ty)),
                         contains_signal: ty.is_signal(),
@@ -5768,6 +5977,39 @@ impl<'a> GateTypeContext<'a> {
             item: item_id,
             name: item_name,
             arguments: Vec::new(),
+        };
+        for field_ty in field_types.into_iter().rev() {
+            ty = GateType::Arrow {
+                parameter: Box::new(field_ty),
+                result: Box::new(ty),
+            };
+        }
+        Some(ty)
+    }
+
+    fn open_same_module_constructor_signature(
+        &mut self,
+        reference: &TermReference,
+    ) -> Option<GateType> {
+        let (item_id, item_name, parameters, fields) = self.same_module_constructor(reference)?;
+        let field_types = fields
+            .into_iter()
+            .map(|field| self.lower_open_annotation(field.ty))
+            .collect::<Option<Vec<_>>>()?;
+        let arguments = parameters
+            .into_iter()
+            .map(|parameter| GateType::TypeParameter {
+                parameter,
+                name: self.module.type_parameters()[parameter]
+                    .name
+                    .text()
+                    .to_owned(),
+            })
+            .collect();
+        let mut ty = GateType::OpaqueItem {
+            item: item_id,
+            name: item_name,
+            arguments,
         };
         for field_ty in field_types.into_iter().rev() {
             ty = GateType::Arrow {
@@ -6576,6 +6818,9 @@ impl<'a> GateTypeContext<'a> {
             info.merge(argument_info);
         }
         let Some(argument_types) = argument_types.into_iter().collect::<Option<Vec<_>>>() else {
+            if let Some(signature) = self.item_value_type(*item_id) {
+                return Some(self.infer_contextual_function_arguments(signature, arguments, env));
+            }
             return Some(info);
         };
         if let Some((_, result)) = self.match_function_signature(function, &argument_types, None) {
@@ -6589,8 +6834,8 @@ impl<'a> GateTypeContext<'a> {
     /// When calling an imported function like `withSelectedThreadId None`, the generic
     /// `infer_expr` path cannot determine `None`'s type without the Arrow parameter context.
     /// This function uses the import's Arrow chain to provide expected types for each argument,
-    /// falling back to the Arrow parameter type when argument inference returns `None` (which is
-    /// safe because the HIR type-checker has already validated the call).
+    /// retaining constructor holes while matching their known payloads against the
+    /// parameter contract. The checker still validates every argument recursively.
     pub(crate) fn infer_import_function_apply_expr(
         &mut self,
         reference: &TermReference,
@@ -6633,11 +6878,9 @@ impl<'a> GateTypeContext<'a> {
             };
             if expected.has_type_params() && !matches!(expected.as_ref(), GateType::Arrow { .. }) {
                 let observed = self.infer_expr(*argument, env, None);
-                if let Some(actual) = observed.actual_gate_type().or(observed.ty)
-                    && !actual.has_type_params()
-                {
+                if observed.ty.as_ref().is_none_or(|ty| !ty.has_type_params()) {
                     let mut candidate = bindings.clone();
-                    if self.match_gate_type_template(expected, &actual, &mut candidate) {
+                    if self.match_gate_expr_template(expected, &observed, &mut candidate) {
                         bindings = candidate;
                     }
                 }
@@ -6669,17 +6912,23 @@ impl<'a> GateTypeContext<'a> {
             } else {
                 self.infer_expr(*argument, env, Some(&param))
             };
-            // Use inferred type, falling back to the parameter type when unknown.
-            // This is safe because HIR type-checking has already validated the call.
-            let arg_ty = arg_info
-                .actual_gate_type()
-                .or(arg_info.ty.clone())
-                .unwrap_or_else(|| param.clone());
+            let argument_type = arg_info.ty.clone().or_else(|| arg_info.actual_gate_type());
+            let next = argument_type
+                .as_ref()
+                .and_then(|actual| self.apply_function(&current, actual));
+            let next = match next {
+                Some(next) => next,
+                None => {
+                    let mut partial_bindings = HashMap::new();
+                    if !self.match_gate_expr_template(&param, &arg_info, &mut partial_bindings) {
+                        info.merge(arg_info);
+                        return info;
+                    }
+                    fallback_result.substitute_type_parameters(&partial_bindings)
+                }
+            };
             info.merge(arg_info);
-            // Advance the Arrow chain by applying this argument
-            current = self
-                .apply_function(&current, &arg_ty)
-                .unwrap_or(fallback_result);
+            current = next;
         }
         if info.issues.is_empty() {
             info.ty = Some(current);

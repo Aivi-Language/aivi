@@ -37,6 +37,25 @@ argument retains its type throughout the body; calling another generic function 
 not change that local type. Container inputs constrain generic callbacks in expressions
 such as `items |> map identity`.
 
+An annotated result can establish the argument contract before an argument's type is
+known. The compiler then checks every argument against that same instantiated member
+signature. For example, `pure : A -> F A` requires its argument and result payload to
+share `A`:
+
+```aivi
+value countTask : Task Text Int = pure 42
+```
+
+Using a `Text` argument in this declaration produces a type mismatch. The same shared
+quantifier rules apply when an argument contains another polymorphic call or a comparison.
+A class reference or call that cannot match its declared signature produces a diagnostic.
+
+Constructor payloads can constrain a call even when another payload type remains
+unknown: `isOk (Ok 2)` has result `Bool`. Equality needs evidence for every payload
+of the sum. A comparison of two `Ok` values cannot establish the error type; give
+the input a carrier annotation such as `Result Text Int` so both `Eq Text` and
+`Eq Int` are available. No type is chosen implicitly for an unused branch.
+
 A class member may have its own constraints. They apply to that member's quantified
 parameters and are available while checking each instance implementation:
 

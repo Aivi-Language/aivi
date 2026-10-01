@@ -2043,6 +2043,41 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
+    fn emit_class_member_signature_mismatch(
+        &mut self,
+        reference: &TermReference,
+        expected: &GateType,
+    ) {
+        let candidates = self
+            .typing
+            .class_member_candidates(reference)
+            .unwrap_or_default();
+        let mut signatures = Vec::new();
+        for candidate in candidates {
+            if let Some((_, annotation, _)) = self.typing.class_member_signature(candidate)
+                && let Some(signature) = self.typing.lower_open_annotation(annotation)
+            {
+                signatures.push(signature.to_string());
+            }
+        }
+        let mut diagnostic = Diagnostic::error(format!(
+            "class member `{}` does not match this use",
+            reference.path.segments().last().text(),
+        ))
+        .with_code(code("type-mismatch"))
+        .with_primary_label(
+            reference.span(),
+            format!("`{expected}` is required by this use"),
+        );
+        if !signatures.is_empty() {
+            diagnostic = diagnostic.with_note(format!(
+                "declared class member signature: {}",
+                signatures.join("; "),
+            ));
+        }
+        self.diagnostics.push(diagnostic);
+    }
+
     fn check_class_member_name(
         &mut self,
         reference: &TermReference,
@@ -2082,10 +2117,14 @@ impl<'a> TypeChecker<'a> {
                 self.emit_ambiguous_class_member(reference.span(), reference, &labels);
                 Some(false)
             }
-            DomainMemberSelection::NoMatch => (labels.len() > 1).then(|| {
-                self.emit_ambiguous_class_member(reference.span(), reference, &labels);
-                false
-            }),
+            DomainMemberSelection::NoMatch => {
+                if labels.len() > 1 {
+                    self.emit_ambiguous_class_member(reference.span(), reference, &labels);
+                } else {
+                    self.emit_class_member_signature_mismatch(reference, expected);
+                }
+                Some(false)
+            }
         }
     }
 
@@ -2103,13 +2142,14 @@ impl<'a> TypeChecker<'a> {
             let info = self.typing.infer_expr(*argument, env, None);
             self.emit_expr_issues(&info.issues);
             self.handle_constraints(&info.constraints);
-            let argument_ty = info.ty.clone().or_else(|| info.actual_gate_type())?;
-            argument_types.push(argument_ty);
+            argument_types.push(info.ty.clone().or_else(|| info.actual_gate_type()));
         }
-        match self
-            .typing
-            .select_class_member_call(reference, &argument_types, Some(expected))?
-        {
+        let selection = self.typing.select_class_member_call_with_argument_hints(
+            reference,
+            &argument_types,
+            expected,
+        )?;
+        match selection {
             DomainMemberSelection::Unique(matched) => {
                 if let Err(reason) = self.solve_class_constraint_bindings(
                     reference.span(),
@@ -2134,7 +2174,7 @@ impl<'a> TypeChecker<'a> {
                     return Some(false);
                 }
                 for (argument, parameter) in arguments.iter().zip(matched.parameters.iter()) {
-                    if !self.check_expr(*argument, env, Some(parameter), value_stack) {
+                    if !self.check_expected_expr(*argument, env, parameter, value_stack) {
                         return Some(false);
                     }
                 }
@@ -2144,10 +2184,14 @@ impl<'a> TypeChecker<'a> {
                 self.emit_ambiguous_class_member(reference.span(), reference, &labels);
                 Some(false)
             }
-            DomainMemberSelection::NoMatch => (labels.len() > 1).then(|| {
-                self.emit_ambiguous_class_member(reference.span(), reference, &labels);
-                false
-            }),
+            DomainMemberSelection::NoMatch => {
+                if labels.len() > 1 {
+                    self.emit_ambiguous_class_member(reference.span(), reference, &labels);
+                } else {
+                    self.emit_class_member_signature_mismatch(reference, expected);
+                }
+                Some(false)
+            }
         }
     }
 
@@ -2181,7 +2225,7 @@ impl<'a> TypeChecker<'a> {
         {
             self.record_function_signature_evidence(*item_id, &parameter_types, &result_type);
             for (argument, parameter) in arguments.iter().zip(parameter_types.iter()) {
-                if !self.check_expr(*argument, env, Some(parameter), value_stack) {
+                if !self.check_expected_expr(*argument, env, parameter, value_stack) {
                     return Some(false);
                 }
             }
@@ -2210,7 +2254,7 @@ impl<'a> TypeChecker<'a> {
             }
         }
         for (argument, parameter) in arguments.iter().zip(matched_parameters.iter()) {
-            if !self.check_expr(*argument, env, Some(parameter), value_stack) {
+            if !self.check_expected_expr(*argument, env, parameter, value_stack) {
                 return Some(false);
             }
         }
@@ -2259,14 +2303,15 @@ impl<'a> TypeChecker<'a> {
                     // is instantiated. Failed probes must not leave partial bindings.
                     let actuals = arguments
                         .iter()
-                        .map(|argument| self.typing.infer_expr(*argument, env, None).ty)
+                        .map(|argument| self.typing.infer_expr(*argument, env, None))
                         .collect::<Vec<_>>();
                     for callbacks in [false, true] {
                         for (actual, param) in actuals.iter().zip(&parameter_types) {
-                            let Some(actual) = actual else {
-                                continue;
-                            };
-                            if matches!(actual, GateType::Arrow { .. }) != callbacks
+                            if actual
+                                .ty
+                                .as_ref()
+                                .is_some_and(|ty| matches!(ty, GateType::Arrow { .. }))
+                                != callbacks
                                 || !param.has_type_params()
                             {
                                 continue;
@@ -2274,7 +2319,7 @@ impl<'a> TypeChecker<'a> {
                             let mut candidate = bindings.clone();
                             if self
                                 .typing
-                                .match_gate_type_template(param, actual, &mut candidate)
+                                .match_gate_expr_template(param, actual, &mut candidate)
                             {
                                 bindings = candidate;
                             }
@@ -2337,7 +2382,7 @@ impl<'a> TypeChecker<'a> {
         }
 
         for (argument, parameter) in arguments.iter().zip(parameter_types.iter()) {
-            if !self.check_expr(*argument, env, Some(parameter), value_stack) {
+            if !self.check_expected_expr(*argument, env, parameter, value_stack) {
                 return Some(false);
             }
         }

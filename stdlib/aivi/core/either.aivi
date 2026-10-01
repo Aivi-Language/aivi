@@ -121,6 +121,12 @@ value eitherItemsForTest : List (Either Text Int) = [
     fromResult (Err "b")
 ]
 
+// Comparisons require Eq for both payloads, including the unused branch.
+value leftEitherForTest : Either Text Int = Left "error"
+value rightEitherForTest : Either Text Int = Right 2
+value oneEitherForTest : Either Text Int = Right 1
+value errorResultForTest : Result Text Int = Err "error"
+
 @test
 value either_isLeft : Task Text Bool = pure (isLeft (Left "error"))
 
@@ -134,10 +140,10 @@ value either_fromLeft : Task Text Bool = pure (fromLeft (Left "error") == Some "
 value either_fromRight : Task Text Bool = pure (fromRight (Right 1) == Some 1)
 
 @test
-value either_mapLeft : Task Text Bool = pure (mapLeft markEitherTest (Left "error") == Left "error!")
+value either_mapLeft : Task Text Bool = pure (mapLeft markEitherTest leftEitherForTest == Left "error!")
 
 @test
-value either_mapRight : Task Text Bool = pure (mapRight doubleEitherTest (Right 2) == Right 4)
+value either_mapRight : Task Text Bool = pure (mapRight doubleEitherTest rightEitherForTest == Right 4)
 
 @test
 value either_mapBoth : Task Text Bool = pure (mapBoth markEitherTest doubleEitherTest (Right 2) == Right 4)
@@ -146,16 +152,16 @@ value either_mapBoth : Task Text Bool = pure (mapBoth markEitherTest doubleEithe
 value either_fold : Task Text Bool = pure (fold leftSizeEitherTest doubleEitherTest (Left "abc") == 3)
 
 @test
-value either_swap : Task Text Bool = pure (swap (Left "error") == Right "error")
+value either_swap : Task Text Bool = pure (swap leftEitherForTest == Right "error")
 
 @test
 value either_toOption : Task Text Bool = pure (toOption (Right 1) == Some 1)
 
 @test
-value either_toResult : Task Text Bool = pure (toResult (Right 1) == Ok 1)
+value either_toResult : Task Text Bool = pure (toResult oneEitherForTest == Ok 1)
 
 @test
-value either_fromResult : Task Text Bool = pure (fromResult (Err "error") == Left "error")
+value either_fromResult : Task Text Bool = pure (fromResult errorResultForTest == Left "error")
 
 @test
 value either_partitionEithers : Task Text Bool = pure (partitionEithers eitherItemsForTest == (["a", "b"], [1]))

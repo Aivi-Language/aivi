@@ -73,6 +73,11 @@ func optionIsTwoForTest = opt => opt
  ||> Some n -> n == 2
  ||> None   -> False
 
+// Deriving Eq requires the error and success payload types to be known.
+value invalidValidationForTest : Validation Text Int = Invalid "bad"
+value validValidationForTest : Validation Text Int = Valid 2
+value okResultForTest : Result Text Int = Ok 2
+
 @test
 value validation_isValid : Task Text Bool = pure (isValid (Valid 2))
 
@@ -83,19 +88,19 @@ value validation_isInvalid : Task Text Bool = pure (isInvalid (Invalid "bad"))
 value validation_getOrElse : Task Text Bool = pure (getOrElse 0 (Valid 2) == 2)
 
 @test
-value validation_mapErr : Task Text Bool = pure (mapErr prefixForTest (Invalid "bad") == Invalid "error: bad")
+value validation_mapErr : Task Text Bool = pure (mapErr prefixForTest invalidValidationForTest == Invalid "error: bad")
 
 @test
-value validation_toResult : Task Text Bool = pure (toResult (Valid 2) == Ok 2)
+value validation_toResult : Task Text Bool = pure (toResult validValidationForTest == Ok 2)
 
 @test
-value validation_fromResult : Task Text Bool = pure (fromResult (Ok 2) == Valid 2)
+value validation_fromResult : Task Text Bool = pure (fromResult okResultForTest == Valid 2)
 
 @test
 value validation_toOption : Task Text Bool = pure (optionIsTwoForTest (toOption (Valid 2)))
 
 @test
-value validation_map : Task Text Bool = pure (map incrementForTest (Valid 2) == Valid 3)
+value validation_map : Task Text Bool = pure (map incrementForTest validValidationForTest == Valid 3)
 
 @test
 value validation_andThen : Task Text Bool = pure (andThen incrementValidForTest (Valid 2) == Valid 3)

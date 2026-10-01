@@ -41,6 +41,7 @@ use aivi.nonEmpty (
     head as nelHead
     length as nelLength
     init as nelInit
+    toList as nelToList
 )
 ```
 
@@ -163,13 +164,13 @@ domain Snake over NonEmptyList Cell = {
     head = snake => nelHead snake
 
     type contains : Snake -> Cell -> Bool
-    contains = snake cell => any (sameCell cell) (toList snake)
+    contains = snake cell => any (sameCell cell) (nelToList snake)
 
     type length : Snake -> Int
     length = snake => nelLength snake
 
     type cells : Snake -> List Cell
-    cells = snake => toList snake
+    cells = snake => nelToList snake
 
     type grow : Snake -> Cell -> Snake
     grow = snake cell => cons cell snake

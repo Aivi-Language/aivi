@@ -2,6 +2,7 @@ use aivi.nonEmpty (
     head as nelHead
     length as nelLength
     init as nelInit
+    toList as nelToList
 )
 
 use aivi.env (EnvSource)
@@ -97,13 +98,13 @@ domain Snake over NonEmptyList Cell = {
     head = snake => nelHead snake
 
     type contains : Snake -> Cell -> Bool
-    contains = snake cell => any (sameCell cell) (toList snake)
+    contains = snake cell => any (sameCell cell) (nelToList snake)
 
     type length : Snake -> Int
     length = snake => nelLength snake
 
     type cells : Snake -> List Cell
-    cells = snake => toList snake
+    cells = snake => nelToList snake
 
     type grow : Snake -> Cell -> Snake
     grow = snake cell => cons cell snake
@@ -308,7 +309,7 @@ func windowCellAsset = assetRoot win => win
 // Tail entry as a singleton list (empty when snake has only one cell).
 type Text -> Option CPair -> List TCell
 func tailCellEntries = assetRoot tailPair => tailPair
- ||> Some (prev, tail) -> cons (tail, tailAssetFor assetRoot (directionFromTo prev tail)) []
+ ||> Some (prev, tail) -> [(tail, tailAssetFor assetRoot (directionFromTo prev tail))]
  ||> None              -> []
 
 // Build [(cell, asset)] for all snake cells from precomputed pairs — called ONCE per tick.
@@ -318,7 +319,7 @@ func snakeCellAssetList = assetRoot dir snake pairs =>
 
 type Text -> Snake -> Direction -> List QPair -> Option CPair -> List TCell
 func snakeCellAssetListFull = assetRoot snake headDir wins tailPair =>
-    append (cons (snake.head, headAssetFor assetRoot headDir) (map (windowCellAsset assetRoot) wins)) (tailCellEntries assetRoot tailPair)
+    append (append [(snake.head, headAssetFor assetRoot headDir)] (map (windowCellAsset assetRoot) wins)) (tailCellEntries assetRoot tailPair)
 
 type Cell -> TCell -> Bool
 func cellEntryMatches = target pair => pair
