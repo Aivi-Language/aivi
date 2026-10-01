@@ -112,6 +112,79 @@ value genericMethodLocal : Task Text Bool = pure (unbox (matchAll (Tag "yes") (B
 }
 
 #[test]
+fn authored_standard_spellings_execute_imported_generic_dictionaries() {
+    let dir = TempDir::new("authored-standard-dictionaries");
+    for (module, class, proof) in [
+        ("first", "Eq", "True"),
+        ("second", "Eq", "False"),
+        ("ordered", "Ord", "True"),
+        ("setoid", "Setoid", "True"),
+    ] {
+        dir.write(
+            &format!("{module}.aivi"),
+            &format!(
+                r#"
+class {class} A = {{
+    proof : A -> A -> Bool
+    label : A -> Text
+}}
+instance {class} Int = {{
+    proof = left right => {proof}
+    label = value => "{module}"
+}}
+type {class} A => A -> A -> Bool
+func accepts = left right => proof left right
+type {class} A => A -> Text
+func describe = value => label value
+export {class}
+export accepts
+export describe
+"#
+            ),
+        );
+    }
+    dir.write(
+        "bridge.aivi",
+        "use first (Eq as Forwarded)\nexport Forwarded\n",
+    );
+    let path = dir.write(
+        "main.aivi",
+        r#"
+use bridge (Forwarded as First)
+use first (accepts as firstAccepts, describe as firstDescribe)
+use second (Eq as Second, accepts as secondAccepts)
+use ordered (Ord as Ordered, accepts as orderedAccepts)
+use setoid (Setoid as Relation, accepts as relationAccepts)
+type (First A, Second A) => A -> A -> Bool
+func differ = left right => firstAccepts left right != secondAccepts left right
+@test
+value first : Task Text Bool = pure (firstAccepts 1 2)
+@test
+value second : Task Text Bool = pure (secondAccepts 1 2 == False)
+@test
+value independent : Task Text Bool = pure (differ 1 2)
+@test
+value extraMember : Task Text Bool = pure (firstDescribe 1 == "first")
+@test
+value orderingName : Task Text Bool = pure (orderedAccepts 1 2)
+@test
+value relationName : Task Text Bool = pure (relationAccepts 1 2)
+"#,
+    );
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("6 passed; 0 failed; 6 total"), "{stdout}");
+    }
+}
+
+#[test]
 fn imported_classes_preserve_foreign_carriers_in_method_signatures() {
     let dir = TempDir::new("class-foreign-carriers");
     dir.write(

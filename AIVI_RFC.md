@@ -831,10 +831,12 @@ member-local requirements, then visible arguments. Import metadata preserves con
 and shared quantifier indices across the visible signature and this prefix. Dictionary references
 retain their polymorphic parameter contract; each application carries its instantiated result type.
 The same evidence construction applies to direct and partial calls, pipes, equality, ordering, and
-applicative clusters. Generic constrained functions can receive authored member dictionaries with
-method-local requirements. Builtin traversal dictionaries whose result applicative is still abstract
-remain outside the executable slice; direct builtin traversal with a known result applicative is
-unchanged. Native support remains subject to the pipeline matrix below.
+applicative clusters. Generic constrained functions can receive authored and builtin member
+dictionaries with method-local requirements. Builtin traversal consumes explicit `Applicative G`
+operations (`pure`, inherited `apply`, and `map`) before its mapper and source arguments, so the
+result constructor can remain abstract. Traversal into `Task` constructs a deferred plan. Exact
+matching builtin dictionaries may be partially evaluated into eager collectors. Native support
+remains subject to the pipeline matrix below.
 
 
 ### 7.2 Core instances
@@ -843,7 +845,7 @@ unchanged. Native support remains subject to the pipeline matrix below.
 - `Signal` remains builtin `Functor`, `Apply`, and `Applicative` only; it is intentionally not `Chain` / `Monad`.
 - `Validation E` remains builtin `Functor`, `Bifunctor`, `Apply`, `Applicative`, `Foldable`, and `Traversable`, but not `Chain` / `Monad`.
 - `Task E` has builtin executable `Functor`, `Apply`, `Applicative`, `Chain`, and `Monad` support.
-- `Traversable` support and traverse-result applicative support are distinct registry checks: builtin `traverse` supports `List`, `Option`, `Result`, and `Validation` as traversables, while traverse results may use `List`, `Option`, `Result`, `Validation`, or `Signal` applicatives, but not `Task`.
+- Builtin `traverse` supports `List`, `Option`, `Result`, and `Validation` as traversables. Its result uses explicit `Applicative` evidence, including `Task` and authored instances; the canonical executable-support registry defines the builtin result carriers.
 - `Eq` is compiler-provided for the structural cases in §7.3
 - current `Default` evidence is narrower than general imported instance resolution: builtin `Option` defaulting comes from `use aivi.defaults (Option)`, `Text` / `Int` / `Bool` omission can use `use aivi.defaults (defaultText, defaultInt, defaultBool)`, and other cases are still limited to same-module `Default` instances
 

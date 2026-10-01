@@ -178,6 +178,10 @@ and re-exports as well; unrelated carriers with the same name remain distinct. C
 instances belong to the standard class
 declarations; declaring another class named `Functor` does not provide instances for it.
 
+Authored dictionaries retain every declared member, including classes named `Eq`, `Ord` or
+`Setoid`. Class identity determines dictionary layout: an unrelated authored class does not inherit
+the standard class’s filtered executable dictionary layout merely by sharing its name.
+
 The compiler bounds alias normalization and instance unification with explicit complexity
 diagnostics. It does not select an instance when coherence cannot be established.
 

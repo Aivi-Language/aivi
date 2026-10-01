@@ -1139,6 +1139,96 @@ value piped : Bool = ([2, 3] |> traverse loggedIncrement) == Logged "firstsecond
 }
 
 #[test]
+fn authored_standard_class_spellings_keep_every_dictionary_member() {
+    for class in ["Eq", "Ord", "Setoid"] {
+        let source = format!(
+            r#"
+class {class} A = {{
+    proof : A -> A -> Bool
+    label : A -> Text
+}}
+instance {class} Int = {{
+    proof = left right => True
+    label = value => "authored"
+}}
+type {class} A => A -> A -> Bool
+func accepts = left right => proof left right
+type {class} A => A -> Text
+func describe = value => label value
+value direct : Bool = accepts 1 2
+value description : Text = describe 1
+value partial : Int -> Bool = accepts 1
+value partiallyApplied : Bool = partial 2
+value piped : Bool = 2 |> accepts 1
+"#
+        );
+        let backend = lower_text("authored-standard-spelling.aivi", &source);
+        let mut interpreter = KernelEvaluator::new(&backend);
+        let executable = aivi_backend::BackendExecutableProgram::interpreted(&backend);
+        let mut engine = executable.create_engine();
+        for (name, expected) in [
+            ("direct", RuntimeValue::Bool(true)),
+            ("description", RuntimeValue::Text("authored".into())),
+            ("partiallyApplied", RuntimeValue::Bool(true)),
+            ("piped", RuntimeValue::Bool(true)),
+        ] {
+            let item = find_item(&backend, name);
+            assert_eq!(
+                interpreter.evaluate_item(item, &BTreeMap::new()).unwrap(),
+                expected,
+                "{class}.{name}"
+            );
+            assert_eq!(
+                engine.evaluate_item(item, &BTreeMap::new()).unwrap(),
+                expected,
+                "{class}.{name}"
+            );
+        }
+    }
+}
+
+#[test]
+fn authored_eq_operator_shadowing_keeps_its_generic_evidence() {
+    let backend = lower_text(
+        "authored-eq-operator.aivi",
+        r#"
+class Eq A = {
+    (==) : A -> A -> Bool
+    witness : A -> Bool
+}
+type Tag = Tag Int
+instance Eq Tag = {
+    (==) = left right => True
+    witness = value => True
+}
+type Eq A => A -> A -> Bool
+func equal = left right => left == right
+type Eq A => A -> A -> Bool
+func unequal = left right => left != right
+type Eq A => A -> Bool
+func witnessed = value => witness value
+value equalTags : Bool = equal (Tag 1) (Tag 2)
+value unequalTags : Bool = unequal (Tag 1) (Tag 2)
+value witnessedTag : Bool = witnessed (Tag 1)
+"#,
+    );
+    let mut interpreter = KernelEvaluator::new(&backend);
+    for (name, expected) in [
+        ("equalTags", true),
+        ("unequalTags", false),
+        ("witnessedTag", true),
+    ] {
+        assert_eq!(
+            interpreter
+                .evaluate_item(find_item(&backend, name), &BTreeMap::new())
+                .unwrap(),
+            RuntimeValue::Bool(expected),
+            "{name}"
+        );
+    }
+}
+
+#[test]
 fn task_traversal_builds_and_abandons_deep_plans_without_recursion() {
     let backend = lower_text(
         "task-traversal-depth.aivi",

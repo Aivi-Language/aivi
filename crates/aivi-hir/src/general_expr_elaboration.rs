@@ -1060,13 +1060,19 @@ fn collect_owner_class_requirements(
             let ty = dictionary_callable_type(module, typing, member, &subject)?;
             let binding_id = BindingId::from_raw(*next_binding_raw);
             *next_binding_raw = (*next_binding_raw).saturating_add(1);
-            let prefix = if is_ordering_member(module, member) {
-                "__aivi_ord_evidence"
-            } else if matches!(&module.items()[member.class], Item::Class(class) if matches!(class.name.text(), "Eq" | "Setoid"))
-            {
-                "__aivi_eq_evidence"
-            } else {
-                "__aivi_class_evidence"
+            let prefix = match &module.items()[member.class] {
+                Item::Class(class) => match &class.identity {
+                    crate::ClassIdentity::Standard(name) if name.as_ref() == "Ord" => {
+                        "__aivi_ord_evidence"
+                    }
+                    crate::ClassIdentity::Standard(name)
+                        if matches!(name.as_ref(), "Eq" | "Setoid") =>
+                    {
+                        "__aivi_eq_evidence"
+                    }
+                    _ => "__aivi_class_evidence",
+                },
+                _ => "__aivi_class_evidence",
             };
             requirements.push(ClassEvidenceRequirement {
                 binding: binding_id,
@@ -1132,10 +1138,16 @@ fn supported_evidence_members(
     let Item::Class(class_item) = &module.items()[class_item_id] else {
         return Vec::new();
     };
-    let members: &[(&str, u8)] = match class_item.name.text() {
-        "Eq" => &[("==", 0)],
-        "Setoid" => &[("equals", 1)],
-        "Ord" => &[("compare", 0)],
+    let standard_name = match &class_item.identity {
+        crate::ClassIdentity::Standard(name) => Some(name.as_ref()),
+        crate::ClassIdentity::Source { .. } => None,
+    };
+    // Only compiler-owned identities use the canonical operator dictionary ABI.
+    // Authored declarations carry all members, regardless of their spelling.
+    let members: &[(&str, u8)] = match standard_name {
+        Some("Eq") => &[("==", 0)],
+        Some("Setoid") => &[("equals", 1)],
+        Some("Ord") => &[("compare", 0)],
         _ => {
             return class_item
                 .members
@@ -6108,6 +6120,54 @@ mod tests {
         typecheck::resolve_class_member_dispatch,
         validate::{GateExprEnv, GateType, GateTypeContext, gate_env_for_function},
     };
+
+    #[test]
+    fn authored_class_names_do_not_select_the_standard_dictionary_layout() {
+        for (name, standard_member) in [("Eq", "=="), ("Ord", "compare"), ("Setoid", "equals")] {
+            let source = format!(
+                "class {name} A = {{\n    proof : A -> A -> Bool\n    label : A -> Text\n}}\ntype {name} A => A -> Text\nfunc describe = value => label value\n"
+            );
+            let lowered = lower_text("authored-dictionary-layout.aivi", &source);
+            assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+            let module = lowered.module();
+            for (id, item) in module.items().iter() {
+                let Item::Class(class) = item else { continue };
+                if class.name.text() != name {
+                    continue;
+                }
+                let members = super::supported_evidence_members(module, id)
+                    .into_iter()
+                    .map(|(member, _)| class.members[member.member_index].name.text())
+                    .collect::<Vec<_>>();
+                match &class.identity {
+                    crate::ClassIdentity::Standard(_) => assert_eq!(members, [standard_member]),
+                    crate::ClassIdentity::Source { .. } => assert_eq!(members, ["proof", "label"]),
+                }
+            }
+            let function = module
+                .items()
+                .iter()
+                .find_map(|(_, item)| match item {
+                    Item::Function(function) if function.name.text() == "describe" => {
+                        Some(function)
+                    }
+                    _ => None,
+                })
+                .unwrap();
+            let evidence = super::export_function_evidence(module, function).unwrap();
+            assert_eq!(
+                evidence
+                    .iter()
+                    .map(|member| member.member_name.as_ref())
+                    .collect::<Vec<_>>(),
+                ["proof", "label"]
+            );
+            assert!(evidence.iter().all(|member| matches!(
+                member.class_identity,
+                crate::ClassIdentity::Source { .. }
+            )));
+        }
+    }
 
     #[test]
     fn missing_function_evidence_is_blocked_instead_of_omitted() {
