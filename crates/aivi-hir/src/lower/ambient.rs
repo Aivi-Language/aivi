@@ -572,7 +572,7 @@ func __aivi_listAt_match = matches idx item => matches
     T|> (idx + 1, Some item)
     F|> (idx + 1, None)
 
-type Int -> Int -> (Option A) -> A -> (Int, Option A)
+type Eq Int => Int -> Int -> (Option A) -> A -> (Int, Option A)
 func __aivi_listAt_check = target idx found item => found
     ||> Some already -> (idx + 1, Some already)
     ||> None -> __aivi_listAt_match (idx == target) idx item
@@ -595,7 +595,7 @@ func __aivi_listReplace_pick = matches newVal idx result item => matches
     T|> (idx + 1, append result [newVal])
     F|> (idx + 1, append result [item])
 
-type Int -> A -> Int -> (List A) -> A -> (Int, List A)
+type Eq Int => Int -> A -> Int -> (List A) -> A -> (Int, List A)
 func __aivi_listReplace_check = target newVal idx result item =>
     __aivi_listReplace_pick (idx == target) newVal idx result item
 
@@ -702,10 +702,10 @@ func sort = items =>
     items
       |> reduce __aivi_list_sortOrdStep []
 
-type Text -> Bool
+type Eq Text => Text -> Bool
 func __aivi_text_isEmpty = text => text == ""
 
-type Text -> Bool
+type Eq Text => Text -> Bool
 func __aivi_text_nonEmpty = text => text == ""
     T|> False
     F|> True

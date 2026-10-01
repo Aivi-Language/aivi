@@ -10,7 +10,12 @@ mod decode_elaboration;
 mod decode_generation;
 mod domain_operator_elaboration;
 mod elaboration_session;
+mod equality_derivation;
 pub use elaboration_session::ElaborationSession;
+pub use equality_derivation::{
+    EqualityEvidenceId, EqualityNodeId, EqualityRecordField, EqualityShape, EqualityShapeError,
+    EqualityShapeNode, EqualitySumVariant,
+};
 pub mod exports;
 mod fanout_elaboration;
 mod function_inference;

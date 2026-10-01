@@ -25,6 +25,12 @@ struct RepackShape<'a, Field> {
     target_fields: &'a [Field],
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum LayoutCompatibility {
+    Repack,
+    CallableRepresentation,
+}
+
 #[derive(Clone, Copy)]
 struct InlinePipeStageLocation {
     kernel: KernelId,
@@ -61,15 +67,45 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         }
     }
 
-    /// Full-program object emission still skips ambient prelude kernels
-    /// by default, but lazy JIT may compile them on demand when their
-    /// lowered expressions stay inside the supported backend slice.
+    /// Object emission starts with non-ambient kernels. Native call plans pull
+    /// in required prelude bodies for both object emission and lazy JIT.
     fn is_ambient_kernel(&self, kernel: &Kernel) -> bool {
         let name = self.program.items()[kernel.origin.item].name.as_ref();
         name.starts_with("__aivi_") || name.starts_with("builtin-evidence#")
     }
 
     fn prevalidate_kernels<I>(&self, kernel_ids: I) -> Result<(), CodegenErrors>
+    where
+        I: IntoIterator<Item = KernelId>,
+    {
+        self.validate_native_kernels(kernel_ids, false, &mut BTreeSet::new())
+    }
+
+    /// Follow the functions actually referenced by native call plans. Inlined
+    /// dictionary wrappers do not introduce a dependency on their generic body.
+    fn native_dependency_kernel_ids<I>(&self, roots: I) -> Result<Vec<KernelId>, CodegenErrors>
+    where
+        I: IntoIterator<Item = KernelId>,
+    {
+        let mut kernels = BTreeSet::new();
+        let mut pending = roots.into_iter().collect::<Vec<_>>();
+        while let Some(kernel) = pending.pop() {
+            if !kernels.insert(kernel) {
+                continue;
+            }
+            let mut dependencies = BTreeSet::new();
+            self.validate_native_kernels([kernel], true, &mut dependencies)?;
+            pending.extend(dependencies);
+        }
+        Ok(kernels.into_iter().collect())
+    }
+
+    fn validate_native_kernels<I>(
+        &self,
+        kernel_ids: I,
+        include_ambient: bool,
+        dependencies: &mut BTreeSet<KernelId>,
+    ) -> Result<(), CodegenErrors>
     where
         I: IntoIterator<Item = KernelId>,
     {
@@ -80,7 +116,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 errors.push(CodegenError::MissingKernel { kernel: kernel_id });
                 continue;
             };
-            if self.is_ambient_kernel(kernel) {
+            if !include_ambient && self.is_ambient_kernel(kernel) {
                 continue;
             }
             match kernel.convention.kind {
@@ -485,9 +521,19 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             }
                         }
                     }
-                    KernelExprKind::Item(item) => {
-                        if let Err(error) = self.plan_item_reference(kernel_id, expr_id, *item) {
-                            errors.push(error);
+                    KernelExprKind::Item(item) | KernelExprKind::ExecutableEvidence(item) => {
+                        match self.plan_item_reference(kernel_id, expr_id, *item) {
+                            Ok(
+                                ItemReferencePlan::DirectValue { body, .. }
+                                | ItemReferencePlan::CallableDescriptor { body, .. },
+                            ) => {
+                                dependencies.insert(body);
+                            }
+                            Ok(
+                                ItemReferencePlan::SignalSlot { .. }
+                                | ItemReferencePlan::ImportedSlot { .. },
+                            ) => {}
+                            Err(error) => errors.push(error),
                         }
                     }
                     KernelExprKind::IntrinsicValue(intrinsic) => {
@@ -501,8 +547,38 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         }
                     }
                     KernelExprKind::Apply { callee, arguments } => {
-                        match self.resolve_direct_apply_plan(kernel_id, expr_id, *callee, arguments)
-                        {
+                        let plan =
+                            self.resolve_direct_apply_plan(kernel_id, expr_id, *callee, arguments);
+                        if let Ok(plan) = &plan {
+                            let body = match plan {
+                                DirectApplyPlan::Item { body, .. }
+                                | DirectApplyPlan::LocalFunctionAddress { body } => Some(*body),
+                                DirectApplyPlan::Builtin(BuiltinCallPlan::ListMap(plan)) => {
+                                    Some(plan.step_body)
+                                }
+                                DirectApplyPlan::Builtin(
+                                    BuiltinCallPlan::ListFilter(plan)
+                                    | BuiltinCallPlan::ListQuantified(plan, _),
+                                ) => Some(plan.step_body),
+                                DirectApplyPlan::Builtin(BuiltinCallPlan::ListFind(plan)) => {
+                                    Some(plan.predicate.step_body)
+                                }
+                                DirectApplyPlan::Builtin(BuiltinCallPlan::ListFlatMap(plan)) => {
+                                    Some(plan.step_body)
+                                }
+                                DirectApplyPlan::Builtin(BuiltinCallPlan::ListReduce(plan)) => {
+                                    Some(plan.step_body)
+                                }
+                                DirectApplyPlan::Builtin(BuiltinCallPlan::SignalApply(plan)) => {
+                                    Some(plan.body)
+                                }
+                                _ => None,
+                            };
+                            if let Some(body) = body {
+                                dependencies.insert(body);
+                            }
+                        }
+                        match plan {
                             Ok(DirectApplyPlan::Builtin(BuiltinCallPlan::ListMap(plan))) => {
                                 for argument in plan
                                     .step_prefix_exprs
@@ -572,10 +648,14 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     work.push(argument);
                                 }
                             }
+                            Ok(DirectApplyPlan::CallableValue { .. }) => {
+                                work.push(*callee);
+                                work.extend(arguments.iter().copied());
+                            }
                             Ok(_) => {
-                                for argument in arguments {
-                                    work.push(*argument);
-                                }
+                                work.extend(
+                                    self.flatten_direct_apply_arguments(kernel, *callee, arguments),
+                                );
                             }
                             Err(error) => {
                                 for argument in arguments {
@@ -620,7 +700,6 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         }
                     }
                     KernelExprKind::DomainMember(_)
-                    | KernelExprKind::ExecutableEvidence(_)
                     | KernelExprKind::BuiltinClassMember(_)
                     | KernelExprKind::Builtin(_) => {
                         errors.push(self.unsupported_expression(
@@ -1050,7 +1129,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         continue;
                     }
                     match &expr.kind {
-                        KernelExprKind::Item(item) => {
+                        KernelExprKind::Item(item) | KernelExprKind::ExecutableEvidence(item) => {
                             match self.plan_item_reference(kernel_id, expr_id, *item)? {
                                 ItemReferencePlan::DirectValue { body, result } => {
                                     let value =
@@ -1222,32 +1301,33 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 "Text literal",
                             )?;
                             // Try static first
-                        if let Ok(Some(rendered)) =
-                            self.render_static_text_literal(kernel_id, kernel, expr_id, text)
-                        {
-                            values.push(self.materialize_text_constant(
-                                kernel_id,
+                            if let Ok(Some(rendered)) =
+                                self.render_static_text_literal(kernel_id, kernel, expr_id, text)
+                            {
+                                values.push(self.materialize_text_constant(
+                                    kernel_id,
                                     rendered.as_ref(),
                                     builder,
                                 )?);
-                        } else {
-                            let mut static_interpolations = Vec::new();
-                            for segment in &text.segments {
-                                let crate::TextSegment::Interpolation {
-                                    expr: interp_expr, ..
-                                } = segment
-                                else {
-                                    continue;
-                                };
-                                if let Some(value) =
-                                    self.evaluate_static_value(kernel_id, kernel, *interp_expr)?
-                                {
-                                    static_interpolations.push(Some(value.to_string().into_boxed_str()));
-                                    continue;
-                                }
-                                let layout = kernel.exprs()[*interp_expr].layout;
-                                if self.runtime_text_interpolation_support(layout).is_none() {
-                                    return Err(self.unsupported_expression(
+                            } else {
+                                let mut static_interpolations = Vec::new();
+                                for segment in &text.segments {
+                                    let crate::TextSegment::Interpolation {
+                                        expr: interp_expr, ..
+                                    } = segment
+                                    else {
+                                        continue;
+                                    };
+                                    if let Some(value) =
+                                        self.evaluate_static_value(kernel_id, kernel, *interp_expr)?
+                                    {
+                                        static_interpolations
+                                            .push(Some(value.to_string().into_boxed_str()));
+                                        continue;
+                                    }
+                                    let layout = kernel.exprs()[*interp_expr].layout;
+                                    if self.runtime_text_interpolation_support(layout).is_none() {
+                                        return Err(self.unsupported_expression(
                                         kernel_id,
                                         *interp_expr,
                                         &format!(
@@ -2055,7 +2135,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     let one = builder.ins().iconst(types::I8, 1);
                                     builder.ins().bxor(equal, one)
                                 }
-                                NativeEqualityShape::Text
+                                NativeEqualityShape::Evidence { .. }
+                                | NativeEqualityShape::DerivedScalarOption { .. }
+                                | NativeEqualityShape::Text
                                 | NativeEqualityShape::Bytes
                                 | NativeEqualityShape::TaggedNullarySum
                                 | NativeEqualityShape::TaggedPayloadSum(_)
@@ -2564,7 +2646,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     let counter = builder.block_params(loop_header)[0];
                     let offset = builder.ins().imul_imm_s(counter, result_stride as i64);
                     let dest = builder.ins().iadd(result_array_ptr, offset);
-                    builder.ins().store(MemFlagsData::new(), map_result, dest, 0);
+                    builder
+                        .ins()
+                        .store(MemFlagsData::new(), map_result, dest, 0);
 
                     // Increment counter and jump back to loop header
                     let next_counter = builder.ins().iadd_imm_s(counter, 1);
@@ -3805,7 +3889,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         match &kernel.exprs()[expr_id].kind {
             KernelExprKind::Apply { callee, arguments } => {
                 let callee_intrinsic = match &kernel.exprs()[*callee].kind {
-                    KernelExprKind::BuiltinClassMember(intrinsic) => Some(*intrinsic),
+                    KernelExprKind::BuiltinClassMember(intrinsic) => Some(intrinsic.clone()),
                     KernelExprKind::Item(item) | KernelExprKind::ExecutableEvidence(item) => self
                         .program
                         .items()
@@ -4337,7 +4421,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     kernel_id,
                     expr_id,
                     callee,
-                    *intrinsic,
+                    intrinsic.clone(),
                     arguments,
                 )
                 .map(DirectApplyPlan::Builtin),
@@ -4593,7 +4677,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 };
                 let kernel = &self.program.kernels()[kernel_id];
                 let value_layout = kernel.exprs()[*value].layout;
-                let LayoutKind::Signal { element } = &self.program.layouts()[result_layout].kind else {
+                let LayoutKind::Signal { element } = &self.program.layouts()[result_layout].kind
+                else {
                     return Err(self.unsupported_expression(
                         kernel_id,
                         expr_id,
@@ -4643,7 +4728,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     &format!("signal apply argument for `{}`", resolved.item_name),
                 )?;
                 resolved.argument_exprs.push(*values);
-                resolved.argument_layouts.push((found_layout, expected_layout));
+                resolved
+                    .argument_layouts
+                    .push((found_layout, expected_layout));
                 resolved.remaining_parameter_layouts.remove(0);
                 if !resolved.remaining_parameter_layouts.is_empty() {
                     return Err(self.unsupported_expression(
@@ -4701,6 +4788,57 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     greater_tag,
                 })
             }
+            crate::BuiltinClassMemberIntrinsic::DerivedStructuralEq(ref shape) => {
+                self.require_saturated_callable_call(
+                    kernel_id,
+                    expr_id,
+                    callee,
+                    arguments,
+                    "derived equality",
+                )?;
+                shape.validate().map_err(|error| {
+                    self.unsupported_expression(kernel_id, expr_id, &error.to_string())
+                })?;
+                let count = shape.evidence_count();
+                if arguments.len() != count + 2 {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "derived equality arity differs",
+                    ));
+                }
+                let kernel = &self.program.kernels()[kernel_id];
+                let layout = kernel.exprs()[arguments[count]].layout;
+                self.require_layout_match(
+                    kernel_id,
+                    expr_id,
+                    layout,
+                    kernel.exprs()[arguments[count + 1]].layout,
+                    "derived equality operands",
+                )?;
+                self.require_bool_expression(
+                    kernel_id,
+                    expr_id,
+                    kernel.exprs()[expr_id].layout,
+                    "derived equality result",
+                )?;
+                let evidence = arguments[..count]
+                    .iter()
+                    .map(|id| kernel.exprs()[*id].layout)
+                    .collect::<Vec<_>>();
+                let native = self.resolve_derived_native_equality(
+                    (kernel_id, expr_id),
+                    shape,
+                    shape.root(),
+                    layout,
+                    &evidence,
+                    &mut HashSet::new(),
+                )?;
+                Ok(BuiltinCallPlan::DerivedStructuralEq {
+                    shape: native,
+                    evidence_count: count,
+                })
+            }
             crate::BuiltinClassMemberIntrinsic::StructuralEq => {
                 let detail = format!("builtin class member `{intrinsic:?}`");
                 let (_parameters, _result_layout) = self.require_saturated_callable_call(
@@ -4712,8 +4850,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     );
                 };
                 let kernel = &self.program.kernels()[kernel_id];
-                let shape =
-                    self.require_equatable_expression_pair(kernel_id, kernel, expr_id, *left, *right)?;
+                let shape = self
+                    .require_equatable_expression_pair(kernel_id, kernel, expr_id, *left, *right)?;
                 Ok(BuiltinCallPlan::StructuralEq(shape))
             }
             crate::BuiltinClassMemberIntrinsic::Append(crate::BuiltinAppendCarrier::List) => {
@@ -4727,7 +4865,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 let kernel = &self.program.kernels()[kernel_id];
                 let left_layout = kernel.exprs()[*left].layout;
                 let right_layout = kernel.exprs()[*right].layout;
-                let LayoutKind::List { element } = &self.program.layouts()[result_layout].kind else {
+                let LayoutKind::List { element } = &self.program.layouts()[result_layout].kind
+                else {
                     return Err(self.unsupported_expression(
                         kernel_id,
                         expr_id,
@@ -7156,8 +7295,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     ));
                 };
                 // Domain values are ByReference pointers; load the inner i64.
-                let lhs = builder.ins().load(types::I64, MemFlagsData::new(), *left, 0);
-                let rhs = builder.ins().load(types::I64, MemFlagsData::new(), *right, 0);
+                let lhs = builder
+                    .ins()
+                    .load(types::I64, MemFlagsData::new(), *left, 0);
+                let rhs = builder
+                    .ins()
+                    .load(types::I64, MemFlagsData::new(), *right, 0);
                 match operator {
                     BinaryOperator::Add
                     | BinaryOperator::Subtract
@@ -7194,6 +7337,26 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         "unsupported domain binary operator in emission",
                     )),
                 }
+            }
+            DirectApplyPlan::Builtin(BuiltinCallPlan::DerivedStructuralEq {
+                shape,
+                evidence_count,
+            }) => {
+                if arguments.len() != evidence_count + 2 {
+                    return Err(self.unsupported_expression(
+                        kernel_id,
+                        expr_id,
+                        "derived equality materialized arity differs",
+                    ));
+                }
+                self.lower_native_equality_shape_with_evidence(
+                    kernel_id,
+                    Some(expr_id),
+                    &shape,
+                    (arguments[evidence_count], arguments[evidence_count + 1]),
+                    &arguments[..evidence_count],
+                    builder,
+                )
             }
             DirectApplyPlan::Builtin(BuiltinCallPlan::StructuralEq(shape)) => {
                 let [left, right] = arguments else {
@@ -7472,14 +7635,19 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 Ok(self.lower_bytes_to_text_option(*argument, builder))
             }
             DirectApplyPlan::Intrinsic(IntrinsicCallPlan::TextUnary { symbol }) => {
-                let [text] = arguments else { unreachable!("validated unary text call") };
+                let [text] = arguments else {
+                    unreachable!("validated unary text call")
+                };
                 let function = self.declare_ptr_unop_func(symbol, kernel_id, builder)?;
                 let call = builder.ins().call(function, &[*text]);
                 Ok(builder.inst_results(call)[0])
             }
             DirectApplyPlan::Intrinsic(IntrinsicCallPlan::TextContains) => {
-                let [needle, haystack] = arguments else { unreachable!("validated binary text call") };
-                let function = self.declare_ptr_cmp_func("aivi_text_contains", kernel_id, builder)?;
+                let [needle, haystack] = arguments else {
+                    unreachable!("validated binary text call")
+                };
+                let function =
+                    self.declare_ptr_cmp_func("aivi_text_contains", kernel_id, builder)?;
                 let call = builder.ins().call(function, &[*needle, *haystack]);
                 Ok(builder.inst_results(call)[0])
             }
@@ -7613,6 +7781,17 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         if self.layouts_call_compatible(expected, found) {
             return Ok(());
         }
+        if matches!(
+            self.program.layouts()[expected].kind,
+            LayoutKind::Arrow { .. }
+        ) && matches!(self.program.layouts()[found].kind, LayoutKind::Arrow { .. })
+        {
+            return Err(self.unsupported_expression(
+                kernel_id,
+                expr_id,
+                &format!("{detail} requires a callable adapter between layout{found} and layout{expected}"),
+            ));
+        }
         Err(self.unsupported_expression(
             kernel_id,
             expr_id,
@@ -7637,150 +7816,215 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
     }
 
     fn layouts_call_compatible(&self, expected: LayoutId, found: LayoutId) -> bool {
-        let (Some(expected), Some(found)) = (
-            self.runtime_payload_layout(expected),
-            self.runtime_payload_layout(found),
-        ) else {
-            return false;
-        };
+        self.layouts_compatible(expected, found, LayoutCompatibility::Repack)
+    }
+
+    /// Ordinary arguments may be repacked by a direct call. A callable keeps
+    /// its original code pointer, so all nested representations must already
+    /// match. Generic opaque pointers accept reference values without boxing.
+    fn layouts_compatible(
+        &self,
+        expected: LayoutId,
+        found: LayoutId,
+        mode: LayoutCompatibility,
+    ) -> bool {
         if expected == found {
             return true;
         }
-        let expected_layout = &self.program.layouts()[expected];
-        let found_layout = &self.program.layouts()[found];
-        if matches!(
-            (&expected_layout.kind, &found_layout.kind),
-            (LayoutKind::Domain { .. }, _) | (_, LayoutKind::Domain { .. })
-        ) {
-            return true;
+        let mut pending = vec![(expected, found, mode)];
+        let mut visited = HashSet::new();
+        while let Some((expected, found, mode)) = pending.pop() {
+            let (Some(expected), Some(found)) = (
+                self.runtime_payload_layout(expected),
+                self.runtime_payload_layout(found),
+            ) else {
+                return false;
+            };
+            if expected == found || !visited.insert((expected, found, mode)) {
+                continue;
+            }
+            let left = &self.program.layouts()[expected];
+            let right = &self.program.layouts()[found];
+            if matches!(left.kind, LayoutKind::Domain { .. })
+                || matches!(right.kind, LayoutKind::Domain { .. })
+            {
+                if mode == LayoutCompatibility::Repack {
+                    continue;
+                }
+                if left.abi != AbiPassMode::ByReference || right.abi != AbiPassMode::ByReference {
+                    return false;
+                }
+                let carrier = |id, layout: &Layout| match &layout.kind {
+                    LayoutKind::Domain { .. } => self.program.named_domain_carrier(id),
+                    _ => Some(id),
+                };
+                let (Some(left), Some(right)) = (carrier(expected, left), carrier(found, right))
+                else {
+                    // An erased generic domain is an uninterpreted reference.
+                    continue;
+                };
+                if left != expected || right != found {
+                    pending.push((left, right, mode));
+                    continue;
+                }
+                return false;
+            }
+            if left.abi != right.abi {
+                return false;
+            }
+            match (&left.kind, &right.kind) {
+                (LayoutKind::Primitive(left), LayoutKind::Primitive(right)) if left == right => {}
+                (LayoutKind::Tuple(left), LayoutKind::Tuple(right))
+                    if left.len() == right.len() =>
+                {
+                    pending.extend(
+                        left.iter()
+                            .zip(right)
+                            .map(|(left, right)| (*left, *right, mode)),
+                    )
+                }
+                (LayoutKind::Record(left), LayoutKind::Record(right))
+                    if left.len() == right.len()
+                        && left
+                            .iter()
+                            .zip(right)
+                            .all(|(left, right)| left.name == right.name) =>
+                {
+                    pending.extend(
+                        left.iter()
+                            .zip(right)
+                            .map(|(left, right)| (left.layout, right.layout, mode)),
+                    )
+                }
+                (
+                    LayoutKind::Arrow {
+                        parameter: left_parameter,
+                        result: left_result,
+                    },
+                    LayoutKind::Arrow {
+                        parameter: right_parameter,
+                        result: right_result,
+                    },
+                ) => {
+                    pending.push((
+                        *left_parameter,
+                        *right_parameter,
+                        LayoutCompatibility::CallableRepresentation,
+                    ));
+                    pending.push((
+                        *left_result,
+                        *right_result,
+                        LayoutCompatibility::CallableRepresentation,
+                    ));
+                }
+                (LayoutKind::List { element: left }, LayoutKind::List { element: right })
+                | (LayoutKind::Set { element: left }, LayoutKind::Set { element: right })
+                | (LayoutKind::Option { element: left }, LayoutKind::Option { element: right })
+                | (
+                    LayoutKind::AnonymousDomain { carrier: left, .. },
+                    LayoutKind::AnonymousDomain { carrier: right, .. },
+                ) => pending.push((*left, *right, mode)),
+                (
+                    LayoutKind::Map {
+                        key: left_key,
+                        value: left_value,
+                    },
+                    LayoutKind::Map {
+                        key: right_key,
+                        value: right_value,
+                    },
+                )
+                | (
+                    LayoutKind::Result {
+                        error: left_key,
+                        value: left_value,
+                    },
+                    LayoutKind::Result {
+                        error: right_key,
+                        value: right_value,
+                    },
+                )
+                | (
+                    LayoutKind::Validation {
+                        error: left_key,
+                        value: left_value,
+                    },
+                    LayoutKind::Validation {
+                        error: right_key,
+                        value: right_value,
+                    },
+                )
+                | (
+                    LayoutKind::Task {
+                        error: left_key,
+                        value: left_value,
+                    },
+                    LayoutKind::Task {
+                        error: right_key,
+                        value: right_value,
+                    },
+                ) => {
+                    pending.push((*left_key, *right_key, mode));
+                    pending.push((*left_value, *right_value, mode));
+                }
+                (LayoutKind::Sum(left), LayoutKind::Sum(right)) => {
+                    if !Self::append_compatible_variants(left, right, mode, &mut pending) {
+                        return false;
+                    }
+                }
+                (
+                    LayoutKind::Opaque {
+                        item: left_item,
+                        name: left_name,
+                        variants: left,
+                        ..
+                    },
+                    LayoutKind::Opaque {
+                        item: right_item,
+                        name: right_name,
+                        variants: right,
+                        ..
+                    },
+                ) if opaque_layout_identity_matches(
+                    *left_item,
+                    left_name,
+                    *right_item,
+                    right_name,
+                ) =>
+                {
+                    if !left.is_empty()
+                        && !right.is_empty()
+                        && !Self::append_compatible_variants(left, right, mode, &mut pending)
+                    {
+                        return false;
+                    }
+                }
+                _ => return false,
+            }
         }
-        if expected_layout.abi != found_layout.abi {
-            return false;
-        }
-        match (&expected_layout.kind, &found_layout.kind) {
-            (LayoutKind::Primitive(left), LayoutKind::Primitive(right)) => left == right,
-            (LayoutKind::Tuple(left), LayoutKind::Tuple(right)) => {
-                left.len() == right.len()
-                    && left
-                        .iter()
-                        .zip(right.iter())
-                        .all(|(left, right)| self.layouts_call_compatible(*left, *right))
-            }
-            (LayoutKind::Record(left), LayoutKind::Record(right)) => {
-                left.len() == right.len()
-                    && left.iter().zip(right.iter()).all(|(left, right)| {
-                        left.name == right.name
-                            && self.layouts_call_compatible(left.layout, right.layout)
-                    })
-            }
-            (LayoutKind::Sum(left), LayoutKind::Sum(right)) => {
-                self.variant_layouts_compatible(left, right)
-            }
-            (
-                LayoutKind::Arrow {
-                    parameter: left_parameter,
-                    result: left_result,
-                },
-                LayoutKind::Arrow {
-                    parameter: right_parameter,
-                    result: right_result,
-                },
-            ) => {
-                self.layouts_call_compatible(*left_parameter, *right_parameter)
-                    && self.layouts_call_compatible(*left_result, *right_result)
-            }
-            (LayoutKind::List { element: left }, LayoutKind::List { element: right })
-            | (LayoutKind::Set { element: left }, LayoutKind::Set { element: right })
-            | (LayoutKind::Option { element: left }, LayoutKind::Option { element: right }) => {
-                self.layouts_call_compatible(*left, *right)
-            }
-            (
-                LayoutKind::Map {
-                    key: left_key,
-                    value: left_value,
-                },
-                LayoutKind::Map {
-                    key: right_key,
-                    value: right_value,
-                },
-            )
-            | (
-                LayoutKind::Result {
-                    error: left_key,
-                    value: left_value,
-                },
-                LayoutKind::Result {
-                    error: right_key,
-                    value: right_value,
-                },
-            )
-            | (
-                LayoutKind::Validation {
-                    error: left_key,
-                    value: left_value,
-                },
-                LayoutKind::Validation {
-                    error: right_key,
-                    value: right_value,
-                },
-            )
-            | (
-                LayoutKind::Task {
-                    error: left_key,
-                    value: left_value,
-                },
-                LayoutKind::Task {
-                    error: right_key,
-                    value: right_value,
-                },
-            ) => {
-                self.layouts_call_compatible(*left_key, *right_key)
-                    && self.layouts_call_compatible(*left_value, *right_value)
-            }
-            (
-                LayoutKind::AnonymousDomain { carrier: left, .. },
-                LayoutKind::AnonymousDomain { carrier: right, .. },
-            ) => self.layouts_call_compatible(*left, *right),
-            (
-                LayoutKind::Opaque {
-                    item: left_item,
-                    name: left_name,
-                    variants: left_variants,
-                    ..
-                },
-                LayoutKind::Opaque {
-                    item: right_item,
-                    name: right_name,
-                    variants: right_variants,
-                    ..
-                },
-            ) => {
-                opaque_layout_identity_matches(*left_item, left_name, *right_item, right_name)
-                    && (left_variants.is_empty()
-                        || right_variants.is_empty()
-                        || self.variant_layouts_compatible(left_variants, right_variants))
-            }
-            _ => false,
-        }
+        true
     }
 
-    fn variant_layouts_compatible(
-        &self,
-        expected: &[crate::VariantLayout],
-        found: &[crate::VariantLayout],
+    fn append_compatible_variants(
+        left: &[crate::VariantLayout],
+        right: &[crate::VariantLayout],
+        mode: LayoutCompatibility,
+        pending: &mut Vec<(LayoutId, LayoutId, LayoutCompatibility)>,
     ) -> bool {
-        expected.len() == found.len()
-            && expected.iter().zip(found.iter()).all(|(expected, found)| {
-                expected.name == found.name
-                    && expected.field_count == found.field_count
-                    && match (expected.payload, found.payload) {
-                        (Some(expected), Some(found)) => {
-                            self.layouts_call_compatible(expected, found)
-                        }
-                        (None, None) => true,
-                        _ => false,
-                    }
-            })
+        if left.len() != right.len() {
+            return false;
+        }
+        for (left, right) in left.iter().zip(right) {
+            if left.name != right.name || left.field_count != right.field_count {
+                return false;
+            }
+            match (left.payload, right.payload) {
+                (None, None) => {}
+                (Some(left), Some(right)) => pending.push((left, right, mode)),
+                _ => return false,
+            }
+        }
+        true
     }
 
     fn unsupported_inline_pipe_stage(
@@ -8716,7 +8960,75 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         rhs: Value,
         builder: &mut FunctionBuilder<'_>,
     ) -> Result<Value, CodegenError> {
+        self.lower_native_equality_shape_with_evidence(
+            kernel_id,
+            None,
+            shape,
+            (lhs, rhs),
+            &[],
+            builder,
+        )
+    }
+
+    fn lower_native_equality_shape_with_evidence(
+        &mut self,
+        kernel_id: KernelId,
+        expr_id: Option<KernelExprId>,
+        shape: &NativeEqualityShape,
+        operands: (Value, Value),
+        evidence: &[Value],
+        builder: &mut FunctionBuilder<'_>,
+    ) -> Result<Value, CodegenError> {
+        let (lhs, rhs) = operands;
         match shape {
+            NativeEqualityShape::Evidence {
+                slot,
+                callable_layout,
+            } => {
+                let expr = expr_id.expect("derived equality emission keeps its call site");
+                let signature = self.materialize_callable_signature(
+                    kernel_id,
+                    expr,
+                    *callable_layout,
+                    "derived equality evidence",
+                )?;
+                let imported = builder.func.import_signature(signature);
+                let target = self.lower_callable_descriptor_target(evidence[*slot], builder);
+                let call = builder.ins().call_indirect(imported, target, &[lhs, rhs]);
+                Ok(builder.inst_results(call)[0])
+            }
+            NativeEqualityShape::DerivedScalarOption { layout, payload } => {
+                let left_tag = builder.ins().ireduce(types::I64, lhs);
+                let right_tag = builder.ins().ireduce(types::I64, rhs);
+                let tags_equal = builder.ins().icmp(IntCC::Equal, left_tag, right_tag);
+                let is_none = builder.ins().icmp_imm_s(IntCC::Equal, left_tag, 0);
+                let mismatch = builder.ins().icmp(IntCC::NotEqual, left_tag, right_tag);
+                let early = builder.ins().bor(is_none, mismatch);
+                let body = builder.create_block();
+                let merge = builder.create_block();
+                builder.append_block_param(merge, types::I8);
+                builder
+                    .ins()
+                    .brif(early, merge, &[BlockArg::Value(tags_equal)], body, &[]);
+                builder.seal_block(body);
+                builder.switch_to_block(body);
+                let left =
+                    self.extract_truthy_falsy_payload(lhs, *layout, &BuiltinTerm::Some, builder);
+                let right =
+                    self.extract_truthy_falsy_payload(rhs, *layout, &BuiltinTerm::Some, builder);
+                let equal = self.lower_native_equality_shape_with_evidence(
+                    kernel_id,
+                    expr_id,
+                    payload,
+                    (left, right),
+                    evidence,
+                    builder,
+                )?;
+                builder.ins().jump(merge, &[BlockArg::Value(equal)]);
+                builder.seal_block(merge);
+                builder.switch_to_block(merge);
+                Ok(builder.block_params(merge)[0])
+            }
             NativeEqualityShape::Integer => Ok(builder.ins().icmp(IntCC::Equal, lhs, rhs)),
             NativeEqualityShape::Float => Ok(builder.ins().fcmp(FloatCC::Equal, lhs, rhs)),
             NativeEqualityShape::Decimal | NativeEqualityShape::BigInt => {
@@ -8751,7 +9063,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     .brif(tags_equal, dispatch_block, &[], mismatch_block, &[]);
 
                 builder.switch_to_block(mismatch_block);
-                builder.ins().jump(merge_block, &[BlockArg::Value(false_value)]);
+                builder
+                    .ins()
+                    .jump(merge_block, &[BlockArg::Value(false_value)]);
 
                 for (index, variant) in variants.iter().enumerate() {
                     let body_block = builder.create_block();
@@ -8762,7 +9076,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     };
 
                     builder.switch_to_block(dispatch_block);
-                    let is_match = builder.ins().icmp_imm_s(IntCC::Equal, left_tag, variant.tag);
+                    let is_match = builder
+                        .ins()
+                        .icmp_imm_s(IntCC::Equal, left_tag, variant.tag);
                     if let Some(next_block) = next_block {
                         builder
                             .ins()
@@ -8784,20 +9100,27 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             "tagged payload equality",
                         )?;
                         let left_payload =
-                            builder.ins().load(payload_abi.ty, MemFlagsData::new(), lhs, 8);
+                            builder
+                                .ins()
+                                .load(payload_abi.ty, MemFlagsData::new(), lhs, 8);
                         let right_payload =
-                            builder.ins().load(payload_abi.ty, MemFlagsData::new(), rhs, 8);
-                        self.lower_native_equality_shape(
+                            builder
+                                .ins()
+                                .load(payload_abi.ty, MemFlagsData::new(), rhs, 8);
+                        self.lower_native_equality_shape_with_evidence(
                             kernel_id,
+                            expr_id,
                             payload_shape,
-                            left_payload,
-                            right_payload,
+                            (left_payload, right_payload),
+                            evidence,
                             builder,
                         )?
                     } else {
                         true_value
                     };
-                    builder.ins().jump(merge_block, &[BlockArg::Value(variant_equal)]);
+                    builder
+                        .ins()
+                        .jump(merge_block, &[BlockArg::Value(variant_equal)]);
                     builder.seal_block(body_block);
 
                     if let Some(next_block) = next_block {
@@ -8818,24 +9141,49 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             }
             NativeEqualityShape::Aggregate(fields) => {
                 let mut equal = builder.ins().iconst(types::I8, 1);
-                for field in fields {
+                let merge = if evidence.is_empty() {
+                    None
+                } else {
+                    let block = builder.create_block();
+                    builder.append_block_param(block, types::I8);
+                    Some(block)
+                };
+                for (index, field) in fields.iter().enumerate() {
                     let abi =
                         self.field_abi_shape(kernel_id, field.layout, "native equality field")?;
-                    let left_field = builder
-                        .ins()
-                        .load(abi.ty, MemFlagsData::new(), lhs, field.offset);
+                    let left_field =
+                        builder
+                            .ins()
+                            .load(abi.ty, MemFlagsData::new(), lhs, field.offset);
                     let right_field =
                         builder
                             .ins()
                             .load(abi.ty, MemFlagsData::new(), rhs, field.offset);
-                    let field_equal = self.lower_native_equality_shape(
+                    let field_equal = self.lower_native_equality_shape_with_evidence(
                         kernel_id,
+                        expr_id,
                         field.shape.as_ref(),
-                        left_field,
-                        right_field,
+                        (left_field, right_field),
+                        evidence,
                         builder,
                     )?;
                     equal = builder.ins().band(equal, field_equal);
+                    if let Some(merge) = merge
+                        && index + 1 < fields.len()
+                    {
+                        let next = builder.create_block();
+                        builder
+                            .ins()
+                            .brif(equal, next, &[], merge, &[BlockArg::Value(equal)]);
+                        builder.seal_block(next);
+                        builder.switch_to_block(next);
+                    }
+                }
+                if let Some(merge) = merge {
+                    builder.ins().jump(merge, &[BlockArg::Value(equal)]);
+                    builder.seal_block(merge);
+                    builder.switch_to_block(merge);
+                    equal = builder.block_params(merge)[0];
                 }
                 Ok(equal)
             }
@@ -8860,11 +9208,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
 
                 builder.seal_block(payload_block);
                 builder.switch_to_block(payload_block);
-                let some_equal = self.lower_native_equality_shape(
+                let some_equal = self.lower_native_equality_shape_with_evidence(
                     kernel_id,
+                    expr_id,
                     payload.as_ref(),
-                    lhs,
-                    rhs,
+                    (lhs, rhs),
+                    evidence,
                     builder,
                 )?;
                 builder
@@ -11822,8 +12171,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         | KernelExprKind::Subject(_)
                         | KernelExprKind::Environment(_)
                         | KernelExprKind::Item(_)
-                        | KernelExprKind::DomainMember(_)
                         | KernelExprKind::ExecutableEvidence(_)
+                        | KernelExprKind::DomainMember(_)
                         | KernelExprKind::BuiltinClassMember(_)
                         | KernelExprKind::Projection { .. }
                         | KernelExprKind::Pipe(_) => {
@@ -11983,7 +12332,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 }
                                 KernelExprKind::BuiltinClassMember(intrinsic) => {
                                     let Some(expected_arity) =
-                                        static_builtin_class_member_arity(*intrinsic)
+                                        static_builtin_class_member_arity(intrinsic.clone())
                                     else {
                                         return Ok(None);
                                     };
@@ -11991,7 +12340,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                         return Ok(None);
                                     }
                                     tasks.push(Task::BuildBuiltinClassMember {
-                                        intrinsic: *intrinsic,
+                                        intrinsic: intrinsic.clone(),
                                     });
                                     for argument in arguments.iter().rev() {
                                         tasks.push(Task::Visit(*argument));
@@ -12013,7 +12362,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                         return Ok(None);
                                     };
                                     let Some(expected_arity) =
-                                        static_builtin_class_member_arity(intrinsic)
+                                        static_builtin_class_member_arity(intrinsic.clone())
                                     else {
                                         return Ok(None);
                                     };
@@ -12074,10 +12423,10 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 }
                 Task::BuildBuiltinClassMember { intrinsic } => {
                     let Some(value) = static_evaluate_builtin_class_member_call(
-                        intrinsic,
+                        intrinsic.clone(),
                         drain_tail(
                             &mut values,
-                            static_builtin_class_member_arity(intrinsic).expect(
+                            static_builtin_class_member_arity(intrinsic.clone()).expect(
                                 "static builtin class member builder should only use supported arities",
                             ),
                         ),

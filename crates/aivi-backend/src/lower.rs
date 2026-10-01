@@ -2258,7 +2258,7 @@ impl<'a> ProgramLowerer<'a> {
                                     )
                                 }
                                 core::Reference::BuiltinClassMember(intrinsic) => {
-                                    KernelExprKind::BuiltinClassMember(*intrinsic)
+                                    KernelExprKind::BuiltinClassMember(intrinsic.clone())
                                 }
                                 core::Reference::HirItem(_) => {
                                     return Err(UnresolvedItemReference { span: expr.span });

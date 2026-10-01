@@ -686,7 +686,9 @@ fn referenced_hir_dependencies(root: &GateRuntimeExpr) -> HirDependencies {
             | GateRuntimeExprKind::Reference(GateRuntimeReference::Builtin(_))
             | GateRuntimeExprKind::Reference(GateRuntimeReference::IntrinsicValue(_))
             | GateRuntimeExprKind::Reference(GateRuntimeReference::SumConstructor(_)) => {}
-            GateRuntimeExprKind::Reference(GateRuntimeReference::Import(import)) => { seen_imports.insert(*import); }
+            GateRuntimeExprKind::Reference(GateRuntimeReference::Import(import)) => {
+                seen_imports.insert(*import);
+            }
             GateRuntimeExprKind::Reference(GateRuntimeReference::Item(item)) => {
                 seen_items.insert(*item);
             }
@@ -696,6 +698,7 @@ fn referenced_hir_dependencies(root: &GateRuntimeExpr) -> HirDependencies {
                     member_index: handle.member_index,
                 });
             }
+            GateRuntimeExprKind::Reference(GateRuntimeReference::DerivedEquality(_)) => {}
             GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(dispatch)) => {
                 match dispatch.implementation {
                     aivi_hir::ClassMemberImplementation::SameModuleInstance {

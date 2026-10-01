@@ -307,9 +307,19 @@ imported declarations. Importing a type does not establish equality for its payl
 containing `Bytes` or a function still needs an explicit instance. Recursive proofs distinguish
 the declaration and its actual type arguments, so `Box Int` cannot establish equality for a
 recursive `Box Bytes` payload. Unavailable imported representations require explicit evidence.
+Derived equality invokes the selected equality dictionary for each payload. An authored or
+scoped instance therefore applies inside a list, tuple, record, option, result, validation, or
+closed sum as well as in a direct comparison. Container length, field positions, and outer
+constructor tags still determine which payloads are compared. First-class comparisons and
+constrained helpers carry the same dictionaries across imports and cached execution.
+
 Growing or excessively large proofs report `hir::equality-proof-complexity`; simplify the type
 or provide explicit equality evidence. Native execution also requires a supported closed layout;
 accepting a recursive proof does not make recursive native layouts executable.
+Native dictionary calls also require matching callable representations. Passing a concrete
+scalar dictionary to a helper whose generic operands use a boxed representation requires a
+callable adapter; native compilation reports this unsupported conversion. Source execution
+retains the same dictionary through its interpreter path.
 
 ## User-authored higher-kinded classes and instances
 

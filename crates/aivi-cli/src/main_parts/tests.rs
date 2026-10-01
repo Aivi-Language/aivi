@@ -469,7 +469,7 @@ fn snake_serialized_frozen_image_reloads_frozen_catalog_without_backend_program(
 }
 
 #[test]
-fn source_run_cache_discards_keys_from_before_imported_equality_payload_checks() {
+fn source_run_cache_discards_keys_without_executable_payload_equality() {
     use std::{
         collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
@@ -484,7 +484,7 @@ fn source_run_cache_discards_keys_from_before_imported_equality_payload_checks()
     let mut legacy = DefaultHasher::new();
     "aivi.source-run-cache".hash(&mut legacy);
     5_u32.hash(&mut legacy);
-    "19".hash(&mut legacy);
+    "20".hash(&mut legacy);
     env!("CARGO_PKG_VERSION").hash(&mut legacy);
     super::normalize_source_run_cache_path(&entry)
         .to_string_lossy()
@@ -1825,6 +1825,50 @@ value main : Task Text Unit =
         super::RunArtifactKind::HeadlessTask { .. }
     ));
     assert!(reloaded.gtk().is_none());
+}
+
+#[test]
+fn cached_source_image_preserves_executable_payload_equality_dictionaries() {
+    let artifact = prepare_run_from_text(
+        "derived-equality-roundtrip.aivi",
+        r#"
+type Tag = Tag Int | Other Int
+instance Eq Tag = { (==) = left right => True }
+type Eq A => List A -> List A -> Bool
+func same = left right => left == right
+value main : Task Text Bool = pure (same [Tag 1] [Other 2])
+"#,
+        None,
+    )
+    .unwrap();
+    let frozen = super::freeze_run_artifact(&artifact).unwrap();
+    let reloaded = super::load_frozen_run_image_from_bytes(&frozen.bytes, None).unwrap();
+    for candidate in [&artifact, &reloaded] {
+        let super::RunArtifactKind::HeadlessTask { task_owner } = candidate.kind else {
+            panic!("expected headless entry");
+        };
+        let linked = if let Some(tables) = &candidate.runtime_tables {
+            aivi_runtime::link_backend_runtime_with_tables_and_native_kernels_from_payload(
+                candidate.runtime_assembly.clone(),
+                candidate.backend.clone(),
+                candidate.backend_native_kernels.clone(),
+                tables.clone(),
+            )
+        } else {
+            aivi_runtime::link_backend_runtime_with_seed_and_native_kernels_from_payload(
+                candidate.runtime_assembly.clone(),
+                candidate.backend.clone(),
+                candidate.backend_native_kernels.clone(),
+                &candidate.runtime_link,
+            )
+        }
+        .unwrap();
+        let value = linked.evaluate_task_value_by_owner(task_owner).unwrap();
+        let RuntimeValue::Task(RuntimeTaskPlan::Pure { value }) = value.into_runtime() else {
+            panic!("expected pure task result");
+        };
+        assert_eq!(*value, RuntimeValue::Bool(true));
+    }
 }
 
 #[test]

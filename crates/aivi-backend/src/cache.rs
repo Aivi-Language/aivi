@@ -254,7 +254,7 @@ const JIT_KERNEL_CACHE_MAGIC_V2: &[u8; 5] = b"AIVJ\x02";
 
 const COMPILER_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Bump when backend machine-code semantics change without a Cargo package-version change.
-const CODEGEN_NAMESPACE_REVISION: &str = "8";
+const CODEGEN_NAMESPACE_REVISION: &str = "9";
 const SHARED_CODEGEN_SETTINGS: &[(&str, &str)] =
     &[("enable_llvm_abi_extensions", "1"), ("opt_level", "speed")];
 
@@ -1516,6 +1516,44 @@ fun indexCount:Int = count:Int=> length (indices count)
                 call_i64_value(&replayed, &[AbiValue::I64(100_000)]),
                 AbiValue::I64(100_000)
             );
+        });
+    }
+
+    #[test]
+    fn cached_jit_equality_dictionaries_replay_with_their_callable_dependencies() {
+        let backend = lower_text(
+            "cache-jit-equality-dictionaries.aivi",
+            r#"
+type Tag = Tag Int | Other Int
+instance Eq Tag = { (==) left right = True }
+fun same:Eq Int => Int -> Int -> Bool = left right => left == right
+value scalar:Bool = same 1 1
+value different:Bool = same 1 2
+value nested:Bool = (Tag 1, 3) == (Other 2, 3)
+"#,
+        );
+        with_temp_cache_dir(|cache_root| {
+            for (name, expected) in [("scalar", 1), ("different", 0), ("nested", 1)] {
+                let body = backend.items()[find_item(&backend, name)].body.unwrap();
+                let compiled =
+                    compile_kernel_jit_cached_in_dir(cache_root, &backend, body).unwrap();
+                let fingerprint = compute_kernel_fingerprint(&backend, body);
+                let artifact =
+                    load_cached_jit_kernel_artifact_from(cache_root, &backend, fingerprint)
+                        .unwrap();
+                assert!(!artifact.callable_descriptors.is_empty());
+                for descriptor in &artifact.callable_descriptors {
+                    assert!(
+                        artifact
+                            .kernels
+                            .iter()
+                            .any(|kernel| kernel.kernel == descriptor.body)
+                    );
+                }
+                let replayed = instantiate_cached_jit_kernel(&backend, body, &artifact).unwrap();
+                assert_eq!(call_i64_value(&compiled, &[]), AbiValue::I8(expected));
+                assert_eq!(call_i64_value(&replayed, &[]), AbiValue::I8(expected));
+            }
         });
     }
 

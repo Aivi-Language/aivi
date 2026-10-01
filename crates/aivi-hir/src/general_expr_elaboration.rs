@@ -1498,7 +1498,7 @@ fn lower_evidence_expression(
             dictionary: bool,
         },
         Complete {
-            dispatch: crate::ResolvedClassMemberDispatch,
+            reference: GateRuntimeReference,
             ty: GateType,
             count: usize,
         },
@@ -1529,13 +1529,34 @@ fn lower_evidence_expression(
                 if dispatch.is_none()
                     && let Some(local) = in_scope_class_evidence_by_member(env, member, &subject)
                 {
-                    values.push(GateRuntimeExpr {
-                        span,
-                        ty: local.ty.clone(),
-                        kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Local(
-                            local.binding,
-                        )),
-                    });
+                    let value = if dictionary {
+                        GateRuntimeExpr {
+                            span,
+                            ty: local.ty.clone(),
+                            kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Local(
+                                local.binding,
+                            )),
+                        }
+                    } else {
+                        let Item::Class(class) = &module.items()[member.class] else {
+                            return None;
+                        };
+                        let name =
+                            Name::new(class.members[member.member_index].name.text(), span).ok()?;
+                        let reference = TermReference::resolved(
+                            NamePath::from_vec(vec![name]).ok()?,
+                            TermResolution::ClassMember(member),
+                        );
+                        lower_class_member_callee_with_evidence(
+                            module,
+                            typing,
+                            catalog,
+                            env,
+                            &reference,
+                            ty.clone(),
+                        )?
+                    };
+                    values.push(value);
                     continue;
                 }
                 if active.contains(&(member, subject.clone())) {
@@ -1547,6 +1568,20 @@ fn lower_evidence_expression(
                 let mut requirements = instantiated_dispatch_requirements(
                     module, typing, catalog, &dispatch, &ty, span,
                 )?;
+                let derived = if matches!(
+                    dispatch.implementation,
+                    crate::ClassMemberImplementation::Builtin
+                ) && matches!(&module.items()[member.class], Item::Class(class) if matches!(&class.identity, crate::ClassIdentity::Standard(name) if matches!(name.as_ref(), "Eq" | "Setoid")))
+                {
+                    let TypeBinding::Type(subject) = &subject else {
+                        return None;
+                    };
+                    Some(crate::typecheck::derived_equality_dictionary(
+                        module, env, subject,
+                    )?)
+                } else {
+                    None
+                };
                 if dictionary {
                     let instance_count = match dispatch.implementation {
                         crate::ClassMemberImplementation::SameModuleInstance {
@@ -1580,24 +1615,49 @@ fn lower_evidence_expression(
                             .collect(),
                     );
                 }
+                let mut resolved_requirements = requirements
+                    .into_iter()
+                    .map(|requirement| {
+                        (
+                            requirement.member,
+                            requirement.subject,
+                            requirement.visible_ty,
+                            true,
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let reference = if let Some(derived) = derived {
+                    resolved_requirements.extend(
+                        derived
+                            .evidence
+                            .into_iter()
+                            .map(|leaf| (leaf.member, leaf.subject, leaf.ty, false)),
+                    );
+                    match derived.shape {
+                        Some(shape) => GateRuntimeReference::DerivedEquality(shape),
+                        None => GateRuntimeReference::ClassMember(dispatch),
+                    }
+                } else {
+                    GateRuntimeReference::ClassMember(dispatch)
+                };
                 active.push((member, subject));
                 pending.push(Step::Complete {
-                    dispatch,
+                    reference,
                     ty,
-                    count: requirements.len(),
+                    count: resolved_requirements.len(),
                 });
-                for requirement in requirements.into_iter().rev() {
+                for (member, subject, ty, dictionary) in resolved_requirements.into_iter().rev() {
                     pending.push(Step::Resolve {
-                        member: requirement.member,
-                        subject: requirement.subject,
-                        ty: requirement.visible_ty,
+                        member,
+                        subject,
+                        ty,
                         dispatch: None,
-                        dictionary: true,
+                        dictionary,
                     });
                 }
             }
             Step::Complete {
-                dispatch,
+                reference,
                 ty,
                 count,
             } => {
@@ -1612,9 +1672,7 @@ fn lower_evidence_expression(
                             .map(|argument| argument.ty.clone())
                             .collect(),
                     ),
-                    kind: GateRuntimeExprKind::Reference(GateRuntimeReference::ClassMember(
-                        dispatch,
-                    )),
+                    kind: GateRuntimeExprKind::Reference(reference),
                 };
                 values.push(if arguments.is_empty() {
                     callee

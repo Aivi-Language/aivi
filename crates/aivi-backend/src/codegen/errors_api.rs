@@ -293,45 +293,6 @@ pub fn compute_kernel_fingerprint(program: &Program, kernel_id: KernelId) -> Ker
     compute_kernel_fingerprint_for(program, kernel_id, kernel)
 }
 
-fn jit_dependency_kernel_ids(
-    program: &Program,
-    kernel_id: KernelId,
-) -> Result<Vec<KernelId>, CodegenError> {
-    if program.kernels().get(kernel_id).is_none() {
-        return Err(CodegenError::MissingKernel { kernel: kernel_id });
-    }
-    let mut kernels = BTreeSet::new();
-    let mut seen_items = BTreeSet::new();
-    collect_jit_kernel_dependencies(program, kernel_id, &mut kernels, &mut seen_items);
-    Ok(kernels.into_iter().collect())
-}
-
-fn collect_jit_kernel_dependencies(
-    program: &Program,
-    kernel_id: KernelId,
-    kernels: &mut BTreeSet<KernelId>,
-    seen_items: &mut BTreeSet<ItemId>,
-) {
-    if !kernels.insert(kernel_id) {
-        return;
-    }
-    let kernel = &program.kernels()[kernel_id];
-    for (_, expr) in kernel.exprs().iter() {
-        if let KernelExprKind::Item(item) = expr.kind {
-            if !seen_items.insert(item) {
-                continue;
-            }
-            let item_decl = &program.items()[item];
-            if matches!(item_decl.kind, ItemKind::Signal(_)) {
-                continue;
-            }
-            if let Some(body) = item_decl.body {
-                collect_jit_kernel_dependencies(program, body, kernels, seen_items);
-            }
-        }
-    }
-}
-
 struct CraneliftCompiler<'a, M: Module> {
     program: &'a Program,
     module: M,
@@ -408,6 +369,10 @@ enum DomainMemberCallPlan {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum BuiltinCallPlan {
     StructuralEq(NativeEqualityShape),
+    DerivedStructuralEq {
+        shape: NativeEqualityShape,
+        evidence_count: usize,
+    },
     NativeCompare {
         kind: NativeCompareKind,
         less_tag: i64,
@@ -581,6 +546,14 @@ enum NativeArithmeticKind {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum NativeEqualityShape {
+    Evidence {
+        slot: usize,
+        callable_layout: LayoutId,
+    },
+    DerivedScalarOption {
+        layout: LayoutId,
+        payload: Box<NativeEqualityShape>,
+    },
     Integer,
     Float,
     Decimal,

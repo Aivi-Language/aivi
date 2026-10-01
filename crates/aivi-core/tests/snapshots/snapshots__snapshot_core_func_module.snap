@@ -282,11 +282,11 @@ func __aivi_listAt_match:
   params = [matches: Bool, idx: Int, item: A]
   body = #207 T|>[True] (#208 Add 1, Some #209) F|>[False] (#208 Add 1, None)
 func __aivi_listAt_check:
-  params = [target: Int, idx: Int, found: Option A, item: A]
-  body = #212 ||> Some already => (#211 Add 1, Some #214) ||> None => __aivi_listAt_match evidence builtin-evidence#202::structural-eq #211 #210 #211 #213
+  params = [__aivi_eq_evidence393: Int -> Int -> Bool, target: Int, idx: Int, found: Option A, item: A]
+  body = #212 ||> Some already => (#211 Add 1, Some #214) ||> None => __aivi_listAt_match #393 #211 #210 #211 #213
 func __aivi_listAt_step:
   params = [target: Int, state: (Int, Option A), item: A]
-  body = #216 ||> (idx, found) => __aivi_listAt_check #215 #218 #219 #217
+  body = #216 ||> (idx, found) => __aivi_listAt_check evidence builtin-evidence#202::structural-eq #215 #218 #219 #217
 func __aivi_listAt_extract:
   params = [state: (Int, Option A)]
   body = #220 ||> (idx, found) => #222
@@ -297,11 +297,11 @@ func __aivi_listReplace_pick:
   params = [matches: Bool, newVal: A, idx: Int, result: List A, item: A]
   body = #225 T|>[True] (#227 Add 1, evidence builtin-evidence#204::append #228 [#226]) F|>[False] (#227 Add 1, evidence builtin-evidence#204::append #228 [#229])
 func __aivi_listReplace_check:
-  params = [target: Int, newVal: A, idx: Int, result: List A, item: A]
-  body = __aivi_listReplace_pick evidence builtin-evidence#202::structural-eq #232 #230 #231 #232 #233 #234
+  params = [__aivi_eq_evidence394: Int -> Int -> Bool, target: Int, newVal: A, idx: Int, result: List A, item: A]
+  body = __aivi_listReplace_pick #394 #232 #230 #231 #232 #233 #234
 func __aivi_listReplace_step:
   params = [target: Int, newVal: A, state: (Int, List A), item: A]
-  body = #237 ||> (idx, result) => __aivi_listReplace_check #235 #236 #239 #240 #238
+  body = #237 ||> (idx, result) => __aivi_listReplace_check evidence builtin-evidence#202::structural-eq #235 #236 #239 #240 #238
 func __aivi_listReplace_extract:
   params = [state: (Int, List A)]
   body = #241 ||> (idx, result) => #243
@@ -348,29 +348,29 @@ func __aivi_list_sortBy:
   params = [cmp: A -> A -> Bool, items: List A]
   body = #290 |> evidence builtin-evidence#213::reduce __aivi_list_sortByStep #289 [] _
 func __aivi_list_insertSortedOrdFalse:
-  params = [__aivi_ord_evidence393: A -> A -> Ordering, __aivi_eq_evidence394: A -> A -> Bool, newItem: A, current: A, acc: List A]
-  body = __aivi_binary_lt #393 #394 #291 #292 T|>[True] (True, evidence builtin-evidence#214::append evidence builtin-evidence#214::append #293 [#291] [#292]) F|>[False] (False, evidence builtin-evidence#214::append #293 [#292])
+  params = [__aivi_ord_evidence395: A -> A -> Ordering, __aivi_eq_evidence396: A -> A -> Bool, newItem: A, current: A, acc: List A]
+  body = __aivi_binary_lt #395 #396 #291 #292 T|>[True] (True, evidence builtin-evidence#214::append evidence builtin-evidence#214::append #293 [#291] [#292]) F|>[False] (False, evidence builtin-evidence#214::append #293 [#292])
 func __aivi_list_insertSortedOrdStep:
-  params = [__aivi_ord_evidence395: A -> A -> Ordering, __aivi_eq_evidence396: A -> A -> Bool, newItem: A, state: (Bool, List A), current: A]
-  body = #295 ||> (True, acc) => (True, evidence builtin-evidence#215::append #297 [#296]) ||> (False, acc) => __aivi_list_insertSortedOrdFalse #395 #396 #294 #296 #298
+  params = [__aivi_ord_evidence397: A -> A -> Ordering, __aivi_eq_evidence398: A -> A -> Bool, newItem: A, state: (Bool, List A), current: A]
+  body = #295 ||> (True, acc) => (True, evidence builtin-evidence#215::append #297 [#296]) ||> (False, acc) => __aivi_list_insertSortedOrdFalse #397 #398 #294 #296 #298
 func __aivi_list_insertSortedOrdFinish:
-  params = [__aivi_ord_evidence397: A -> A -> Ordering, __aivi_eq_evidence398: A -> A -> Bool, newItem: A, state: (Bool, List A)]
+  params = [__aivi_ord_evidence399: A -> A -> Ordering, __aivi_eq_evidence400: A -> A -> Bool, newItem: A, state: (Bool, List A)]
   body = #300 ||> (True, result) => #301 ||> (False, acc) => evidence builtin-evidence#216::append #302 [#299]
 func __aivi_list_insertSortedOrd:
-  params = [__aivi_ord_evidence399: A -> A -> Ordering, __aivi_eq_evidence400: A -> A -> Bool, newItem: A, sorted: List A]
-  body = #304 |> evidence builtin-evidence#217::reduce __aivi_list_insertSortedOrdStep #399 #400 #303 (False, []) _ |> __aivi_list_insertSortedOrdFinish #399 #400 #303 _
+  params = [__aivi_ord_evidence401: A -> A -> Ordering, __aivi_eq_evidence402: A -> A -> Bool, newItem: A, sorted: List A]
+  body = #304 |> evidence builtin-evidence#217::reduce __aivi_list_insertSortedOrdStep #401 #402 #303 (False, []) _ |> __aivi_list_insertSortedOrdFinish #401 #402 #303 _
 func __aivi_list_sortOrdStep:
-  params = [__aivi_ord_evidence401: A -> A -> Ordering, __aivi_eq_evidence402: A -> A -> Bool, sorted: List A, item: A]
-  body = __aivi_list_insertSortedOrd #401 #402 #306 #305
+  params = [__aivi_ord_evidence403: A -> A -> Ordering, __aivi_eq_evidence404: A -> A -> Bool, sorted: List A, item: A]
+  body = __aivi_list_insertSortedOrd #403 #404 #306 #305
 func sort:
-  params = [__aivi_ord_evidence403: A -> A -> Ordering, __aivi_eq_evidence404: A -> A -> Bool, items: List A]
-  body = #307 |> evidence builtin-evidence#218::reduce __aivi_list_sortOrdStep #403 #404 [] _
+  params = [__aivi_ord_evidence405: A -> A -> Ordering, __aivi_eq_evidence406: A -> A -> Bool, items: List A]
+  body = #307 |> evidence builtin-evidence#218::reduce __aivi_list_sortOrdStep #405 #406 [] _
 func __aivi_text_isEmpty:
-  params = [text: Text]
-  body = evidence builtin-evidence#219::structural-eq #308 ""
+  params = [__aivi_eq_evidence407: Text -> Text -> Bool, text: Text]
+  body = #407 #308 ""
 func __aivi_text_nonEmpty:
-  params = [text: Text]
-  body = evidence builtin-evidence#219::structural-eq #309 "" T|>[True] False F|>[False] True
+  params = [__aivi_eq_evidence408: Text -> Text -> Bool, text: Text]
+  body = #408 #309 "" T|>[True] False F|>[False] True
 func __aivi_pair_first:
   params = [pair: (A, B)]
   body = #312 ||> (a, _) => #313
@@ -566,6 +566,3 @@ func builtin-evidence#217::reduce:
 func builtin-evidence#218::reduce:
   params = [arg0: List A -> A -> List A, arg1: List A, arg2: List A]
   body = Reduce(List) #467 #468 #469
-func builtin-evidence#219::structural-eq:
-  params = [arg0: Text, arg1: Text]
-  body = StructuralEq #470 #471

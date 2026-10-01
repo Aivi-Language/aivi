@@ -46,8 +46,7 @@ impl<'a> CraneliftCompiler<'a, ObjectModule> {
     /// Phases 1–2 and 4 remain sequential because they mutate shared module state.
     /// Phase 3 uses Rayon's par_iter and yields a speedup proportional to kernel count.
     fn compile(mut self) -> Result<CompiledProgram, CodegenErrors> {
-        let kernel_ids = self.non_ambient_kernel_ids();
-        self.prevalidate_kernels(kernel_ids.iter().copied())?;
+        let kernel_ids = self.native_dependency_kernel_ids(self.non_ambient_kernel_ids())?;
         self.declare_kernels(kernel_ids.iter().copied(), KernelLinkage::Local)?;
         let built_kernels = self.build_kernels(kernel_ids.iter().copied())?;
         self.finish_object_compilation(built_kernels)
@@ -140,8 +139,7 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
         mut self,
         kernel_id: KernelId,
     ) -> Result<(CompiledJitKernel, Option<CachedJitKernelArtifact>), CodegenErrors> {
-        let kernel_ids = jit_dependency_kernel_ids(self.program, kernel_id).map_err(wrap_one)?;
-        self.prevalidate_kernels(kernel_ids.iter().copied())?;
+        let kernel_ids = self.native_dependency_kernel_ids([kernel_id])?;
         self.declare_kernels(kernel_ids.iter().copied(), KernelLinkage::Local)?;
         let built_kernels = self.build_kernels(kernel_ids.iter().copied())?;
         self.finish_jit_compilation(kernel_id, built_kernels)
@@ -243,8 +241,7 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
         mut self,
         kernel_id: KernelId,
     ) -> Result<Option<Box<str>>, CodegenErrors> {
-        let kernel_ids = jit_dependency_kernel_ids(self.program, kernel_id).map_err(wrap_one)?;
-        self.prevalidate_kernels(kernel_ids.iter().copied())?;
+        let kernel_ids = self.native_dependency_kernel_ids([kernel_id])?;
         self.declare_kernels(kernel_ids.iter().copied(), KernelLinkage::Local)?;
         let built_kernels = self.build_kernels(kernel_ids.iter().copied())?;
         let emit_inputs = self.compile_machine_code(built_kernels)?;
@@ -274,7 +271,7 @@ impl<'a> CraneliftCompiler<'a, JITModule> {
     ) -> Result<CompiledJitKernel, CodegenErrors> {
         let kernel_ids = match expected_kernel_ids {
             Some(kernel_ids) => kernel_ids,
-            None => jit_dependency_kernel_ids(self.program, requested_kernel).map_err(wrap_one)?,
+            None => self.native_dependency_kernel_ids([requested_kernel])?,
         };
         if artifact.requested_kernel != requested_kernel
             || artifact

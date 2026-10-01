@@ -1,12 +1,12 @@
 const FROZEN_RUN_IMAGE_FORMAT: &str = "aivi.frozen-run-image";
-const FROZEN_RUN_IMAGE_VERSION: u32 = 9;
+const FROZEN_RUN_IMAGE_VERSION: u32 = 10;
 const FROZEN_RUN_IMAGE_FILE_NAME: &str = "frozen-run-image.bin";
 const BACKEND_PAYLOAD_FORMAT: &str = "aivi.backend-payload";
-const BACKEND_PAYLOAD_VERSION: u32 = 6;
+const BACKEND_PAYLOAD_VERSION: u32 = 7;
 const SOURCE_RUN_CACHE_FORMAT: &str = "aivi.source-run-cache";
 const SOURCE_RUN_CACHE_VERSION: u32 = 5;
-// Revision 20 verifies imported equality payloads and required dictionary members.
-const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "20";
+// Revision 21 carries executable payload dictionaries through derived equality.
+const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "21";
 const SOURCE_RUN_CACHE_DIR: &str = "run-cache";
 const SOURCE_RUN_CACHE_METADATA_FILE_NAME: &str = "source-run-cache.json";
 const MAX_BINARY_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;

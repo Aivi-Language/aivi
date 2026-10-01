@@ -13,6 +13,11 @@ use crate::{
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ValidationError {
+    InvalidDerivedEquality {
+        kernel: KernelId,
+        expr: KernelExprId,
+        reason: aivi_hir::EqualityShapeError,
+    },
     ItemUnknownParameterLayout {
         item: ItemId,
         parameter_index: usize,
@@ -251,6 +256,14 @@ pub enum ValidationError {
 impl fmt::Display for ValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidDerivedEquality {
+                kernel,
+                expr,
+                reason,
+            } => write!(
+                f,
+                "derived equality at kernel {kernel} expression {expr} is invalid: {reason}"
+            ),
             Self::ItemUnknownParameterLayout {
                 item,
                 parameter_index,
@@ -1468,6 +1481,17 @@ fn validate_kernel(
                     });
                 }
             }
+            KernelExprKind::BuiltinClassMember(
+                crate::BuiltinClassMemberIntrinsic::DerivedStructuralEq(shape),
+            ) => {
+                if let Err(reason) = validate_derived_equality_layout(program, shape, expr.layout) {
+                    errors.push(ValidationError::InvalidDerivedEquality {
+                        kernel: kernel_id,
+                        expr: expr_id,
+                        reason,
+                    });
+                }
+            }
             KernelExprKind::BuiltinClassMember(_) => {}
             KernelExprKind::SumConstructor(_)
             | KernelExprKind::DomainMember(_)
@@ -1847,6 +1871,95 @@ fn push_decode_steps(
 /// runtime evaluation would loop forever. This function builds a dependency map from the
 /// `global_items` lists of all kernels owned by each item, then performs a DFS with
 /// white/gray/black coloring to detect back-edges.
+fn validate_derived_equality_layout(
+    program: &Program,
+    shape: &aivi_hir::EqualityShape,
+    layout: LayoutId,
+) -> Result<(), aivi_hir::EqualityShapeError> {
+    use aivi_hir::{EqualityShapeError as Error, EqualityShapeNode as Node};
+    let signature = |mut layout| -> Result<(Vec<LayoutId>, LayoutId), Error> {
+        let mut parameters = Vec::new();
+        let mut visited = std::collections::HashSet::new();
+        loop {
+            if !visited.insert(layout) {
+                return Err(Error("cyclic equality callable layout"));
+            }
+            match &program
+                .layouts()
+                .get(layout)
+                .ok_or(Error("unknown equality callable layout"))?
+                .kind
+            {
+                LayoutKind::Arrow { parameter, result } => {
+                    parameters.push(*parameter);
+                    layout = *result;
+                }
+                _ => return Ok((parameters, layout)),
+            }
+        }
+    };
+    let boolean = |layout| {
+        program
+            .layouts()
+            .get(layout)
+            .is_some_and(|layout| matches!(layout.kind, LayoutKind::Primitive(PrimitiveType::Bool)))
+    };
+    let (parameters, result) = signature(layout)?;
+    let count = shape.evidence_count();
+    if parameters.len() != count + 2
+        || parameters[count] != parameters[count + 1]
+        || !boolean(result)
+    {
+        return Err(Error(
+            "derived equality callable ABI differs from its shape",
+        ));
+    }
+    let evidence = parameters[..count]
+        .iter()
+        .map(|layout| {
+            let (parameters, result) = signature(*layout)?;
+            match parameters.as_slice() {
+                [left, right] => Ok((*left, *right, boolean(result))),
+                _ => Err(Error("derived equality evidence must be fully bound")),
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    shape.validate_operands(parameters[count], &evidence, |node, id| {
+        let layout = program.layouts().get(*id).ok_or(Error("unknown equality operand layout"))?;
+        let types = match (node, &layout.kind) {
+            (Node::Structural, LayoutKind::Primitive(primitive)) if *primitive != PrimitiveType::Bytes => Vec::new(),
+            (Node::Carrier(_), LayoutKind::AnonymousDomain { carrier, .. }) => vec![*carrier],
+            (Node::Carrier(_), LayoutKind::Domain { .. }) => vec![program.named_domain_carrier(*id).ok_or(Error("derived equality domain carrier is unavailable"))?],
+            (Node::Carrier(_), _) => vec![*id],
+            (Node::Tuple(_), LayoutKind::Tuple(fields)) => fields.clone(),
+            (Node::Record(nodes), LayoutKind::Record(fields)) if nodes.len() == fields.len() => nodes.iter().map(|node| fields.iter().find(|field| field.name == node.name).map(|field| field.layout)).collect::<Option<Vec<_>>>().ok_or(Error("derived equality record fields differ"))?,
+            (Node::List(_), LayoutKind::List { element }) | (Node::Option(_), LayoutKind::Option { element }) => vec![*element],
+            (Node::Result { .. }, LayoutKind::Result { error, value }) | (Node::Validation { .. }, LayoutKind::Validation { error, value }) => vec![*error, *value],
+            (Node::Sum(nodes), LayoutKind::Sum(variants) | LayoutKind::Opaque { variants, .. }) => {
+                if nodes.len() != variants.len() { return Err(Error("derived equality constructors differ")); }
+                let mut fields = Vec::new();
+                for node in nodes {
+                    let variant = variants.iter().find(|variant| variant.name == node.name).ok_or(Error("derived equality constructor is absent"))?;
+                    if node.fields.len() != variant.field_count { return Err(Error("derived equality constructor arity differs")); }
+                    match (variant.field_count, variant.payload) {
+                        (0, None) => {},
+                        (1, Some(payload)) => fields.push(payload),
+                        (_, Some(payload)) => {
+                            let Some(LayoutKind::Tuple(elements)) = program.layouts().get(payload).map(|layout| &layout.kind) else { return Err(Error("derived equality constructor fields lack a tuple representation")); };
+                            if elements.len() != variant.field_count { return Err(Error("derived equality constructor payload arity differs")); }
+                            fields.extend(elements);
+                        }
+                        _ => return Err(Error("derived equality constructor payload is absent")),
+                    }
+                }
+                fields
+            }
+            _ => return Err(Error("derived equality node differs from its operand layout")),
+        };
+        Ok(Some(types))
+    })
+}
+
 fn validate_no_item_dep_cycles(program: &Program, errors: &mut Vec<ValidationError>) {
     // Build item -> deps map: for each item, collect all items referenced in any kernel it owns.
     let mut deps: HashMap<ItemId, Vec<ItemId>> = HashMap::new();

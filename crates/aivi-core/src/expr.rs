@@ -69,9 +69,10 @@ pub enum Reference {
 pub type ExecutableEvidence = crate::ItemId;
 pub type ExecutableClassMember = ExecutableEvidence;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum BuiltinClassMemberIntrinsic {
     StructuralEq,
+    DerivedStructuralEq(std::sync::Arc<aivi_hir::EqualityShape>),
     Compare {
         subject: BuiltinOrdSubject,
         ordering_item: HirItemId,

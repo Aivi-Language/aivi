@@ -194,6 +194,10 @@ impl TypeChecker<'_> {
         subject: &GateType,
         path: &mut EqualityProofPath,
     ) -> Result<ClassMemberCallMatch, ComparisonError> {
+        if path.steps >= 4096 {
+            return Err(ComparisonError::Complexity);
+        }
+        path.steps += 1;
         // A dictionary already in scope carries its original lexical identity,
         // including the compiler-owned helpers checked under local shadowing.
         let scoped_classes = self

@@ -282,7 +282,7 @@ func __aivi_listAt_match:
   params = [matches: Bool, idx: Int, item: A]
   body = closure92
 func __aivi_listAt_check:
-  params = [target: Int, idx: Int, found: Option A, item: A]
+  params = [__aivi_eq_evidence393: Int -> Int -> Bool, target: Int, idx: Int, found: Option A, item: A]
   body = closure93
 func __aivi_listAt_step:
   params = [target: Int, state: (Int, Option A), item: A]
@@ -297,7 +297,7 @@ func __aivi_listReplace_pick:
   params = [matches: Bool, newVal: A, idx: Int, result: List A, item: A]
   body = closure97
 func __aivi_listReplace_check:
-  params = [target: Int, newVal: A, idx: Int, result: List A, item: A]
+  params = [__aivi_eq_evidence394: Int -> Int -> Bool, target: Int, newVal: A, idx: Int, result: List A, item: A]
   body = closure98
 func __aivi_listReplace_step:
   params = [target: Int, newVal: A, state: (Int, List A), item: A]
@@ -348,28 +348,28 @@ func __aivi_list_sortBy:
   params = [cmp: A -> A -> Bool, items: List A]
   body = closure114
 func __aivi_list_insertSortedOrdFalse:
-  params = [__aivi_ord_evidence393: A -> A -> Ordering, __aivi_eq_evidence394: A -> A -> Bool, newItem: A, current: A, acc: List A]
+  params = [__aivi_ord_evidence395: A -> A -> Ordering, __aivi_eq_evidence396: A -> A -> Bool, newItem: A, current: A, acc: List A]
   body = closure115
 func __aivi_list_insertSortedOrdStep:
-  params = [__aivi_ord_evidence395: A -> A -> Ordering, __aivi_eq_evidence396: A -> A -> Bool, newItem: A, state: (Bool, List A), current: A]
+  params = [__aivi_ord_evidence397: A -> A -> Ordering, __aivi_eq_evidence398: A -> A -> Bool, newItem: A, state: (Bool, List A), current: A]
   body = closure116
 func __aivi_list_insertSortedOrdFinish:
-  params = [__aivi_ord_evidence397: A -> A -> Ordering, __aivi_eq_evidence398: A -> A -> Bool, newItem: A, state: (Bool, List A)]
+  params = [__aivi_ord_evidence399: A -> A -> Ordering, __aivi_eq_evidence400: A -> A -> Bool, newItem: A, state: (Bool, List A)]
   body = closure117
 func __aivi_list_insertSortedOrd:
-  params = [__aivi_ord_evidence399: A -> A -> Ordering, __aivi_eq_evidence400: A -> A -> Bool, newItem: A, sorted: List A]
+  params = [__aivi_ord_evidence401: A -> A -> Ordering, __aivi_eq_evidence402: A -> A -> Bool, newItem: A, sorted: List A]
   body = closure118
 func __aivi_list_sortOrdStep:
-  params = [__aivi_ord_evidence401: A -> A -> Ordering, __aivi_eq_evidence402: A -> A -> Bool, sorted: List A, item: A]
+  params = [__aivi_ord_evidence403: A -> A -> Ordering, __aivi_eq_evidence404: A -> A -> Bool, sorted: List A, item: A]
   body = closure119
 func sort:
-  params = [__aivi_ord_evidence403: A -> A -> Ordering, __aivi_eq_evidence404: A -> A -> Bool, items: List A]
+  params = [__aivi_ord_evidence405: A -> A -> Ordering, __aivi_eq_evidence406: A -> A -> Bool, items: List A]
   body = closure120
 func __aivi_text_isEmpty:
-  params = [text: Text]
+  params = [__aivi_eq_evidence407: Text -> Text -> Bool, text: Text]
   body = closure121
 func __aivi_text_nonEmpty:
-  params = [text: Text]
+  params = [__aivi_eq_evidence408: Text -> Text -> Bool, text: Text]
   body = closure122
 func __aivi_pair_first:
   params = [pair: (A, B)]
@@ -566,9 +566,6 @@ func builtin-evidence#217::reduce:
 func builtin-evidence#218::reduce:
   params = [arg0: List A -> A -> List A, arg1: List A, arg2: List A]
   body = closure187
-func builtin-evidence#219::structural-eq:
-  params = [arg0: Text, arg1: Text]
-  body = closure188
 closures:
   closure0 add owner=0 root=expr2 kind=item-body
     params = [x:#0:Int, y:#1:Int]
@@ -756,66 +753,66 @@ closures:
     params = [sep:#205:Text, items:#206:List Text]
   closure92 __aivi_listAt_match owner=92 root=expr941 kind=item-body
     params = [matches:#207:Bool, idx:#208:Int, item:#209:A]
-  closure93 __aivi_listAt_check owner=93 root=expr962 kind=item-body
-    params = [target:#210:Int, idx:#211:Int, found:#212:Option A, item:#213:A]
-  closure94 __aivi_listAt_step owner=94 root=expr970 kind=item-body
+  closure93 __aivi_listAt_check owner=93 root=expr958 kind=item-body
+    params = [__aivi_eq_evidence393:#393:Int -> Int -> Bool, target:#210:Int, idx:#211:Int, found:#212:Option A, item:#213:A]
+  closure94 __aivi_listAt_step owner=94 root=expr972 kind=item-body
     params = [target:#215:Int, state:#216:(Int, Option A), item:#217:A]
-  closure95 __aivi_listAt_extract owner=95 root=expr973 kind=item-body
+  closure95 __aivi_listAt_extract owner=95 root=expr975 kind=item-body
     params = [state:#220:(Int, Option A)]
-  closure96 __aivi_listAt owner=96 root=expr992 kind=item-body
+  closure96 __aivi_listAt owner=96 root=expr994 kind=item-body
     params = [target:#223:Int, items:#224:List A]
-  closure97 __aivi_listReplace_pick owner=97 root=expr1016 kind=item-body
+  closure97 __aivi_listReplace_pick owner=97 root=expr1018 kind=item-body
     params = [matches:#225:Bool, newVal:#226:A, idx:#227:Int, result:#228:List A, item:#229:A]
-  closure98 __aivi_listReplace_check owner=98 root=expr1026 kind=item-body
-    params = [target:#230:Int, newVal:#231:A, idx:#232:Int, result:#233:List A, item:#234:A]
-  closure99 __aivi_listReplace_step owner=99 root=expr1035 kind=item-body
+  closure98 __aivi_listReplace_check owner=98 root=expr1028 kind=item-body
+    params = [__aivi_eq_evidence394:#394:Int -> Int -> Bool, target:#230:Int, newVal:#231:A, idx:#232:Int, result:#233:List A, item:#234:A]
+  closure99 __aivi_listReplace_step owner=99 root=expr1039 kind=item-body
     params = [target:#235:Int, newVal:#236:A, state:#237:(Int, List A), item:#238:A]
-  closure100 __aivi_listReplace_extract owner=100 root=expr1038 kind=item-body
+  closure100 __aivi_listReplace_extract owner=100 root=expr1042 kind=item-body
     params = [state:#241:(Int, List A)]
-  closure101 __aivi_listReplace owner=101 root=expr1058 kind=item-body
+  closure101 __aivi_listReplace owner=101 root=expr1062 kind=item-body
     params = [target:#244:Int, newVal:#245:A, items:#246:List A]
-  closure102 __aivi_list_findTry owner=102 root=expr1066 kind=item-body
+  closure102 __aivi_list_findTry owner=102 root=expr1070 kind=item-body
     params = [predicate:#247:A -> Bool, item:#248:A]
-  closure103 __aivi_list_findStep owner=103 root=expr1075 kind=item-body
+  closure103 __aivi_list_findStep owner=103 root=expr1079 kind=item-body
     params = [predicate:#249:A -> Bool, acc:#250:Option A, item:#251:A]
-  closure104 __aivi_list_find owner=104 root=expr1089 kind=item-body
+  closure104 __aivi_list_find owner=104 root=expr1093 kind=item-body
     params = [predicate:#253:A -> Bool, items:#254:List A]
-  closure105 __aivi_list_takeHelp owner=105 root=expr1114 kind=item-body
+  closure105 __aivi_list_takeHelp owner=105 root=expr1118 kind=item-body
     params = [n:#255:Int, count:#256:Int, acc:#257:List A, item:#258:A]
-  closure106 __aivi_list_takeStep owner=106 root=expr1122 kind=item-body
+  closure106 __aivi_list_takeStep owner=106 root=expr1126 kind=item-body
     params = [n:#259:Int, state:#260:(Int, List A), item:#261:A]
-  closure107 __aivi_list_takeExtract owner=107 root=expr1125 kind=item-body
+  closure107 __aivi_list_takeExtract owner=107 root=expr1129 kind=item-body
     params = [state:#264:(Int, List A)]
-  closure108 __aivi_list_take owner=108 root=expr1144 kind=item-body
+  closure108 __aivi_list_take owner=108 root=expr1148 kind=item-body
     params = [n:#266:Int, items:#267:List A]
-  closure109 __aivi_list_sortByInsertFalse owner=109 root=expr1171 kind=item-body
+  closure109 __aivi_list_sortByInsertFalse owner=109 root=expr1175 kind=item-body
     params = [cmp:#268:A -> A -> Bool, newItem:#269:A, current:#270:A, acc:#271:List A]
-  closure110 __aivi_list_sortByInsertStep owner=110 root=expr1190 kind=item-body
+  closure110 __aivi_list_sortByInsertStep owner=110 root=expr1194 kind=item-body
     params = [cmp:#272:A -> A -> Bool, newItem:#273:A, state:#274:(Bool, List A), current:#275:A]
-  closure111 __aivi_list_sortByInsertFinish owner=111 root=expr1202 kind=item-body
+  closure111 __aivi_list_sortByInsertFinish owner=111 root=expr1206 kind=item-body
     params = [cmp:#278:A -> A -> Bool, newItem:#279:A, state:#280:(Bool, List A)]
-  closure112 __aivi_list_sortByInsert owner=112 root=expr1224 kind=item-body
+  closure112 __aivi_list_sortByInsert owner=112 root=expr1228 kind=item-body
     params = [cmp:#283:A -> A -> Bool, newItem:#284:A, sorted:#285:List A]
-  closure113 __aivi_list_sortByStep owner=113 root=expr1229 kind=item-body
+  closure113 __aivi_list_sortByStep owner=113 root=expr1233 kind=item-body
     params = [cmp:#286:A -> A -> Bool, sorted:#287:List A, item:#288:A]
-  closure114 __aivi_list_sortBy owner=114 root=expr1243 kind=item-body
+  closure114 __aivi_list_sortBy owner=114 root=expr1247 kind=item-body
     params = [cmp:#289:A -> A -> Bool, items:#290:List A]
-  closure115 __aivi_list_insertSortedOrdFalse owner=115 root=expr1273 kind=item-body
-    params = [__aivi_ord_evidence393:#393:A -> A -> Ordering, __aivi_eq_evidence394:#394:A -> A -> Bool, newItem:#291:A, current:#292:A, acc:#293:List A]
-  closure116 __aivi_list_insertSortedOrdStep owner=116 root=expr1294 kind=item-body
-    params = [__aivi_ord_evidence395:#395:A -> A -> Ordering, __aivi_eq_evidence396:#396:A -> A -> Bool, newItem:#294:A, state:#295:(Bool, List A), current:#296:A]
-  closure117 __aivi_list_insertSortedOrdFinish owner=117 root=expr1306 kind=item-body
-    params = [__aivi_ord_evidence397:#397:A -> A -> Ordering, __aivi_eq_evidence398:#398:A -> A -> Bool, newItem:#299:A, state:#300:(Bool, List A)]
-  closure118 __aivi_list_insertSortedOrd owner=118 root=expr1332 kind=item-body
-    params = [__aivi_ord_evidence399:#399:A -> A -> Ordering, __aivi_eq_evidence400:#400:A -> A -> Bool, newItem:#303:A, sorted:#304:List A]
-  closure119 __aivi_list_sortOrdStep owner=119 root=expr1339 kind=item-body
-    params = [__aivi_ord_evidence401:#401:A -> A -> Ordering, __aivi_eq_evidence402:#402:A -> A -> Bool, sorted:#305:List A, item:#306:A]
-  closure120 sort owner=120 root=expr1354 kind=item-body
-    params = [__aivi_ord_evidence403:#403:A -> A -> Ordering, __aivi_eq_evidence404:#404:A -> A -> Bool, items:#307:List A]
+  closure115 __aivi_list_insertSortedOrdFalse owner=115 root=expr1277 kind=item-body
+    params = [__aivi_ord_evidence395:#395:A -> A -> Ordering, __aivi_eq_evidence396:#396:A -> A -> Bool, newItem:#291:A, current:#292:A, acc:#293:List A]
+  closure116 __aivi_list_insertSortedOrdStep owner=116 root=expr1298 kind=item-body
+    params = [__aivi_ord_evidence397:#397:A -> A -> Ordering, __aivi_eq_evidence398:#398:A -> A -> Bool, newItem:#294:A, state:#295:(Bool, List A), current:#296:A]
+  closure117 __aivi_list_insertSortedOrdFinish owner=117 root=expr1310 kind=item-body
+    params = [__aivi_ord_evidence399:#399:A -> A -> Ordering, __aivi_eq_evidence400:#400:A -> A -> Bool, newItem:#299:A, state:#300:(Bool, List A)]
+  closure118 __aivi_list_insertSortedOrd owner=118 root=expr1336 kind=item-body
+    params = [__aivi_ord_evidence401:#401:A -> A -> Ordering, __aivi_eq_evidence402:#402:A -> A -> Bool, newItem:#303:A, sorted:#304:List A]
+  closure119 __aivi_list_sortOrdStep owner=119 root=expr1343 kind=item-body
+    params = [__aivi_ord_evidence403:#403:A -> A -> Ordering, __aivi_eq_evidence404:#404:A -> A -> Bool, sorted:#305:List A, item:#306:A]
+  closure120 sort owner=120 root=expr1358 kind=item-body
+    params = [__aivi_ord_evidence405:#405:A -> A -> Ordering, __aivi_eq_evidence406:#406:A -> A -> Bool, items:#307:List A]
   closure121 __aivi_text_isEmpty owner=121 root=expr1362 kind=item-body
-    params = [text:#308:Text]
+    params = [__aivi_eq_evidence407:#407:Text -> Text -> Bool, text:#308:Text]
   closure122 __aivi_text_nonEmpty owner=122 root=expr1369 kind=item-body
-    params = [text:#309:Text]
+    params = [__aivi_eq_evidence408:#408:Text -> Text -> Bool, text:#309:Text]
   closure123 __aivi_pair_first owner=123 root=expr1372 kind=item-body
     params = [pair:#312:(A, B)]
   closure124 __aivi_pair_second owner=124 root=expr1375 kind=item-body
@@ -912,39 +909,37 @@ closures:
     params = [arg0:#423:Text, arg1:#424:Text]
   closure170 builtin-evidence#201::reduce owner=170 root=expr914 kind=item-body
     params = [arg0:#425:(Bool, Text) -> Text -> (Bool, Text), arg1:#426:(Bool, Text), arg2:#427:List Text]
-  closure171 builtin-evidence#202::structural-eq owner=171 root=expr954 kind=item-body
+  closure171 builtin-evidence#202::structural-eq owner=171 root=expr964 kind=item-body
     params = [arg0:#428:Int, arg1:#429:Int]
-  closure172 builtin-evidence#203::reduce owner=172 root=expr979 kind=item-body
+  closure172 builtin-evidence#203::reduce owner=172 root=expr981 kind=item-body
     params = [arg0:#430:(Int, Option A) -> A -> (Int, Option A), arg1:#431:(Int, Option A), arg2:#432:List A]
-  closure173 builtin-evidence#204::append owner=173 root=expr1000 kind=item-body
+  closure173 builtin-evidence#204::append owner=173 root=expr1002 kind=item-body
     params = [arg0:#433:List A, arg1:#434:List A]
-  closure174 builtin-evidence#205::reduce owner=174 root=expr1044 kind=item-body
+  closure174 builtin-evidence#205::reduce owner=174 root=expr1048 kind=item-body
     params = [arg0:#435:(Int, List A) -> A -> (Int, List A), arg1:#436:(Int, List A), arg2:#437:List A]
-  closure175 builtin-evidence#206::reduce owner=175 root=expr1081 kind=item-body
+  closure175 builtin-evidence#206::reduce owner=175 root=expr1085 kind=item-body
     params = [arg0:#438:Option A -> A -> Option A, arg1:#439:Option A, arg2:#440:List A]
-  closure176 builtin-evidence#207::append owner=176 root=expr1107 kind=item-body
+  closure176 builtin-evidence#207::append owner=176 root=expr1111 kind=item-body
     params = [arg0:#441:List A, arg1:#442:List A]
-  closure177 builtin-evidence#208::reduce owner=177 root=expr1131 kind=item-body
+  closure177 builtin-evidence#208::reduce owner=177 root=expr1135 kind=item-body
     params = [arg0:#443:(Int, List A) -> A -> (Int, List A), arg1:#444:(Int, List A), arg2:#445:List A]
-  closure178 builtin-evidence#209::append owner=178 root=expr1153 kind=item-body
+  closure178 builtin-evidence#209::append owner=178 root=expr1157 kind=item-body
     params = [arg0:#446:List A, arg1:#447:List A]
-  closure179 builtin-evidence#210::append owner=179 root=expr1177 kind=item-body
+  closure179 builtin-evidence#210::append owner=179 root=expr1181 kind=item-body
     params = [arg0:#448:List A, arg1:#449:List A]
-  closure180 builtin-evidence#211::append owner=180 root=expr1196 kind=item-body
+  closure180 builtin-evidence#211::append owner=180 root=expr1200 kind=item-body
     params = [arg0:#450:List A, arg1:#451:List A]
-  closure181 builtin-evidence#212::reduce owner=181 root=expr1208 kind=item-body
+  closure181 builtin-evidence#212::reduce owner=181 root=expr1212 kind=item-body
     params = [arg0:#452:(Bool, List A) -> A -> (Bool, List A), arg1:#453:(Bool, List A), arg2:#454:List A]
-  closure182 builtin-evidence#213::reduce owner=182 root=expr1235 kind=item-body
+  closure182 builtin-evidence#213::reduce owner=182 root=expr1239 kind=item-body
     params = [arg0:#455:List A -> A -> List A, arg1:#456:List A, arg2:#457:List A]
-  closure183 builtin-evidence#214::append owner=183 root=expr1255 kind=item-body
+  closure183 builtin-evidence#214::append owner=183 root=expr1259 kind=item-body
     params = [arg0:#458:List A, arg1:#459:List A]
-  closure184 builtin-evidence#215::append owner=184 root=expr1279 kind=item-body
+  closure184 builtin-evidence#215::append owner=184 root=expr1283 kind=item-body
     params = [arg0:#460:List A, arg1:#461:List A]
-  closure185 builtin-evidence#216::append owner=185 root=expr1300 kind=item-body
+  closure185 builtin-evidence#216::append owner=185 root=expr1304 kind=item-body
     params = [arg0:#462:List A, arg1:#463:List A]
-  closure186 builtin-evidence#217::reduce owner=186 root=expr1312 kind=item-body
+  closure186 builtin-evidence#217::reduce owner=186 root=expr1316 kind=item-body
     params = [arg0:#464:(Bool, List A) -> A -> (Bool, List A), arg1:#465:(Bool, List A), arg2:#466:List A]
-  closure187 builtin-evidence#218::reduce owner=187 root=expr1345 kind=item-body
+  closure187 builtin-evidence#218::reduce owner=187 root=expr1349 kind=item-body
     params = [arg0:#467:List A -> A -> List A, arg1:#468:List A, arg2:#469:List A]
-  closure188 builtin-evidence#219::structural-eq owner=188 root=expr1358 kind=item-body
-    params = [arg0:#470:Text, arg1:#471:Text]

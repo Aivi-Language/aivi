@@ -142,6 +142,212 @@ fn sum_fields_match_layout(
     }
 }
 
+impl KernelEvaluator<'_> {
+    fn evaluate_derived_equality(
+        &mut self,
+        kernel: KernelId,
+        expr: KernelExprId,
+        shape: &aivi_hir::EqualityShape,
+        arguments: Vec<RuntimeValue>,
+        globals: &BTreeMap<ItemId, RuntimeValue>,
+    ) -> Result<RuntimeValue, EvaluationError> {
+        use aivi_hir::EqualityShapeNode as Node;
+        let invalid = |reason| EvaluationError::UnsupportedBuiltinClassMember {
+            kernel,
+            expr,
+            intrinsic: BuiltinClassMemberIntrinsic::DerivedStructuralEq(std::sync::Arc::new(
+                shape.clone(),
+            )),
+            reason,
+        };
+        shape
+            .validate()
+            .map_err(|_| invalid("invalid derived equality shape"))?;
+        if arguments.len() != shape.evidence_count() + 2 {
+            return Err(invalid(
+                "derived equality received the wrong argument count",
+            ));
+        }
+        // These owners release arbitrarily deep value trees iteratively, even
+        // on a short circuit or a callback error. Work entries borrow owners.
+        let arguments = arguments
+            .into_iter()
+            .map(DetachedRuntimeValue::from_runtime_owned)
+            .collect::<Vec<_>>();
+        let operands = &arguments[shape.evidence_count()..];
+        let mut pending = vec![(
+            shape.root(),
+            operands[0].as_runtime(),
+            operands[1].as_runtime(),
+        )];
+        while let Some((id, left, right)) = pending.pop() {
+            match shape
+                .node(id)
+                .ok_or_else(|| invalid("invalid derived equality edge"))?
+            {
+                Node::Structural => {
+                    if !structural_eq(kernel, expr, left, right)? {
+                        return Ok(RuntimeValue::Bool(false));
+                    }
+                }
+                Node::Evidence(slot) => {
+                    let callable = arguments[slot.as_raw() as usize].as_runtime().clone();
+                    let result = self.apply_callable(
+                        kernel,
+                        expr,
+                        callable,
+                        vec![left.clone(), right.clone()],
+                        globals,
+                    )?;
+                    match result {
+                        RuntimeValue::Bool(true) => {}
+                        RuntimeValue::Bool(false) => return Ok(RuntimeValue::Bool(false)),
+                        _ => return Err(invalid("equality evidence did not return Bool")),
+                    }
+                }
+                Node::Carrier(child) => pending.push((*child, left, right)),
+                Node::Tuple(fields) => {
+                    let (RuntimeValue::Tuple(left), RuntimeValue::Tuple(right)) = (left, right)
+                    else {
+                        return Err(invalid(
+                            "derived tuple equality received a different representation",
+                        ));
+                    };
+                    if left.len() != fields.len() || right.len() != fields.len() {
+                        return Err(invalid("derived tuple equality received a different arity"));
+                    }
+                    pending.extend(
+                        fields
+                            .iter()
+                            .zip(left.iter().zip(right))
+                            .rev()
+                            .map(|(id, (left, right))| (*id, left, right)),
+                    );
+                }
+                Node::Record(fields) => {
+                    let (RuntimeValue::Record(left), RuntimeValue::Record(right)) = (left, right)
+                    else {
+                        return Err(invalid(
+                            "derived record equality received a different representation",
+                        ));
+                    };
+                    if left.len() != fields.len() || right.len() != fields.len() {
+                        return Err(invalid(
+                            "derived record equality received a different field count",
+                        ));
+                    }
+                    for field in fields.iter().rev() {
+                        let left = left
+                            .iter()
+                            .find(|actual| actual.label == field.name)
+                            .ok_or_else(|| invalid("derived equality record field is absent"))?;
+                        let right = right
+                            .iter()
+                            .find(|actual| actual.label == field.name)
+                            .ok_or_else(|| invalid("derived equality record field is absent"))?;
+                        pending.push((field.node, &left.value, &right.value));
+                    }
+                }
+                Node::Sum(variants) => {
+                    let (RuntimeValue::Sum(left), RuntimeValue::Sum(right)) = (left, right) else {
+                        return Err(invalid(
+                            "derived sum equality received a different representation",
+                        ));
+                    };
+                    if left.item != right.item || left.variant_name != right.variant_name {
+                        return Ok(RuntimeValue::Bool(false));
+                    }
+                    let variant = variants
+                        .iter()
+                        .find(|variant| variant.name == left.variant_name)
+                        .ok_or_else(|| invalid("derived equality constructor is absent"))?;
+                    if left.fields.len() != variant.fields.len()
+                        || right.fields.len() != variant.fields.len()
+                    {
+                        return Err(invalid("derived equality constructor arity differs"));
+                    }
+                    pending.extend(
+                        variant
+                            .fields
+                            .iter()
+                            .zip(left.fields.iter().zip(&right.fields))
+                            .rev()
+                            .map(|(id, (left, right))| (*id, left, right)),
+                    );
+                }
+                Node::List(child) => {
+                    let (RuntimeValue::List(left), RuntimeValue::List(right)) = (left, right)
+                    else {
+                        return Err(invalid(
+                            "derived list equality received a different representation",
+                        ));
+                    };
+                    if left.len() != right.len() {
+                        return Ok(RuntimeValue::Bool(false));
+                    }
+                    pending.extend(
+                        left.iter()
+                            .zip(right)
+                            .rev()
+                            .map(|(left, right)| (*child, left, right)),
+                    );
+                }
+                Node::Option(child) => match (left, right) {
+                    (RuntimeValue::OptionNone, RuntimeValue::OptionNone) => {}
+                    (RuntimeValue::OptionSome(left), RuntimeValue::OptionSome(right)) => {
+                        pending.push((*child, left, right))
+                    }
+                    (RuntimeValue::OptionNone, RuntimeValue::OptionSome(_))
+                    | (RuntimeValue::OptionSome(_), RuntimeValue::OptionNone) => {
+                        return Ok(RuntimeValue::Bool(false));
+                    }
+                    _ => {
+                        return Err(invalid(
+                            "derived option equality received a different representation",
+                        ));
+                    }
+                },
+                Node::Result { error, value } => match (left, right) {
+                    (RuntimeValue::ResultErr(left), RuntimeValue::ResultErr(right)) => {
+                        pending.push((*error, left, right))
+                    }
+                    (RuntimeValue::ResultOk(left), RuntimeValue::ResultOk(right)) => {
+                        pending.push((*value, left, right))
+                    }
+                    (RuntimeValue::ResultErr(_), RuntimeValue::ResultOk(_))
+                    | (RuntimeValue::ResultOk(_), RuntimeValue::ResultErr(_)) => {
+                        return Ok(RuntimeValue::Bool(false));
+                    }
+                    _ => {
+                        return Err(invalid(
+                            "derived result equality received a different representation",
+                        ));
+                    }
+                },
+                Node::Validation { error, value } => match (left, right) {
+                    (
+                        RuntimeValue::ValidationInvalid(left),
+                        RuntimeValue::ValidationInvalid(right),
+                    ) => pending.push((*error, left, right)),
+                    (RuntimeValue::ValidationValid(left), RuntimeValue::ValidationValid(right)) => {
+                        pending.push((*value, left, right))
+                    }
+                    (RuntimeValue::ValidationInvalid(_), RuntimeValue::ValidationValid(_))
+                    | (RuntimeValue::ValidationValid(_), RuntimeValue::ValidationInvalid(_)) => {
+                        return Ok(RuntimeValue::Bool(false));
+                    }
+                    _ => {
+                        return Err(invalid(
+                            "derived validation equality received a different representation",
+                        ));
+                    }
+                },
+            }
+        }
+        Ok(RuntimeValue::Bool(true))
+    }
+}
+
 fn structural_eq(
     kernel: KernelId,
     expr: KernelExprId,
@@ -276,6 +482,77 @@ fn unordered_runtime_values_eq(
         return Ok(false);
     }
     Ok(true)
+}
+
+#[cfg(test)]
+mod derived_dictionary_tests {
+    use super::*;
+    use aivi_hir::{EqualityEvidenceId, EqualityNodeId, EqualityShape, EqualityShapeNode as Node, EqualitySumVariant};
+
+    #[test]
+    fn derived_equality_walks_and_releases_deep_recursive_values_on_a_small_stack() {
+        std::thread::Builder::new()
+            .stack_size(256 * 1024)
+            .spawn(|| {
+                let root = EqualityNodeId::from_raw(0);
+                let shape = EqualityShape::new(
+                    root,
+                    vec![
+                        Node::Sum(vec![
+                            EqualitySumVariant {
+                                name: "End".into(),
+                                fields: vec![EqualityNodeId::from_raw(1)],
+                            },
+                            EqualitySumVariant {
+                                name: "Next".into(),
+                                fields: vec![root],
+                            },
+                        ]),
+                        Node::Evidence(EqualityEvidenceId::from_raw(0)),
+                    ],
+                    1,
+                )
+                .unwrap();
+                let build = |last| {
+                    let sum = |name: &str, value| {
+                        RuntimeValue::Sum(RuntimeSumValue {
+                            item: HirItemId::from_raw(0),
+                            type_name: "Chain".into(),
+                            variant_name: name.into(),
+                            fields: vec![value],
+                        })
+                    };
+                    let mut value = sum("End", RuntimeValue::Int(last));
+                    for _ in 0..100_000 {
+                        value = sum("Next", value);
+                    }
+                    value
+                };
+                let program = Program::new();
+                let mut evaluator = KernelEvaluator::new(&program);
+                for (right, expected) in [(3, true), (4, false)] {
+                    let result = evaluator
+                        .evaluate_derived_equality(
+                            KernelId::from_raw(0),
+                            KernelExprId::from_raw(0),
+                            &shape,
+                            vec![
+                                runtime_class_member_value(
+                                    BuiltinClassMemberIntrinsic::StructuralEq,
+                                ),
+                                build(3),
+                                build(right),
+                            ],
+                            &BTreeMap::new(),
+                        )
+                        .unwrap();
+                    assert_eq!(result, RuntimeValue::Bool(expected));
+                }
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
 }
 
 fn unordered_runtime_map_eq(

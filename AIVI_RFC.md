@@ -903,6 +903,14 @@ equality evidence. Proofs exceeding compiler resource limits report
 The standard `Eq` dictionary requires only `(==)`; `!=` is derived from that evidence.
 Authored class dictionaries require every declared member, independent of the class name.
 
+Derived equality carries executable payload evidence. Each payload comparison invokes the
+selected authored, imported, or scoped equality dictionary, including inside compiler-derived
+containers and sums. Dictionaries retain their class and type-parameter identities when type
+parameters later instantiate to the same concrete type. Compiler-owned payload equality may
+use the structural fast path only when its evidence establishes that operation. Cached and
+native execution preserve the same dictionary ABI; native layouts retain their documented
+representation support boundary.
+
 Derived equality is structural and type-directed:
 
 - tuple equality: position-by-position

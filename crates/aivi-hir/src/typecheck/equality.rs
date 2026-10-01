@@ -196,44 +196,9 @@ impl TypeChecker<'_> {
                     })
                     .collect()
             }
-            GateType::OpaqueImport {
-                origin,
-                import,
-                arguments,
-                definition,
-                ..
-            } => {
-                let key = EqualityProofKey::of(self.module, ty);
-                let declaration = definition
-                    .as_deref()
-                    .or_else(|| {
-                        self.module.imports().iter().find_map(|(id, binding)| {
-                            let same = origin.as_deref().map_or(id == *import, |origin| {
-                                binding
-                                    .metadata
-                                    .type_origin()
-                                    .is_some_and(|candidate| &candidate.identity == origin)
-                            });
-                            if !same {
-                                return None;
-                            }
-                            match &binding.metadata {
-                                ImportBindingMetadata::TypeConstructor { definition, .. } => {
-                                    definition.as_ref()
-                                }
-                                _ => None,
-                            }
-                        })
-                    })
-                    .or_else(|| {
-                        let identity = &key.as_ref()?.identity;
-                        path.active.iter().rev().find_map(|frame| {
-                            (&frame.key.identity == identity)
-                                .then_some(frame.definition.as_deref())
-                                .flatten()
-                        })
-                    });
-                let fields = match declaration {
+            GateType::OpaqueImport { arguments, .. } => {
+                let declaration = self.imported_equality_definition(ty, path);
+                let fields = match declaration.as_ref() {
                     Some(
                         crate::ImportTypeDefinition::Alias(carrier)
                         | crate::ImportTypeDefinition::Domain(carrier),
@@ -243,22 +208,9 @@ impl TypeChecker<'_> {
                         .flat_map(|variant| variant.fields.iter())
                         .collect(),
                     None => {
-                        if let Some(carrier) =
-                            self.module.imports().get(*import).and_then(|binding| {
-                                match &binding.metadata {
-                                    ImportBindingMetadata::Domain { carrier, .. } => {
-                                        carrier.as_ref()
-                                    }
-                                    _ => None,
-                                }
-                            })
-                        {
-                            vec![carrier]
-                        } else {
-                            return Err(ComparisonError::Missing(format!(
-                                "the closed representation of imported `{ty}` is unavailable; explicit equality evidence is required"
-                            )));
-                        }
+                        return Err(ComparisonError::Missing(format!(
+                            "the closed representation of imported `{ty}` is unavailable; explicit equality evidence is required"
+                        )));
                     }
                 };
                 Ok(fields

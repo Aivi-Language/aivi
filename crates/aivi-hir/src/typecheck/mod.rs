@@ -29,6 +29,8 @@ include!("comparison.rs");
 
 include!("equality.rs");
 
+include!("equality_dictionary.rs");
+
 include!("helpers.rs");
 
 #[cfg(test)]

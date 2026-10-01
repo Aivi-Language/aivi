@@ -2819,7 +2819,7 @@ impl<'a> ModuleLowerer<'a> {
         expr_ty: &aivi_hir::GateType,
     ) -> Result<ItemId, LoweringError> {
         let key = BuiltinEvidenceKey {
-            intrinsic,
+            intrinsic: intrinsic.clone(),
             ty: self.lower_type(expr_ty),
         };
         if let Some(item) = self.builtin_evidence_item_map.get(&key).copied() {
@@ -2836,7 +2836,7 @@ impl<'a> ModuleLowerer<'a> {
         let name = format!(
             "builtin-evidence#{}::{}",
             origin.as_raw(),
-            self.builtin_evidence_name(intrinsic)
+            self.builtin_evidence_name(intrinsic.clone())
         )
         .into_boxed_str();
         let item_id = self
@@ -2943,7 +2943,7 @@ impl<'a> ModuleLowerer<'a> {
             return None;
         };
         let ExprKind::Reference(Reference::BuiltinClassMember(intrinsic)) =
-            self.module.exprs()[*callee].kind
+            self.module.exprs()[*callee].kind.clone()
         else {
             return None;
         };
@@ -2985,6 +2985,7 @@ impl<'a> ModuleLowerer<'a> {
     fn builtin_evidence_name(&self, intrinsic: BuiltinClassMemberIntrinsic) -> &'static str {
         match intrinsic {
             BuiltinClassMemberIntrinsic::StructuralEq => "structural-eq",
+            BuiltinClassMemberIntrinsic::DerivedStructuralEq(_) => "derived-structural-eq",
             BuiltinClassMemberIntrinsic::Compare { .. } => "compare",
             BuiltinClassMemberIntrinsic::Append(_) => "append",
             BuiltinClassMemberIntrinsic::Empty(_) => "empty",
@@ -3638,6 +3639,16 @@ impl<'a> ModuleLowerer<'a> {
                                     .copied()
                                     .map(Reference::Item)
                                     .unwrap_or_else(|| Reference::DomainMember(handle.clone())),
+                                GateRuntimeReference::DerivedEquality(shape) => {
+                                    Reference::ExecutableEvidence(self.seed_builtin_evidence_item(
+                                        owner,
+                                        expr.span,
+                                        BuiltinClassMemberIntrinsic::DerivedStructuralEq(
+                                            shape.clone(),
+                                        ),
+                                        &expr.ty,
+                                    )?)
+                                }
                                 GateRuntimeReference::ClassMember(dispatch) => self
                                     .lower_class_member_reference(
                                         owner, expr.span, dispatch, &expr.ty,
@@ -4117,7 +4128,8 @@ impl<'a> ModuleLowerer<'a> {
                                                     payload_subject: truthy
                                                         .payload_subject
                                                         .map(|payload| self.lower_type(&payload)),
-                                                    result_type: self.lower_type(&truthy.result_type),
+                                                    result_type: self
+                                                        .lower_type(&truthy.result_type),
                                                     body: bodies
                                                         .next()
                                                         .expect("truthy body should exist"),
@@ -4128,7 +4140,8 @@ impl<'a> ModuleLowerer<'a> {
                                                     payload_subject: falsy
                                                         .payload_subject
                                                         .map(|payload| self.lower_type(&payload)),
-                                                    result_type: self.lower_type(&falsy.result_type),
+                                                    result_type: self
+                                                        .lower_type(&falsy.result_type),
                                                     body: bodies
                                                         .next()
                                                         .expect("falsy body should exist"),

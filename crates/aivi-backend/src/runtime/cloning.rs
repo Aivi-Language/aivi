@@ -612,7 +612,7 @@ fn clone_runtime_value_fields(
                 intrinsic,
                 bound_arguments,
             } => RuntimeCallable::BuiltinClassMember {
-                intrinsic: *intrinsic,
+                intrinsic: intrinsic.clone(),
                 bound_arguments: fields.values(bound_arguments),
             },
             RuntimeCallable::IntrinsicValue {

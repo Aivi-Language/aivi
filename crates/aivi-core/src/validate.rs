@@ -9,6 +9,10 @@ use crate::{
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ValidationError {
+    InvalidDerivedEquality {
+        expr: ExprId,
+        reason: aivi_hir::EqualityShapeError,
+    },
     MissingItemBody {
         item: crate::ItemId,
     },
@@ -171,6 +175,10 @@ pub enum ValidationError {
 impl fmt::Display for ValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidDerivedEquality { expr, reason } => write!(
+                f,
+                "derived equality at expression {expr} is invalid: {reason}"
+            ),
             Self::MissingItemBody { item } => {
                 write!(f, "item {item} is missing its typed-core body expression")
             }
@@ -582,11 +590,21 @@ pub fn validate_module(module: &Module) -> Result<(), ValidationErrors> {
             | ExprKind::SuffixedInteger(_)
             | ExprKind::Reference(Reference::Local(_))
             | ExprKind::Reference(Reference::Builtin(_))
-            | ExprKind::Reference(Reference::BuiltinClassMember(_))
             | ExprKind::Reference(Reference::IntrinsicValue(_))
             | ExprKind::Reference(Reference::DomainMember(_))
             | ExprKind::Reference(Reference::SumConstructor(_))
             | ExprKind::Reference(Reference::HirItem(_)) => {}
+            ExprKind::Reference(Reference::BuiltinClassMember(
+                crate::BuiltinClassMemberIntrinsic::DerivedStructuralEq(shape),
+            )) => {
+                if let Err(reason) = validate_derived_equality_type(shape, &expr.ty) {
+                    errors.push(ValidationError::InvalidDerivedEquality {
+                        expr: expr_id,
+                        reason,
+                    });
+                }
+            }
+            ExprKind::Reference(Reference::BuiltinClassMember(_)) => {}
             ExprKind::Reference(Reference::ExecutableEvidence(item)) => {
                 if !module.items().contains(*item) {
                     errors.push(ValidationError::UnknownItemReference {
@@ -1025,6 +1043,85 @@ fn push_exprs(
     for expr in exprs {
         push_expr(module, *expr, work, errors);
     }
+}
+
+fn validate_derived_equality_type(
+    shape: &aivi_hir::EqualityShape,
+    ty: &crate::Type,
+) -> Result<(), aivi_hir::EqualityShapeError> {
+    use crate::Type;
+    use aivi_hir::{BuiltinType, EqualityShapeError as Error, EqualityShapeNode as Node};
+    fn signature(mut ty: &Type) -> (Vec<Type>, &Type) {
+        let mut parameters = Vec::new();
+        while let Type::Arrow { parameter, result } = ty {
+            parameters.push(parameter.as_ref().clone());
+            ty = result;
+        }
+        (parameters, ty)
+    }
+    let (parameters, result) = signature(ty);
+    let count = shape.evidence_count();
+    if parameters.len() != count + 2
+        || parameters[count] != parameters[count + 1]
+        || *result != Type::Primitive(BuiltinType::Bool)
+    {
+        return Err(Error(
+            "derived equality callable ABI differs from its shape",
+        ));
+    }
+    let evidence = parameters[..count]
+        .iter()
+        .map(|ty| {
+            let (parameters, result) = signature(ty);
+            match parameters.as_slice() {
+                [left, right] => Ok((
+                    left.clone(),
+                    right.clone(),
+                    *result == Type::Primitive(BuiltinType::Bool),
+                )),
+                _ => Err(Error("derived equality evidence must be fully bound")),
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    shape.validate_operands(parameters[count].clone(), &evidence, |node, ty| {
+        let types = match (node, ty) {
+            (Node::Structural, Type::Primitive(primitive)) if *primitive != BuiltinType::Bytes => {
+                Vec::new()
+            }
+            (
+                Node::Carrier(_),
+                Type::Domain {
+                    carrier: Some(carrier),
+                    ..
+                },
+            ) => vec![carrier.as_ref().clone()],
+            (
+                Node::Carrier(_) | Node::Sum(_),
+                Type::OpaqueItem { .. } | Type::OpaqueImport { .. },
+            ) => return Ok(None),
+            (Node::Carrier(_), ty) => vec![ty.clone()],
+            (Node::Tuple(_), Type::Tuple(fields)) => fields.clone(),
+            (Node::Record(nodes), Type::Record(fields)) if nodes.len() == fields.len() => nodes
+                .iter()
+                .map(|node| {
+                    fields
+                        .iter()
+                        .find(|field| field.name == node.name)
+                        .map(|field| field.ty.clone())
+                })
+                .collect::<Option<Vec<_>>>()
+                .ok_or(Error("derived equality record fields differ"))?,
+            (Node::List(_), Type::List(element)) | (Node::Option(_), Type::Option(element)) => {
+                vec![element.as_ref().clone()]
+            }
+            (Node::Result { .. }, Type::Result { error, value })
+            | (Node::Validation { .. }, Type::Validation { error, value }) => {
+                vec![error.as_ref().clone(), value.as_ref().clone()]
+            }
+            _ => return Err(Error("derived equality node differs from its operand type")),
+        };
+        Ok(Some(types))
+    })
 }
 
 fn validate_pattern(pattern: &Pattern) {

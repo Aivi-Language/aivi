@@ -4,7 +4,7 @@ struct EvaluationLocation {
     expr: KernelExprId,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct BuiltinCallSite {
     location: EvaluationLocation,
     intrinsic: BuiltinClassMemberIntrinsic,
@@ -506,7 +506,7 @@ impl<'a> KernelEvaluator<'a> {
                             values.push(self.runtime_executable_evidence_value(*evidence, globals)?)
                         }
                         KernelExprKind::BuiltinClassMember(intrinsic) => {
-                            values.push(runtime_class_member_value(*intrinsic))
+                            values.push(runtime_class_member_value(intrinsic.clone()))
                         }
                         KernelExprKind::Builtin(term) => values.push(map_builtin(*term)),
                         KernelExprKind::IntrinsicValue(value) => {
@@ -1379,7 +1379,7 @@ impl<'a> KernelEvaluator<'a> {
                 mut bound_arguments,
             } => {
                 bound_arguments.extend(arguments);
-                let arity = builtin_class_member_arity(intrinsic);
+                let arity = builtin_class_member_arity(&intrinsic);
                 if bound_arguments.len() < arity {
                     return Ok(RuntimeValue::Callable(
                         RuntimeCallable::BuiltinClassMember {
@@ -1614,15 +1614,18 @@ impl<'a> KernelEvaluator<'a> {
                 kernel: kernel_id,
                 expr,
             },
-            intrinsic,
+            intrinsic: intrinsic.clone(),
         };
         match intrinsic {
+            BuiltinClassMemberIntrinsic::DerivedStructuralEq(shape) => {
+                self.evaluate_derived_equality(kernel_id, expr, &shape, arguments, globals)
+            }
             BuiltinClassMemberIntrinsic::StructuralEq => {
                 let [left, right] = expect_arity::<2>(arguments).map_err(|reason| {
                     EvaluationError::UnsupportedBuiltinClassMember {
                         kernel: kernel_id,
                         expr,
-                        intrinsic,
+                        intrinsic: intrinsic.clone(),
                         reason,
                     }
                 })?;
@@ -1638,7 +1641,7 @@ impl<'a> KernelEvaluator<'a> {
                     EvaluationError::UnsupportedBuiltinClassMember {
                         kernel: kernel_id,
                         expr,
-                        intrinsic,
+                        intrinsic: intrinsic.clone(),
                         reason,
                     }
                 })?;
@@ -1649,7 +1652,7 @@ impl<'a> KernelEvaluator<'a> {
                     EvaluationError::UnsupportedBuiltinClassMember {
                         kernel: kernel_id,
                         expr,
-                        intrinsic,
+                        intrinsic: intrinsic.clone(),
                         reason,
                     }
                 })?;
@@ -1664,7 +1667,7 @@ impl<'a> KernelEvaluator<'a> {
                     EvaluationError::UnsupportedBuiltinClassMember {
                         kernel: kernel_id,
                         expr,
-                        intrinsic,
+                        intrinsic: intrinsic.clone(),
                         reason,
                     }
                 })?;
@@ -1675,7 +1678,7 @@ impl<'a> KernelEvaluator<'a> {
                     EvaluationError::UnsupportedBuiltinClassMember {
                         kernel: kernel_id,
                         expr,
-                        intrinsic,
+                        intrinsic: intrinsic.clone(),
                         reason,
                     }
                 })?;
@@ -1686,7 +1689,7 @@ impl<'a> KernelEvaluator<'a> {
                     EvaluationError::UnsupportedBuiltinClassMember {
                         kernel: kernel_id,
                         expr,
-                        intrinsic,
+                        intrinsic: intrinsic.clone(),
                         reason,
                     }
                 })?;
@@ -1697,7 +1700,7 @@ impl<'a> KernelEvaluator<'a> {
                     EvaluationError::UnsupportedBuiltinClassMember {
                         kernel: kernel_id,
                         expr,
-                        intrinsic,
+                        intrinsic: intrinsic.clone(),
                         reason,
                     }
                 })?;
@@ -1708,7 +1711,7 @@ impl<'a> KernelEvaluator<'a> {
                     EvaluationError::UnsupportedBuiltinClassMember {
                         kernel: kernel_id,
                         expr,
-                        intrinsic,
+                        intrinsic: intrinsic.clone(),
                         reason,
                     }
                 })?;
@@ -1719,7 +1722,7 @@ impl<'a> KernelEvaluator<'a> {
                     EvaluationError::UnsupportedBuiltinClassMember {
                         kernel: kernel_id,
                         expr,
-                        intrinsic,
+                        intrinsic: intrinsic.clone(),
                         reason,
                     }
                 })?;
@@ -1745,7 +1748,7 @@ impl<'a> KernelEvaluator<'a> {
                     EvaluationError::UnsupportedBuiltinClassMember {
                         kernel: kernel_id,
                         expr,
-                        intrinsic,
+                        intrinsic: intrinsic.clone(),
                         reason,
                     }
                 })?;
@@ -1782,7 +1785,7 @@ impl<'a> KernelEvaluator<'a> {
                     EvaluationError::UnsupportedBuiltinClassMember {
                         kernel: kernel_id,
                         expr,
-                        intrinsic,
+                        intrinsic: intrinsic.clone(),
                         reason,
                     }
                 })?;
@@ -2569,7 +2572,7 @@ impl<'a> KernelEvaluator<'a> {
             RuntimeValue::Callable(RuntimeCallable::BuiltinClassMember {
                 intrinsic,
                 bound_arguments,
-            }) if bound_arguments.is_empty() => Some(*intrinsic),
+            }) if bound_arguments.is_empty() => Some(intrinsic.clone()),
             RuntimeValue::Callable(RuntimeCallable::ItemBody {
                 item,
                 kernel,
@@ -2585,11 +2588,12 @@ impl<'a> KernelEvaluator<'a> {
                 else {
                     return None;
                 };
-                let KernelExprKind::BuiltinClassMember(intrinsic) = kernel.exprs()[*callee].kind
+                let KernelExprKind::BuiltinClassMember(intrinsic) =
+                    kernel.exprs()[*callee].kind.clone()
                 else {
                     return None;
                 };
-                if arguments.len() != builtin_class_member_arity(intrinsic)
+                if arguments.len() != builtin_class_member_arity(&intrinsic)
                     || arguments.len() != kernel.convention.parameters.len()
                 {
                     return None;
@@ -2656,7 +2660,12 @@ impl<'a> KernelEvaluator<'a> {
 
         let EvaluationLocation { kernel, expr } = call_site.location;
         let pure = |this: &mut Self, value| {
-            this.apply_applicative_operation(call_site, &evidence.pure, vec![value], globals)
+            this.apply_applicative_operation(
+                call_site.clone(),
+                &evidence.pure,
+                vec![value],
+                globals,
+            )
         };
         let (payload, constructor) = match (traversable, strip_signal(subject)) {
             (BuiltinTraversableCarrier::List, RuntimeValue::List(values)) => {
@@ -2668,7 +2677,7 @@ impl<'a> KernelEvaluator<'a> {
                     let mapped =
                         self.apply_callable(kernel, expr, function.clone(), vec![value], globals)?;
                     let singleton = self.apply_applicative_operation(
-                        call_site,
+                        call_site.clone(),
                         &evidence.map,
                         vec![
                             runtime_class_member_value(BuiltinClassMemberIntrinsic::Pure(
@@ -2679,7 +2688,7 @@ impl<'a> KernelEvaluator<'a> {
                         globals,
                     )?;
                     let functions = self.apply_applicative_operation(
-                        call_site,
+                        call_site.clone(),
                         &evidence.map,
                         vec![
                             runtime_class_member_value(BuiltinClassMemberIntrinsic::Append(
@@ -2691,7 +2700,7 @@ impl<'a> KernelEvaluator<'a> {
                     )?;
                     accumulated = DetachedRuntimeValue::from_runtime_owned(
                         self.apply_applicative_operation(
-                            call_site,
+                            call_site.clone(),
                             &evidence.apply,
                             vec![functions, singleton],
                             globals,

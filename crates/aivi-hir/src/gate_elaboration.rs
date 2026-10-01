@@ -268,6 +268,7 @@ pub enum GateRuntimeReference {
     SumConstructor(crate::SumConstructorHandle),
     DomainMember(DomainMemberHandle),
     ClassMember(crate::ResolvedClassMemberDispatch),
+    DerivedEquality(std::sync::Arc<crate::EqualityShape>),
     Builtin(BuiltinTerm),
     IntrinsicValue(IntrinsicValue),
 }

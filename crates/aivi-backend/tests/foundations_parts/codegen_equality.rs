@@ -50,6 +50,197 @@ fun ne:Bool = left:Float right:Float=>    left != right
 }
 
 #[test]
+fn derived_equality_preserves_authored_payloads_in_interpreter_and_native_code() {
+    let backend = lower_text(
+        "backend-derived-equality-dictionaries.aivi",
+        r#"
+type Tag = Tag Int | Other Int
+instance Eq Tag = { (==) left right = True }
+type Box = Box Tag Int | Empty
+
+fun tupleSame:Bool = left:(Tag, Int) right:(Tag, Int) => left == right
+fun recordSame:Bool = left:{ tag:Tag, count:Int } right:{ tag:Tag, count:Int } => left == right
+fun optionSame:Bool = left:Option Tag right:Option Tag => left == right
+fun boxSame:Bool = left:Box right:Box => left == right
+fun evidenceSame:Eq Int => Int -> Int -> Bool = left right => left == right
+fun callbackSame:(A -> A -> Bool) -> A -> A -> Bool = compare left right => compare left right
+fun tagSame:Tag -> Tag -> Bool = left right => left == right
+
+value tupleEqual:Bool = tupleSame (Tag 1, 3) (Other 2, 3)
+value tupleDifferent:Bool = tupleSame (Tag 1, 3) (Other 2, 4)
+value recordEqual:Bool = recordSame { tag:Tag 1, count:3 } { tag:Other 2, count:3 }
+value optionEqual:Bool = optionSame (Some (Tag 1)) (Some (Other 2))
+value optionDifferent:Bool = optionSame (Some (Tag 1)) None
+value boxEqual:Bool = boxSame (Box (Tag 1) 3) (Box (Other 2) 3)
+value boxDifferent:Bool = boxSame (Box (Tag 1) 3) Empty
+value scalarEqual:Bool = evidenceSame 1 1
+value scalarDifferent:Bool = evidenceSame 1 2
+value referenceCallback:Bool = callbackSame tagSame (Tag 1) (Other 2)
+"#,
+    );
+    let expected = [
+        ("tupleEqual", true),
+        ("tupleDifferent", false),
+        ("recordEqual", true),
+        ("optionEqual", true),
+        ("optionDifferent", false),
+        ("boxEqual", true),
+        ("boxDifferent", false),
+        ("scalarEqual", true),
+        ("scalarDifferent", false),
+        ("referenceCallback", true),
+    ];
+    let mut evaluator = KernelEvaluator::new(&backend);
+    for (name, expected) in expected {
+        assert_eq!(
+            evaluator
+                .evaluate_item(find_item(&backend, name), &BTreeMap::new())
+                .unwrap(),
+            RuntimeValue::Bool(expected),
+            "interpreter {name}"
+        );
+    }
+    let compiled = compile_program(&backend)
+        .expect("closed derived equality should compile with callable payload evidence");
+    assert!(
+        compiled
+            .kernels()
+            .iter()
+            .any(|artifact| artifact.clif.contains("call_indirect"))
+    );
+    let executable = aivi_backend::BackendExecutableProgram::interpreted(&backend);
+    let mut engine = executable.create_engine();
+    for (name, expected) in expected {
+        assert_eq!(
+            engine
+                .evaluate_item(find_item(&backend, name), &BTreeMap::new())
+                .unwrap(),
+            RuntimeValue::Bool(expected),
+            "JIT {name}"
+        );
+    }
+    let decoded: aivi_backend::Program =
+        postcard::from_bytes(&postcard::to_stdvec(&backend).unwrap()).unwrap();
+    validate_program(&decoded).expect("decoded equality dictionaries retain their typed ABI");
+    let mut replay = KernelEvaluator::new(&decoded);
+    for (name, expected) in expected {
+        assert_eq!(
+            replay
+                .evaluate_item(find_item(&decoded, name), &BTreeMap::new())
+                .unwrap(),
+            RuntimeValue::Bool(expected),
+            "decoded {name}"
+        );
+    }
+    let mut malformed = backend.clone();
+    let mut changed = false;
+    for index in 0..malformed.kernels().len() {
+        let kernel = malformed
+            .kernels_mut()
+            .get_mut(aivi_backend::KernelId::from_raw(index as u32))
+            .unwrap();
+        for index in 0..kernel.exprs().len() {
+            let expr = kernel
+                .exprs_mut()
+                .get_mut(aivi_backend::KernelExprId::from_raw(index as u32))
+                .unwrap();
+            if let aivi_backend::KernelExprKind::BuiltinClassMember(
+                aivi_backend::BuiltinClassMemberIntrinsic::DerivedStructuralEq(shape),
+            ) = &mut expr.kind
+                && matches!(
+                    shape.node(shape.root()),
+                    Some(aivi_hir::EqualityShapeNode::Tuple(_))
+                )
+            {
+                *shape = std::sync::Arc::new(
+                    aivi_hir::EqualityShape::new(
+                        aivi_hir::EqualityNodeId::from_raw(0),
+                        vec![
+                            aivi_hir::EqualityShapeNode::Tuple(vec![
+                                aivi_hir::EqualityNodeId::from_raw(1),
+                            ]),
+                            aivi_hir::EqualityShapeNode::Evidence(
+                                aivi_hir::EqualityEvidenceId::from_raw(0),
+                            ),
+                        ],
+                        1,
+                    )
+                    .unwrap(),
+                );
+                changed = true;
+            }
+        }
+    }
+    assert!(changed);
+    assert!(
+        validate_program(&malformed)
+            .unwrap_err()
+            .errors()
+            .iter()
+            .any(|error| matches!(
+                error,
+                aivi_backend::ValidationError::InvalidDerivedEquality { .. }
+            ))
+    );
+}
+
+#[test]
+fn native_equality_rejects_callable_conversion_without_a_generic_adapter() {
+    let backend = lower_text(
+        "generic-equality-abi.aivi",
+        r#"
+fun same:Eq A => A -> A -> Bool = left right => left == right
+value equal:Bool = same 1 1
+value different:Bool = same 1 2
+fun withList:(List A -> Bool) -> List A -> Bool = callback items => callback items
+fun accepts:List Int -> Bool = items => True
+value nested:Bool = withList accepts [1, 2]
+"#,
+    );
+    let errors =
+        compile_program(&backend).expect_err("boxed generic evidence requires a callable adapter");
+    assert!(errors.errors().iter().any(|error| matches!(error, CodegenError::UnsupportedExpression { detail, .. } if detail.contains("callable adapter"))));
+    let executable = aivi_backend::BackendExecutableProgram::interpreted(&backend);
+    let mut engine = executable.create_engine();
+    for (name, expected) in [("equal", true), ("different", false), ("nested", true)] {
+        let item = find_item(&backend, name);
+        assert!(
+            aivi_backend::NativeKernelPlan::compile(&backend, backend.items()[item].body.unwrap())
+                .is_none()
+        );
+        assert_eq!(
+            engine.evaluate_item(item, &BTreeMap::new()).unwrap(),
+            RuntimeValue::Bool(expected)
+        );
+    }
+}
+
+#[test]
+fn native_derived_scalar_option_equality_invokes_its_payload_dictionary() {
+    let backend = lower_text(
+        "derived-scalar-option.aivi",
+        r#"
+instance Eq Int = { (==) left right = True }
+fun same:Bool = left:Option Int right:Option Int => left == right
+value equal:Bool = same (Some 1) (Some 2)
+value absent:Bool = same None None
+value different:Bool = same (Some 1) None
+"#,
+    );
+    compile_program(&backend).expect("derived inline scalar Option equality should compile");
+    let executable = aivi_backend::BackendExecutableProgram::interpreted(&backend);
+    let mut engine = executable.create_engine();
+    for (name, expected) in [("equal", true), ("absent", true), ("different", false)] {
+        assert_eq!(
+            engine
+                .evaluate_item(find_item(&backend, name), &BTreeMap::new())
+                .unwrap(),
+            RuntimeValue::Bool(expected)
+        );
+    }
+}
+
+#[test]
 fn cranelift_codegen_compiles_native_tuple_equality_kernels() {
     let backend = lower_text(
         "backend-tuple-equality-codegen.aivi",

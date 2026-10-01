@@ -50,4 +50,5 @@ include!("artifacts.rs");
 include!("errors_api.rs");
 include!("specialized.rs");
 include!("compiler.rs");
+include!("derived_equality.rs");
 include!("helpers.rs");

@@ -1261,8 +1261,9 @@ fn runtime_custom_capability_command_plan(
     }
 }
 
-fn builtin_class_member_arity(intrinsic: BuiltinClassMemberIntrinsic) -> usize {
+fn builtin_class_member_arity(intrinsic: &BuiltinClassMemberIntrinsic) -> usize {
     match intrinsic {
+        BuiltinClassMemberIntrinsic::DerivedStructuralEq(shape) => shape.evidence_count() + 2,
         BuiltinClassMemberIntrinsic::Empty(_) => 0,
         BuiltinClassMemberIntrinsic::Pure(_) | BuiltinClassMemberIntrinsic::Join(_) => 1,
         BuiltinClassMemberIntrinsic::Bimap(_) | BuiltinClassMemberIntrinsic::Reduce(_) => 3,

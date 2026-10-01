@@ -185,6 +185,166 @@ value relationName : Task Text Bool = pure (relationAccepts 1 2)
 }
 
 #[test]
+fn derived_equality_invokes_payload_instances_and_scoped_dictionaries() {
+    let dir = TempDir::new("derived-payload-equality");
+    let path = dir.write(
+        "main.aivi",
+        r#"
+type Tag = Tag Int | Other Int
+instance Eq Tag = { (==) = left right => True }
+type Box = Box Tag | Empty
+domain Tagged over Tag
+    wrap : Tag -> Tagged
+value leftResult : Result Text Tag = Ok (Tag 1)
+value rightResult : Result Text Tag = Ok (Other 2)
+value leftValidation : Validation Text Tag = Valid (Tag 1)
+value rightValidation : Validation Text Tag = Valid (Other 2)
+value invalidValidation : Validation Text Tag = Invalid "missing"
+value leftDomain : Tagged = wrap (Tag 1)
+value rightDomain : Tagged = wrap (Other 2)
+type Eq A => List A -> List A -> Bool
+func sameList = left right => left == right
+value compareLists : List Tag -> List Tag -> Bool = (==)
+@test
+value direct : Task Text Bool = pure (Tag 1 == Other 2)
+@test
+value list : Task Text Bool = pure ([Tag 1] == [Other 2])
+@test
+value tuple : Task Text Bool = pure ((Tag 1, 1) == (Other 2, 1))
+@test
+value record : Task Text Bool = pure ({ item: Tag 1 } == { item: Other 2 })
+@test
+value option : Task Text Bool = pure (Some (Tag 1) == Some (Other 2))
+@test
+value result : Task Text Bool = pure (leftResult == rightResult)
+@test
+value validation : Task Text Bool = pure (leftValidation == rightValidation)
+@test
+value validationTagMatters : Task Text Bool = pure ((leftValidation == invalidValidation) == False)
+@test
+value domain : Task Text Bool = pure (leftDomain == rightDomain)
+@test
+value box : Task Text Bool = pure (Box (Tag 1) == Box (Other 2))
+@test
+value genericList : Task Text Bool = pure (sameList [Tag 1] [Other 2])
+@test
+value firstClass : Task Text Bool = pure (compareLists [Tag 1] [Other 2])
+@test
+value lengthMatters : Task Text Bool = pure (([Tag 1] == [Other 2, Tag 3]) == False)
+@test
+value constructorMatters : Task Text Bool = pure ((Box (Tag 1) == Empty) == False)
+@test
+value ordinaryPayloadMatters : Task Text Bool = pure (((Tag 1, 1) == (Other 2, 2)) == False)
+"#,
+    );
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .expect("test should run");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("15 passed; 0 failed; 15 total"), "{stdout}");
+    }
+}
+
+#[test]
+fn derived_equality_preserves_imports_reexports_and_method_prerequisites() {
+    let dir = TempDir::new("derived-equality-imported-dictionaries");
+    dir.write(
+        "model.aivi",
+        r#"
+class Ready A = { ready : A -> Bool }
+class Eq A = { (==) : Ready A => A -> A -> Bool }
+type Tag = Tag Int | Other Int
+type Box A = Box A
+value tagLeft : Tag = Tag 1
+value boxLeft : Box Tag = Box (Tag 1)
+instance Ready Tag = { ready = value => True }
+instance Eq Tag = { (==) = left right => ready left }
+type (Eq A, Ready A) => List A -> List A -> Bool
+func same = left right => left == right
+export (Ready, Eq, Tag, Other, Box, same, tagLeft, boxLeft)
+"#,
+    );
+    dir.write(
+        "forward.aivi",
+        "use model (Ready, Eq as Equality, same)\nexport (Ready, Equality, same)\n",
+    );
+    let path = dir.write(
+        "main.aivi",
+        r#"
+use forward (Ready, Equality, same)
+use model (Tag, Other, Box, tagLeft, boxLeft)
+type (Equality A, Ready A) => List A -> List A -> Bool
+func nested = left right => same left right
+value compare : List Tag -> List Tag -> Bool = (==)
+@test
+value list : Task Text Bool = pure ([tagLeft] == [Other 2])
+@test
+value wrapper : Task Text Bool = pure (Box (Some (Tag 1)) == Box (Some (Other 2)))
+@test
+value crossModuleWrapper : Task Text Bool = pure (boxLeft == Box (Other 2))
+@test
+value generic : Task Text Bool = pure (nested [Tag 1] [Other 2])
+@test
+value firstClass : Task Text Bool = pure (compare [Tag 1] [Other 2])
+"#,
+    );
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("5 passed; 0 failed; 5 total"), "{stdout}");
+    }
+}
+
+#[test]
+fn derived_equality_keeps_distinct_scoped_dictionaries_after_type_substitution() {
+    let dir = TempDir::new("derived-equality-distinct-scopes");
+    let path = dir.write(
+        "main.aivi",
+        r#"
+class Always A = { (==) : A -> A -> Bool }
+class Never A = { (==) : A -> A -> Bool }
+instance Always Int = { (==) = left right => True }
+instance Never Int = { (==) = left right => False }
+type (Always A, Never B) => (List A, List B) -> (List A, List B) -> Bool
+func both = left right => left == right
+type Always A => List A -> List A -> Bool
+func first = left right => left == right
+type Never A => List A -> List A -> Bool
+func second = left right => left == right
+@test
+value firstUsesAlways : Task Text Bool = pure (first [1] [2])
+@test
+value secondUsesNever : Task Text Bool = pure ((second [1] [1]) == False)
+@test
+value bothKeepTheirSlots : Task Text Bool = pure ((both ([1], [1]) ([2], [1])) == False)
+"#,
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("test")
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("3 passed; 0 failed; 3 total"));
+}
+
+#[test]
 fn imported_equality_checks_closed_payloads_and_uses_standard_eq_instances() {
     let dir = TempDir::new("imported-closed-equality-execution");
     dir.write(

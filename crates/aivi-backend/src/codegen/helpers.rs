@@ -35,13 +35,14 @@ fn static_builtin_class_member_arity(
 
 fn builtin_wrapper_intrinsic(kernel: &crate::Kernel) -> Option<crate::BuiltinClassMemberIntrinsic> {
     match &kernel.exprs()[kernel.root].kind {
-        crate::KernelExprKind::BuiltinClassMember(intrinsic) => Some(*intrinsic),
+        crate::KernelExprKind::BuiltinClassMember(intrinsic) => Some(intrinsic.clone()),
         crate::KernelExprKind::Apply { callee, arguments } => {
-            let crate::KernelExprKind::BuiltinClassMember(intrinsic) = &kernel.exprs()[*callee].kind
+            let crate::KernelExprKind::BuiltinClassMember(intrinsic) =
+                &kernel.exprs()[*callee].kind
             else {
                 return None;
             };
-            (arguments.len() == kernel.convention.parameters.len()).then_some(*intrinsic)
+            (arguments.len() == kernel.convention.parameters.len()).then_some(intrinsic.clone())
         }
         _ => None,
     }
@@ -531,7 +532,7 @@ fn collect_kernel_layout_dependencies(
 fn collect_kernel_item_dependencies(kernel: &Kernel, item_ids: &mut BTreeSet<ItemId>) {
     item_ids.extend(kernel.global_items.iter().copied());
     for (_, expr) in kernel.exprs().iter() {
-        if let KernelExprKind::Item(item) = &expr.kind {
+        if let KernelExprKind::Item(item) | KernelExprKind::ExecutableEvidence(item) = &expr.kind {
             item_ids.insert(*item);
         }
     }
