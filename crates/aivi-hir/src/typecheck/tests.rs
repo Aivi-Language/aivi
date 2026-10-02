@@ -1,9 +1,12 @@
 use aivi_base::{FileId, SourceDatabase, SourceSpan};
 use aivi_syntax::parse_module;
 
-use crate::{BuiltinType, Item, PipeTransformMode, RecordFieldSurface, lower_module};
+use crate::{
+    BuiltinType, Item, PipeTransformMode, RecordFieldSurface, TypeParameterId, lower_module,
+};
 
 use super::*;
+use crate::typecheck_context::GateExprInfo;
 use crate::typecheck_context::SourceOptionActualType;
 
 fn typecheck_text(path: &str, text: &str) -> TypeCheckReport {
@@ -2012,6 +2015,351 @@ fn typecheck_reports_value_annotation_mismatch() {
             .iter()
             .any(|diagnostic| { diagnostic.code == Some(crate::codes::TYPE_MISMATCH) }),
         "expected type mismatch diagnostic, got diagnostics: {:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
+fn contextual_callbacks_infer_empty_effect_constructor_results() {
+    for callback in ["n => None", "n => []"] {
+        let report = typecheck_text(
+            "callback-effect-constructor.aivi",
+            &format!(
+                "type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)\nfunc visit = transform values => traverse transform values\nvalue result : Bool = visit ({callback}) [1] == {}\n",
+                if callback == "n => None" {
+                    "None"
+                } else {
+                    "[]"
+                }
+            ),
+        );
+        assert!(report.is_ok(), "{callback}: {:?}", report.diagnostics());
+    }
+}
+
+#[test]
+fn contextual_callbacks_instantiate_constructor_quantifiers_from_generic_inputs() {
+    let module = lowered_module_text(
+        "constructor-callback-identity.aivi",
+        r#"
+type Identity A = Identity A
+instance Functor Identity = { map = f identity => identity ||> Identity a -> Identity (f a) }
+instance Apply Identity = { apply = functions values => functions ||> Identity f -> map f values }
+instance Applicative Identity = { pure = a => Identity a }
+type Identity A -> A
+func unwrap = identity => identity ||> Identity a -> a
+type (Traversable F, Eq (F Int)) => F Int -> Bool
+func identityLaw = values => unwrap (traverse Identity values) == values
+"#,
+    );
+    let report = typecheck_module(&module);
+    assert!(report.is_ok(), "{:?}", report.diagnostics());
+}
+
+#[test]
+fn nullary_constructor_inference_preserves_absent_payloads_as_holes() {
+    let module = lowered_module_text(
+        "nullary-constructor-evidence.aivi",
+        "type Maybe A = Missing | Found A\nvalue empty = Missing\n",
+    );
+    let body = module
+        .items()
+        .iter()
+        .find_map(|(_, item)| match item {
+            Item::Value(value) if value.name.text() == "empty" => Some(value.body),
+            _ => None,
+        })
+        .unwrap();
+    let info = GateTypeContext::new(&module).infer_expr(body, &GateExprEnv::default(), None);
+    assert!(
+        info.ty.is_none(),
+        "a nullary constructor cannot fix its payload: {:?}",
+        info.ty
+    );
+    assert!(
+        matches!(info.actual, Some(SourceOptionActualType::OpaqueItem { arguments, .. })
+        if arguments == vec![SourceOptionActualType::Hole])
+    );
+}
+
+#[test]
+fn nullary_constructor_branches_instantiate_from_present_payloads() {
+    let report = typecheck_text(
+        "nullary-constructor-branches.aivi",
+        r#"
+type Maybe A = Missing | Found A
+type (A -> B) -> Maybe A -> Maybe B
+func transform = f maybe => maybe
+ ||> Missing -> Missing
+ ||> Found a -> Found (f a)
+type (A -> B) -> Maybe A -> Maybe B
+func reversed = f maybe => maybe
+ ||> Found a -> Found (f a)
+ ||> Missing -> Missing
+type Maybe Int -> Result Text (Maybe Int)
+func nested = maybe => maybe
+ ||> Missing -> Ok Missing
+ ||> Found n -> Ok (Found n)
+value empty : Maybe Int = Missing
+value mapped : Maybe Text = transform (n => "yes") (Found 1)
+value reverseEmpty : Maybe Text = reversed (n => "yes") empty
+"#,
+    );
+    assert!(report.is_ok(), "{:?}", report.diagnostics());
+}
+
+#[test]
+fn nullary_constructor_branches_keep_known_payloads_rigid() {
+    for body in [
+        "maybe\n ||> Missing -> Found captured\n ||> Found n -> Found n",
+        "maybe\n ||> Found n -> Found n\n ||> Missing -> Found captured",
+        "maybe\n ||> Missing -> Ok (Found captured)\n ||> Found n -> Ok (Found n)",
+    ] {
+        let result = if body.contains("Ok") {
+            "Result Text (Maybe Int)"
+        } else {
+            "Maybe Int"
+        };
+        let source = format!(
+            "type Maybe A = Missing | Found A\ntype A -> Maybe Int -> {result}\nfunc invalid = captured maybe => {body}\n"
+        );
+        let report = typecheck_text("nullary-constructor-rigid.aivi", &source);
+        assert!(
+            !report.is_ok(),
+            "rigid payload specialization was accepted: {source}"
+        );
+        assert!(
+            report
+                .diagnostics()
+                .iter()
+                .any(|d| d.code == Some(crate::codes::CASE_BRANCH_TYPE_MISMATCH)),
+            "{:?}",
+            report.diagnostics()
+        );
+    }
+}
+
+#[test]
+fn contextual_callbacks_preserve_present_generic_payload_contracts() {
+    let module = lowered_module_text(
+        "generic-some.aivi",
+        "type A -> Option A\nfunc wrap = value => Some value\n",
+    );
+    let function = module
+        .items()
+        .iter()
+        .find_map(|(_, item)| match item {
+            Item::Function(function) if function.name.text() == "wrap" => Some(function),
+            _ => None,
+        })
+        .unwrap();
+    let mut typing = GateTypeContext::new(&module);
+    typing.replace_rigid_type_parameters(function.type_parameters.clone());
+    let parameter = &function.parameters[0];
+    let payload = typing
+        .lower_open_annotation(parameter.annotation.unwrap())
+        .unwrap();
+    let mut env = GateExprEnv::default();
+    env.locals.insert(parameter.binding, payload.clone());
+    let info = typing.infer_expr(function.body, &env, None);
+    assert_eq!(info.ty, Some(GateType::Option(Box::new(payload))));
+    assert!(!typing.match_gate_expr_template(
+        &GateType::Option(Box::new(GateType::Primitive(BuiltinType::Int))),
+        &info,
+        &mut HashMap::new()
+    ));
+}
+
+#[test]
+fn partial_constructor_evidence_preserves_abstract_payload_identity() {
+    let parameter = GateType::TypeParameter {
+        parameter: TypeParameterId::from_raw(29),
+        name: "A".to_owned(),
+    };
+    let applied = GateType::TypeApplication {
+        parameter: TypeParameterId::from_raw(30),
+        name: "F".to_owned(),
+        arguments: vec![parameter.clone()],
+    };
+    let module = lowered_module_text("partial-abstract-payload.aivi", "");
+    let typing = GateTypeContext::new(&module);
+    for payload in [parameter, applied] {
+        let actual = SourceOptionActualType::from_gate_type(&payload);
+        assert_eq!(actual.to_gate_type(), Some(payload.clone()));
+        assert_eq!(
+            actual.unify(&SourceOptionActualType::Hole),
+            Some(actual.clone())
+        );
+        assert!(
+            actual
+                .unify(&SourceOptionActualType::Primitive(BuiltinType::Int))
+                .is_none()
+        );
+        let info = GateExprInfo {
+            actual: Some(SourceOptionActualType::Result {
+                error: Box::new(SourceOptionActualType::Hole),
+                value: Box::new(actual),
+            }),
+            ..GateExprInfo::default()
+        };
+        assert!(!typing.match_gate_expr_template(
+            &GateType::Result {
+                error: Box::new(GateType::Primitive(BuiltinType::Text)),
+                value: Box::new(GateType::Primitive(BuiltinType::Int)),
+            },
+            &info,
+            &mut HashMap::new(),
+        ));
+        assert!(typing.match_gate_expr_template(
+            &GateType::Result {
+                error: Box::new(GateType::Primitive(BuiltinType::Text)),
+                value: Box::new(payload),
+            },
+            &info,
+            &mut HashMap::new(),
+        ));
+    }
+}
+
+#[test]
+fn contextual_callbacks_reject_partial_constructor_capture_and_rigid_effects() {
+    let prefix = "type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)\nfunc visit = transform values => traverse transform values\n";
+    for constructor in ["Some", "Ok", "Err", "Valid", "Invalid"] {
+        for body in [
+            format!(
+                "type (Traversable F, Applicative G) => A -> F Int -> G (F Int)\nfunc bad = captured values => visit (n => {constructor} captured) values\n"
+            ),
+            format!(
+                "type (Traversable F, Applicative G) => F Int -> G (F Int)\nfunc bad = values => visit (n => {constructor} n) values\n"
+            ),
+        ] {
+            let report = typecheck_text(
+                "partial-constructor-rigid-callback.aivi",
+                &format!("{prefix}{body}"),
+            );
+            assert!(!report.is_ok(), "accepted {constructor}: {body}");
+        }
+    }
+}
+
+#[test]
+fn contextual_expected_results_instantiate_phantom_constructor_parameters() {
+    let report = typecheck_text(
+        "phantom-constructor-result.aivi",
+        r#"
+type Choice L R = Left L | Right R
+type Applicative G => Choice E A -> (A -> G B) -> G (Choice E B)
+func visit = choice transform => choice
+ ||> Left error -> pure (Left error)
+ ||> Right item -> map Right (transform item)
+"#,
+    );
+    assert!(report.is_ok(), "{:?}", report.diagnostics());
+}
+
+#[test]
+fn contextual_callbacks_preserve_valid_partial_constructor_payloads() {
+    for signature_and_body in [
+        "type A -> Result Text A\nfunc wrap = captured => Ok captured\n",
+        "type A -> Result A Int\nfunc wrap = captured => Err captured\n",
+        "type A -> Validation Text A\nfunc wrap = captured => Valid captured\n",
+        "type A -> Validation A Int\nfunc wrap = captured => Invalid captured\n",
+        "type Traversable F => A -> F A -> Result Text (F A)\nfunc fill = captured values => traverse (n => Ok captured) values\n",
+        "type Traversable F => A -> F A -> Validation Text (F A)\nfunc fill = captured values => traverse (n => Valid captured) values\n",
+    ] {
+        let report = typecheck_text("valid-partial-constructor.aivi", signature_and_body);
+        assert!(
+            report.is_ok(),
+            "{signature_and_body}: {:?}",
+            report.diagnostics()
+        );
+    }
+}
+
+#[test]
+fn contextual_callbacks_reject_incompatible_effects_and_rigid_specialization() {
+    let prefix = "type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)\nfunc visit = transform values => traverse transform values\n";
+    for body in [
+        "value bad : Bool = visit (n => Some \"wrong\") [1] == None\n",
+        "value bad : Bool = visit (n => n) [1] == None\n",
+        "type (Traversable F, Applicative G) => F Int -> G (F Int)\nfunc bad = values => visit (n => None) values\n",
+        "type (Traversable F, Applicative G) => A -> F Int -> G (F Int)\nfunc bad = captured values => visit (n => Some captured) values\n",
+        "type A -> List Int\nfunc bad = captured => map (n => captured) [1]\n",
+        "type A -> List Int\nfunc bad = captured => map (n => [captured]) [1]\n",
+        "type Applicative G => (Int -> G Int) -> (Int -> G Int) -> G Int\nfunc both = first second => first 1\nvalue bad : Bool = both (n => None) (n => [n]) == None\n",
+        "value bad : Bool = traverse (n => None) [1] == None\n",
+    ] {
+        let report = typecheck_text(
+            "incompatible-callback-context.aivi",
+            &format!("{prefix}{body}"),
+        );
+        assert!(!report.is_ok(), "accepted {body:?}");
+        assert!(report.diagnostics().iter().any(|diagnostic| matches!(diagnostic.code, Some(code) if code == crate::codes::TYPE_MISMATCH || code == crate::codes::INVALID_BINARY_OPERATOR)), "{body:?}: {:?}", report.diagnostics());
+    }
+}
+
+#[test]
+fn contextual_callbacks_solve_direct_class_calls_and_nested_bodies() {
+    for source in [
+        "value empty : Option (List Text) = None\nvalue result : Bool = traverse (n => None) [1] == empty\n",
+        "value empty : List (List Text) = []\nvalue result : Bool = traverse (n => []) [1] == empty\n",
+        "type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)\nfunc visit = transform values => traverse transform values\nvalue result : List (Option (List Int)) = map (n => visit (m => None) [n]) [1]\n",
+        "type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)\nfunc visit = transform values => traverse transform values\nvalue rejected = [1, 2]\n |> visit (n => None)\nvalue result : Bool = rejected == None\n",
+    ] {
+        let report = typecheck_text("direct-and-nested-callbacks.aivi", source);
+        assert!(report.is_ok(), "{source:?}: {:?}", report.diagnostics());
+    }
+}
+
+#[test]
+fn contextual_callbacks_infer_nested_factory_results_before_consumers() {
+    let report = typecheck_text(
+        "nested-callback-factory.aivi",
+        r#"
+type Box A = { payload: A }
+type Int -> Int -> (Int -> Int -> A) -> Box A
+func build = x y cell => { payload: cell x y }
+type Box A -> Int
+func size = box => 0
+value result : Option Int = map size (Some (build 0 3 (x y => 1)))
+"#,
+    );
+    assert!(report.is_ok(), "{:?}", report.diagnostics());
+
+    struct Resolver(crate::ExportedNames);
+    impl crate::ImportResolver for Resolver {
+        fn resolve(&self, _: &[&str]) -> crate::ImportModuleResolution {
+            crate::ImportModuleResolution::Resolved(self.0.clone())
+        }
+    }
+    let mut sources = SourceDatabase::new();
+    let owner = sources.add_file(
+        "factory.aivi",
+        r#"
+type Box A = { payload: A }
+type Int -> Int -> (Int -> Int -> A) -> Box A
+func build = x y cell => { payload: cell x y }
+type Box A -> Int
+func size = box => 0
+export Box
+export build
+export size
+"#,
+    );
+    let parsed = parse_module(&sources[owner]);
+    assert!(!parsed.has_errors());
+    let lowered = lower_module(&parsed.module);
+    assert!(!lowered.has_errors());
+    let resolver = Resolver(crate::exports(lowered.module()));
+    let consumer = sources.add_file("consumer.aivi", "use factory (Box, build, size)\nvalue result : Option Int = map size (Some (build 0 3 (x y => 1)))\n");
+    let parsed = parse_module(&sources[consumer]);
+    assert!(!parsed.has_errors());
+    let lowered = crate::lower_module_with_resolver(&parsed.module, Some(&resolver));
+    assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+    let report = typecheck_module(lowered.module());
+    assert!(
+        report.is_ok(),
+        "imported factory: {:?}",
         report.diagnostics()
     );
 }

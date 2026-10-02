@@ -10,6 +10,7 @@ pub(crate) struct GateTypeContext<'a> {
     function_call_evidence: Vec<FunctionCallEvidence>,
     function_signature_evidence: Vec<FunctionSignatureEvidence>,
     allow_function_inference: bool,
+    allow_callback_body_inference: bool,
     rigid_type_parameters: Vec<TypeParameterId>,
 }
 
@@ -23,6 +24,7 @@ impl<'a> GateTypeContext<'a> {
             function_call_evidence: Vec::new(),
             function_signature_evidence: Vec::new(),
             allow_function_inference: true,
+            allow_callback_body_inference: true,
             rigid_type_parameters: Vec::new(),
         }
     }
@@ -36,6 +38,7 @@ impl<'a> GateTypeContext<'a> {
             function_call_evidence: Vec::new(),
             function_signature_evidence: Vec::new(),
             allow_function_inference: false,
+            allow_callback_body_inference: true,
             rigid_type_parameters: Vec::new(),
         }
     }
@@ -58,6 +61,7 @@ impl<'a> GateTypeContext<'a> {
             function_call_evidence: Vec::new(),
             function_signature_evidence: Vec::new(),
             allow_function_inference,
+            allow_callback_body_inference: true,
             rigid_type_parameters: Vec::new(),
         }
     }
@@ -95,6 +99,7 @@ impl<'a> GateTypeContext<'a> {
             function_call_evidence: Vec::new(),
             function_signature_evidence: Vec::new(),
             allow_function_inference: self.allow_function_inference,
+            allow_callback_body_inference: self.allow_callback_body_inference,
             rigid_type_parameters: self.rigid_type_parameters.clone(),
         }
     }
@@ -5395,27 +5400,30 @@ impl<'a> GateTypeContext<'a> {
         expected: &GateType,
     ) -> GateExprInfo {
         let expr = self.module.exprs()[expr_id].clone();
-        match expr.kind {
+        let mut info = match expr.kind {
             ExprKind::SuffixedInteger(literal) => {
                 self.infer_suffixed_integer_expr_with_expected(&literal, expected)
             }
             ExprKind::Name(reference) => self.infer_name_with_expected(&reference, env, expected),
-            ExprKind::Apply { .. } => {
-                let mut info = self.infer_expr(expr_id, env, ambient);
-                // A partial application can retain quantifiers belonging to its
-                // callee. Instantiate those from the callback contract while
-                // keeping the enclosing definition's quantifiers rigid.
-                if let Some(actual @ GateType::Arrow { .. }) =
-                    info.actual_gate_type().or(info.ty.clone())
-                    && let Some(specialized) = self.specialize_gate_type_template(&actual, expected)
-                {
-                    info.ty = Some(specialized);
-                    info.actual = None;
-                }
-                info
-            }
             _ => self.infer_expr(expr_id, env, ambient),
+        };
+        // Expressions can retain declaration-owned quantifiers, including
+        // constructor parameters absent from a variant's payload. Instantiate
+        // them from the result contract while protecting lexical rigid binders.
+        let actual = info
+            .ty
+            .as_ref()
+            .map(std::borrow::Cow::Borrowed)
+            .or_else(|| info.actual_gate_type().map(std::borrow::Cow::Owned));
+        if let Some(actual) = actual
+            && actual.as_ref() != expected
+            && actual.has_type_params()
+            && let Some(specialized) = self.specialize_gate_type_template(actual.as_ref(), expected)
+        {
+            info.ty = Some(specialized);
+            info.actual = None;
         }
+        info
     }
 
     fn infer_binary_operand_against_peer(
@@ -5488,7 +5496,27 @@ impl<'a> GateTypeContext<'a> {
                 }
             }
             ResolutionState::Resolved(TermResolution::Item(item_id)) => {
-                let constructor_ty = self.infer_same_module_constructor_name_type(reference);
+                let constructor_ty = self.open_same_module_constructor_signature(reference);
+                // A nullary generic variant supplies no payload evidence for
+                // its declaration parameters. Its full signature remains
+                // available to infer_name_with_expected; ordinary inference
+                // retains only the nominal head and absent argument holes.
+                if let Some(GateType::OpaqueItem {
+                    item,
+                    name,
+                    arguments,
+                }) = &constructor_ty
+                    && !arguments.is_empty()
+                {
+                    return GateExprInfo {
+                        actual: Some(SourceOptionActualType::OpaqueItem {
+                            item: *item,
+                            name: name.clone(),
+                            arguments: vec![SourceOptionActualType::Hole; arguments.len()],
+                        }),
+                        ..GateExprInfo::default()
+                    };
+                }
                 let ty = constructor_ty
                     .clone()
                     .or_else(|| self.item_value_type(*item_id));
@@ -6125,33 +6153,6 @@ impl<'a> GateTypeContext<'a> {
         let actual = self.infer_builtin_constructor_actual(*builtin, &argument_actuals)?;
         info.set_actual(actual);
         Some(info)
-    }
-
-    pub(crate) fn infer_same_module_constructor_name_type(
-        &mut self,
-        reference: &TermReference,
-    ) -> Option<GateType> {
-        let (item_id, item_name, parameters, fields) = self.same_module_constructor(reference)?;
-        if !parameters.is_empty() {
-            return None;
-        }
-        let substitutions = HashMap::new();
-        let field_types = fields
-            .into_iter()
-            .map(|field| self.lower_hir_type(field.ty, &substitutions))
-            .collect::<Option<Vec<_>>>()?;
-        let mut ty = GateType::OpaqueItem {
-            item: item_id,
-            name: item_name,
-            arguments: Vec::new(),
-        };
-        for field_ty in field_types.into_iter().rev() {
-            ty = GateType::Arrow {
-                parameter: Box::new(field_ty),
-                result: Box::new(ty),
-            };
-        }
-        Some(ty)
     }
 
     fn open_same_module_constructor_signature(
@@ -6929,7 +6930,7 @@ impl<'a> GateTypeContext<'a> {
             self.record_function_signature_evidence(FunctionSignatureEvidence {
                 item_id: *item_id,
                 parameter_types: parameter_types.clone(),
-                result_type: result_type.clone(),
+                result_type: Some(result_type.clone()),
             });
         }
 
@@ -7056,6 +7057,41 @@ impl<'a> GateTypeContext<'a> {
             }
             parameter = result;
         }
+
+        // Known callback inputs can reveal a result constructor even when its
+        // payload is empty. Keep these probes local until the call is resolved.
+        let mut parameter = &signature;
+        for argument in arguments.iter() {
+            let GateType::Arrow {
+                parameter: expected,
+                result,
+            } = parameter
+            else {
+                break;
+            };
+            if expected.has_type_params() && matches!(expected.as_ref(), GateType::Arrow { .. }) {
+                let expected = expected.substitute_type_parameters(&bindings);
+                let mut probe = self.contextual_probe();
+                let mut observed = probe.infer_expr_with_expected(*argument, env, None, &expected);
+                if let Some(actual) = observed.ty.as_ref()
+                    && let Some(specialized) = probe.specialize_callback_inputs(actual, &expected)
+                {
+                    observed.ty = Some(specialized);
+                    observed.actual = None;
+                }
+                if observed.ty.is_none()
+                    && let Some(callback) =
+                        probe.infer_callback_from_inputs(*argument, env, &expected)
+                {
+                    observed = callback;
+                }
+                let mut candidate = bindings.clone();
+                if probe.match_gate_expr_template(&expected, &observed, &mut candidate) {
+                    bindings = candidate;
+                }
+            }
+            parameter = result;
+        }
         let mut info = GateExprInfo::default();
         let mut current = signature.substitute_type_parameters(&bindings);
         for argument in arguments.iter() {
@@ -7103,6 +7139,72 @@ impl<'a> GateTypeContext<'a> {
             info.ty = Some(current);
         }
         info
+    }
+
+    fn infer_callback_from_inputs(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        expected: &GateType,
+    ) -> Option<GateExprInfo> {
+        if !self.allow_callback_body_inference {
+            return None;
+        }
+        let ExprKind::Name(reference) = &self.module.exprs()[expr_id].kind else {
+            return None;
+        };
+        let ResolutionState::Resolved(TermResolution::Item(item_id)) =
+            reference.resolution.as_ref()
+        else {
+            return None;
+        };
+        let Item::Function(function) = &self.module.items()[*item_id] else {
+            return None;
+        };
+        if !supports_same_module_function_inference(function) {
+            return None;
+        }
+        let parameters = Self::arrow_parameter_types(expected, function.parameters.len())?;
+        let mut callback_env = env.clone();
+        for (parameter, ty) in function.parameters.iter().zip(&parameters) {
+            if !crate::function_inference::function_accepts_inference_type(function, ty) {
+                return None;
+            }
+            if let Some(annotation) = parameter.annotation {
+                let declared = self.lower_open_annotation(annotation)?;
+                if !self.types_match(&declared, ty) {
+                    return None;
+                }
+            }
+            callback_env.locals.insert(parameter.binding, ty.clone());
+        }
+        let mut probe = self.contextual_probe();
+        // Do not recursively launch callback-body probes. Module inference
+        // supplies nested contracts on subsequent passes.
+        probe.allow_callback_body_inference = false;
+        let body = probe.infer_expr(function.body, &callback_env, None);
+        if !body.issues.is_empty() {
+            return None;
+        }
+        let mut actual = body.actual()?;
+        let mut ty = body
+            .ty
+            .filter(|ty| crate::function_inference::function_accepts_inference_type(function, ty));
+        for parameter in parameters.into_iter().rev() {
+            actual = SourceOptionActualType::Arrow {
+                parameter: Box::new(SourceOptionActualType::from_gate_type(&parameter)),
+                result: Box::new(actual),
+            };
+            ty = ty.map(|result| GateType::Arrow {
+                parameter: Box::new(parameter),
+                result: Box::new(result),
+            });
+        }
+        Some(GateExprInfo {
+            ty,
+            actual: Some(actual),
+            ..GateExprInfo::default()
+        })
     }
 
     pub(crate) fn infer_class_member_apply_expr(
@@ -8593,6 +8695,7 @@ mod contextual_probe_tests {
         typing
             .rigid_type_parameters
             .push(TypeParameterId::from_raw(2));
+        typing.allow_callback_body_inference = false;
         typing.function_call_evidence.push(FunctionCallEvidence {
             item_id: completed,
             argument_types: Vec::new(),
@@ -8603,7 +8706,7 @@ mod contextual_probe_tests {
             .push(FunctionSignatureEvidence {
                 item_id: completed,
                 parameter_types: Vec::new(),
-                result_type: original.clone(),
+                result_type: Some(original.clone()),
             });
         let mut probe = typing.contextual_probe();
         assert!(Arc::ptr_eq(&typing.item_types, &probe.item_types));
@@ -8613,6 +8716,7 @@ mod contextual_probe_tests {
             probe.inferred_function_types.as_ref().unwrap()
         ));
         assert!(!probe.allow_function_inference);
+        assert!(!probe.allow_callback_body_inference);
         assert_eq!(probe.rigid_type_parameters, typing.rigid_type_parameters);
         assert_eq!(probe.item_types.get(&pending), Some(&None));
         assert_eq!(probe.item_actuals.get(&pending), Some(&None));

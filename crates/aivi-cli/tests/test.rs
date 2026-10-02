@@ -898,6 +898,156 @@ value executed : Task Text Bool = main
 }
 
 #[test]
+fn contextual_traversal_callbacks_preserve_imports_captures_and_cached_execution() {
+    let dir = TempDir::new("contextual-traversal-callbacks");
+    dir.write(
+        "maybe.aivi",
+        r#"
+type Maybe A = Missing | Found A
+instance Functor Maybe = {
+    map = f maybe => maybe
+     ||> Missing -> Missing
+     ||> Found a -> Found (f a)
+}
+instance Apply Maybe = {
+    apply = functions values => functions
+     ||> Missing -> Missing
+     ||> Found f -> map f values
+}
+instance Applicative Maybe = { pure = a => Found a }
+type A -> Maybe A -> A
+func unwrapDefault = fallback maybe => maybe
+ ||> Missing -> fallback
+ ||> Found a -> a
+type Maybe A -> Result Text (Maybe A)
+func liftResult = maybe => maybe
+ ||> Missing -> Ok Missing
+ ||> Found a -> Ok (Found a)
+export Maybe
+export Missing
+export Found
+export unwrapDefault
+export liftResult
+"#,
+    );
+    dir.write(
+        "operations.aivi",
+        r#"
+type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)
+func visit = transform values => traverse transform values
+export visit
+"#,
+    );
+    dir.write(
+        "identity.aivi",
+        r#"
+type Identity A = Identity A
+instance Functor Identity = { map = f identity => identity ||> Identity a -> Identity (f a) }
+instance Apply Identity = { apply = functions values => functions ||> Identity f -> map f values }
+instance Applicative Identity = { pure = a => Identity a }
+type Identity A -> A
+func unwrap = identity => identity ||> Identity a -> a
+export Identity
+export unwrap
+"#,
+    );
+    let path = dir.write(
+        "main.aivi",
+        r#"
+use operations (visit)
+use identity (Identity, unwrap)
+use maybe (Maybe, Missing, Found, unwrapDefault, liftResult)
+use aivi.core.either (Either, Right)
+use aivi.core.dict (Dict, fromList)
+use aivi.nonEmpty (NonEmptyList, fromHeadTail)
+use aivi.matrix (Matrix, MatrixError, fromRows, init as matrixInit, width)
+type (Traversable F, Eq (F Int)) => F Int -> Bool
+func identityLaw = values => unwrap (traverse Identity values) == values
+type Traversable F => A -> F A -> Option (F A)
+func fill = captured values => traverse (n => Some captured) values
+type Traversable F => A -> F A -> Result Text (F A)
+func fillResult = captured values => traverse (n => Ok captured) values
+type Traversable F => A -> F A -> Validation Text (F A)
+func fillValidation = captured values => traverse (n => Valid captured) values
+value firstClass : (Int -> Option Int) -> List Int -> Option (List Int) = visit
+value partial : List Int -> Option (List Int) = visit (n => None)
+value piped = [1, 2]
+ |> visit (n => None)
+value nested : List (Option (List Int)) = map (n => visit (m => None) [n]) [1]
+value widths : Result MatrixError Int = map width (matrixInit 0 3 (x y => 1))
+value right : Either Text Int = Right 2
+value dictionary : Dict Text Int = fromList [("a", 1), ("b", 2)]
+value emptyDict : Dict Text Int = { entries: [] }
+value items : NonEmptyList Int = fromHeadTail 1 [2]
+value emptyMaybe : Maybe Int = Missing
+value pureMaybe : Maybe Int = pure 5
+type Int -> Int
+func increment = n => n + 1
+type Matrix Int -> Bool
+func matrixLaw = matrix => identityLaw matrix
+value matrixPassed : Bool = map matrixLaw (fromRows [[1, 2], [3, 4]])
+ ||> Ok passed -> passed
+ ||> Err _ -> False
+@test
+value emptyOption : Task Text Bool = pure (visit (n => None) [1, 2] == None)
+@test
+value emptyChoices : Task Text Bool = pure (visit (n => []) [1, 2] == [])
+@test
+value mappedOption : Task Text Bool = pure (visit (n => Some (n + 1)) [1, 2] == Some [2, 3])
+@test
+value firstClassCallback : Task Text Bool = pure (firstClass (n => None) [1] == None)
+@test
+value partialCallback : Task Text Bool = pure (partial [1] == None)
+@test
+value pipeCallback : Task Text Bool = pure (piped == None)
+@test
+value nestedCallback : Task Text Bool = pure (nested == [None])
+@test
+value capturedCallback : Task Text Bool = pure (fill 9 [1, 2] == Some [9, 9])
+@test
+value capturedResult : Task Text Bool = pure (fillResult 9 [1, 2] == Ok [9, 9])
+@test
+value capturedValidation : Task Text Bool = pure (fillValidation 9 [1, 2] == Valid [9, 9])
+@test
+value listIdentity : Task Text Bool = pure (identityLaw [1, 2])
+@test
+value eitherIdentity : Task Text Bool = pure (identityLaw right)
+@test
+value dictIdentity : Task Text Bool = pure (identityLaw dictionary)
+@test
+value nonEmptyIdentity : Task Text Bool = pure (identityLaw items)
+@test
+value matrixIdentity : Task Text Bool = pure matrixPassed
+@test
+value matrixCallback : Task Text Bool = pure (widths == Ok 0)
+@test
+value emptyDictionary : Task Text Bool = pure (visit (n => None) emptyDict == Some emptyDict)
+@test
+value authoredMap : Task Text Bool = pure (unwrapDefault 0 (map (n => n + 1) (Found 1)) == 2)
+@test
+value authoredEmpty : Task Text Bool = pure (unwrapDefault 9 (map (n => n + 1) emptyMaybe) == 9)
+@test
+value authoredApply : Task Text Bool = pure (unwrapDefault 0 (apply (Found increment) (Found 2)) == 3)
+@test
+value authoredPure : Task Text Bool = pure (unwrapDefault 0 pureMaybe == 5)
+@test
+value authoredPartialResult : Task Text Bool = pure (map (unwrapDefault 9) (liftResult emptyMaybe) == Ok 9)
+"#,
+    );
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("22 passed; 0 failed; 22 total"), "{stdout}");
+    }
+}
+
+#[test]
 fn headless_commands_execute_effectful_task_composition() {
     let dir = TempDir::new("task-composition");
     let path = dir.write(

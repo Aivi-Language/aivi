@@ -39,6 +39,7 @@ impl ApplicativeClusterKind {
                 value.as_ref().clone(),
             )),
             SourceOptionActualType::Hole
+            | SourceOptionActualType::KnownAbstract(_)
             | SourceOptionActualType::Primitive(_)
             | SourceOptionActualType::Tuple(_)
             | SourceOptionActualType::Record(_)

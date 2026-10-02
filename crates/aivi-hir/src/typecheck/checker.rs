@@ -1426,7 +1426,7 @@ impl<'a> TypeChecker<'a> {
                     self.check_unannotated_value_name(&reference, env, expected, value_stack)
                 })
                 .or_else(|| {
-                    self.check_unannotated_function_name(&reference, expected, value_stack)
+                    self.check_unannotated_function_name(&reference, env, expected, value_stack)
                 }),
             ExprKind::Apply { callee, arguments } => {
                 let callee_kind = self.module.exprs()[callee].kind.clone();
@@ -1720,6 +1720,7 @@ impl<'a> TypeChecker<'a> {
     fn check_unannotated_function_name(
         &mut self,
         reference: &TermReference,
+        enclosing_env: &GateExprEnv,
         expected: &GateType,
         value_stack: &mut Vec<ItemId>,
     ) -> Option<bool> {
@@ -1749,7 +1750,7 @@ impl<'a> TypeChecker<'a> {
         }
         let (parameter_types, result_expected) =
             self.expected_function_signature(expected, parameters.len())?;
-        let mut env = GateExprEnv::default();
+        let mut env = enclosing_env.clone();
         for (parameter, expected_parameter_ty) in parameters.iter().zip(parameter_types.iter()) {
             if let Some(annotation) = parameter.annotation {
                 let parameter_ty = self.typing.lower_open_annotation(annotation)?;
@@ -1775,7 +1776,7 @@ impl<'a> TypeChecker<'a> {
         }
         self.record_function_signature_evidence(*item_id, &parameter_types, &result_expected);
         value_stack.push(*item_id);
-        let result = self.check_expr(body, &env, Some(&result_expected), value_stack);
+        let result = self.check_expected_expr(body, &env, &result_expected, value_stack);
         let popped = value_stack.pop();
         debug_assert_eq!(popped, Some(*item_id));
         Some(result)
@@ -1868,18 +1869,20 @@ impl<'a> TypeChecker<'a> {
         let Item::Function(function) = &self.module.items()[item_id] else {
             return;
         };
-        if !crate::function_inference::function_accepts_inference_type(function, result_type)
-            || parameter_types.iter().any(|ty| {
-                !crate::function_inference::function_accepts_inference_type(function, ty)
-            })
-        {
+        if parameter_types.iter().any(|ty| {
+            !crate::function_inference::function_accepts_inference_type(function, ty)
+        }) {
             return;
         }
         self.typing
             .record_function_signature_evidence(FunctionSignatureEvidence {
                 item_id,
                 parameter_types: parameter_types.to_vec(),
-                result_type: result_type.clone(),
+                result_type: crate::function_inference::function_accepts_inference_type(
+                    function,
+                    result_type,
+                )
+                .then(|| result_type.clone()),
             });
     }
 
@@ -2205,6 +2208,14 @@ impl<'a> TypeChecker<'a> {
         if let Some((parameter_types, result_type)) =
             self.contextual_same_module_function_signature(&function, &argument_types, expected)
         {
+            // A contextual result contract is an obligation to check the whole
+            // inferred function, including parameters left by partial application.
+            let signature = self.arrow_type(&parameter_types, &result_type);
+            if self.check_unannotated_function_name(reference, env, &signature, value_stack)
+                == Some(false)
+            {
+                return Some(false);
+            }
             self.record_function_signature_evidence(*item_id, &parameter_types, &result_type);
             for (argument, parameter) in arguments.iter().zip(parameter_types.iter()) {
                 if !self.check_expected_expr(*argument, env, parameter, value_stack) {

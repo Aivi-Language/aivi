@@ -16,7 +16,8 @@ pub(crate) struct FunctionCallEvidence {
 pub(crate) struct FunctionSignatureEvidence {
     pub(crate) item_id: ItemId,
     pub(crate) parameter_types: Vec<GateType>,
-    pub(crate) result_type: GateType,
+    // Known inputs can seed a callback while its result is still unresolved.
+    pub(crate) result_type: Option<GateType>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -129,7 +130,11 @@ impl FunctionInferenceState {
         changed
     }
 
-    fn record_signature(&mut self, parameter_types: &[GateType], result_type: &GateType) -> bool {
+    fn record_signature(
+        &mut self,
+        parameter_types: &[GateType],
+        result_type: Option<&GateType>,
+    ) -> bool {
         if parameter_types.len() != self.parameter_slots.len() {
             return false;
         }
@@ -137,9 +142,11 @@ impl FunctionInferenceState {
         for (slot, parameter_ty) in self.parameter_slots.iter_mut().zip(parameter_types.iter()) {
             changed |= slot.record(parameter_ty.clone(), &self.rigid_type_parameters);
         }
-        changed |= self
-            .result_slot
-            .record(result_type.clone(), &self.rigid_type_parameters);
+        if let Some(result_type) = result_type {
+            changed |= self
+                .result_slot
+                .record(result_type.clone(), &self.rigid_type_parameters);
+        }
         changed
     }
 }
@@ -206,7 +213,10 @@ fn accepts_signature_evidence(module: &Module, evidence: &FunctionSignatureEvide
     let Item::Function(function) = &module.items()[evidence.item_id] else {
         return false;
     };
-    function_accepts_inference_type(function, &evidence.result_type)
+    evidence
+        .result_type
+        .as_ref()
+        .is_none_or(|ty| function_accepts_inference_type(function, ty))
         && evidence
             .parameter_types
             .iter()
@@ -271,7 +281,8 @@ pub(crate) fn infer_same_module_function_types(module: &Module) -> HashMap<ItemI
             let Some(state) = states.get_mut(&evidence.item_id) else {
                 continue;
             };
-            changed |= state.record_signature(&evidence.parameter_types, &evidence.result_type);
+            changed |=
+                state.record_signature(&evidence.parameter_types, evidence.result_type.as_ref());
         }
 
         changed |= infer_body_results(module, &mut states, seeded_item_types);
@@ -324,7 +335,7 @@ fn collect_call_evidence(
             .map(|evidence| FunctionCallEvidence {
                 item_id: evidence.item_id,
                 argument_types: evidence.parameter_types,
-                result_type: Some(evidence.result_type),
+                result_type: evidence.result_type,
             }),
     );
     evidence
@@ -400,6 +411,26 @@ fn infer_body_results(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn partial_signature_evidence_seeds_inputs_without_guessing_the_result() {
+        let int = GateType::Primitive(crate::BuiltinType::Int);
+        let text = GateType::Primitive(crate::BuiltinType::Text);
+        let mut state = FunctionInferenceState {
+            parameter_slots: vec![InferenceSlot::default()],
+            result_slot: InferenceSlot::default(),
+            rigid_type_parameters: Vec::new(),
+        };
+        assert!(state.record_signature(std::slice::from_ref(&int), None));
+        assert_eq!(state.parameter_types(), Some(vec![int.clone()]));
+        assert!(state.arrow_type().is_none());
+        assert!(!state.record_signature(std::slice::from_ref(&int), None));
+        assert!(state.record_signature(std::slice::from_ref(&int), Some(&text)));
+        assert_eq!(state.arrow_type(), Some(arrow(int.clone(), text.clone())));
+        assert!(state.record_signature(std::slice::from_ref(&text), Some(&text)));
+        assert!(state.parameter_types().is_none());
+        assert!(state.arrow_type().is_none());
+    }
 
     fn arrow(parameter: GateType, result: GateType) -> GateType {
         GateType::Arrow {

@@ -375,6 +375,47 @@ value both : (List Int, List Text) = (copy [1, 2], copy ["a", "b"])
 }
 
 #[test]
+fn check_rejects_contextual_callback_capture_specialization() {
+    for (name, source) in [
+        (
+            "captured-parameter",
+            "type A -> List Int\nfunc bad = captured => map (n => captured) [1]\n",
+        ),
+        (
+            "captured-payload",
+            "type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)\nfunc visit = transform values => traverse transform values\ntype (Traversable F, Applicative G) => A -> F Int -> G (F Int)\nfunc bad = captured values => visit (n => Some captured) values\n",
+        ),
+        (
+            "captured-result",
+            "type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)\nfunc visit = transform values => traverse transform values\ntype (Traversable F, Applicative G) => A -> F Int -> G (F Int)\nfunc bad = captured values => visit (n => Ok captured) values\n",
+        ),
+        (
+            "captured-validation",
+            "type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)\nfunc visit = transform values => traverse transform values\ntype (Traversable F, Applicative G) => A -> F Int -> G (F Int)\nfunc bad = captured values => visit (n => Valid captured) values\n",
+        ),
+        (
+            "rigid-effect",
+            "type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)\nfunc visit = transform values => traverse transform values\ntype (Traversable F, Applicative G) => F Int -> G (F Int)\nfunc bad = values => visit (n => None) values\n",
+        ),
+    ] {
+        let dir = TempDir::new(name);
+        let path = dir.write("main.aivi", source);
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("check")
+            .arg(path)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "{name}: {stderr}");
+        assert!(stderr.contains("hir::type-mismatch"), "{name}: {stderr}");
+        assert!(
+            stderr.contains("found") || stderr.contains("does not match"),
+            "{name}: {stderr}"
+        );
+    }
+}
+
+#[test]
 fn check_accepts_reactive_update_programs() {
     let dir = TempDir::new("check-reactive-update");
     let path = dir.write(

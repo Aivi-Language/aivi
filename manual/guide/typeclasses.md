@@ -179,6 +179,27 @@ Keep constraints explicit. A `Functor` constraint does not imply `Monad`, and a 
 does not imply that a collection can be empty. Class resolution must select one instance; it does
 not choose between overlapping instance implementations by import order.
 
+### Contextual callback inference
+
+Arguments and the expected result constrain callbacks, including callbacks passed before the
+collection argument. A callback's known inputs can determine its result constructor without
+requiring a separate annotated helper:
+
+```aivi
+type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)
+func visit = transform values => traverse transform values
+
+value rejected : Bool = visit (n => None) [1, 2] == None
+value noChoices : Bool = visit (n => []) [1, 2] == []
+```
+
+Here the signature fixes the transformed element type to `Int`; `None` determines `Option` and
+`[]` determines `List`. Empty constructors do not choose an otherwise unknown element type.
+For a direct `traverse (n => None)` call, supply a result or callback annotation when no other
+argument fixes that result element type. Generic constructor callbacks instantiate at each use,
+and captured values keep their lexical types; an expected callback type cannot specialize a
+caller's generic parameter to a concrete type.
+
 ## Instance coherence and ownership
 
 The compiler checks instance declarations even when no expression uses them. Two heads conflict

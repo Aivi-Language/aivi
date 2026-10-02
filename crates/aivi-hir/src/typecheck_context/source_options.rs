@@ -20,11 +20,12 @@ pub(crate) struct SourceOptionExpectedRecordField {
     pub(crate) ty: SourceOptionExpectedType,
 }
 
-/// Local proof type that keeps builtin container holes explicit until later
-/// ordinary-expression or source-option evidence refines them into closed `GateType`s.
+/// Local proof type that keeps absent constructor payloads as holes while
+/// retaining the binder identity of known abstract ordinary-expression types.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SourceOptionActualType {
     Hole,
+    KnownAbstract(Box<GateType>),
     Primitive(BuiltinType),
     Tuple(Vec<Self>),
     Record(Vec<SourceOptionActualRecordField>),
@@ -400,7 +401,9 @@ impl SourceOptionActualType {
     pub(crate) fn from_gate_type(ty: &GateType) -> Self {
         match ty {
             GateType::Primitive(builtin) => Self::Primitive(*builtin),
-            GateType::TypeParameter { .. } | GateType::TypeApplication { .. } => Self::Hole,
+            GateType::TypeParameter { .. } | GateType::TypeApplication { .. } => {
+                Self::KnownAbstract(Box::new(ty.clone()))
+            }
             GateType::Tuple(elements) => {
                 Self::Tuple(elements.iter().map(Self::from_gate_type).collect())
             }
@@ -474,6 +477,7 @@ impl SourceOptionActualType {
     pub(crate) fn to_gate_type(&self) -> Option<GateType> {
         match self {
             Self::Hole => None,
+            Self::KnownAbstract(ty) => Some(ty.as_ref().clone()),
             Self::Primitive(builtin) => Some(GateType::Primitive(*builtin)),
             Self::Tuple(elements) => Some(GateType::Tuple(
                 elements
@@ -562,6 +566,9 @@ impl SourceOptionActualType {
     pub(crate) fn unify(&self, other: &Self) -> Option<Self> {
         match (self, other) {
             (Self::Hole, actual) | (actual, Self::Hole) => Some(actual.clone()),
+            (Self::KnownAbstract(left), Self::KnownAbstract(right)) if left == right => {
+                Some(Self::KnownAbstract(left.clone()))
+            }
             (Self::Primitive(left), Self::Primitive(right)) if left == right => {
                 Some(Self::Primitive(*left))
             }
@@ -740,6 +747,7 @@ impl fmt::Display for SourceOptionActualType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Hole => write!(f, "_"),
+            Self::KnownAbstract(ty) => write!(f, "{ty}"),
             Self::Primitive(builtin) => write!(f, "{}", builtin_type_name(*builtin)),
             Self::Tuple(elements) => {
                 write!(f, "(")?;

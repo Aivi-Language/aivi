@@ -5,8 +5,8 @@ const BACKEND_PAYLOAD_FORMAT: &str = "aivi.backend-payload";
 const BACKEND_PAYLOAD_VERSION: u32 = 7;
 const SOURCE_RUN_CACHE_FORMAT: &str = "aivi.source-run-cache";
 const SOURCE_RUN_CACHE_VERSION: u32 = 5;
-// Revision 21 carries executable payload dictionaries through derived equality.
-const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "21";
+// Revision 22 requires checked contextual callbacks and preserved abstract payloads.
+const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "22";
 const SOURCE_RUN_CACHE_DIR: &str = "run-cache";
 const SOURCE_RUN_CACHE_METADATA_FILE_NAME: &str = "source-run-cache.json";
 const MAX_BINARY_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;
