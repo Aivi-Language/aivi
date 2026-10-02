@@ -665,7 +665,9 @@ impl<'a> GateTypeContext<'a> {
         let ty = {
             let binding = &self.module.imports()[import_id];
             match &binding.metadata {
-                crate::ImportBindingMetadata::Value { ty } | crate::ImportBindingMetadata::ConstrainedValue { ty, .. } => ty.clone(),
+                    crate::ImportBindingMetadata::Value { ty }
+                    | crate::ImportBindingMetadata::ConstructorValue { ty, .. }
+                    | crate::ImportBindingMetadata::ConstrainedValue { ty, .. } => ty.clone(),
                 _ => return Vec::new(),
             }
         };
@@ -1226,6 +1228,7 @@ impl<'a> GateTypeContext<'a> {
         }
         match &import.metadata {
             ImportBindingMetadata::Value { ty }
+            | ImportBindingMetadata::ConstructorValue { ty, .. }
             | ImportBindingMetadata::ConstrainedValue { ty, .. }
             | ImportBindingMetadata::IntrinsicValue { ty, .. } => {
                 Some(self.lower_import_value_type(ty))
@@ -2657,7 +2660,7 @@ impl<'a> GateTypeContext<'a> {
             match (template, actual) {
                 (template @ GateType::TypeApplication { .. }, actual) => {
                     let Some(witness) =
-                        self.contextual_builtin_constructor_witness(&template, &actual, &candidate)
+                        self.contextual_constructor_witness(&template, &actual, &candidate)
                     else {
                         return false;
                     };
@@ -2805,7 +2808,7 @@ impl<'a> GateTypeContext<'a> {
 
     /// An empty constructor still proves its head. Context may supply its
     /// applied payloads; unknown fixed arguments require an earlier binding.
-    fn contextual_builtin_constructor_witness(
+    fn contextual_constructor_witness(
         &self,
         template: &GateType,
         actual: &SourceOptionActualType,
@@ -2819,29 +2822,57 @@ impl<'a> GateTypeContext<'a> {
         else {
             return None;
         };
-        let (builtin, actual_arguments): (_, Vec<&SourceOptionActualType>) = match actual {
-            SourceOptionActualType::List(value) => (BuiltinType::List, vec![value]),
-            SourceOptionActualType::Set(value) => (BuiltinType::Set, vec![value]),
-            SourceOptionActualType::Option(value) => (BuiltinType::Option, vec![value]),
-            SourceOptionActualType::Signal(value) => (BuiltinType::Signal, vec![value]),
-            SourceOptionActualType::Map { key, value } => (BuiltinType::Map, vec![key, value]),
-            SourceOptionActualType::Result { error, value } => {
-                (BuiltinType::Result, vec![error, value])
+        let (head, actual_arguments): (_, Vec<&SourceOptionActualType>) = match actual {
+            SourceOptionActualType::List(value) => {
+                (TypeConstructorHead::Builtin(BuiltinType::List), vec![value])
             }
-            SourceOptionActualType::Validation { error, value } => {
-                (BuiltinType::Validation, vec![error, value])
+            SourceOptionActualType::Set(value) => {
+                (TypeConstructorHead::Builtin(BuiltinType::Set), vec![value])
             }
-            SourceOptionActualType::Task { error, value } => {
-                (BuiltinType::Task, vec![error, value])
+            SourceOptionActualType::Option(value) => (
+                TypeConstructorHead::Builtin(BuiltinType::Option),
+                vec![value],
+            ),
+            SourceOptionActualType::Signal(value) => (
+                TypeConstructorHead::Builtin(BuiltinType::Signal),
+                vec![value],
+            ),
+            SourceOptionActualType::Map { key, value } => (
+                TypeConstructorHead::Builtin(BuiltinType::Map),
+                vec![key, value],
+            ),
+            SourceOptionActualType::Result { error, value } => (
+                TypeConstructorHead::Builtin(BuiltinType::Result),
+                vec![error, value],
+            ),
+            SourceOptionActualType::Validation { error, value } => (
+                TypeConstructorHead::Builtin(BuiltinType::Validation),
+                vec![error, value],
+            ),
+            SourceOptionActualType::Task { error, value } => (
+                TypeConstructorHead::Builtin(BuiltinType::Task),
+                vec![error, value],
+            ),
+            SourceOptionActualType::Domain {
+                item, arguments, ..
             }
+            | SourceOptionActualType::OpaqueItem {
+                item, arguments, ..
+            } => (TypeConstructorHead::Item(*item), arguments.iter().collect()),
+            SourceOptionActualType::OpaqueImport {
+                import, arguments, ..
+            } => (
+                TypeConstructorHead::Import(*import),
+                arguments.iter().collect(),
+            ),
             _ => return None,
         };
         let fixed = actual_arguments.len().checked_sub(arguments.len())?;
         let previous = substitutions
             .get(parameter)
             .and_then(GateType::constructor_view)
-            .filter(|(head, previous)| {
-                *head == TypeConstructorHead::Builtin(builtin)
+            .filter(|(previous_head, previous)| {
+                self.constructor_heads_match(*previous_head, head)
                     && previous.len() == actual_arguments.len()
             })
             .map(|(_, arguments)| arguments);
@@ -2864,7 +2895,37 @@ impl<'a> GateTypeContext<'a> {
                     .or_else(|| (refined == partial).then_some(contextual))?,
             );
         }
-        self.apply_builtin_type_constructor(builtin, &completed)
+        match actual {
+            SourceOptionActualType::Domain { item, name, .. } => Some(GateType::Domain {
+                item: *item,
+                name: name.clone(),
+                arguments: completed,
+            }),
+            SourceOptionActualType::OpaqueItem { item, name, .. } => Some(GateType::OpaqueItem {
+                item: *item,
+                name: name.clone(),
+                arguments: completed,
+            }),
+            SourceOptionActualType::OpaqueImport {
+                origin,
+                import,
+                name,
+                definition,
+                ..
+            } => Some(GateType::OpaqueImport {
+                origin: origin.clone(),
+                import: *import,
+                name: name.clone(),
+                arguments: completed,
+                definition: definition.clone(),
+            }),
+            _ => match head {
+                TypeConstructorHead::Builtin(builtin) => {
+                    self.apply_builtin_type_constructor(builtin, &completed)
+                }
+                _ => None,
+            },
+        }
     }
 
     /// Instantiate a polymorphic callback from its known input contract before
@@ -5533,6 +5594,21 @@ impl<'a> GateTypeContext<'a> {
             }
             ResolutionState::Resolved(TermResolution::Import(import_id)) => {
                 let ty = self.import_value_type(*import_id);
+                if matches!(self.module.imports()[*import_id].metadata, ImportBindingMetadata::ConstructorValue { .. })
+                    && let Some(GateType::OpaqueImport { origin, import, name, arguments, definition }) = &ty
+                    && !arguments.is_empty()
+                {
+                    return GateExprInfo {
+                        actual: Some(SourceOptionActualType::OpaqueImport {
+                            origin: origin.clone(),
+                            import: *import,
+                            name: name.clone(),
+                            arguments: vec![SourceOptionActualType::Hole; arguments.len()],
+                            definition: definition.clone(),
+                        }),
+                        ..GateExprInfo::default()
+                    };
+                }
                 GateExprInfo {
                     contains_signal: ty.as_ref().is_some_and(GateType::is_signal),
                     ty,
@@ -5620,6 +5696,9 @@ impl<'a> GateTypeContext<'a> {
         expected: &GateType,
     ) -> GateExprInfo {
         let mut info = match reference.resolution.as_ref() {
+            ResolutionState::Resolved(TermResolution::Builtin(builtin)) => self
+                .infer_builtin_constructor_callable(*builtin, expected)
+                .unwrap_or_else(|| self.infer_name(reference, env)),
             ResolutionState::Resolved(TermResolution::Item(item_id)) => {
                 let constructor = self
                     .open_same_module_constructor_signature(reference)
@@ -5658,6 +5737,24 @@ impl<'a> GateTypeContext<'a> {
                     },
                     Some(DomainMemberSelection::NoMatch) | None => self.infer_name(reference, env),
                 }
+            }
+            ResolutionState::Resolved(TermResolution::Import(import))
+                if matches!(
+                    self.module.imports()[*import].metadata,
+                    ImportBindingMetadata::ConstructorValue { .. }
+                ) =>
+            {
+                let specialized = self
+                    .import_value_type(*import)
+                    .and_then(|ty| self.specialize_gate_type_template(&ty, expected));
+                specialized
+                    .map(|ty| GateExprInfo {
+                        contains_signal: ty.is_signal(),
+                        actual: Some(SourceOptionActualType::from_gate_type(&ty)),
+                        ty: Some(ty),
+                        ..GateExprInfo::default()
+                    })
+                    .unwrap_or_else(|| self.infer_name(reference, env))
             }
             _ => self.infer_name(reference, env),
         };
@@ -6077,6 +6174,45 @@ impl<'a> GateTypeContext<'a> {
             callee_type,
             result_type: result,
         })
+    }
+
+    fn infer_builtin_constructor_callable(
+        &self,
+        builtin: BuiltinTerm,
+        expected: &GateType,
+    ) -> Option<GateExprInfo> {
+        let expanded = expected.expand_transparent_import_alias();
+        let expected = expanded.as_ref().unwrap_or(expected);
+        let GateType::Arrow {
+            parameter,
+            result: expected_result,
+        } = expected
+        else {
+            return None;
+        };
+        let input = SourceOptionActualType::from_gate_type(parameter);
+        let result =
+            self.infer_builtin_constructor_actual(builtin, std::slice::from_ref(&input))?;
+        // Reusing application evidence preserves the relation between the
+        // callable's input and payload. Only absent opposite payloads are holes.
+        let actual = SourceOptionActualType::Arrow {
+            parameter: Box::new(input),
+            result: Box::new(result),
+        };
+        let expected = GateType::Arrow {
+            parameter: parameter.clone(),
+            result: Box::new(
+                expected_result
+                    .expand_transparent_import_alias()
+                    .unwrap_or_else(|| expected_result.as_ref().clone()),
+            ),
+        };
+        let actual = actual
+            .unify(&SourceOptionActualType::from_gate_type(&expected))
+            .unwrap_or(actual);
+        let mut info = GateExprInfo::default();
+        info.set_actual(actual);
+        Some(info)
     }
 
     pub(crate) fn infer_builtin_constructor_actual(
@@ -6558,8 +6694,17 @@ impl<'a> GateTypeContext<'a> {
             for (argument, parameter) in explicit_arguments.iter().zip(function.parameters.iter()) {
                 let annotation = parameter.annotation?;
                 let argument_info = self.infer_expr(*argument, env, Some(ambient));
-                let Some(argument_ty) = argument_info.actual_gate_type().or(argument_info.ty)
-                else {
+                let argument_ty = argument_info
+                    .actual_gate_type()
+                    .or(argument_info.ty)
+                    .or_else(|| {
+                        let expected =
+                            self.instantiate_poly_hir_type_partially(annotation, &bindings)?;
+                        let info =
+                            self.infer_expr_with_expected(*argument, env, Some(ambient), &expected);
+                        info.actual_gate_type().or(info.ty)
+                    });
+                let Some(argument_ty) = argument_ty else {
                     signal_payload_arguments.push(false);
                     continue;
                 };
@@ -6678,8 +6823,23 @@ impl<'a> GateTypeContext<'a> {
                 continue;
             }
             let mut arguments_match = true;
-            for (annotation, actual) in parameter_type_ids.iter().zip(&explicit_argument_types) {
-                let Some(actual) = actual else {
+            for ((annotation, actual), argument) in parameter_type_ids
+                .iter()
+                .zip(&explicit_argument_types)
+                .zip(&explicit_arguments)
+            {
+                let contextual = if actual.is_none() {
+                    (|| {
+                        let expected =
+                            self.instantiate_poly_hir_type_partially(*annotation, &bindings)?;
+                        let info =
+                            self.infer_expr_with_expected(*argument, env, Some(ambient), &expected);
+                        info.actual_gate_type().or(info.ty)
+                    })()
+                } else {
+                    None
+                };
+                let Some(actual) = actual.as_ref().or(contextual.as_ref()) else {
                     signal_payload_arguments.push(false);
                     continue;
                 };
@@ -6718,7 +6878,12 @@ impl<'a> GateTypeContext<'a> {
                 .zip(parameter_types.iter().take(explicit_arguments.len()))
                 .zip(signal_payload_arguments.iter())
                 .all(|((argument, expected_parameter), reads_signal_payload)| {
-                    let argument_info = self.infer_expr(*argument, env, Some(ambient));
+                    let argument_info = self.infer_expr_with_expected(
+                        *argument,
+                        env,
+                        Some(ambient),
+                        expected_parameter,
+                    );
                     let arg_ty = argument_info
                         .actual_gate_type()
                         .or(argument_info.ty.clone());
@@ -6800,11 +6965,22 @@ impl<'a> GateTypeContext<'a> {
                 continue;
             }
             let mut ok = true;
-            for (parameter, actual) in parameters.iter().zip(&explicit_arg_types) {
-                let Some(actual) = actual else {
+            for ((parameter, actual), argument) in parameters
+                .iter()
+                .zip(&explicit_arg_types)
+                .zip(&explicit_arguments)
+            {
+                let expected = parameter.substitute_type_parameters(&substitutions);
+                let contextual = if actual.is_none() {
+                    let info =
+                        self.infer_expr_with_expected(*argument, env, Some(ambient), &expected);
+                    info.actual_gate_type().or(info.ty)
+                } else {
+                    None
+                };
+                let Some(actual) = actual.as_ref().or(contextual.as_ref()) else {
                     continue;
                 };
-                let expected = parameter.substitute_type_parameters(&substitutions);
                 let specialized = self
                     .specialize_gate_type_template(actual, &expected)
                     .or_else(|| self.specialize_callback_inputs(actual, &expected));

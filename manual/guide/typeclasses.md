@@ -200,6 +200,21 @@ argument fixes that result element type. Generic constructor callbacks instantia
 and captured values keep their lexical types; an expected callback type cannot specialize a
 caller's generic parameter to a concrete type.
 
+Unary constructors are ordinary callbacks. Their input determines the payload, while the result
+annotation supplies any unused parameters, such as a `Result` error type:
+
+```aivi
+value optionalItems : List (Option Int) = map Some [1, 2]
+value successfulItems : List (Result Text Int) = map Ok [1, 2]
+value failedItems : List (Result Text Int) = map Err ["missing"]
+value validatedItems : List (Validation Text Int) = map Valid [1, 2]
+```
+
+The same rules apply to authored constructors, including imported aliases and re-exports.
+A nullary constructor establishes its nominal head without choosing absent payloads. For a
+partially applied head, its fixed prefix must already be known from arguments or an annotation;
+the compiler does not guess an error type or dictionary key.
+
 ## Instance coherence and ownership
 
 The compiler checks instance declarations even when no expression uses them. Two heads conflict

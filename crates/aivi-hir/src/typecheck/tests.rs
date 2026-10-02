@@ -1496,7 +1496,7 @@ fn typecheck_reports_instance_member_operator_operand_mismatch() {
 }
 
 #[test]
-fn typecheck_reports_invalid_unary_operator_without_resolved_operand_type() {
+fn typecheck_reports_constructor_operand_mismatch_without_payload_evidence() {
     let report = typecheck_text(
         "invalid-unary-operator.aivi",
         "value broken:Bool = not None\n",
@@ -1505,8 +1505,8 @@ fn typecheck_reports_invalid_unary_operator_without_resolved_operand_type() {
         report
             .diagnostics()
             .iter()
-            .any(|diagnostic| { diagnostic.code == Some(crate::codes::INVALID_UNARY_OPERATOR) }),
-        "expected invalid unary operator diagnostic, got diagnostics: {:?}",
+            .any(|diagnostic| { diagnostic.code == Some(crate::codes::TYPE_MISMATCH) }),
+        "expected constructor operand mismatch diagnostic, got diagnostics: {:?}",
         report.diagnostics()
     );
 }
@@ -2017,6 +2017,177 @@ fn typecheck_reports_value_annotation_mismatch() {
         "expected type mismatch diagnostic, got diagnostics: {:?}",
         report.diagnostics()
     );
+}
+
+#[test]
+fn exported_constructor_signatures_retain_provenance() {
+    let module = lowered_module_text(
+        "constructor-exports.aivi",
+        "type Maybe A = Missing | Found A\nvalue fallback : Maybe Int = Found 7\nvalue wrap : Int -> Maybe Int = Found\nexport Missing\nexport Found\nexport fallback\nexport wrap\n",
+    );
+    let exports = crate::exports(&module);
+    for name in ["Missing", "Found"] {
+        assert!(matches!(
+            &exports.find(name).unwrap().metadata,
+            crate::ImportBindingMetadata::ConstructorValue { variant_name, .. } if variant_name == name
+        ));
+    }
+    for name in ["fallback", "wrap"] {
+        assert!(matches!(
+            exports.find(name).unwrap().metadata,
+            crate::ImportBindingMetadata::Value { .. }
+        ));
+    }
+}
+
+#[test]
+fn transparent_constructor_aliases_have_portable_payloads() {
+    let module = lowered_module_text(
+        "constructor-alias-exports.aivi",
+        "type Maybe A = (Option A)\ntype Reply A = (Result Text A)\nexport Maybe\nexport Reply\n",
+    );
+    let exports = crate::exports(&module);
+    assert!(
+        matches!(
+            &exports.find("Maybe").unwrap().metadata,
+            crate::ImportBindingMetadata::TypeConstructor {
+                definition: Some(crate::ImportTypeDefinition::Alias(
+                    crate::ImportValueType::Option(_)
+                )),
+                ..
+            }
+        ),
+        "{:?}",
+        exports.find("Maybe")
+    );
+    assert!(
+        matches!(
+            &exports.find("Reply").unwrap().metadata,
+            crate::ImportBindingMetadata::TypeConstructor {
+                definition: Some(crate::ImportTypeDefinition::Alias(
+                    crate::ImportValueType::Result { .. }
+                )),
+                ..
+            }
+        ),
+        "{:?}",
+        exports.find("Reply")
+    );
+}
+
+#[test]
+fn constructor_callbacks_infer_builtin_payload_contracts() {
+    for (constructor, source, result) in [
+        ("Some", "[1, 2]", "List (Option Int)"),
+        ("Ok", "[1, 2]", "List (Result Text Int)"),
+        ("Err", "[\"missing\"]", "List (Result Text Int)"),
+        ("Valid", "[1, 2]", "List (Validation Text Int)"),
+        ("Invalid", "[\"missing\"]", "List (Validation Text Int)"),
+    ] {
+        let report = typecheck_text(
+            "builtin-constructor-callback.aivi",
+            &format!("value wrapped : {result} = map {constructor} {source}\n"),
+        );
+        assert!(report.is_ok(), "{constructor}: {:?}", report.diagnostics());
+    }
+}
+
+#[test]
+fn constructor_callbacks_infer_authored_empty_effect_heads() {
+    let report = typecheck_text(
+        "authored-empty-constructor-callback.aivi",
+        r#"
+type Maybe A = Missing | Found A
+instance Functor Maybe = {
+    map = f maybe => maybe
+     ||> Missing -> Missing
+     ||> Found a -> Found (f a)
+}
+instance Apply Maybe = {
+    apply = functions values => functions
+     ||> Missing -> Missing
+     ||> Found f -> map f values
+}
+instance Applicative Maybe = { pure = a => Found a }
+type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)
+func visit = transform values => traverse transform values
+value rejected : Bool = visit (n => Missing) [1, 2] == Missing
+"#,
+    );
+    assert!(report.is_ok(), "{:?}", report.diagnostics());
+}
+
+#[test]
+fn constructor_callbacks_preserve_nominal_fixed_prefixes() {
+    let declaration = r#"
+type Report E A = Silent | Failure E | Success A
+instance Functor (Report E) = {
+    map = f report => report
+     ||> Silent -> Silent
+     ||> Failure e -> Failure e
+     ||> Success a -> Success (f a)
+}
+instance Apply (Report E) = {
+    apply = functions values => functions
+     ||> Silent -> Silent
+     ||> Failure e -> Failure e
+     ||> Success f -> map f values
+}
+instance Applicative (Report E) = { pure = a => Success a }
+type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)
+func visit = transform values => traverse transform values
+"#;
+    for (source, accepted) in [
+        (
+            "value result : Bool = visit (n => Failure \"missing\") [1] == Failure \"missing\"\n",
+            true,
+        ),
+        (
+            "value result : Report Text (List Int) = visit (n => Silent) [1]\n",
+            true,
+        ),
+        (
+            "value result : Bool = visit (n => Silent) [1] == Silent\n",
+            false,
+        ),
+        (
+            "value result : Report Int (List Int) = visit (n => Failure \"missing\") [1]\n",
+            false,
+        ),
+    ] {
+        let report = typecheck_text(
+            "nominal-prefix-callback.aivi",
+            &format!("{declaration}\n{source}"),
+        );
+        assert_eq!(
+            report.is_ok(),
+            accepted,
+            "{source}: {:?}",
+            report.diagnostics()
+        );
+    }
+}
+
+#[test]
+fn constructor_callbacks_preserve_rigid_inputs_and_result_payloads() {
+    for source in [
+        "value invalid : List (Option Text) = map Some [1]\n",
+        "value invalid : List (Option Text) = [1] |> map Some\n",
+        "value invalid : List (Result Text Int) = map Err [1]\n",
+        "value invalid : Int -> Text -> Option Int = Some\n",
+        "value invalid : Int -> Option Int = None\n",
+        "value invalid : Int = None\n",
+        "type Maybe A = Missing | Found A\nvalue invalid : Int = Missing\n",
+        "type Maybe A = Missing | Found A\nvalue invalid : Int -> Maybe Int = Missing\n",
+        "type Functor F => F A -> F (Option Int)\nfunc invalid = values => map Some values\n",
+        "type Functor F => F A -> F (Option Int)\nfunc invalid = values => values |> map Some\n",
+    ] {
+        let report = typecheck_text("invalid-constructor-callback.aivi", source);
+        assert!(
+            !report.is_ok(),
+            "invalid constructor contract accepted: {source}"
+        );
+    }
 }
 
 #[test]

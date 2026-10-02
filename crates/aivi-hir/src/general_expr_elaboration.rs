@@ -5754,6 +5754,7 @@ impl<'a> GeneralExprElaborator<'a> {
                     let binding = &self.module.imports()[*import_id];
                     match &binding.metadata {
                         crate::ImportBindingMetadata::Value { ty }
+                        | crate::ImportBindingMetadata::ConstructorValue { ty, .. }
                         | crate::ImportBindingMetadata::ConstrainedValue { ty, .. } => ty.clone(),
                         _ => return None,
                     }

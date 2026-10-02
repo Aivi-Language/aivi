@@ -898,6 +898,104 @@ value executed : Task Text Bool = main
 }
 
 #[test]
+fn constructor_callbacks_execute_import_aliases_and_curried_contracts() {
+    let dir = TempDir::new("constructor-callbacks");
+    dir.write(
+        "maybe.aivi",
+        r#"
+type Maybe A = Missing | Found A
+instance Functor Maybe = {
+    map = f maybe => maybe
+     ||> Missing -> Missing
+     ||> Found a -> Found (f a)
+}
+instance Apply Maybe = {
+    apply = functions values => functions
+     ||> Missing -> Missing
+     ||> Found f -> map f values
+}
+instance Applicative Maybe = { pure = a => Found a }
+value defaultValue : Maybe Int = Found 7
+value factory : Int -> Maybe Int = Found
+export Maybe
+export Missing
+export Found
+export defaultValue
+export factory
+"#,
+    );
+    dir.write(
+        "aliases.aivi",
+        "use maybe (Missing as Absent, Found as Present)\nexport Absent\nexport Present\n",
+    );
+    dir.write("operations.aivi", "type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)\nfunc visit = transform values => traverse transform values\nexport visit\n");
+    let path = dir.write("main.aivi", r#"
+use operations (visit)
+use aliases (Absent, Present)
+use maybe (Maybe, Missing, Found, Found as Wrap, Missing as Empty, defaultValue, factory)
+value wrappedOptions : List (Option Int) = map Some [1, 2]
+value wrappedResults : List (Result Text Int) = map Ok [1, 2]
+value wrappedErrors : List (Result Text Int) = map Err ["missing"]
+value wrappedValid : List (Validation Text Int) = map Valid [1, 2]
+value wrappedInvalid : List (Validation Text Int) = map Invalid ["missing"]
+value constructorCallback : Int -> Option Int = Some
+value partialConstructorCallback : List Int -> List (Option Int) = map Some
+value pipeConstructorCallback : List (Option Int) = [1, 2] |> map Some
+type Functor F => (A -> B) -> F A -> F B
+func mapped = transform values => map transform values
+value sameModulePipe : List (Option Int) = [1, 2] |> mapped Some
+value importedPipe : Option (List Int) = [1, 2] |> visit Some
+@test
+value directSome : Task Text Bool = pure (wrappedOptions == [Some 1, Some 2])
+@test
+value directOk : Task Text Bool = pure (wrappedResults == [Ok 1, Ok 2])
+@test
+value directErr : Task Text Bool = pure (wrappedErrors == [Err "missing"])
+@test
+value directValid : Task Text Bool = pure (wrappedValid == [Valid 1, Valid 2])
+@test
+value directInvalid : Task Text Bool = pure (wrappedInvalid == [Invalid "missing"])
+@test
+value firstClassConstructor : Task Text Bool = pure (map constructorCallback [1] == [Some 1])
+@test
+value partialConstructor : Task Text Bool = pure (partialConstructorCallback [1, 2] == wrappedOptions)
+@test
+value pipedConstructor : Task Text Bool = pure (pipeConstructorCallback == wrappedOptions)
+@test
+value pipedSameModuleConstructor : Task Text Bool = pure (sameModulePipe == wrappedOptions)
+@test
+value pipedImportedConstructor : Task Text Bool = pure (importedPipe == Some [1, 2])
+@test
+value directAuthored : Task Text Bool = pure (map Found [1, 2] == [Found 1, Found 2])
+@test
+value aliasAuthored : Task Text Bool = pure (map Wrap [1] == [Found 1])
+@test
+value reexportAuthored : Task Text Bool = pure (map Present [1] == [Found 1])
+@test
+value authoredEmptyCallback : Task Text Bool = pure (visit (n => Missing) [1] == Missing)
+@test
+value aliasEmptyCallback : Task Text Bool = pure (visit (n => Empty) [1] == Missing)
+@test
+value reexportEmptyCallback : Task Text Bool = pure (visit (n => Absent) [1] == Missing)
+@test
+value importedOrdinaryValue : Task Text Bool = pure (defaultValue == Found 7)
+@test
+value importedOrdinaryFunctionValue : Task Text Bool = pure (factory 8 == Found 8)
+"#);
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("18 passed; 0 failed; 18 total"), "{stdout}");
+    }
+}
+
+#[test]
 fn contextual_traversal_callbacks_preserve_imports_captures_and_cached_execution() {
     let dir = TempDir::new("contextual-traversal-callbacks");
     dir.write(

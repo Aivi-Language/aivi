@@ -480,8 +480,9 @@ fn source_run_cache_discards_images_without_current_type_and_equality_contracts(
     let cache_home = temp.path().join("cache-home");
     let requested_view = Some("main");
     // Reconstruct the historical keys exactly. Revision 20 lacked executable
-    // payload equality; revision 21 preceded contextual callback body checking.
-    for revision in ["20", "21"] {
+    // payload equality; revision 21 preceded contextual callback body checking;
+    // revision 22 preceded constructor provenance and reference validation.
+    for revision in ["20", "21", "22"] {
         let mut legacy = DefaultHasher::new();
         "aivi.source-run-cache".hash(&mut legacy);
         5_u32.hash(&mut legacy);
@@ -559,6 +560,103 @@ fn source_run_cache_roundtrip_reloads_frozen_catalog_without_backend_program() {
         cached.backend_native_kernels.len() >= artifact.backend_native_kernels.len(),
         "source run cache should not drop native kernels during roundtrip"
     );
+}
+
+#[test]
+fn source_run_cache_replays_constructor_callbacks_and_reexports() {
+    let workspace = TempDir::new("constructor-callback-cache");
+    workspace.write(
+        "maybe.aivi",
+        r#"
+type Maybe A = Missing | Found A
+instance Functor Maybe = {
+    map = f maybe => maybe
+     ||> Missing -> Missing
+     ||> Found a -> Found (f a)
+}
+instance Apply Maybe = {
+    apply = functions values => functions
+     ||> Missing -> Missing
+     ||> Found f -> map f values
+}
+instance Applicative Maybe = { pure = a => Found a }
+export Maybe
+export Missing
+export Found
+"#,
+    );
+    workspace.write(
+        "aliases.aivi",
+        "use maybe (Missing as Absent, Found as Present)\nexport Absent\nexport Present\n",
+    );
+    let entry = workspace.write(
+        "main.aivi",
+        r#"
+use maybe (Maybe, Missing, Found)
+use aliases (Absent, Present)
+type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)
+func visit = transform values => traverse transform values
+value options : List (Option Int) = map Some [1, 2]
+value successes : List (Result Text Int) = map Ok [1]
+value errors : List (Result Text Int) = map Err ["missing"]
+value valid : List (Validation Text Int) = map Valid [1]
+value invalid : List (Validation Text Int) = map Invalid ["missing"]
+value wrapped : List (Maybe Int) = [1] |> map Present
+value absent : Maybe (List Int) = visit (n => Absent) [1]
+value main : Task Text Bool = pure (
+    options == [Some 1, Some 2]
+    and successes == [Ok 1]
+    and errors == [Err "missing"]
+    and valid == [Valid 1]
+    and invalid == [Invalid "missing"]
+    and wrapped == [Found 1]
+    and absent == Missing
+)
+"#,
+    );
+    let snapshot = WorkspaceHirSnapshot::load(&entry).unwrap();
+    let artifact = prepare_run_from_workspace(&workspace, "main.aivi", None).unwrap();
+    let cache_home = workspace.path().join("cache-home");
+    super::store_cached_source_run_artifact(&cache_home, &entry, None, &snapshot, &artifact)
+        .unwrap();
+    let cached = super::load_cached_source_run_artifact(&cache_home, &entry, None).unwrap();
+    assert!(cached.sources.is_none());
+    for relative in ["main.aivi", "maybe.aivi", "aliases.aivi"] {
+        fs::remove_file(workspace.path().join(relative)).unwrap();
+    }
+    for candidate in [&artifact, &cached] {
+        assert_eq!(
+            evaluate_pure_headless_result(candidate),
+            RuntimeValue::Bool(true)
+        );
+    }
+}
+
+fn evaluate_pure_headless_result(artifact: &super::RunArtifact) -> RuntimeValue {
+    let super::RunArtifactKind::HeadlessTask { task_owner } = artifact.kind else {
+        panic!("expected headless entry");
+    };
+    let linked = if let Some(tables) = &artifact.runtime_tables {
+        aivi_runtime::link_backend_runtime_with_tables_and_native_kernels_from_payload(
+            artifact.runtime_assembly.clone(),
+            artifact.backend.clone(),
+            artifact.backend_native_kernels.clone(),
+            tables.clone(),
+        )
+    } else {
+        aivi_runtime::link_backend_runtime_with_seed_and_native_kernels_from_payload(
+            artifact.runtime_assembly.clone(),
+            artifact.backend.clone(),
+            artifact.backend_native_kernels.clone(),
+            &artifact.runtime_link,
+        )
+    }
+    .unwrap();
+    let value = linked.evaluate_task_value_by_owner(task_owner).unwrap();
+    let RuntimeValue::Task(RuntimeTaskPlan::Pure { value }) = value.into_runtime() else {
+        panic!("expected pure task result");
+    };
+    *value
 }
 
 #[test]
@@ -1846,30 +1944,10 @@ value main : Task Text Bool = pure (same [Tag 1] [Other 2])
     let frozen = super::freeze_run_artifact(&artifact).unwrap();
     let reloaded = super::load_frozen_run_image_from_bytes(&frozen.bytes, None).unwrap();
     for candidate in [&artifact, &reloaded] {
-        let super::RunArtifactKind::HeadlessTask { task_owner } = candidate.kind else {
-            panic!("expected headless entry");
-        };
-        let linked = if let Some(tables) = &candidate.runtime_tables {
-            aivi_runtime::link_backend_runtime_with_tables_and_native_kernels_from_payload(
-                candidate.runtime_assembly.clone(),
-                candidate.backend.clone(),
-                candidate.backend_native_kernels.clone(),
-                tables.clone(),
-            )
-        } else {
-            aivi_runtime::link_backend_runtime_with_seed_and_native_kernels_from_payload(
-                candidate.runtime_assembly.clone(),
-                candidate.backend.clone(),
-                candidate.backend_native_kernels.clone(),
-                &candidate.runtime_link,
-            )
-        }
-        .unwrap();
-        let value = linked.evaluate_task_value_by_owner(task_owner).unwrap();
-        let RuntimeValue::Task(RuntimeTaskPlan::Pure { value }) = value.into_runtime() else {
-            panic!("expected pure task result");
-        };
-        assert_eq!(*value, RuntimeValue::Bool(true));
+        assert_eq!(
+            evaluate_pure_headless_result(candidate),
+            RuntimeValue::Bool(true)
+        );
     }
 }
 

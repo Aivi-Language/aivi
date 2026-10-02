@@ -1265,6 +1265,7 @@ impl NavigationAnalysis {
                 imported.type_declaration_targets(import_binding.imported_name.text())
             }
             ImportBindingMetadata::Value { .. }
+            | ImportBindingMetadata::ConstructorValue { .. }
             | ImportBindingMetadata::ConstrainedValue { .. }
             | ImportBindingMetadata::IntrinsicValue { .. }
             | ImportBindingMetadata::DomainSuffix { .. }

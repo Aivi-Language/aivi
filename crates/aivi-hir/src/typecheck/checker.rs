@@ -1418,7 +1418,7 @@ impl<'a> TypeChecker<'a> {
         let kind = self.module.exprs()[expr_id].kind.clone();
         match kind {
             ExprKind::Name(reference) => self
-                .check_builtin_constructor_name(&reference, expected)
+                .check_constructor_name(&reference, expected)
                 .or_else(|| self.check_domain_member_name(&reference, expected))
                 .or_else(|| self.check_class_member_name(&reference, expected))
                 .or_else(|| self.check_signal_payload_name(expr_id, env, expected))
@@ -1916,19 +1916,56 @@ impl<'a> TypeChecker<'a> {
         self.record_function_signature_evidence(*item_id, &parameter_types, &result_type);
     }
 
-    fn check_builtin_constructor_name(
-        &self,
+    fn check_constructor_name(
+        &mut self,
         reference: &TermReference,
         expected: &GateType,
     ) -> Option<bool> {
-        let crate::ResolutionState::Resolved(TermResolution::Builtin(builtin)) =
-            reference.resolution.as_ref()
-        else {
-            return None;
+        // Local constructors resolve to their owning sum; imports carry
+        // declaration provenance independently of ordinary value signatures.
+        let builtin = match reference.resolution.as_ref() {
+            ResolutionState::Resolved(TermResolution::Builtin(builtin)) => Some(*builtin),
+            ResolutionState::Resolved(TermResolution::Item(item)) if matches!(self.module.items().get(*item), Some(Item::Type(item)) if matches!(item.body, crate::TypeItemBody::Sum(_))) => {
+                None
+            }
+            ResolutionState::Resolved(TermResolution::Import(import))
+                if matches!(
+                    self.module.imports()[*import].metadata,
+                    ImportBindingMetadata::ConstructorValue { .. }
+                ) =>
+            {
+                None
+            }
+            _ => return None,
         };
-        match (builtin, expected) {
-            (BuiltinTerm::None, GateType::Option(_)) => Some(true),
-            _ => None,
+        let expanded = expected.expand_transparent_import_alias();
+        let expected_shape = expanded.as_ref().unwrap_or(expected);
+        match (builtin, expected_shape) {
+            (Some(BuiltinTerm::None), GateType::Option(_)) => Some(true),
+            (Some(BuiltinTerm::True | BuiltinTerm::False), _) => None,
+            _ => {
+                // Constructor references have a complete arity and carrier
+                // contract even when ordinary inference has no payload evidence.
+                let info = self.typing.infer_name_with_expected(
+                    reference,
+                    &GateExprEnv::default(),
+                    expected_shape,
+                );
+                let actual = info.ty.clone().or_else(|| info.actual_gate_type());
+                if actual
+                    .as_ref()
+                    .is_some_and(|actual| self.typing.types_match(actual, expected))
+                {
+                    Some(true)
+                } else {
+                    self.emit_type_mismatch_or_unresolved(
+                        reference.span(),
+                        expected,
+                        actual.as_ref(),
+                    );
+                    Some(false)
+                }
+            }
         }
     }
 

@@ -75,6 +75,64 @@ impl Drop for TempDir {
 }
 
 #[test]
+fn check_constructor_callbacks_expand_transparent_import_aliases() {
+    let dir = TempDir::new("constructor-callback-aliases");
+    dir.write(
+        "models.aivi",
+        "type Maybe A = (Option A)\ntype Reply A = (Result Text A)\ntype Wrapper = (Int -> Maybe Int)\nexport Maybe\nexport Reply\nexport Wrapper\n",
+    );
+    let path = dir.write(
+        "main.aivi",
+        "use models (Maybe, Reply, Wrapper)\nuse aivi.api (ApiResponse)\nvalue empty : Maybe Int = None\nvalue wrap : Wrapper = Some\nvalue reply : Int -> Reply Int = Ok\nvalue replies : List (Reply Int) = map Ok [1]\nvalue response : ApiResponse Int = Ok 1\n",
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn check_rejects_constructor_callback_contract_mismatches() {
+    let dir = TempDir::new("constructor-callback-contracts");
+    dir.write(
+        "models.aivi",
+        "type Maybe A = Missing | Found A\nexport Missing\n",
+    );
+    for source in [
+        "value invalid : List (Option Text) = map Some [1]\n",
+        "value invalid : List (Option Text) = [1] |> map Some\n",
+        "value invalid : List (Result Text Int) = map Err [1]\n",
+        "value invalid : Int -> Text -> Option Int = Some\n",
+        "value invalid : Int -> Option Int = None\n",
+        "value invalid : Int = None\n",
+        "type Maybe A = Missing | Found A\nvalue invalid : Int = Missing\n",
+        "type Maybe A = Missing | Found A\nvalue invalid : Int -> Maybe Int = Missing\n",
+        "use models (Missing as Empty)\nvalue invalid : Int = Empty\n",
+        "type Functor F => F A -> F (Option Int)\nfunc invalid = values => map Some values\n",
+        "type Functor F => F A -> F (Option Int)\nfunc invalid = values => values |> map Some\n",
+    ] {
+        let path = dir.write("main.aivi", source);
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("check")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !output.status.success(),
+            "invalid contract accepted: {source}"
+        );
+        assert!(stderr.contains("type-mismatch"), "{source}\n{stderr}");
+    }
+}
+
+#[test]
 fn check_verifies_imported_structural_equality_payloads() {
     for (model, subject, diagnostic) in [
         ("type Box = Box Bytes", "Box", Some("missing-eq-instance")),
@@ -1584,8 +1642,9 @@ fn check_reports_invalid_operator_typing_from_hir_typechecker() {
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("hir::invalid-unary-operator"),
-        "expected invalid unary operator diagnostic code, got stderr: {stderr}"
+        stderr.contains("hir::type-mismatch")
+            && stderr.contains("expected `Bool` but found an unresolved expression"),
+        "expected constructor operand mismatch for `not None`, got stderr: {stderr}"
     );
     assert!(
         stderr.contains("hir::invalid-binary-operator"),

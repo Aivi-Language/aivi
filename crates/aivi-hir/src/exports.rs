@@ -271,7 +271,8 @@ fn implicit_exported_names(module: &Module) -> Vec<ExportedName> {
                 let metadata = builtin_term_metadata(&name).unwrap_or_else(|| {
                     let owner_type_name: String = type_item.name.text().into();
                     if variant.fields.is_empty() {
-                        ImportBindingMetadata::Value {
+                        ImportBindingMetadata::ConstructorValue {
+                            variant_name: variant.name.text().to_owned(),
                             ty: ImportValueType::Named {
                                 origin: module.type_origin(id),
                                 type_name: owner_type_name,
@@ -300,7 +301,10 @@ fn implicit_exported_names(module: &Module) -> Vec<ExportedName> {
                                 result: Box::new(acc),
                             }
                         });
-                        ImportBindingMetadata::Value { ty }
+                        ImportBindingMetadata::ConstructorValue {
+                            variant_name: variant.name.text().to_owned(),
+                            ty,
+                        }
                     }
                 });
                 push_unique_exported_name(
@@ -451,7 +455,8 @@ fn explicit_item_exported_name(
                         // fields wrap the field types in Arrow chains.
                         let owner_type_name: String = item.name.text().into();
                         if variant.fields.is_empty() {
-                            ImportBindingMetadata::Value {
+                            ImportBindingMetadata::ConstructorValue {
+                                variant_name: variant.name.text().to_owned(),
                                 ty: ImportValueType::Named {
                                     origin: module.type_origin(item_id),
                                     type_name: owner_type_name,
@@ -482,7 +487,10 @@ fn explicit_item_exported_name(
                                     result: Box::new(acc),
                                 }
                             });
-                            ImportBindingMetadata::Value { ty }
+                            ImportBindingMetadata::ConstructorValue {
+                                variant_name: variant.name.text().to_owned(),
+                                ty,
+                            }
                         }
                     });
                     ExportedName {
@@ -1946,6 +1954,7 @@ fn resolve_type_constructor(
             }
             ImportBindingMetadata::Unknown
             | ImportBindingMetadata::Value { .. }
+            | ImportBindingMetadata::ConstructorValue { .. }
             | ImportBindingMetadata::ConstrainedValue { .. }
             | ImportBindingMetadata::IntrinsicValue { .. }
             | ImportBindingMetadata::OpaqueValue

@@ -5014,7 +5014,10 @@ impl<'a> Lowerer<'a> {
                     };
                 }
                 let mut constructor = import.clone();
-                constructor.metadata = ImportBindingMetadata::Value { ty };
+                constructor.metadata = ImportBindingMetadata::ConstructorValue {
+                    variant_name: variant.name.to_string(),
+                    ty,
+                };
                 constructor.source_module = Some(module_name.clone().into());
                 let constructor_id = self.alloc_import(constructor);
                 insert_site(
@@ -5035,6 +5038,7 @@ impl<'a> Lowerer<'a> {
                     );
                 }
                 ImportBindingMetadata::Value { .. }
+            | ImportBindingMetadata::ConstructorValue { .. }
                 | ImportBindingMetadata::ConstrainedValue { .. }
                 | ImportBindingMetadata::IntrinsicValue { .. }
                 | ImportBindingMetadata::OpaqueValue

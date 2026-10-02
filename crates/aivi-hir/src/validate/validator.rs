@@ -57,7 +57,7 @@ impl Validator<'_> {
                     ImportBindingResolution::UnknownModule
                     | ImportBindingResolution::MissingExport
                     | ImportBindingResolution::Cycle,
-                    ImportBindingMetadata::Value { .. } | ImportBindingMetadata::ConstrainedValue { .. }
+                    ImportBindingMetadata::Value { .. } | ImportBindingMetadata::ConstructorValue { .. } | ImportBindingMetadata::ConstrainedValue { .. }
                     | ImportBindingMetadata::IntrinsicValue { .. }
                     | ImportBindingMetadata::OpaqueValue
                     | ImportBindingMetadata::TypeConstructor { .. }
@@ -8050,6 +8050,7 @@ impl Validator<'_> {
             ImportBindingMetadata::Domain { kind, .. } => Some(kind.clone()),
             ImportBindingMetadata::BuiltinType(builtin) => Some(builtin_kind(*builtin)),
             ImportBindingMetadata::Value { .. }
+            | ImportBindingMetadata::ConstructorValue { .. }
             | ImportBindingMetadata::ConstrainedValue { .. }
             | ImportBindingMetadata::IntrinsicValue { .. }
             | ImportBindingMetadata::OpaqueValue

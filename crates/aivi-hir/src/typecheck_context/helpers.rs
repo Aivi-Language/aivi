@@ -660,7 +660,7 @@ pub fn case_pattern_field_types(
             // type matches the subject's OpaqueImport name.
             let binding = module.imports().get(*import_id)?;
             let ty_owned: ImportValueType = match &binding.metadata {
-                ImportBindingMetadata::Value { ty } | ImportBindingMetadata::ConstrainedValue { ty, .. } => ty.clone(),
+                ImportBindingMetadata::Value { ty } | ImportBindingMetadata::ConstructorValue { ty, .. } | ImportBindingMetadata::ConstrainedValue { ty, .. } => ty.clone(),
                 ImportBindingMetadata::IntrinsicValue { ty, .. } => ty.clone(),
                 _ => return None,
             };

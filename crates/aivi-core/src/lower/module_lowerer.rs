@@ -2411,7 +2411,10 @@ impl<'a> ModuleLowerer<'a> {
                 // an item to reference, then build a SumConstructorHandle using the globally stable
                 // origin of the source sum type when available. That keeps imported constructor
                 // values aligned with pattern arms inside compiled workspace functions.
-                let variant_name: Box<str> = reference.path.segments().last().text().into();
+                let variant_name: Box<str> = match &self.hir.imports()[*import].metadata {
+                    ImportBindingMetadata::ConstructorValue { variant_name, .. } => variant_name.as_str().into(),
+                    _ => reference.path.segments().last().text().into(),
+                };
                 if let Ok(item_id) = self.seed_import_item(*import) {
                     let origin = self
                         .workspace_constructor_origin(*import)
@@ -2419,8 +2422,9 @@ impl<'a> ModuleLowerer<'a> {
                     let binding = self.hir.imports().get(*import).cloned();
                     if let Some(binding) = binding {
                         let type_name: Box<str> = match &binding.metadata {
-                            ImportBindingMetadata::Value {
+                            ImportBindingMetadata::ConstructorValue {
                                 ty: ImportValueType::Named { type_name, .. },
+                                ..
                             }
                             | ImportBindingMetadata::IntrinsicValue {
                                 ty: ImportValueType::Named { type_name, .. },
@@ -2429,8 +2433,9 @@ impl<'a> ModuleLowerer<'a> {
                             // For sum constructors with payload: `SwitchView : View -> UIEvent`.
                             // Walk the Arrow chain to its final Named result to get the parent
                             // type name (e.g. "UIEvent"), not the constructor name itself.
-                            ImportBindingMetadata::Value {
+                            ImportBindingMetadata::ConstructorValue {
                                 ty: ImportValueType::Arrow { .. },
+                                ..
                             }
                             | ImportBindingMetadata::IntrinsicValue {
                                 ty: ImportValueType::Arrow { .. },
@@ -2448,7 +2453,7 @@ impl<'a> ModuleLowerer<'a> {
                                     }
                                 }
                                 let ty = match &binding.metadata {
-                                    ImportBindingMetadata::Value { ty } | ImportBindingMetadata::ConstrainedValue { ty, .. }
+                                    ImportBindingMetadata::Value { ty } | ImportBindingMetadata::ConstructorValue { ty, .. } | ImportBindingMetadata::ConstrainedValue { ty, .. }
                                     | ImportBindingMetadata::IntrinsicValue { ty, .. } => ty,
                                     _ => unreachable!(),
                                 };
@@ -2459,7 +2464,7 @@ impl<'a> ModuleLowerer<'a> {
                             _ => variant_name.clone(),
                         };
                         let field_count = match &binding.metadata {
-                            ImportBindingMetadata::Value { ty } | ImportBindingMetadata::ConstrainedValue { ty, .. }
+                            ImportBindingMetadata::Value { ty } | ImportBindingMetadata::ConstructorValue { ty, .. } | ImportBindingMetadata::ConstrainedValue { ty, .. }
                             | ImportBindingMetadata::IntrinsicValue { ty, .. } => {
                                 fn count_arrow_params(ty: &ImportValueType) -> usize {
                                     match ty {
@@ -3018,7 +3023,7 @@ impl<'a> ModuleLowerer<'a> {
             reason,
         };
         let ty = match &binding.metadata {
-            ImportBindingMetadata::Value { ty } | ImportBindingMetadata::ConstrainedValue { ty, .. }
+            ImportBindingMetadata::Value { ty } | ImportBindingMetadata::ConstructorValue { ty, .. } | ImportBindingMetadata::ConstrainedValue { ty, .. }
             | ImportBindingMetadata::IntrinsicValue { ty, .. }
             | ImportBindingMetadata::InstanceMember { ty, .. } => ty,
             ImportBindingMetadata::DomainSuffix { .. } => {
@@ -3227,118 +3232,69 @@ impl<'a> ModuleLowerer<'a> {
         binding: &aivi_hir::ImportBinding,
         parameters: &[ItemParameter],
     ) -> Result<Option<ExprId>, LoweringError> {
-        // For zero-argument sum constructor imports (e.g. `ChooseProviderStep`, `LightTheme`),
-        // synthesize a `SumConstructor` expression so the value can be constructed at runtime
-        // without calling a separate item body. When the constructor comes from a compiled
-        // workspace module, reuse the source sum type's global origin so imported function bodies
-        // and imported constructor values agree on runtime constructor identity.
-        if let (
-            ImportBindingMetadata::Value {
-                ty: ImportValueType::Named { type_name, .. },
-            },
-            true,
-        ) = (&binding.metadata, parameters.is_empty())
-        {
-            let variant_name: Box<str> = binding.local_name.text().into();
-            let constructor_origin = self.workspace_constructor_origin(import).unwrap_or(owner);
-            let handle = SumConstructorHandle {
-                item: constructor_origin,
-                type_name: type_name.as_str().into(),
-                variant_name,
-                field_count: 0,
+        // Constructor provenance preserves the original variant across aliases and
+        // re-exports. Workspace origins keep imported values and patterns identical.
+        if let ImportBindingMetadata::ConstructorValue { ty, variant_name } = &binding.metadata {
+            let malformed = || LoweringError::UnsupportedImportBinding {
+                import,
+                span: binding.span,
+                name: binding.local_name.text().into(),
+                reason: "constructor metadata must be a curried signature ending in its nominal sum type",
             };
-            let ty = self.lower_import_type(match &binding.metadata {
-                ImportBindingMetadata::Value { ty } | ImportBindingMetadata::ConstrainedValue { ty, .. } => ty,
-                _ => unreachable!(),
-            });
-            let expr = self.alloc_expr(
+            let mut result = ty;
+            for _ in parameters {
+                let ImportValueType::Arrow { result: next, .. } = result else {
+                    return Err(malformed());
+                };
+                result = next;
+            }
+            let ImportValueType::Named { type_name, .. } = result else {
+                return Err(malformed());
+            };
+            let handle = SumConstructorHandle {
+                item: self.workspace_constructor_origin(import).unwrap_or(owner),
+                type_name: type_name.as_str().into(),
+                variant_name: variant_name.as_str().into(),
+                field_count: parameters.len(),
+            };
+            let callee = self.alloc_expr(
                 owner,
                 binding.span,
                 Expr {
                     span: binding.span,
-                    ty,
+                    ty: self.lower_import_type(ty),
                     kind: ExprKind::Reference(Reference::SumConstructor(handle)),
                 },
             )?;
-            return Ok(Some(expr));
-        }
-
-        // For N-ary sum constructor imports (e.g. `SwitchView : ViewName -> UIEvent`),
-        // synthesize a body: `Apply { callee: SumConstructor(handle), arguments: [arg0, ...] }`.
-        // This ensures the backend compiles a kernel body so the runtime linker can find it.
-        //
-        // Guard: only fire this heuristic when `callable_type` is None — constructors are
-        // exported without a callable_type, while regular functions always set callable_type.
-        // Without this guard a regular stdlib function like
-        //   `filled : Int -> Int -> A -> Result MatrixError (Matrix A)`
-        // (result type Named("Matrix")) would be misidentified as a constructor,
-        // producing a fake Sum value at runtime instead of calling the real function body.
-        if let ImportBindingMetadata::Value { ty } = &binding.metadata
-            && !parameters.is_empty() && binding.callable_type.is_none() {
-                // Peel Arrow layers to find the result type
-                let mut result_ty_ref = ty;
-                for _ in parameters {
-                    if let ImportValueType::Arrow { result, .. } = result_ty_ref {
-                        result_ty_ref = result;
-                    } else {
-                        break;
-                    }
-                }
-                // If the final result is a Named type, this is an N-ary sum constructor
-                if let ImportValueType::Named { type_name, .. } = result_ty_ref {
-                    let variant_name: Box<str> = binding.local_name.text().into();
-                    let field_count = parameters.len();
-                    let constructor_origin =
-                        self.workspace_constructor_origin(import).unwrap_or(owner);
-                    let handle = SumConstructorHandle {
-                        item: constructor_origin,
-                        type_name: type_name.as_str().into(),
-                        variant_name,
-                        field_count,
-                    };
-                    // Callee: the SumConstructor itself has the full function type
-                    let callee_ty = self.lower_import_type(ty);
-                    let callee_id = self.alloc_expr(
-                        owner,
-                        binding.span,
-                        Expr {
-                            span: binding.span,
-                            ty: callee_ty,
-                            kind: ExprKind::Reference(Reference::SumConstructor(handle)),
-                        },
-                    )?;
-                    // Arguments: one per parameter
-                    let args: Result<Vec<_>, _> = parameters
-                        .iter()
-                        .map(|param| {
-                            self.alloc_expr(
-                                owner,
-                                binding.span,
-                                Expr {
-                                    span: binding.span,
-                                    ty: param.ty.clone(),
-                                    kind: ExprKind::Reference(Reference::Local(param.binding)),
-                                },
-                            )
-                        })
-                        .collect();
-                    let args = args?;
-                    let result_ty = self.lower_import_type(result_ty_ref);
-                    let apply_id = self.alloc_expr(
-                        owner,
-                        binding.span,
-                        Expr {
-                            span: binding.span,
-                            ty: result_ty,
-                            kind: ExprKind::Apply {
-                                callee: callee_id,
-                                arguments: args,
-                            },
-                        },
-                    )?;
-                    return Ok(Some(apply_id));
-                }
+            if parameters.is_empty() {
+                return Ok(Some(callee));
             }
+            let arguments = parameters
+                .iter()
+                .map(|parameter| {
+                    self.alloc_expr(
+                        owner,
+                        parameter.span,
+                        Expr {
+                            span: parameter.span,
+                            ty: parameter.ty.clone(),
+                            kind: ExprKind::Reference(Reference::Local(parameter.binding)),
+                        },
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            return self
+                .alloc_expr(
+                    owner,
+                    binding.span,
+                    Expr {
+                        span: binding.span,
+                        ty: self.lower_import_type(result),
+                        kind: ExprKind::Apply { callee, arguments },
+                    },
+                )
+                .map(Some);
+        }
 
         let ImportBindingMetadata::IntrinsicValue { value, .. } = &binding.metadata else {
             return Ok(None);

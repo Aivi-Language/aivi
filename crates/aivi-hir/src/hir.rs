@@ -876,6 +876,13 @@ pub enum ImportBindingMetadata {
     Value {
         ty: ImportValueType,
     },
+    /// An ordinary curried ADT constructor, with declaration-owned
+    /// quantifiers. Nullary uses provide no payload type evidence.
+    ConstructorValue {
+        /// Original variant name, preserved across aliases and re-exports.
+        variant_name: String,
+        ty: ImportValueType,
+    },
     IntrinsicValue {
         value: IntrinsicValue,
         ty: ImportValueType,

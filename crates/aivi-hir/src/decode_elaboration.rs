@@ -1007,6 +1007,7 @@ impl<'a> DecodeTypeLowerer<'a> {
             }
             ImportBindingMetadata::Unknown
             | ImportBindingMetadata::Value { .. }
+            | ImportBindingMetadata::ConstructorValue { .. }
             | ImportBindingMetadata::ConstrainedValue { .. }
             | ImportBindingMetadata::IntrinsicValue { .. }
             | ImportBindingMetadata::OpaqueValue
