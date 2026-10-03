@@ -1612,7 +1612,8 @@ impl<'a> Lowerer<'a> {
                     let name = self.make_name(&synthetic_name, item.base.span);
                     imports.push(self.alloc_import(ImportBinding {
                         span: item.base.span,
-                        source_module: Some(module_name.clone().into()),
+                        source_module: instance_decl.source_module.clone()
+                            .or_else(|| Some(module_name.clone().into())),
                         imported_name: self.make_name(&member.name, item.base.span),
                         local_name: name,
                         resolution: ImportBindingResolution::Resolved,
@@ -5298,7 +5299,8 @@ impl<'a> Lowerer<'a> {
                 let name = self.make_name(&synthetic_name, span);
                 self.alloc_import(ImportBinding {
                     span,
-                    source_module: Some(module_name.into()),
+                    source_module: instance_decl.source_module.clone()
+                        .or_else(|| Some(module_name.into())),
                     imported_name: self.make_name(&member.name, span),
                     local_name: name,
                     resolution: ImportBindingResolution::Resolved,

@@ -256,6 +256,7 @@ instance Functor Box = {
     map = f box => box
         ||> Box a -> Box (f a)
 }
+
 instance Foldable Box = {
     reduce = f seed box => box
         ||> Box a -> f seed a
@@ -3545,4 +3546,74 @@ fn source_option_signal_contract_parameters_still_check_outer_signal_shape() {
         &SourceOptionActualType::from_gate_type(&GateType::Primitive(BuiltinType::Bool)),
         &mut bindings,
     ));
+}
+
+#[test]
+fn ambient_class_kinds_keep_constructor_and_member_quantifiers_independent() {
+    let mut sources = SourceDatabase::new();
+    let file = sources.add_file("ambient-class-kinds.aivi", "");
+    let parsed = parse_module(&sources[file]);
+    let lowered = crate::lower_module(&parsed.module);
+    let module = lowered.module();
+    let mut validator = Validator {
+        module,
+        mode: ValidationMode::RequireResolvedNames,
+        diagnostics: Vec::new(),
+        kind_item_cache: HashMap::new(),
+        kind_item_stack: HashSet::new(),
+    };
+    for (_, item) in module.items().iter() {
+        let Item::Class(class) = item else { continue };
+        let arity = match class.name.text() {
+            "Semigroupoid" | "Category" | "Profunctor" | "Bifunctor" => 2,
+            "Setoid" | "Semigroup" | "Eq" | "Default" | "Ord" | "Monoid" | "Group" => 0,
+            "Foldable" | "Functor" | "Contravariant" | "Filterable" | "Traversable" | "Alt"
+            | "Apply" | "Extend" | "Plus" | "Applicative" | "Chain" | "Comonad" | "Alternative"
+            | "Monad" | "ChainRec" => 1,
+            name => panic!("unclassified ambient class {name}"),
+        };
+        assert_eq!(
+            validator.class_parameter_kinds(class),
+            Some(vec![Kind::constructor(arity)]),
+            "{}: {:?}",
+            class.name.text(),
+            validator.diagnostics
+        );
+        for member in &class.members {
+            assert!(member.type_parameters.iter().all(|parameter| {
+                !class
+                    .parameters
+                    .iter()
+                    .any(|class_parameter| class_parameter == parameter)
+            }));
+        }
+        if class.name.text() == "Semigroupoid" {
+            assert_eq!(class.members[0].type_parameters.len(), 3);
+        }
+    }
+    assert!(
+        validator.diagnostics.is_empty(),
+        "{:?}",
+        validator.diagnostics
+    );
+}
+
+#[test]
+fn binary_classes_reject_unsaturated_and_wrong_arity_carriers() {
+    for head in ["Unary", "(Binary Int)", "Int"] {
+        let report = validate_resolved_text(
+            "binary-class-carrier-arity.aivi",
+            &format!(
+                "type Unary A = Unary A\ntype Binary A B = Binary A B\ninstance Semigroupoid {head} = {{ compose = left right => left }}\n"
+            ),
+        );
+        assert!(
+            report
+                .diagnostics()
+                .iter()
+                .any(|d| d.code == Some(code("expected-kind-mismatch"))),
+            "{head}: {:?}",
+            report.diagnostics()
+        );
+    }
 }

@@ -4,8 +4,8 @@ class Setoid A = {
     equals : A -> A -> Bool
 }
 
-class Semigroupoid C = {
-    compose : C B C -> C A B -> C A C
+class Semigroupoid P = {
+    compose : P B C -> P A B -> P A C
 }
 
 class Semigroup A = {

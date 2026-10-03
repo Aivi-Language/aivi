@@ -1589,3 +1589,92 @@ value compared : Task Text Bool = pure (mapBoth mark double (Right 2) == Right 4
             .contains("test result: ok. 1 passed; 0 failed; 1 total")
     );
 }
+
+#[test]
+fn binary_class_instances_execute_imported_partial_and_cached_evidence() {
+    let dir = TempDir::new("binary-class-evidence");
+    dir.write(
+        "arrows.aivi",
+        r#"
+type Arrow A B = ArrowFn (A -> B)
+type Arrow A B -> A -> B
+func runArrow = arrow x => arrow
+ ||> ArrowFn f -> f x
+type Arrow B C -> Arrow A B -> Arrow A C
+func composeArrow = left right => ArrowFn (x => runArrow left (runArrow right x))
+type A -> A
+func identity = x => x
+instance Semigroupoid Arrow = { compose = composeArrow }
+instance Category Arrow = { id = ArrowFn identity }
+type (A2 -> A1) -> (B1 -> B2) -> Arrow A1 B1 -> Arrow A2 B2
+func dimapArrow = before after arrow => ArrowFn (x => after (runArrow arrow (before x)))
+instance Profunctor Arrow = { dimap = dimapArrow }
+type Int -> Int
+func increment = n => n + 1
+type Int -> Int
+func twice = n => n * 2
+type Text -> Int
+func textCount = text => 3
+type Int -> Bool
+func positive = n => n > 0
+value incrementArrow : Arrow Int Int = ArrowFn increment
+value twiceArrow : Arrow Int Int = ArrowFn twice
+value textArrow : Arrow Text Int = ArrowFn textCount
+value boolArrow : Arrow Int Bool = ArrowFn positive
+export (Arrow, runArrow, increment, incrementArrow, twiceArrow, textArrow, boolArrow)
+"#,
+    );
+    dir.write(
+        "facade.aivi",
+        "use arrows (Arrow as Morphism, runArrow, increment, incrementArrow, twiceArrow, textArrow, boolArrow)\nexport (Morphism, runArrow, increment, incrementArrow, twiceArrow, textArrow, boolArrow)\n",
+    );
+    let path = dir.write(
+        "main.aivi",
+        r#"
+use facade (Morphism, runArrow, increment, incrementArrow, twiceArrow, textArrow, boolArrow)
+use aivi.core.fn (compose as composeFunctions)
+type Semigroupoid P => P B C -> P A B -> P A C
+func combine = left right => compose left right
+type Category P => P B C -> P A B -> P A C
+func inheritedCombine = left right => compose left right
+value firstClass : Morphism Int Int -> Morphism Int Int -> Morphism Int Int = compose
+value partial : Morphism Int Int -> Morphism Int Int = compose incrementArrow
+value identityArrow : Morphism Int Int = id
+value mapped : Morphism Int Int = dimap increment increment twiceArrow
+value differentTypes : Morphism Text Bool = combine boolArrow textArrow
+@test
+value direct : Task Text Bool = pure (runArrow (compose incrementArrow twiceArrow) 3 == 7)
+@test
+value generic : Task Text Bool = pure (runArrow (combine incrementArrow twiceArrow) 3 == 7)
+@test
+value firstClassMethod : Task Text Bool = pure (runArrow (firstClass incrementArrow twiceArrow) 3 == 7)
+@test
+value partialMethod : Task Text Bool = pure (runArrow (partial twiceArrow) 3 == 7)
+@test
+value superclass : Task Text Bool = pure (runArrow (inheritedCombine incrementArrow twiceArrow) 3 == 7)
+@test
+value independentQuantifiers : Task Text Bool = pure (runArrow differentTypes "three")
+@test
+value leftIdentity : Task Text Bool = pure (runArrow (compose identityArrow incrementArrow) 3 == 4)
+@test
+value rightIdentity : Task Text Bool = pure (runArrow (compose incrementArrow identityArrow) 3 == 4)
+@test
+value associativity : Task Text Bool = pure (runArrow (compose incrementArrow (compose twiceArrow incrementArrow)) 3 == runArrow (compose (compose incrementArrow twiceArrow) incrementArrow) 3)
+@test
+value profunctor : Task Text Bool = pure (runArrow mapped 3 == 9)
+@test
+value plainFunctionHelper : Task Text Bool = pure (composeFunctions increment increment 3 == 5)
+"#,
+    );
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("11 passed; 0 failed; 11 total"), "{stdout}");
+    }
+}

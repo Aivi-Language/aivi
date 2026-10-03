@@ -401,13 +401,51 @@ retains the same dictionary through its interpreter path.
 - Partially applied heads with fixed or polymorphic prefixes, such as `instance Functor (Either E)`
 - Same-module and imported use of unary higher-kinded members such as `map` and `reduce`, which lower to authored executable evidence when the checker can choose concrete evidence
 - Bundled stdlib carriers can rely on this path; `aivi.matrix` exposes ambient `map` / `reduce` through user-authored `Functor` / `Foldable` instances rather than a new builtin carrier
+- Authored `Semigroupoid`, `Category`, and `Profunctor` instances for an ADT carrying a function, including imported and re-exported carriers, constrained composition, and first-class or partially applied methods
+
+### Binary constructor parameters
+
+`Semigroupoid P` has `compose : P B C -> P A B -> P A C`. The constructor `P`
+has kind `Type -> Type -> Type`; `A`, `B`, and `C` are independent ordinary
+types. `Category P` adds `id : P A A` and inherits composition. Each class has
+one constructor parameter. Indexed classes with several class parameters remain
+subject to the limits below.
+
+An authored ADT can carry ordinary functions and supply this evidence:
+
+```aivi
+use aivi.core.fn (identity)
+
+type Arrow A B = Arrow (A -> B)
+type Arrow A B -> A -> B
+func runArrow = arrow x => arrow
+ ||> Arrow f -> f x
+type Arrow B C -> Arrow A B -> Arrow A C
+func composeArrow = left right => Arrow (x => runArrow left (runArrow right x))
+
+instance Semigroupoid Arrow = { compose = composeArrow }
+instance Category Arrow = { id = Arrow identity }
+
+value increment : Arrow Int Int = Arrow (n => n + 1)
+value identityArrow : Arrow Int Int = id
+value composed : Arrow Int Int = compose identityArrow increment
+```
+
+These instances use authored executable evidence and explicitly typed helpers.
+The builtin carrier registry above retains its existing scope. The ordinary
+function combinator `aivi.core.fn.compose` is available through its module import.
+Re-exporting a class or nominal carrier also forwards its instance evidence,
+including through an import alias. Implementations retain their declaring module;
+private imports do not add instances to the module's public interface.
 
 ### Not end to end today
 
 - Multi-parameter indexed-style higher-kinded instance heads are not yet proven end to end
 - Declaring a new higher-kinded class or instance does **not** create new builtin runtime support for arbitrary carriers
 
-In practice, unary user-authored higher-kinded classes and instances are trustworthy today for imported execution through the current executable-evidence lowering path, but indexed / multi-parameter evidence remains a design frontier rather than a finished executable slice.
+The executable-evidence path supports the unary instances and binary-constructor
+examples described above. Indexed classes with several class parameters remain
+a design frontier.
 
 ## Related pages
 

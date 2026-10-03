@@ -75,6 +75,9 @@ fn domain_suffix_base(module: &Module, annotation: TypeId) -> Option<LiteralSuff
 /// metadata for the importing module to resolve cross-module class instances.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExportedInstanceDeclaration {
+    /// Declaring implementation module, retained through re-exports. `None`
+    /// lets standalone resolvers use the immediate import module as the owner.
+    pub source_module: Option<Box<str>>,
     pub class_identity: crate::ClassIdentity,
     pub class_name: Box<str>,
     pub subject: Box<str>,
@@ -112,7 +115,7 @@ pub fn exports(module: &Module) -> ExportedNames {
             .cmp(&right.name)
             .then_with(|| exported_kind_rank(left.kind).cmp(&exported_kind_rank(right.kind)))
     });
-    let instances = collect_instance_declarations(module);
+    let instances = collect_instance_declarations(module, &names);
     let classes = collect_class_definitions(module);
     ExportedNames {
         names,
@@ -848,7 +851,10 @@ pub(crate) fn poly_gate_type_import_value_type(
 }
 
 /// Collect all instance declarations from a module for cross-module instance resolution.
-fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclaration> {
+fn collect_instance_declarations(
+    module: &Module,
+    names: &[ExportedName],
+) -> Vec<ExportedInstanceDeclaration> {
     let mut declarations = Vec::new();
     let mut typing = crate::validate::GateTypeContext::new(module);
     let evidence_catalog =
@@ -967,6 +973,7 @@ fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclara
             })
             .collect();
         declarations.push(ExportedInstanceDeclaration {
+            source_module: module.source_module.clone(),
             class_identity: class_item.identity.clone(),
             class_name,
             subject,
@@ -975,7 +982,91 @@ fn collect_instance_declarations(module: &Module) -> Vec<ExportedInstanceDeclara
             members,
         });
     }
+    // Re-exported classes and carriers retain their dictionaries. Private
+    // imports do not enlarge the public evidence environment. Keep the original
+    // implementation owner so a façade forwards its callables.
+    for (_, import) in module.imports().iter() {
+        let ImportBindingMetadata::InstanceMember {
+            class_identity,
+            class_name,
+            member_name,
+            subject,
+            head,
+            context,
+            evidence,
+            instance_evidence_count,
+            ty,
+        } = &import.metadata
+        else {
+            continue;
+        };
+        if !names.iter().any(|exported| {
+            matches!(&exported.metadata, ImportBindingMetadata::Class { identity }
+                if identity == class_identity)
+                || exported_instance_carrier_matches(head, &exported.metadata)
+        }) {
+            continue;
+        }
+        let member = ExportedInstanceMember {
+            name: member_name.clone(),
+            ty: ty.clone(),
+            evidence: evidence.clone(),
+            instance_evidence_count: *instance_evidence_count,
+        };
+        if let Some(declaration) = declarations.iter_mut().find(|declaration| {
+            declaration.source_module == import.source_module
+                && declaration.class_identity == *class_identity
+                && declaration.head == *head
+                && declaration.context == *context
+        }) {
+            if !declaration.members.contains(&member) {
+                declaration.members.push(member);
+            }
+        } else {
+            declarations.push(ExportedInstanceDeclaration {
+                source_module: import.source_module.clone(),
+                class_identity: class_identity.clone(),
+                class_name: class_name.clone(),
+                subject: subject.clone(),
+                head: head.clone(),
+                context: context.clone(),
+                members: vec![member],
+            });
+        }
+    }
     declarations
+}
+
+fn exported_instance_carrier_matches(
+    head: &crate::ImportedTypeBinding,
+    exported: &ImportBindingMetadata,
+) -> bool {
+    use crate::{ImportedTypeBinding, ImportedTypeConstructor};
+    let (origin, builtin) = match head {
+        ImportedTypeBinding::Constructor { head, .. } => match head {
+            ImportedTypeConstructor::Named { origin, .. } => (origin.as_ref(), None),
+            ImportedTypeConstructor::Builtin(builtin) => (None, Some(*builtin)),
+            ImportedTypeConstructor::Parameter { .. } => return false,
+        },
+        ImportedTypeBinding::Type(ty) => match ty {
+            ImportValueType::Named { origin, .. } => (origin.as_ref(), None),
+            ImportValueType::Primitive(builtin) => (None, Some(*builtin)),
+            ImportValueType::List(_) => (None, Some(BuiltinType::List)),
+            ImportValueType::Map { .. } => (None, Some(BuiltinType::Map)),
+            ImportValueType::Set(_) => (None, Some(BuiltinType::Set)),
+            ImportValueType::Option(_) => (None, Some(BuiltinType::Option)),
+            ImportValueType::Result { .. } => (None, Some(BuiltinType::Result)),
+            ImportValueType::Validation { .. } => (None, Some(BuiltinType::Validation)),
+            ImportValueType::Signal(_) => (None, Some(BuiltinType::Signal)),
+            ImportValueType::Task { .. } => (None, Some(BuiltinType::Task)),
+            _ => return false,
+        },
+    };
+    if let Some(origin) = origin {
+        return exported.type_origin() == Some(origin);
+    }
+    matches!((builtin, exported), (Some(builtin), ImportBindingMetadata::BuiltinType(other))
+        if builtin == *other)
 }
 
 pub(crate) fn export_type_binding(
@@ -2608,5 +2699,91 @@ signal windowTitle = "Mailfox"
                 panic!("expected signal metadata for unannotated signal export, got {other:?}")
             }
         }
+    }
+
+    #[test]
+    fn reexported_instances_retain_owner_and_deduplicate_import_paths() {
+        struct Resolver {
+            module: &'static str,
+            dependency: Option<crate::ExportedNames>,
+        }
+        impl crate::ImportResolver for Resolver {
+            fn resolve(&self, _: &[&str]) -> crate::ImportModuleResolution {
+                self.dependency.clone().map_or(
+                    crate::ImportModuleResolution::Missing,
+                    crate::ImportModuleResolution::Resolved,
+                )
+            }
+            fn current_module_path(&self) -> Option<String> {
+                Some(self.module.to_owned())
+            }
+        }
+        fn lower(text: &str, resolver: &Resolver) -> crate::Module {
+            let mut sources = SourceDatabase::new();
+            let file = sources.add_file(resolver.module, text);
+            let parsed = parse_module(&sources[file]);
+            assert!(!parsed.has_errors());
+            let lowered = crate::lower_module_with_resolver(&parsed.module, Some(resolver));
+            assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+            lowered.into_parts().0
+        }
+        let owner = lower(
+            "class Describe A = {\n render : A -> Text\n tag : A -> Int\n}\ntype Label = MkLabel Int\ninstance Describe Label = {\n render = label => \"label\"\n tag = label => 1\n}\nexport (Label, Describe)\n",
+            &Resolver {
+                module: "owner",
+                dependency: None,
+            },
+        );
+        let original = exports(&owner);
+        assert_eq!(original.instances.len(), 1);
+        assert_eq!(original.instances[0].members.len(), 2);
+        assert_eq!(
+            original.instances[0].source_module.as_deref(),
+            Some("owner")
+        );
+        let bridge = lower(
+            "use owner (Label as Renamed)\nuse owner (Label as Again)\nexport Renamed\n",
+            &Resolver {
+                module: "bridge",
+                dependency: Some(original.clone()),
+            },
+        );
+        let forwarded = exports(&bridge);
+        assert_eq!(forwarded.instances, original.instances);
+        let private = lower(
+            "use owner (Label)\nvalue answer = 42\nexport answer\n",
+            &Resolver {
+                module: "private",
+                dependency: Some(original.clone()),
+            },
+        );
+        assert!(exports(&private).instances.is_empty());
+        let class_bridge = lower(
+            "use owner (Describe as Description)\nexport Description\n",
+            &Resolver {
+                module: "class_bridge",
+                dependency: Some(original.clone()),
+            },
+        );
+        assert_eq!(exports(&class_bridge).instances, original.instances);
+        let consumer = lower(
+            "use bridge (Renamed)\n",
+            &Resolver {
+                module: "consumer",
+                dependency: Some(forwarded),
+            },
+        );
+        let owners = consumer
+            .imports()
+            .iter()
+            .filter_map(|(_, binding)| {
+                matches!(
+                    binding.metadata,
+                    ImportBindingMetadata::InstanceMember { .. }
+                )
+                .then_some(binding.source_module.as_deref())
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(owners, vec![Some("owner"), Some("owner")]);
     }
 }

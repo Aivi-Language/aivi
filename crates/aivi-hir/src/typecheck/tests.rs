@@ -4693,3 +4693,52 @@ fn typecheck_infers_signal_without_double_wrapping() {
         report.diagnostics()
     );
 }
+
+#[test]
+fn semigroupoid_contracts_preserve_independent_input_middle_and_output_types() {
+    let declarations = r#"
+type Arrow A B = Arrow (A -> B)
+type Arrow A B -> A -> B
+func runArrow = arrow x => arrow
+ ||> Arrow f -> f x
+type Arrow B C -> Arrow A B -> Arrow A C
+func composeArrow = left right => Arrow (x => runArrow left (runArrow right x))
+type A -> A
+func identity = x => x
+"#;
+    let report = typecheck_text(
+        "semigroupoid-contract.aivi",
+        &format!(
+            r#"{declarations}
+instance Semigroupoid Arrow = {{ compose = composeArrow }}
+instance Category Arrow = {{ id = Arrow identity }}
+type Semigroupoid P => P B C -> P A B -> P A C
+func combine = left right => compose left right
+type Category P => P B C -> P A B -> P A C
+func categoryCombine = left right => compose left right
+value firstClass : Arrow Int Text -> Arrow Bool Int -> Arrow Bool Text = compose
+value partial : Arrow Bool Int -> Arrow Bool Text = compose (Arrow (n => "{{n}}"))
+value identityArrow : Arrow Text Text = id
+"#
+        ),
+    );
+    assert!(report.is_ok(), "{:?}", report.diagnostics());
+    for body in [
+        "left right => left",
+        "left right => right",
+        "left right => Arrow (x => runArrow left x)",
+    ] {
+        let report = typecheck_text(
+            "semigroupoid-incompatible-contract.aivi",
+            &format!("{declarations}\ninstance Semigroupoid Arrow = {{ compose = {body} }}\n"),
+        );
+        assert!(
+            report
+                .diagnostics()
+                .iter()
+                .any(|d| d.code == Some(crate::codes::TYPE_MISMATCH)),
+            "{body}: {:?}",
+            report.diagnostics()
+        );
+    }
+}

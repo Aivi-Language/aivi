@@ -482,8 +482,9 @@ fn source_run_cache_discards_images_without_current_type_and_equality_contracts(
     // Reconstruct the historical keys exactly. Revision 20 lacked executable
     // payload equality; revision 21 preceded contextual callback body checking;
     // revision 22 preceded constructor provenance and reference validation;
-    // revision 23 preceded definitive declaration annotation checking.
-    for revision in ["20", "21", "22", "23"] {
+    // revision 23 preceded definitive declaration annotation checking;
+    // revision 24 preceded binary-class quantifiers and instance re-export owners.
+    for revision in ["20", "21", "22", "23", "24"] {
         let mut legacy = DefaultHasher::new();
         "aivi.source-run-cache".hash(&mut legacy);
         5_u32.hash(&mut legacy);

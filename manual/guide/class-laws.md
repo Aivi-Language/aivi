@@ -33,6 +33,9 @@ for the required signatures, dictionary precedence, and ambiguity behavior.
 | `Traversable T` | Traversal must preserve shape and satisfy the standard identity, naturality, and composition laws. Use it when you are sequencing effects through a fixed structure, not when you are changing the structure itself. |
 | `Filterable F` | `filterMap` may drop or rewrite existing positions, but it must not reorder or duplicate them. `filterMap Some` should behave like the identity. |
 | `Bifunctor F` | Identity and composition in both arguments: `bimap id id` is `id`, and mapping both sides composes pointwise. |
+| `Semigroupoid P` | Associativity: `compose f (compose g h)` and `compose (compose f g) h` must agree for every compatible sequence of input and output types. |
+| `Category P` | Inherits associative composition. Left and right identity require `compose id f` and `compose f id` to agree with `f`. |
+| `Profunctor P` | `dimap id id` preserves the value. Input transformations compose contravariantly and output transformations compose covariantly. |
 
 ## Why `Signal` stops at `Applicative`
 
