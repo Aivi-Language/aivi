@@ -470,7 +470,8 @@ fn extract_aivi_blocks(text: &str) -> Result<Vec<FencedBlock>, String> {
 
 fn parse_aivi_fence_group(info: &str, line_number: usize) -> Result<Option<String>, String> {
     let mut parts = info.split_ascii_whitespace();
-    debug_assert_eq!(parts.next(), Some("aivi"));
+    let language = parts.next();
+    debug_assert_eq!(language, Some("aivi"));
     let Some(attribute) = parts.next() else {
         return Ok(None);
     };

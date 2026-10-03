@@ -126,8 +126,8 @@ func extendNelStep = observe state item => state
 
 type (NonEmptyList A -> B) -> NonEmptyList A -> NonEmptyList B
 func extendNel = observe items => toList items
- |> reverse
- |> reduce (extendNelStep observe) ([], [])
+  |> reverse
+  |> reduce (extendNelStep observe) ([], [])
  ||> (ignored, [first, ...rest]) -> fromHeadTail first rest
 
 instance Extend NonEmptyList = {
@@ -139,10 +139,12 @@ instance Comonad NonEmptyList = {
 }
 
 type Int -> Int -> Int
-func sumNelTestStep = total item => total + item
+func sumNelTestStep = total item =>
+    total + item
 
 type NonEmptyList Int -> Int
-func sumNelTest = items => reduce sumNelTestStep 0 items
+func sumNelTest = items =>
+    reduce sumNelTestStep 0 items
 
 @test
 value nonEmpty_extend_suffixes : Task Text Bool = pure (toList (extend toList (fromHeadTail 1 [2, 3])) == [[1, 2, 3], [2, 3], [3]])
