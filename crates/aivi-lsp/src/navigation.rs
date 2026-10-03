@@ -5,8 +5,8 @@ use aivi_hir::{
     BinaryOperator, BindingId, BuiltinTerm, BuiltinType, ClassMemberResolution, DomainMemberKind,
     DomainMemberResolution, ExportResolution, ExprKind, ImportBinding, ImportBindingMetadata,
     ImportBindingResolution, ImportId, Item, ItemId, LiteralSuffixResolution, Module, NamePath,
-    PatternKind, ResolutionState, TermResolution, TypeItemBody, TypeKind, TypeParameterId,
-    TypeResolution,
+    PatternKind, ResolutionState, TermResolution, TypeIdentity, TypeItemBody, TypeKind,
+    TypeParameterId, TypeResolution,
 };
 use aivi_query::{HirModuleResult, RootDatabase, SourceFile};
 use tower_lsp::lsp_types::{GotoDefinitionResponse, Location, Url};
@@ -983,7 +983,17 @@ impl NavigationAnalysis {
             ResolutionState::Resolved(ExportResolution::BuiltinType(builtin)) => {
                 self.builtin_type_import_targets(db, name, *builtin)
             }
-            ResolutionState::Resolved(ExportResolution::Import(_)) => Vec::new(),
+            ResolutionState::Resolved(ExportResolution::Import(import)) => {
+                self.import_definition_targets_for_import_id(db, *import)
+            }
+            ResolutionState::Resolved(ExportResolution::ImportedConstructor(pair)) => {
+                let mut targets = self.import_definition_targets_for_import_id(db, pair.carrier());
+                push_targets(
+                    &mut targets,
+                    self.import_definition_targets_for_import_id(db, pair.constructor()),
+                );
+                targets
+            }
         }
     }
 
@@ -1044,7 +1054,8 @@ impl NavigationAnalysis {
             ResolutionState::Unresolved
             | ResolutionState::Resolved(ExportResolution::BuiltinTerm(_))
             | ResolutionState::Resolved(ExportResolution::BuiltinType(_))
-            | ResolutionState::Resolved(ExportResolution::Import(_)) => Vec::new(),
+            | ResolutionState::Resolved(ExportResolution::Import(_))
+            | ResolutionState::Resolved(ExportResolution::ImportedConstructor(_)) => Vec::new(),
         }
     }
 
@@ -1244,6 +1255,29 @@ impl NavigationAnalysis {
         };
         if import_binding.resolution != ImportBindingResolution::Resolved {
             return Vec::new();
+        }
+
+        let origin = match &import_binding.metadata {
+            ImportBindingMetadata::TypeConstructor { origin, .. } => origin.as_ref(),
+            ImportBindingMetadata::ConstructorValue { .. } => {
+                import_binding.metadata.constructor_origin()
+            }
+            _ => None,
+        };
+        if let Some(origin) = origin
+            && let TypeIdentity::Source { file, name } = &origin.identity
+            && let Some(owner) = db
+                .files()
+                .into_iter()
+                .find(|source| source.source(db).id() == *file)
+        {
+            let imported = Self::load(db, owner);
+            return match &import_binding.metadata {
+                ImportBindingMetadata::ConstructorValue { variant_name, .. } => {
+                    imported.term_declaration_targets(variant_name)
+                }
+                _ => imported.type_declaration_targets(name),
+            };
         }
 
         let module_segments = module

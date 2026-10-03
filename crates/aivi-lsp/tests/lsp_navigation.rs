@@ -337,3 +337,64 @@ fn definition_resolves_from_fanout_signal_use_site() {
         position_of_nth(&text, "gameOver", 0)
     );
 }
+
+#[test]
+fn constructor_aliases_and_exports_navigate_to_both_original_declarations() {
+    let state = Arc::new(ServerState::new());
+    let root = std::env::temp_dir().join(format!(
+        "aivi-constructor-navigation-{}",
+        std::process::id()
+    ));
+    let owner_uri = Url::from_file_path(root.join("owner.aivi")).unwrap();
+    let facade_uri = Url::from_file_path(root.join("facade.aivi")).unwrap();
+    let bridge_uri = Url::from_file_path(root.join("bridge.aivi")).unwrap();
+    let main_uri = Url::from_file_path(root.join("main.aivi")).unwrap();
+    let owner = "type Box A = Box A\nexport Box\n";
+    let facade = "use owner (Box as Container)\nexport Container\n";
+    let bridge = "use facade (Container as Wrapped)\nexport Wrapped\n";
+    let main = "use bridge (Wrapped)\nvalue item : Wrapped Int = Wrapped 1\n";
+    for (uri, text) in [
+        (&owner_uri, owner),
+        (&facade_uri, facade),
+        (&bridge_uri, bridge),
+        (&main_uri, main),
+    ] {
+        open_document(&state, uri, 1, text.to_owned());
+    }
+    for (uri, text, name) in [
+        (&facade_uri, facade, "Container"),
+        (&bridge_uri, bridge, "Wrapped"),
+    ] {
+        let response = definition(
+            definition_params(uri.clone(), position_of_nth(text, name, 1)),
+            state.clone(),
+        )
+        .expect("export has definitions");
+        let locations = response_locations(response);
+        assert_eq!(locations.len(), 2, "{locations:?}");
+        for occurrence in [0, 1] {
+            assert!(
+                locations.iter().any(|location| location.uri == owner_uri
+                    && location.range.start == position_of_nth(owner, "Box", occurrence)),
+                "{locations:?}"
+            );
+        }
+    }
+    for (use_occurrence, declaration_occurrence) in [(1, 0), (2, 1)] {
+        let response = definition(
+            definition_params(
+                main_uri.clone(),
+                position_of_nth(main, "Wrapped", use_occurrence),
+            ),
+            state.clone(),
+        )
+        .expect("alias reference has a definition");
+        let locations = response_locations(response);
+        assert_eq!(locations.len(), 1, "{locations:?}");
+        assert_eq!(locations[0].uri, owner_uri);
+        assert_eq!(
+            locations[0].range.start,
+            position_of_nth(owner, "Box", declaration_occurrence)
+        );
+    }
+}

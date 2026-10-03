@@ -96,7 +96,7 @@ pub use hir::{
     FunctionItem, FunctionOrigin, FunctionParameter, HoistItem, HoistKindFilter, ImportBinding,
     ImportBindingMetadata, ImportBindingResolution, ImportBundleKind, ImportRecordField,
     ImportSumVariant, ImportTypeDefinition, ImportValueType, ImportedClassConstraint,
-    ImportedClassDefinition, ImportedClassEvidence, ImportedClassMember,
+    ImportedClassDefinition, ImportedClassEvidence, ImportedClassMember, ImportedConstructorExport,
     ImportedDomainLiteralSuffix, ImportedTypeBinding, ImportedTypeConstructor, ImportedTypeOrigin,
     InstanceItem, InstanceMember, IntegerLiteral, IntrinsicValue, Item, ItemHeader, ItemKind,
     LiteralSuffixBase, LiteralSuffixResolution, MapExpr, MapExprEntry, MarkupAttribute,

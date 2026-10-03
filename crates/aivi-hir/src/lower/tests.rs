@@ -4986,3 +4986,170 @@ fn hoist_item_emits_diagnostic_for_unknown_kind_filter() {
         lowered.diagnostics()
     );
 }
+
+struct ExportSurfaceResolver(ExportedNames);
+
+impl ImportResolver for ExportSurfaceResolver {
+    fn resolve(&self, _path: &[&str]) -> ImportModuleResolution {
+        ImportModuleResolution::Resolved(self.0.clone())
+    }
+}
+
+#[test]
+fn imported_constructor_exports_preserve_both_namespaces_and_original_identity() {
+    for declaration in [
+        "type Box A = Box A",
+        "type Box = | Box",
+        "type Box A B = Box A B",
+    ] {
+        let owner = lower_text("owner.aivi", &format!("{declaration}\nexport Box\n"));
+        let resolver = ExportSurfaceResolver(exports(owner.module()));
+        let facade = lower_text_with_resolver(
+            "facade.aivi",
+            "use owner (Box as Container)\nexport Container\n",
+            &resolver,
+        );
+        assert!(!facade.has_errors(), "{:?}", facade.diagnostics());
+        let public = exports(facade.module());
+        assert_eq!(public.names.len(), 2);
+        assert_eq!(public.names[0].kind, ExportedNameKind::Type);
+        assert_eq!(public.names[1].kind, ExportedNameKind::Value);
+        assert_eq!(
+            public.names[0].metadata.type_origin().unwrap().identity,
+            public.names[1]
+                .metadata
+                .constructor_origin()
+                .unwrap()
+                .identity
+        );
+        let ImportBindingMetadata::ConstructorValue { variant_name, .. } =
+            &public.names[1].metadata
+        else {
+            panic!("genuine constructor")
+        };
+        assert_eq!(variant_name, "Box");
+        let bridge = lower_text_with_resolver(
+            "bridge.aivi",
+            "use facade (Container as Wrapped)\nexport Wrapped\n",
+            &ExportSurfaceResolver(public),
+        );
+        assert!(!bridge.has_errors(), "{:?}", bridge.diagnostics());
+        let bridged = exports(bridge.module());
+        let consumer = lower_text_with_resolver(
+            "consumer.aivi",
+            "use bridge\nexport Wrapped\n",
+            &ExportSurfaceResolver(bridged),
+        );
+        assert!(!consumer.has_errors(), "{:?}", consumer.diagnostics());
+        assert_eq!(exports(consumer.module()).names.len(), 2);
+        let report = crate::validate_module(consumer.module(), ValidationMode::Structural);
+        assert!(report.is_ok(), "{:?}", report.diagnostics());
+    }
+}
+
+#[test]
+fn imported_constructor_exports_reject_factories_and_mismatched_canonical_owners() {
+    let owner = lower_text("owner.aivi", "type Box A = MkBox A\nexport (Box, MkBox)\n");
+    let surface = exports(owner.module());
+    for factory in [false, true] {
+        let mut invalid = surface.clone();
+        let constructor = invalid
+            .names
+            .iter_mut()
+            .find(|name| name.name == "MkBox")
+            .unwrap();
+        let ImportBindingMetadata::ConstructorValue { ty, .. } = &mut constructor.metadata else {
+            panic!("constructor")
+        };
+        if factory {
+            constructor.metadata = ImportBindingMetadata::Value { ty: ty.clone() };
+        } else {
+            let mut result = ty;
+            while let ImportValueType::Arrow { result: next, .. } = result {
+                result = next;
+            }
+            let ImportValueType::Named {
+                origin: Some(origin),
+                ..
+            } = result
+            else {
+                panic!("owner")
+            };
+            origin.identity = crate::TypeIdentity::Source {
+                file: aivi_base::FileId::new(99),
+                name: "Box".into(),
+            };
+        }
+        let facade = lower_text_with_resolver(
+            "facade.aivi",
+            "use owner (Box as Both, MkBox as Both)\nexport Both\n",
+            &ExportSurfaceResolver(invalid),
+        );
+        assert!(
+            facade
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == Some(super::code("ambiguous-export"))),
+            "{:?}",
+            facade.diagnostics()
+        );
+    }
+    let duplicate = lower_text_with_resolver(
+        "duplicate.aivi",
+        "use owner (Box as Both)\nuse owner (Box as Both)\nexport Both\n",
+        &ExportSurfaceResolver(surface),
+    );
+    assert!(
+        duplicate.has_errors(),
+        "same namespace collisions stay ambiguous"
+    );
+}
+
+#[test]
+fn hoisted_constructor_aliases_keep_namespace_filters() {
+    struct Hoisted(ExportedNames, Vec<HoistKindFilter>);
+    impl ImportResolver for Hoisted {
+        fn resolve(&self, _path: &[&str]) -> ImportModuleResolution {
+            ImportModuleResolution::Resolved(self.0.clone())
+        }
+        fn workspace_hoist_items(&self) -> Vec<crate::RawHoistItem> {
+            vec![crate::RawHoistItem {
+                module_path: vec!["facade".into()],
+                kind_filters: self.1.clone(),
+                hiding: vec![],
+            }]
+        }
+    }
+    let owner = lower_text("owner.aivi", "type Box A = Box A\nexport Box\n");
+    let facade = lower_text_with_resolver(
+        "facade.aivi",
+        "use owner (Box as Container)\nexport Container\n",
+        &ExportSurfaceResolver(exports(owner.module())),
+    );
+    let public = exports(facade.module());
+    for filters in [vec![], vec![HoistKindFilter::Type, HoistKindFilter::Value]] {
+        let result = lower_text_with_resolver(
+            "main.aivi",
+            "value item : Container Int = Container 1\n",
+            &Hoisted(public.clone(), filters),
+        );
+        assert!(!result.has_errors(), "{:?}", result.diagnostics());
+    }
+    let type_only = lower_text_with_resolver(
+        "types.aivi",
+        "value item : Container Int = Container 1\n",
+        &Hoisted(public.clone(), vec![HoistKindFilter::Type]),
+    );
+    assert!(
+        type_only
+            .diagnostics()
+            .iter()
+            .any(|d| d.code == Some(super::code("unresolved-term-name")))
+    );
+    let value_only = lower_text_with_resolver(
+        "values.aivi",
+        "value item = Container 1\n",
+        &Hoisted(public, vec![HoistKindFilter::Value]),
+    );
+    assert!(!value_only.has_errors(), "{:?}", value_only.diagnostics());
+}

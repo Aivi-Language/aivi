@@ -1570,31 +1570,36 @@ impl<'a> Lowerer<'a> {
         if import_specs.is_empty()
             && let ImportModuleResolution::Resolved(exports) = &module_resolution
         {
+            let mut public_names = std::collections::HashSet::new();
             import_specs = exports
                 .iter()
+                .filter(|exported| public_names.insert(exported.name.as_str()))
                 .map(|exported| {
                     let imported_name = self.make_name(&exported.name, item.base.span);
                     (item.base.span, imported_name.clone(), imported_name)
                 })
                 .collect();
         }
-        let mut imports = import_specs
-            .into_iter()
-            .map(|(span, imported_name, local_name)| {
-                let (resolution, metadata, callable_type, deprecation) =
-                    self.resolve_import_binding(&module_name, &imported_name, &module_resolution);
-                self.alloc_import(ImportBinding {
-                    span,
-                    source_module: Some(module_name.clone().into()),
-                    imported_name,
-                    local_name,
-                    resolution,
-                    metadata,
-                    callable_type,
-                    deprecation,
-                })
-            })
-            .collect::<Vec<_>>();
+        let mut imports = Vec::with_capacity(import_specs.len());
+        for (span, imported_name, local_name) in import_specs {
+            let (resolution, metadata, callable_type, deprecation) =
+                self.resolve_import_binding(&module_name, &imported_name, &module_resolution);
+            let import = ImportBinding {
+                span,
+                source_module: Some(module_name.clone().into()),
+                imported_name,
+                local_name,
+                resolution,
+                metadata,
+                callable_type,
+                deprecation,
+            };
+            let constructor = self.same_named_constructor_import(&import, &module_resolution);
+            imports.push(self.alloc_import(import));
+            if let Some(constructor) = constructor {
+                imports.push(self.alloc_import(constructor));
+            }
+        }
         // Auto-register imported instance member bindings so cross-module instance
         // resolution can find them without the user explicitly importing by name.
         if let ImportModuleResolution::Resolved(exports) = &module_resolution {
@@ -1610,27 +1615,31 @@ impl<'a> Lowerer<'a> {
                         import_value_type_label(&member.ty),
                     );
                     let name = self.make_name(&synthetic_name, item.base.span);
-                    imports.push(self.alloc_import(ImportBinding {
-                        span: item.base.span,
-                        source_module: instance_decl.source_module.clone()
-                            .or_else(|| Some(module_name.clone().into())),
-                        imported_name: self.make_name(&member.name, item.base.span),
-                        local_name: name,
-                        resolution: ImportBindingResolution::Resolved,
-                        metadata: ImportBindingMetadata::InstanceMember {
-                            class_identity: instance_decl.class_identity.clone(),
-                            class_name: instance_decl.class_name.clone(),
-                            member_name: member.name.clone(),
-                            subject: instance_decl.subject.clone(),
-                            head: instance_decl.head.clone(),
-                            context: instance_decl.context.clone(),
-                            evidence: member.evidence.clone(),
-                            instance_evidence_count: member.instance_evidence_count,
-                            ty: member.ty.clone(),
-                        },
-                        callable_type: None,
-                        deprecation: None,
-                    }));
+                    imports.push(
+                        self.alloc_import(ImportBinding {
+                            span: item.base.span,
+                            source_module: instance_decl
+                                .source_module
+                                .clone()
+                                .or_else(|| Some(module_name.clone().into())),
+                            imported_name: self.make_name(&member.name, item.base.span),
+                            local_name: name,
+                            resolution: ImportBindingResolution::Resolved,
+                            metadata: ImportBindingMetadata::InstanceMember {
+                                class_identity: instance_decl.class_identity.clone(),
+                                class_name: instance_decl.class_name.clone(),
+                                member_name: member.name.clone(),
+                                subject: instance_decl.subject.clone(),
+                                head: instance_decl.head.clone(),
+                                context: instance_decl.context.clone(),
+                                evidence: member.evidence.clone(),
+                                instance_evidence_count: member.instance_evidence_count,
+                                ty: member.ty.clone(),
+                            },
+                            callable_type: None,
+                            deprecation: None,
+                        }),
+                    );
                 }
             }
         }
@@ -1723,6 +1732,78 @@ impl<'a> Lowerer<'a> {
             kind_filters,
             hiding,
         }
+    }
+
+    /// Retain both namespaces in the use item, including the canonical owner and
+    /// original variant name. A facade's public alias need not name the variant.
+    fn same_named_constructor_import(
+        &self,
+        import: &ImportBinding,
+        resolution: &ImportModuleResolution,
+    ) -> Option<ImportBinding> {
+        let ImportBindingMetadata::TypeConstructor {
+            origin,
+            kind,
+            definition,
+            ..
+        } = &import.metadata
+        else {
+            return None;
+        };
+        let forwarded = match resolution {
+            ImportModuleResolution::Resolved(exports) => exports.names.iter().find(|export| {
+                export.name == import.imported_name.text()
+                    && matches!(
+                        export.metadata,
+                        ImportBindingMetadata::ConstructorValue { .. }
+                    )
+            }),
+            _ => None,
+        };
+        let metadata = if let Some(forwarded) = forwarded {
+            forwarded.metadata.clone()
+        } else {
+            let Some(crate::ImportTypeDefinition::Sum(variants)) = definition else {
+                return None;
+            };
+            let variant = variants
+                .iter()
+                .find(|variant| variant.name.as_ref() == import.imported_name.text())?;
+            let mut arity = 0;
+            let mut result_kind = kind;
+            while let aivi_typing::Kind::Arrow(_, result) = result_kind {
+                arity += 1;
+                result_kind = result;
+            }
+            let mut ty = ImportValueType::Named {
+                origin: origin.clone(),
+                type_name: origin
+                    .as_ref()
+                    .map_or(import.imported_name.text(), |origin| origin.name())
+                    .to_owned(),
+                arguments: (0..arity)
+                    .map(|index| ImportValueType::TypeVariable {
+                        index,
+                        name: format!("T{index}"),
+                    })
+                    .collect(),
+                definition: Some(Box::new(crate::ImportTypeDefinition::Sum(variants.clone()))),
+            };
+            for field in variant.fields.iter().rev() {
+                ty = ImportValueType::Arrow {
+                    parameter: Box::new(field.clone()),
+                    result: Box::new(ty),
+                };
+            }
+            ImportBindingMetadata::ConstructorValue {
+                variant_name: variant.name.to_string(),
+                ty,
+            }
+        };
+        let mut constructor = import.clone();
+        constructor.metadata = metadata;
+        constructor.callable_type = forwarded.and_then(|export| export.callable_type.clone());
+        Some(constructor)
     }
 
     fn resolve_import_binding(
@@ -4980,55 +5061,6 @@ impl<'a> Lowerer<'a> {
                 ImportBindingResolution::Cycle => continue,
             }
 
-            // A same-named sum constructor occupies the term namespace while
-            // its type occupies the type namespace (for example Date).
-            if let ImportBindingMetadata::TypeConstructor {
-                kind,
-                definition: Some(crate::ImportTypeDefinition::Sum(variants)),
-                ..
-            } = &import.metadata
-                && let Some(variant) = variants
-                    .iter()
-                    .find(|variant| variant.name.as_ref() == import.imported_name.text())
-            {
-                let mut arity = 0;
-                let mut result_kind = kind;
-                while let aivi_typing::Kind::Arrow(_, result) = result_kind {
-                    arity += 1;
-                    result_kind = result;
-                }
-                let mut ty = ImportValueType::Named {
-                    origin: None,
-                    type_name: import.imported_name.text().to_owned(),
-                    arguments: (0..arity)
-                        .map(|index| ImportValueType::TypeVariable {
-                            index,
-                            name: format!("T{index}"),
-                        })
-                        .collect(),
-                    definition: Some(Box::new(crate::ImportTypeDefinition::Sum(variants.clone()))),
-                };
-                for field in variant.fields.iter().rev() {
-                    ty = ImportValueType::Arrow {
-                        parameter: Box::new(field.clone()),
-                        result: Box::new(ty),
-                    };
-                }
-                let mut constructor = import.clone();
-                constructor.metadata = ImportBindingMetadata::ConstructorValue {
-                    variant_name: variant.name.to_string(),
-                    ty,
-                };
-                constructor.source_module = Some(module_name.clone().into());
-                let constructor_id = self.alloc_import(constructor);
-                insert_site(
-                    &mut namespaces.term_imports,
-                    import.local_name.text(),
-                    constructor_id,
-                    import.span,
-                );
-            }
-
             match import.metadata.clone() {
                 ImportBindingMetadata::Class { identity } => {
                     self.register_imported_class(
@@ -5039,7 +5071,7 @@ impl<'a> Lowerer<'a> {
                     );
                 }
                 ImportBindingMetadata::Value { .. }
-            | ImportBindingMetadata::ConstructorValue { .. }
+                | ImportBindingMetadata::ConstructorValue { .. }
                 | ImportBindingMetadata::ConstrainedValue { .. }
                 | ImportBindingMetadata::IntrinsicValue { .. }
                 | ImportBindingMetadata::OpaqueValue
@@ -5200,6 +5232,7 @@ impl<'a> Lowerer<'a> {
         self.register_class_catalog(exports);
         let wrapped = ImportModuleResolution::Resolved(exports.clone());
 
+        let mut public_names = std::collections::HashSet::new();
         for exported in exports.names.iter() {
             if !kind_filters.is_empty() {
                 let kind_matches = kind_filters.iter().any(|f| {
@@ -5222,15 +5255,30 @@ impl<'a> Lowerer<'a> {
                 continue;
             }
 
+            if !public_names.insert(exported.name.as_str()) {
+                continue;
+            }
+
             let imported_name = self.make_name(&exported.name, span);
-            let (resolution, metadata, callable_type, deprecation) =
-                self.resolve_import_binding(module_name, &imported_name, &wrapped);
+            let (resolution, metadata, callable_type, deprecation) = if matches!(
+                exported.metadata,
+                ImportBindingMetadata::ConstructorValue { .. }
+            ) {
+                (
+                    ImportBindingResolution::Resolved,
+                    exported.metadata.clone(),
+                    exported.callable_type.clone(),
+                    exported.deprecation.clone(),
+                )
+            } else {
+                self.resolve_import_binding(module_name, &imported_name, &wrapped)
+            };
 
             if !matches!(resolution, ImportBindingResolution::Resolved) {
                 continue;
             }
 
-            let import_id = self.alloc_import(ImportBinding {
+            let import = ImportBinding {
                 span,
                 source_module: Some(module_name.into()),
                 imported_name: imported_name.clone(),
@@ -5239,7 +5287,20 @@ impl<'a> Lowerer<'a> {
                 metadata: metadata.clone(),
                 callable_type,
                 deprecation,
-            });
+            };
+
+            if (kind_filters.is_empty() || kind_filters.contains(&HoistKindFilter::Value))
+                && let Some(constructor) = self.same_named_constructor_import(&import, &wrapped)
+            {
+                let constructor_id = self.alloc_import(constructor);
+                insert_site(
+                    &mut namespaces.hoisted_term_imports,
+                    imported_name.text(),
+                    constructor_id,
+                    span,
+                );
+            }
+            let import_id = self.alloc_import(import);
 
             match &metadata {
                 ImportBindingMetadata::Class { identity } => {
@@ -5299,7 +5360,9 @@ impl<'a> Lowerer<'a> {
                 let name = self.make_name(&synthetic_name, span);
                 self.alloc_import(ImportBinding {
                     span,
-                    source_module: instance_decl.source_module.clone()
+                    source_module: instance_decl
+                        .source_module
+                        .clone()
                         .or_else(|| Some(module_name.into())),
                     imported_name: self.make_name(&member.name, span),
                     local_name: name,
@@ -9556,6 +9619,15 @@ impl<'a> Lowerer<'a> {
             LookupResult::Missing => {}
         }
 
+        if let [constructor, carrier] = candidates.as_slice()
+            && let Some(pair) = self
+                .module
+                .imported_constructor_export(*carrier, *constructor)
+        {
+            return Some(ResolutionState::Resolved(
+                ExportResolution::ImportedConstructor(pair),
+            ));
+        }
         match candidates.as_slice() {
             [import_id] => Some(ResolutionState::Resolved(ExportResolution::Import(
                 *import_id,

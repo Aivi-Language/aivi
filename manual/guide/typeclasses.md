@@ -449,6 +449,11 @@ Re-exporting a class or nominal carrier also forwards its instance evidence,
 including through an import alias. Implementations retain their declaring module;
 private imports do not add instances to the module's public interface.
 
+A carrier with a same-named constructor can also be aliased and re-exported
+under one public name. Both namespaces retain their original declaration, so
+generic class calls select the same instances through every facade. See
+[Modules](/guide/modules#exporting-names) for the export rules.
+
 Generic functions can use value members such as `id` from their class context.
 In `keepLeft`, identity operates on the output type `B`; in `keepRight`, it
 operates on the input type `A`. The two types need not be equal. Each use selects

@@ -349,6 +349,34 @@ fn check_rejects_unused_overlapping_and_orphan_instances() {
 }
 
 #[test]
+fn check_preserves_same_named_constructor_aliases_through_facades() {
+    let dir = TempDir::new("constructor-export-alias");
+    dir.write("models.aivi", "type Box A = Box A\nexport Box\n");
+    dir.write(
+        "facade.aivi",
+        "use models (Box as Container)\nexport Container\n",
+    );
+    dir.write(
+        "bridge.aivi",
+        "use facade (Container as Wrapped)\nexport Wrapped\n",
+    );
+    let path = dir.write(
+        "main.aivi",
+        "use bridge (Wrapped)\nvalue item : Wrapped Int = Wrapped 1\n",
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn check_rejects_overlaps_through_nominal_reexports() {
     let dir = TempDir::new("nominal-reexport-overlap");
     dir.write("models.aivi", "type Box A = MkBox A\nexport Box\n");

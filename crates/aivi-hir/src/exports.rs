@@ -227,6 +227,17 @@ fn explicit_exported_names(module: &Module) -> Vec<ExportedName> {
         let Some(Item::Export(export)) = module.items().get(id) else {
             continue;
         };
+        if let ResolutionState::Resolved(ExportResolution::ImportedConstructor(pair)) =
+            export.resolution
+        {
+            let name = export.target.segments().first().text();
+            for import in [pair.carrier(), pair.constructor()] {
+                if let Some(exported) = re_exported_import_name(module, import, name) {
+                    push_unique_exported_name(&mut names, exported);
+                }
+            }
+            continue;
+        }
         let Some(exported) = export_item_to_exported_name(module, export) else {
             continue;
         };
@@ -362,6 +373,7 @@ fn export_item_to_exported_name(module: &Module, export: &ExportItem) -> Option<
         ExportResolution::Import(import_id) => {
             re_exported_import_name(module, import_id, exported_name.as_str())
         }
+        ExportResolution::ImportedConstructor(_) => None,
     }
 }
 

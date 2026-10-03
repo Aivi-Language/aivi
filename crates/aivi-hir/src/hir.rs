@@ -954,6 +954,21 @@ pub enum ImportBindingMetadata {
 }
 
 impl ImportBindingMetadata {
+    /// Canonical owner of a genuine constructor, including curried constructors.
+    pub fn constructor_origin(&self) -> Option<&ImportedTypeOrigin> {
+        let Self::ConstructorValue { ty, .. } = self else {
+            return None;
+        };
+        let mut result = ty;
+        while let ImportValueType::Arrow { result: next, .. } = result {
+            result = next;
+        }
+        match result {
+            ImportValueType::Named { origin, .. } => origin.as_ref(),
+            _ => None,
+        }
+    }
+
     pub fn type_origin(&self) -> Option<&ImportedTypeOrigin> {
         match self {
             Self::TypeConstructor { origin, .. } | Self::Domain { origin, .. } => origin.as_ref(),
@@ -1716,6 +1731,25 @@ pub enum ExportResolution {
     /// Re-export of an imported binding (e.g. an intrinsic or a name from
     /// another module forwarded through this one).
     Import(ImportId),
+    /// One name exposing a data type and a constructor belonging to that type.
+    ImportedConstructor(ImportedConstructorExport),
+}
+
+/// A coherent pair of imported namespaces, checked against declaration identity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct ImportedConstructorExport {
+    carrier: ImportId,
+    constructor: ImportId,
+}
+
+impl ImportedConstructorExport {
+    pub fn carrier(self) -> ImportId {
+        self.carrier
+    }
+
+    pub fn constructor(self) -> ImportId {
+        self.constructor
+    }
 }
 
 /// Kind filter used in a `hoist` declaration.
@@ -4370,6 +4404,30 @@ impl<S> Module<S> {
 
     pub fn imports(&self) -> &Arena<ImportId, ImportBinding> {
         &self.arenas.imports
+    }
+
+    pub fn imported_constructor_export(
+        &self,
+        carrier: ImportId,
+        constructor: ImportId,
+    ) -> Option<ImportedConstructorExport> {
+        let carrier_metadata = &self.imports().get(carrier)?.metadata;
+        let ImportBindingMetadata::TypeConstructor {
+            origin: Some(origin),
+            ..
+        } = carrier_metadata
+        else {
+            return None;
+        };
+        let constructor_origin = self
+            .imports()
+            .get(constructor)?
+            .metadata
+            .constructor_origin()?;
+        (origin.identity == constructor_origin.identity).then_some(ImportedConstructorExport {
+            carrier,
+            constructor,
+        })
     }
 
     pub fn domain_member_handle(

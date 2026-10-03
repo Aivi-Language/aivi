@@ -1670,18 +1670,18 @@ fn binary_class_instances_execute_imported_partial_and_cached_evidence() {
     dir.write(
         "arrows.aivi",
         r#"
-type Arrow A B = ArrowFn (A -> B)
+type Arrow A B = Arrow (A -> B)
 type Arrow A B -> A -> B
 func runArrow = arrow x => arrow
- ||> ArrowFn f -> f x
+ ||> Arrow f -> f x
 type Arrow B C -> Arrow A B -> Arrow A C
-func composeArrow = left right => ArrowFn (x => runArrow left (runArrow right x))
+func composeArrow = left right => Arrow (x => runArrow left (runArrow right x))
 type A -> A
 func identity = x => x
 instance Semigroupoid Arrow = { compose = composeArrow }
-instance Category Arrow = { id = ArrowFn identity }
+instance Category Arrow = { id = Arrow identity }
 type (A2 -> A1) -> (B1 -> B2) -> Arrow A1 B1 -> Arrow A2 B2
-func dimapArrow = before after arrow => ArrowFn (x => after (runArrow arrow (before x)))
+func dimapArrow = before after arrow => Arrow (x => after (runArrow arrow (before x)))
 instance Profunctor Arrow = { dimap = dimapArrow }
 type Int -> Int
 func increment = n => n + 1
@@ -1691,10 +1691,10 @@ type Text -> Int
 func textCount = text => 3
 type Int -> Bool
 func positive = n => n > 0
-value incrementArrow : Arrow Int Int = ArrowFn increment
-value twiceArrow : Arrow Int Int = ArrowFn twice
-value textArrow : Arrow Text Int = ArrowFn textCount
-value boolArrow : Arrow Int Bool = ArrowFn positive
+value incrementArrow : Arrow Int Int = Arrow increment
+value twiceArrow : Arrow Int Int = Arrow twice
+value textArrow : Arrow Text Int = Arrow textCount
+value boolArrow : Arrow Int Bool = Arrow positive
 export (Arrow, runArrow, increment, incrementArrow, twiceArrow, textArrow, boolArrow)
 "#,
     );
@@ -1769,5 +1769,66 @@ value independentValueUses : Task Text Bool = pure (checkBoth textArrow boolArro
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(output.status.success(), "{stdout}\n{stderr}");
         assert!(stdout.contains("16 passed; 0 failed; 16 total"), "{stdout}");
+    }
+}
+
+#[test]
+fn constructor_exports_execute_generic_partial_nullary_and_cached_uses() {
+    let dir = TempDir::new("constructor-export-runtime");
+    dir.write(
+        "models.aivi",
+        r#"
+type Box A = Box A
+type Pair A B = Pair A B
+type Flag = | Flag
+type (A -> B) -> Box A -> Box B
+func mapBox = f box => box ||> Box x -> Box (f x)
+instance Functor Box = { map = mapBox }
+export (Box, Pair, Flag)
+"#,
+    );
+    dir.write("facade.aivi", "use models (Box as Container, Pair as Product, Flag as Mark)\nexport (Container, Product, Mark)\n");
+    dir.write("bridge.aivi", "use facade (Container as Wrapped, Product as Together, Mark as Token)\nexport (Wrapped, Together, Token)\n");
+    let path = dir.write(
+        "main.aivi",
+        r#"
+use bridge (Wrapped, Together, Token)
+type Functor F => (A -> B) -> F A -> F B
+func transform = f values => map f values
+type Int -> Int
+func increment = n => n + 1
+type Wrapped A -> A
+func read = value => value ||> Wrapped x -> x
+type Together A B -> B
+func second = pair => pair ||> Together first last -> last
+value wrap : Text -> Wrapped Text = Wrapped
+value pair : Text -> Together Int Text = Together 7
+type Token -> Bool
+func isToken = value => value ||> Token -> True
+value token : Token = Token
+@test
+value aliasPattern : Task Text Bool = pure (read (Wrapped 3) == 3)
+@test
+value firstClass : Task Text Bool = pure (read (wrap "kept") == "kept")
+@test
+value partial : Task Text Bool = pure (second (pair "second") == "second")
+@test
+value nullary : Task Text Bool = pure (isToken token)
+@test
+value publicInstance : Task Text Bool = pure (read (map increment (Wrapped 3)) == 4)
+@test
+value genericInstance : Task Text Bool = pure (read (transform increment (Wrapped 3)) == 4)
+"#,
+    );
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("6 passed; 0 failed; 6 total"), "{stdout}");
     }
 }

@@ -3617,3 +3617,91 @@ fn binary_classes_reject_unsaturated_and_wrong_arity_carriers() {
         );
     }
 }
+
+#[test]
+fn imported_constructor_export_validation_checks_ids_and_canonical_owner() {
+    struct Resolver(crate::ExportedNames);
+    impl crate::ImportResolver for Resolver {
+        fn resolve(&self, _path: &[&str]) -> crate::ImportModuleResolution {
+            crate::ImportModuleResolution::Resolved(self.0.clone())
+        }
+    }
+    let mut sources = SourceDatabase::new();
+    let owner = sources.add_file("owner.aivi", "type Box A = Box A\nexport Box\n");
+    let owner = crate::lower_module(&parse_module(&sources[owner]).module);
+    let facade = sources.add_file(
+        "facade.aivi",
+        "use owner (Box as Container)\nexport Container\n",
+    );
+    let facade = crate::lower_module_with_resolver(
+        &parse_module(&sources[facade]).module,
+        Some(&Resolver(crate::exports(owner.module()))),
+    );
+    assert!(!facade.has_errors(), "{:?}", facade.diagnostics());
+    let module = facade.module();
+    let export = module
+        .items()
+        .iter()
+        .find_map(|(_, item)| match item {
+            Item::Export(export) => Some(export.clone()),
+            _ => None,
+        })
+        .unwrap();
+    let ResolutionState::Resolved(crate::ExportResolution::ImportedConstructor(pair)) =
+        export.resolution
+    else {
+        panic!("coherent constructor export")
+    };
+    assert!(validate_module(module, ValidationMode::Structural).is_ok());
+    assert_eq!(
+        module.imported_constructor_export(pair.constructor(), pair.carrier()),
+        None
+    );
+    for factory in [false, true] {
+        let mut invalid = module.clone();
+        let metadata = &mut invalid
+            .arenas
+            .imports
+            .get_mut(pair.constructor())
+            .unwrap()
+            .metadata;
+        let ImportBindingMetadata::ConstructorValue { ty, .. } = metadata else {
+            panic!("constructor")
+        };
+        if factory {
+            *metadata = ImportBindingMetadata::Value { ty: ty.clone() };
+        } else {
+            let crate::ImportValueType::Arrow { result, .. } = ty else {
+                panic!("curried constructor")
+            };
+            let crate::ImportValueType::Named {
+                origin: Some(origin),
+                ..
+            } = result.as_mut()
+            else {
+                panic!("canonical owner")
+            };
+            origin.identity = crate::TypeIdentity::Source {
+                file: FileId::new(99),
+                name: "Box".into(),
+            };
+        }
+        assert!(
+            validate_module(&invalid, ValidationMode::Structural)
+                .diagnostics()
+                .iter()
+                .any(|diagnostic| diagnostic.code == Some(code("invalid-constructor-export")))
+        );
+    }
+    let mut missing = Module::new(module.file());
+    missing.push_item(Item::Export(export)).unwrap();
+    let report = validate_module(&missing, ValidationMode::Structural);
+    assert_eq!(
+        report
+            .diagnostics()
+            .iter()
+            .filter(|diagnostic| diagnostic.code == Some(code("missing-node")))
+            .count(),
+        2
+    );
+}

@@ -41,6 +41,25 @@ func isSuccess =
 
 ## Exporting names
 
+A data type and its same-named constructor occupy separate type and value
+namespaces. One export exposes both:
+
+```aivi
+type Box A = Box A
+export Box
+```
+
+If another module imports this as `use models (Box as Container)`, then
+`export Container` forwards both the type and the genuine constructor. Further
+aliases preserve the original type identity and variant name, so `Container`
+works in type annotations, constructor applications, and case patterns.
+Re-exporting the carrier also forwards its public class instances from their
+original implementation module.
+
+The two imported namespaces must belong to the same canonical data declaration.
+A function that happens to return that type does not qualify as its constructor;
+unrelated declarations and multiple bindings in one namespace remain ambiguous.
+
 You can export one name:
 
 ```aivi

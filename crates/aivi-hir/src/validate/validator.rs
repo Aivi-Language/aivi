@@ -1148,13 +1148,24 @@ impl Validator<'_> {
                         item.resolution.as_ref(),
                         Some(item.target.segments().last().text()),
                         |this, resolved| {
-                            if let ExportResolution::Item(item_id) = resolved {
-                                this.require_item(
+                            match resolved {
+                                ExportResolution::Item(item_id) => this.require_item(
                                     item.header.span,
                                     "export item",
                                     "resolved target",
                                     *item_id,
-                                );
+                                ),
+                                ExportResolution::Import(import) => this.require_import(item.header.span, "export item", "resolved target", *import),
+                                ExportResolution::ImportedConstructor(pair) => {
+                                    this.require_import(item.header.span, "export item", "carrier", pair.carrier());
+                                    this.require_import(item.header.span, "export item", "constructor", pair.constructor());
+                                    if this.module.imported_constructor_export(pair.carrier(), pair.constructor()) != Some(*pair) {
+                                        this.diagnostics.push(Diagnostic::error("exported constructor does not belong to the exported type")
+                                            .with_code(code("invalid-constructor-export"))
+                                            .with_primary_label(item.header.span, "both namespaces must retain the same canonical data declaration"));
+                                    }
+                                }
+                                ExportResolution::BuiltinTerm(_) | ExportResolution::BuiltinType(_) => {}
                             }
                         },
                     );
@@ -6127,7 +6138,6 @@ impl Validator<'_> {
         let mut context = SourceRecurrenceWakeupContext::new(provider);
         if metadata.is_some_and(SourceMetadata::has_reactive_wakeup_inputs) {
             context = context.with_reactive_inputs();
-        }
         let contract = provider.contract();
         if let Some(options) = source.options
             && let ExprKind::Record(record) = &self.module.exprs()[options].kind {
@@ -6148,6 +6158,7 @@ impl Validator<'_> {
                     };
                 }
             }
+        }
         Some(RecurrenceWakeupHint::Builtin(context))
     }
 

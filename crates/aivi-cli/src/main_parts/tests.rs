@@ -3653,3 +3653,58 @@ fn update_prelaunch_replaces_current_stage_label() {
         Some("compile reactive `users` (12 clauses)")
     );
 }
+
+#[test]
+fn frozen_source_image_preserves_constructor_aliases_and_class_owners() {
+    let workspace = TempDir::new("constructor-export-roundtrip");
+    let owner = workspace.write(
+        "models.aivi",
+        r#"
+type Box A = Box A
+type Pair A B = Pair A B
+type Flag = | Flag
+type (A -> B) -> Box A -> Box B
+func mapBox = f box => box ||> Box x -> Box (f x)
+instance Functor Box = { map = mapBox }
+export (Box, Pair, Flag)
+"#,
+    );
+    let facade = workspace.write("facade.aivi", "use models (Box as Container, Pair as Product, Flag as Mark)\nexport (Container, Product, Mark)\n");
+    let bridge = workspace.write("bridge.aivi", "use facade (Container as Wrapped, Product as Together, Mark as Token)\nexport (Wrapped, Together, Token)\n");
+    let entry = workspace.write(
+        "main.aivi",
+        r#"
+use bridge (Wrapped, Together, Token)
+type Functor F => (A -> B) -> F A -> F B
+func transform = f values => map f values
+type Int -> Text
+func label = n => "converted"
+type Wrapped A -> A
+func read = value => value ||> Wrapped x -> x
+type Together A B -> B
+func second = pair => pair ||> Together first last -> last
+value wrap : Int -> Wrapped Int = Wrapped
+value pair : Text -> Together Int Text = Together 7
+type Token -> Bool
+func isToken = value => value ||> Token -> True
+value token : Token = Token
+value main : Task Text Bool = pure (
+    read (transform label (wrap 3)) == "converted"
+    and second (pair "second") == "second"
+    and isToken token)
+"#,
+    );
+    let artifact = prepare_run_from_workspace(&workspace, "main.aivi", None).unwrap();
+    let frozen = super::freeze_run_artifact(&artifact).unwrap();
+    let reloaded = super::load_frozen_run_image_from_bytes(&frozen.bytes, None).unwrap();
+    assert!(reloaded.sources.is_none());
+    for source in [owner, facade, bridge, entry] {
+        fs::remove_file(source).unwrap();
+    }
+    for candidate in [&artifact, &reloaded] {
+        assert_eq!(
+            evaluate_pure_headless_result(candidate),
+            RuntimeValue::Bool(true)
+        );
+    }
+}
