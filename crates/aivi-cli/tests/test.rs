@@ -1637,6 +1637,15 @@ type Semigroupoid P => P B C -> P A B -> P A C
 func combine = left right => compose left right
 type Category P => P B C -> P A B -> P A C
 func inheritedCombine = left right => compose left right
+type Category P => P A B -> P A B
+func keepLeft = arrow => compose id arrow
+type Category P => P A B -> P A B
+func keepRight = arrow => compose arrow id
+type Category P => P A B -> P C D -> (P A B, P C D)
+func keepBoth = first second => (compose id first, compose second id)
+type Morphism Text Int -> Morphism Int Bool -> Bool
+func checkBoth = first second => keepBoth first second
+ ||> (textIdentity, boolIdentity) -> runArrow textIdentity "three" == 3 and runArrow boolIdentity 3
 value firstClass : Morphism Int Int -> Morphism Int Int -> Morphism Int Int = compose
 value partial : Morphism Int Int -> Morphism Int Int = compose incrementArrow
 value identityArrow : Morphism Int Int = id
@@ -1664,6 +1673,16 @@ value associativity : Task Text Bool = pure (runArrow (compose incrementArrow (c
 value profunctor : Task Text Bool = pure (runArrow mapped 3 == 9)
 @test
 value plainFunctionHelper : Task Text Bool = pure (composeFunctions increment increment 3 == 5)
+@test
+value genericLeftIdentity : Task Text Bool = pure (runArrow (keepLeft incrementArrow) 3 == 4)
+@test
+value genericRightIdentity : Task Text Bool = pure (runArrow (keepRight incrementArrow) 3 == 4)
+@test
+value independentIdentityInputs : Task Text Bool = pure (runArrow (keepRight textArrow) "three" == 3)
+@test
+value independentIdentityOutputs : Task Text Bool = pure (runArrow (keepLeft boolArrow) 3)
+@test
+value independentValueUses : Task Text Bool = pure (checkBoth textArrow boolArrow)
 "#,
     );
     for _ in 0..2 {
@@ -1675,6 +1694,6 @@ value plainFunctionHelper : Task Text Bool = pure (composeFunctions increment in
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(output.status.success(), "{stdout}\n{stderr}");
-        assert!(stdout.contains("11 passed; 0 failed; 11 total"), "{stdout}");
+        assert!(stdout.contains("16 passed; 0 failed; 16 total"), "{stdout}");
     }
 }

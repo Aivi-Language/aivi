@@ -2204,11 +2204,17 @@ pub(crate) fn lower_class_member_callee_with_evidence(
         &substitutions,
         reference.span(),
     )?;
-    // A dictionary is a polymorphic callable. Its reference retains the
-    // parameter contract; the application carries the instantiated result.
+    // Callable dictionaries retain their declaration contract; their application
+    // carries the instantiated result. A value member has no application node,
+    // so its use carries the selected member contract directly.
+    let dictionary_ty = env.locals.get(&local.binding)?;
     let callee = GateRuntimeExpr {
         span: reference.span(),
-        ty: env.locals.get(&local.binding)?.clone(),
+        ty: if matches!(dictionary_ty, GateType::Arrow { .. }) {
+            dictionary_ty.clone()
+        } else {
+            callee_ty.clone()
+        },
         kind: GateRuntimeExprKind::Reference(GateRuntimeReference::Local(local.binding)),
     };
     Some(if arguments.is_empty() {
@@ -7134,6 +7140,35 @@ instance Functor Box = {
         match &map.outcome {
             GeneralExprOutcome::Lowered(_) => {}
             other => panic!("expected lowered higher-kinded instance member body, found {other:?}"),
+        }
+    }
+
+    #[test]
+    fn elaborates_generic_category_identity_values() {
+        let lowered = lower_text(
+            "general-expr-category-identity.aivi",
+            r#"
+type Category P => P A B -> P A B
+func leftIdentity = arrow => compose id arrow
+type Category P => P A B -> P A B
+func rightIdentity = arrow => compose arrow id
+"#,
+        );
+        assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+        let checked = crate::typecheck_module(lowered.module());
+        assert!(checked.is_ok(), "{:?}", checked.diagnostics());
+        let report = elaborate_general_expressions(lowered.module());
+        for name in ["leftIdentity", "rightIdentity"] {
+            let item = report
+                .items()
+                .iter()
+                .find(|item| item_name(lowered.module(), item.owner) == Some(name))
+                .unwrap();
+            assert!(
+                matches!(item.outcome, GeneralExprOutcome::Lowered(_)),
+                "{name}: {:?}",
+                item.outcome
+            );
         }
     }
 

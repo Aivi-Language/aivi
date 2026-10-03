@@ -429,6 +429,12 @@ instance Category Arrow = { id = Arrow identity }
 value increment : Arrow Int Int = Arrow (n => n + 1)
 value identityArrow : Arrow Int Int = id
 value composed : Arrow Int Int = compose identityArrow increment
+
+type Category P => P A B -> P A B
+func keepLeft = arrow => compose id arrow
+type Category P => P A B -> P A B
+func keepRight = arrow => compose arrow id
+value kept : Arrow Int Int = keepLeft increment
 ```
 
 These instances use authored executable evidence and explicitly typed helpers.
@@ -437,6 +443,11 @@ function combinator `aivi.core.fn.compose` is available through its module impor
 Re-exporting a class or nominal carrier also forwards its instance evidence,
 including through an import alias. Implementations retain their declaring module;
 private imports do not add instances to the module's public interface.
+
+Generic functions can use value members such as `id` from their class context.
+In `keepLeft`, identity operates on the output type `B`; in `keepRight`, it
+operates on the input type `A`. The two types need not be equal. Each use selects
+its own member contract from the function's dictionary evidence.
 
 ### Not end to end today
 

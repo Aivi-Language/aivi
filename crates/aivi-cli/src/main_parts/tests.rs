@@ -484,7 +484,8 @@ fn source_run_cache_discards_images_without_current_type_and_equality_contracts(
     // revision 22 preceded constructor provenance and reference validation;
     // revision 23 preceded definitive declaration annotation checking;
     // revision 24 preceded binary-class quantifiers and instance re-export owners.
-    for revision in ["20", "21", "22", "23", "24"] {
+    // revision 25 preceded selected use contracts for value class members.
+    for revision in ["20", "21", "22", "23", "24", "25"] {
         let mut legacy = DefaultHasher::new();
         "aivi.source-run-cache".hash(&mut legacy);
         5_u32.hash(&mut legacy);
@@ -1940,6 +1941,44 @@ value main : Task Text Unit =
         super::RunArtifactKind::HeadlessTask { .. }
     ));
     assert!(reloaded.gtk().is_none());
+}
+
+#[test]
+fn frozen_source_image_preserves_generic_category_value_contracts() {
+    let artifact = prepare_run_from_text(
+        "category-value-roundtrip.aivi",
+        r#"
+type Arrow A B = ArrowFn (A -> B)
+type Arrow A B -> A -> B
+func runArrow = arrow x => arrow
+ ||> ArrowFn f -> f x
+type Arrow B C -> Arrow A B -> Arrow A C
+func composeArrow = left right => ArrowFn (x => runArrow left (runArrow right x))
+type A -> A
+func identity = x => x
+instance Semigroupoid Arrow = { compose = composeArrow }
+instance Category Arrow = { id = ArrowFn identity }
+type Category P => P A B -> P A B
+func keepLeft = arrow => compose id arrow
+type Category P => P A B -> P A B
+func keepRight = arrow => compose arrow id
+type Text -> Bool
+func nonempty = text => text != ""
+value arrow : Arrow Text Bool = ArrowFn nonempty
+value main : Task Text Bool = pure (runArrow (keepLeft (keepRight arrow)) "kept")
+"#,
+        None,
+    )
+    .unwrap();
+    let frozen = super::freeze_run_artifact(&artifact).unwrap();
+    let reloaded = super::load_frozen_run_image_from_bytes(&frozen.bytes, None).unwrap();
+    assert!(reloaded.sources.is_none());
+    for candidate in [&artifact, &reloaded] {
+        assert_eq!(
+            evaluate_pure_headless_result(candidate),
+            RuntimeValue::Bool(true)
+        );
+    }
 }
 
 #[test]

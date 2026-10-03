@@ -1868,6 +1868,51 @@ value traversedTask:Task Text (List Int) =
 }
 
 #[test]
+fn generic_category_value_members_keep_selected_use_types() {
+    let lowered = lower_text(
+        "typed-core-category-identity.aivi",
+        r#"
+type Category P => P A B -> P A B
+func leftIdentity = arrow => compose id arrow
+type Category P => P A B -> P A B
+func rightIdentity = arrow => compose arrow id
+"#,
+    );
+    assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+    let core = lower_module(lowered.module()).expect("generic value evidence must lower");
+    validate_module(&core).expect("selected member contracts must validate");
+    for (name, identity_index) in [("leftIdentity", 0), ("rightIdentity", 1)] {
+        let owner = find_core_item(&core, name);
+        let body = &core.exprs()[core.items()[owner].body.unwrap()];
+        let crate::ExprKind::Apply { arguments, .. } = &body.kind else {
+            panic!("expected composition application");
+        };
+        let identity = &core.exprs()[arguments[identity_index]];
+        assert!(matches!(
+            identity.kind,
+            crate::ExprKind::Reference(Reference::Local(_))
+        ));
+        let Type::TypeApplication {
+            arguments: identity_arguments,
+            ..
+        } = &identity.ty
+        else {
+            panic!("identity must retain its abstract binary carrier");
+        };
+        assert_eq!(identity_arguments.len(), 2);
+        assert_eq!(identity_arguments[0], identity_arguments[1]);
+        let Type::TypeApplication {
+            arguments: result_arguments,
+            ..
+        } = &body.ty
+        else {
+            panic!("composition must retain its abstract binary result");
+        };
+        assert_eq!(identity_arguments[0], result_arguments[1 - identity_index]);
+    }
+}
+
+#[test]
 fn abstract_traversal_keeps_its_applicative_evidence_prefix() {
     let lowered = lower_text(
         "abstract-traversal-evidence.aivi",

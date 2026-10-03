@@ -4695,6 +4695,33 @@ fn typecheck_infers_signal_without_double_wrapping() {
 }
 
 #[test]
+fn category_value_members_preserve_rigid_domain_and_codomain_types() {
+    for body in ["compose id arrow", "compose arrow id"] {
+        let report = typecheck_text(
+            "category-value-contract.aivi",
+            &format!("type Category P => P A B -> P A B\nfunc keep = arrow => {body}\n"),
+        );
+        assert!(report.is_ok(), "{body}: {:?}", report.diagnostics());
+    }
+    for source in [
+        "type Category P => P A B -> P A C\nfunc invalid = arrow => compose id arrow\n",
+        "type Category P => P A B -> P C B\nfunc invalid = arrow => compose arrow id\n",
+        "type Category P => P A B -> P A B\nfunc invalid = arrow => id\n",
+    ] {
+        let report = typecheck_text("category-invalid-value-contract.aivi", source);
+        assert!(!report.is_ok(), "invalid contract accepted: {source}");
+        assert!(
+            report
+                .diagnostics()
+                .iter()
+                .any(|d| d.code == Some(crate::codes::TYPE_MISMATCH)),
+            "{source}: {:?}",
+            report.diagnostics()
+        );
+    }
+}
+
+#[test]
 fn semigroupoid_contracts_preserve_independent_input_middle_and_output_types() {
     let declarations = r#"
 type Arrow A B = Arrow (A -> B)
