@@ -9,6 +9,22 @@ fn lex_first_token(src: &str) -> Option<aivi_syntax::TokenKind> {
     lexed.tokens().first().map(|t| t.kind())
 }
 
+#[test]
+fn identifier_prefixes_and_reserved_words_keep_their_lexical_roles() {
+    for name in ["a", "_", "functor", "func1", "signalValue"] {
+        assert_eq!(
+            lex_first_token(name),
+            Some(aivi_syntax::TokenKind::Identifier)
+        );
+    }
+    for keyword in ["fun", "func"] {
+        assert_eq!(
+            lex_first_token(keyword),
+            Some(aivi_syntax::TokenKind::FuncKw)
+        );
+    }
+}
+
 fn format_twice(src: &str) -> Option<String> {
     let mut db = SourceDatabase::new();
     let file_id = db.add_file("test.aivi", src);
@@ -76,13 +92,20 @@ proptest! {
     // --- Identifier lexing ---
 
     #[test]
-    fn identifier_round_trip(
+    fn identifier_or_keyword_round_trip(
         first in "[a-zA-Z_]",
         rest in proptest::string::string_regex("[a-zA-Z0-9_]{0,20}").unwrap(),
     ) {
         let src = format!("{first}{rest}");
-        let kind = lex_first_token(&src);
-        assert_eq!(kind, Some(aivi_syntax::TokenKind::Identifier), "failed for input: {src}");
+        let mut db = SourceDatabase::new();
+        let id = db.add_file("word.aivi", src.as_str());
+        let lexed = lex_module(&db[id]);
+        prop_assert!(!lexed.has_errors());
+        prop_assert_eq!(lexed.tokens().len(), 1, "failed for input: {}", src);
+        let token = lexed.tokens()[0];
+        prop_assert!(token.kind() == aivi_syntax::TokenKind::Identifier || token.kind().is_keyword(), "failed for input: {}", src);
+        prop_assert_eq!(token.text(&db[id]), src.as_str());
+        prop_assert_eq!(token.span().len(), u32::try_from(src.len()).unwrap());
     }
 
     // --- Formatter idempotency on simple valid modules ---

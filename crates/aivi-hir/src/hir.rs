@@ -4211,21 +4211,26 @@ impl<S> Module<S> {
             .copied()
             .filter(|id| matches!(self.items()[*id], Item::Class(_)))
             .collect::<Vec<_>>();
-        for (_, import) in self.imports().iter() {
-            if !matches!(
-                &import.metadata,
-                ImportBindingMetadata::Class { .. } | ImportBindingMetadata::AmbientType
-            ) {
-                continue;
-            }
-            let class = self.items().iter().find_map(|(id, item)| {
-                let Item::Class(class) = item else { return None; };
-                match &import.metadata {
-                    ImportBindingMetadata::Class { identity } if &class.identity == identity => Some(id),
-                    ImportBindingMetadata::AmbientType if matches!(&class.identity, ClassIdentity::Standard(name) if name.as_ref() == import.imported_name.text()) => Some(id),
-                    _ => None,
+        // This query borrows an immutable module. Index declarations once,
+        // retaining the first identity match and the original candidate order.
+        let mut by_identity = std::collections::HashMap::new();
+        let mut by_standard_name = std::collections::HashMap::new();
+        for (id, item) in self.items().iter() {
+            if let Item::Class(class) = item {
+                by_identity.entry(&class.identity).or_insert(id);
+                if let ClassIdentity::Standard(name) = &class.identity {
+                    by_standard_name.entry(name.as_ref()).or_insert(id);
                 }
-            });
+            }
+        }
+        for (_, import) in self.imports().iter() {
+            let class = match &import.metadata {
+                ImportBindingMetadata::Class { identity } => by_identity.get(identity).copied(),
+                ImportBindingMetadata::AmbientType => {
+                    by_standard_name.get(import.imported_name.text()).copied()
+                }
+                _ => None,
+            };
             if let Some(class) = class
                 && !classes.contains(&class)
             {

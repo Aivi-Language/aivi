@@ -45,11 +45,11 @@ use aivi.api (
 type ApiError -> Text
 func describeApiError =
  ||> ApiTimeout                -> "Timed out"
- ||> ApiDecodeFailure message  -> "Decode failed: " + message
- ||> ApiRequestFailure message -> "Request failed: " + message
+ ||> ApiDecodeFailure message  -> "Decode failed: {message}"
+ ||> ApiRequestFailure message -> "Request failed: {message}"
  ||> ApiUnauthorized           -> "Unauthorized"
  ||> ApiNotFound               -> "Not found"
- ||> ApiServerError message    -> "Server error: " + message
+ ||> ApiServerError message    -> "Server error: {message}"
 ```
 
 ---

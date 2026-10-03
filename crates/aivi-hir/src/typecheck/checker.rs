@@ -2,6 +2,7 @@ struct TypeChecker<'a> {
     module: &'a Module,
     typing: GateTypeContext<'a>,
     diagnostics: Vec<Diagnostic>,
+    type_mismatch_reports: Vec<TypeMismatchReport>,
     option_default_in_scope: bool,
     imported_default_values: Vec<ImportedDefaultValue>,
     default_record_elisions: Vec<DefaultRecordElision>,
@@ -11,6 +12,23 @@ struct TypeChecker<'a> {
     instance_resolution_calls: usize,
     instance_resolution_steps: usize,
     equality_proof_depth: usize,
+}
+
+/// Rechecking a callback through its enclosing contract and its hoisted item
+/// may prove the same failure twice. Keep the proof identity separate from its
+/// rendered text, and publish each failure once after speculative checks finish.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct TypeMismatchReport {
+    diagnostic_index: usize,
+    span: SourceSpan,
+    expected: GateType,
+    actual: Option<crate::typecheck_context::SourceOptionActualType>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ContractCheckMode {
+    Probe,
+    Definitive,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,6 +89,7 @@ impl<'a> TypeChecker<'a> {
             module,
             typing: GateTypeContext::new(module),
             diagnostics: Vec::new(),
+            type_mismatch_reports: Vec::new(),
             option_default_in_scope,
             imported_default_values,
             default_record_elisions: Vec::new(),
@@ -90,6 +109,7 @@ impl<'a> TypeChecker<'a> {
             module,
             typing,
             diagnostics: Vec::new(),
+            type_mismatch_reports: Vec::new(),
             option_default_in_scope,
             imported_default_values,
             default_record_elisions: Vec::new(),
@@ -103,19 +123,15 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn run(&mut self) {
-        let items = self
-            .module
-            .items()
-            .iter()
-            .map(|(item_id, item)| (item_id, item.clone()))
-            .collect::<Vec<_>>();
-        for (item_id, item) in items {
+        // Checking mutates only checker-owned evidence, never the HIR module.
+        // Borrow declarations instead of copying the entire inventory per pass.
+        for (item_id, item) in self.module.items().iter() {
             match item {
-                Item::Value(item) => self.check_value_item(&item),
-                Item::Function(item) => self.check_function_item(item_id, &item),
-                Item::Signal(item) => self.check_signal_item(&item),
-                Item::Instance(item) => self.check_instance_item(&item),
-                Item::Domain(item) => self.check_domain_item(item_id, &item),
+                Item::Value(item) => self.check_value_item(item),
+                Item::Function(item) => self.check_function_item(item_id, item),
+                Item::Signal(item) => self.check_signal_item(item),
+                Item::Instance(item) => self.check_instance_item(item),
+                Item::Domain(item) => self.check_domain_item(item_id, item),
                 Item::Type(_)
                 | Item::Class(_)
                 | Item::SourceProviderContract(_)
@@ -125,6 +141,29 @@ impl<'a> TypeChecker<'a> {
             }
         }
         self.solve_pending_eq_constraints();
+        self.publish_unique_type_mismatches();
+    }
+
+    fn publish_unique_type_mismatches(&mut self) {
+        let mut seen: HashMap<SourceSpan, Vec<TypeMismatchReport>> = HashMap::new();
+        let mut duplicates = HashSet::new();
+        for report in self.type_mismatch_reports.drain(..) {
+            let at_span = seen.entry(report.span).or_default();
+            if at_span
+                .iter()
+                .any(|prior| prior.expected == report.expected && prior.actual == report.actual)
+            {
+                duplicates.insert(report.diagnostic_index);
+            } else {
+                at_span.push(report);
+            }
+        }
+        let mut index = 0;
+        self.diagnostics.retain(|_| {
+            let keep = !duplicates.contains(&index);
+            index += 1;
+            keep
+        });
     }
 
     fn collect_default_imports(module: &Module) -> (bool, Vec<ImportedDefaultValue>) {
@@ -203,12 +242,19 @@ impl<'a> TypeChecker<'a> {
         let expected = item
             .annotation
             .and_then(|annotation| self.typing.lower_annotation(annotation));
-        self.check_expr(
-            item.body,
-            &GateExprEnv::default(),
-            expected.as_ref(),
-            &mut Vec::new(),
-        );
+        match expected {
+            Some(expected) => {
+                self.check_expected_expr(
+                    item.body,
+                    &GateExprEnv::default(),
+                    &expected,
+                    &mut Vec::new(),
+                );
+            }
+            None => {
+                self.check_expr(item.body, &GateExprEnv::default(), None, &mut Vec::new());
+            }
+        }
     }
 
     fn check_function_item(&mut self, item_id: ItemId, item: &FunctionItem) {
@@ -242,7 +288,14 @@ impl<'a> TypeChecker<'a> {
                 .annotation
                 .and_then(|annotation| this.typing.lower_open_annotation(annotation))
                 .or_else(|| inferred_parts.as_ref().map(|(_, result)| result.clone()));
-            this.check_expr(item.body, &env, expected.as_ref(), &mut Vec::new());
+            match expected {
+                Some(expected) => {
+                    this.check_expected_expr(item.body, &env, &expected, &mut Vec::new());
+                }
+                None => {
+                    this.check_expr(item.body, &env, None, &mut Vec::new());
+                }
+            }
         });
         self.typing.replace_rigid_type_parameters(previous);
     }
@@ -265,10 +318,12 @@ impl<'a> TypeChecker<'a> {
                         return;
                     }
                     self.diagnostics.truncate(checkpoint);
-                    self.check_expr(
+                    self.type_mismatch_reports
+                        .retain(|report| report.diagnostic_index < checkpoint);
+                    self.check_expected_expr(
                         body,
                         &GateExprEnv::default(),
-                        Some(payload.as_ref()),
+                        payload.as_ref(),
                         &mut Vec::new(),
                     );
                     self.check_signal_reactive_updates(item, Some(payload.as_ref()));
@@ -370,16 +425,16 @@ impl<'a> TypeChecker<'a> {
             } else {
                 &expected_body
             };
-            self.check_expr(
+            self.check_expected_expr(
                 update.guard,
                 &GateExprEnv::default(),
-                Some(guard_expected),
+                guard_expected,
                 &mut Vec::new(),
             );
-            self.check_expr(
+            self.check_expected_expr(
                 update.body,
                 &GateExprEnv::default(),
-                Some(body_expected),
+                body_expected,
                 &mut Vec::new(),
             );
         }
@@ -469,7 +524,7 @@ impl<'a> TypeChecker<'a> {
                 .insert(parameter.binding, parameter_ty.as_ref().clone());
             current = *result;
         }
-        self.check_expr(member.body, &env, Some(&current), &mut Vec::new());
+        self.check_expected_expr(member.body, &env, &current, &mut Vec::new());
     }
 
     fn check_domain_item(&mut self, owner: ItemId, item: &crate::DomainItem) {
@@ -477,10 +532,11 @@ impl<'a> TypeChecker<'a> {
             let Some(body) = member.body else {
                 continue;
             };
-            let Some(expected) = self
-                .typing
-                .lower_domain_member_implementation_type(owner, member.kind, member.annotation)
-            else {
+            let Some(expected) = self.typing.lower_domain_member_implementation_type(
+                owner,
+                member.kind,
+                member.annotation,
+            ) else {
                 continue;
             };
             self.check_domain_member(owner, member, body, &expected);
@@ -522,7 +578,7 @@ impl<'a> TypeChecker<'a> {
                 .insert(parameter.binding, parameter_ty.as_ref().clone());
             current = *result;
         }
-        self.check_expr(body, &env, Some(&current), &mut Vec::new());
+        self.check_expected_expr(body, &env, &current, &mut Vec::new());
     }
 
     fn with_class_constraint_scope<T>(
@@ -619,12 +675,29 @@ impl<'a> TypeChecker<'a> {
         expected: Option<&GateType>,
         value_stack: &mut Vec<ItemId>,
     ) -> bool {
-        match self.module.exprs()[expr_id].kind.clone() {
+        self.check_expr_with_mode(
+            expr_id,
+            env,
+            expected,
+            value_stack,
+            ContractCheckMode::Probe,
+        )
+    }
+
+    fn check_expr_with_mode(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        expected: Option<&GateType>,
+        value_stack: &mut Vec<ItemId>,
+        mode: ContractCheckMode,
+    ) -> bool {
+        match &self.module.exprs()[expr_id].kind {
             ExprKind::PatchApply { target, patch } => {
                 return self.check_patch_apply_expr(
                     expr_id,
-                    target,
-                    &patch,
+                    *target,
+                    patch,
                     env,
                     expected,
                     value_stack,
@@ -633,9 +706,9 @@ impl<'a> TypeChecker<'a> {
             ExprKind::PatchLiteral(patch) => {
                 return match expected {
                     Some(expected) => {
-                        self.check_patch_literal_expr(expr_id, &patch, env, expected, value_stack)
+                        self.check_patch_literal_expr(expr_id, patch, env, expected, value_stack)
                     }
-                    None => self.check_patch_block_children(&patch, env, value_stack),
+                    None => self.check_patch_block_children(patch, env, value_stack),
                 };
             }
             _ => {}
@@ -653,11 +726,11 @@ impl<'a> TypeChecker<'a> {
         if let Some(expected) = expected
             && let Some(result) =
                 self.check_expected_special_case(expr_id, env, expected, value_stack)
-            {
-                return result;
-            }
+        {
+            return result;
+        }
 
-        self.check_inferred_expr(expr_id, env, expected)
+        self.check_inferred_expr_with_mode(expr_id, env, expected, mode)
     }
 
     fn check_expr_with_ambient(
@@ -668,7 +741,10 @@ impl<'a> TypeChecker<'a> {
         ambient: &GateType,
     ) -> bool {
         let info = expected
-            .map(|expected| self.typing.infer_expr_with_expected(expr_id, env, Some(ambient), expected))
+            .map(|expected| {
+                self.typing
+                    .infer_expr_with_expected(expr_id, env, Some(ambient), expected)
+            })
             .unwrap_or_else(|| self.typing.infer_expr(expr_id, env, Some(ambient)));
         self.emit_expr_issues(&info.issues);
         self.handle_constraints(&info.constraints);
@@ -679,7 +755,7 @@ impl<'a> TypeChecker<'a> {
                 self.emit_type_mismatch(self.module.exprs()[expr_id].span, expected, actual);
                 false
             }
-            (Some(_), None) => false,
+            (Some(expected), None) => self.check_partial_inferred_type(expr_id, expected, &info),
             (None, Some(_)) | (None, None) => true,
         }
     }
@@ -708,9 +784,23 @@ impl<'a> TypeChecker<'a> {
         env: &GateExprEnv,
         expected: Option<&GateType>,
     ) -> bool {
+        self.check_inferred_expr_with_mode(expr_id, env, expected, ContractCheckMode::Probe)
+    }
+
+    fn check_inferred_expr_with_mode(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+        expected: Option<&GateType>,
+        mode: ContractCheckMode,
+    ) -> bool {
         let info = expected
-            .map(|expected| self.typing.infer_expr_with_expected(expr_id, env, None, expected))
+            .map(|expected| {
+                self.typing
+                    .infer_expr_with_expected(expr_id, env, None, expected)
+            })
             .unwrap_or_else(|| self.typing.infer_expr(expr_id, env, None));
+        let checkpoint = self.diagnostics.len();
         self.emit_expr_issues(&info.issues);
         self.handle_constraints(&info.constraints);
 
@@ -720,9 +810,46 @@ impl<'a> TypeChecker<'a> {
                 self.emit_type_mismatch(self.module.exprs()[expr_id].span, expected, actual);
                 false
             }
-            (Some(_), None) => false,
+            (Some(expected), None)
+                if mode == ContractCheckMode::Definitive
+                    && info.actual.is_none()
+                    && self.diagnostics.len() == checkpoint =>
+            {
+                // Inference already proved that no actual shape is available.
+                // Report from this evidence instead of inferring the whole
+                // expression again solely to render an unresolved mismatch.
+                self.emit_type_mismatch_or_unresolved(
+                    self.module.exprs()[expr_id].span,
+                    expected,
+                    None,
+                );
+                false
+            }
+            (Some(expected), None) => self.check_partial_inferred_type(expr_id, expected, &info),
             (None, Some(_)) | (None, None) => true,
         }
+    }
+
+    fn check_partial_inferred_type(
+        &mut self,
+        expr_id: ExprId,
+        expected: &GateType,
+        info: &crate::typecheck_context::GateExprInfo,
+    ) -> bool {
+        let Some(actual) = info.actual.as_ref() else {
+            return false;
+        };
+        if !info.issues.is_empty() {
+            return false;
+        }
+        if self
+            .typing
+            .match_gate_expr_template(expected, info, &mut HashMap::new())
+        {
+            return true;
+        }
+        self.emit_partial_type_mismatch(self.module.exprs()[expr_id].span, expected, actual);
+        false
     }
 
     fn check_operator_expr(
@@ -732,10 +859,10 @@ impl<'a> TypeChecker<'a> {
         expected: Option<&GateType>,
         value_stack: &mut Vec<ItemId>,
     ) -> Option<bool> {
-        let kind = self.module.exprs()[expr_id].kind.clone();
+        let kind = &self.module.exprs()[expr_id].kind;
         match kind {
             ExprKind::Unary { operator, expr } => {
-                Some(self.check_unary_expr(expr_id, operator, expr, env, expected, value_stack))
+                Some(self.check_unary_expr(expr_id, *operator, *expr, env, expected, value_stack))
             }
             ExprKind::Binary {
                 left,
@@ -744,9 +871,9 @@ impl<'a> TypeChecker<'a> {
             } => Some(self.check_binary_expr(
                 BinaryExpr {
                     expr_id,
-                    left,
-                    operator,
-                    right,
+                    left: *left,
+                    operator: *operator,
+                    right: *right,
                 },
                 env,
                 expected,
@@ -790,37 +917,25 @@ impl<'a> TypeChecker<'a> {
         value_stack: &mut Vec<ItemId>,
     ) -> bool {
         match binary.operator {
-            BinaryOperator::And | BinaryOperator::Or => self.check_bool_binary_expr(
-                binary,
-                env,
-                expected,
-                value_stack,
-            ),
+            BinaryOperator::And | BinaryOperator::Or => {
+                self.check_bool_binary_expr(binary, env, expected, value_stack)
+            }
             BinaryOperator::Add
             | BinaryOperator::Subtract
             | BinaryOperator::Multiply
             | BinaryOperator::Divide
-            | BinaryOperator::Modulo => self.check_numeric_binary_expr(
-                binary,
-                env,
-                expected,
-                value_stack,
-            ),
+            | BinaryOperator::Modulo => {
+                self.check_numeric_binary_expr(binary, env, expected, value_stack)
+            }
             BinaryOperator::GreaterThan
             | BinaryOperator::LessThan
             | BinaryOperator::GreaterThanOrEqual
-            | BinaryOperator::LessThanOrEqual => self.check_ordered_binary_expr(
-                binary,
-                env,
-                expected,
-                value_stack,
-            ),
-            BinaryOperator::Equals | BinaryOperator::NotEquals => self.check_equality_binary_expr(
-                binary,
-                env,
-                expected,
-                value_stack,
-            ),
+            | BinaryOperator::LessThanOrEqual => {
+                self.check_ordered_binary_expr(binary, env, expected, value_stack)
+            }
+            BinaryOperator::Equals | BinaryOperator::NotEquals => {
+                self.check_equality_binary_expr(binary, env, expected, value_stack)
+            }
         }
     }
 
@@ -883,24 +998,24 @@ impl<'a> TypeChecker<'a> {
                 right_actual,
             )
             .unwrap_or(None)
-            {
-                let checkpoint = self.diagnostics.len();
-                let left_ok = self.check_expr(left, env, Some(left_actual), value_stack);
-                let right_ok = self.check_expr(right, env, Some(right_actual), value_stack);
-                if !left_ok || !right_ok {
-                    if self.diagnostics.len() == checkpoint {
-                        self.emit_invalid_binary_operator(
-                            self.module.exprs()[expr_id].span,
-                            operator,
-                            Some(left_actual),
-                            Some(right_actual),
-                            BinaryOperatorExpectation::MatchingNumeric,
-                        );
-                    }
-                    return false;
+        {
+            let checkpoint = self.diagnostics.len();
+            let left_ok = self.check_expr(left, env, Some(left_actual), value_stack);
+            let right_ok = self.check_expr(right, env, Some(right_actual), value_stack);
+            if !left_ok || !right_ok {
+                if self.diagnostics.len() == checkpoint {
+                    self.emit_invalid_binary_operator(
+                        self.module.exprs()[expr_id].span,
+                        operator,
+                        Some(left_actual),
+                        Some(right_actual),
+                        BinaryOperatorExpectation::MatchingNumeric,
+                    );
                 }
-                return self.check_result_type(expr_id, expected, &domain_operator.result_type);
+                return false;
             }
+            return self.check_result_type(expr_id, expected, &domain_operator.result_type);
+        }
         let Some(operand_ty) = self.select_numeric_operand_type(
             operator,
             left_actual.as_ref(),
@@ -1082,9 +1197,9 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn inferred_expr_shape(&mut self, expr_id: ExprId, env: &GateExprEnv) -> Option<GateType> {
-        let info = self.typing.infer_expr(expr_id, env, None);
+        let mut info = self.typing.infer_expr(expr_id, env, None);
         self.enqueue_eq_constraints(&info.constraints);
-        info.ty.clone().or_else(|| info.actual_gate_type())
+        info.take_inferred_type()
     }
 
     fn select_numeric_operand_type(
@@ -1133,13 +1248,13 @@ impl<'a> TypeChecker<'a> {
         expected: Option<&GateType>,
         value_stack: &mut Vec<ItemId>,
     ) -> Option<bool> {
-        let ExprKind::Pipe(pipe) = self.module.exprs()[expr_id].kind.clone() else {
+        let ExprKind::Pipe(pipe) = &self.module.exprs()[expr_id].kind else {
             return None;
         };
         pipe.result_block_desugaring.then(|| {
             self.check_result_block_pipe_with_error(
                 expr_id,
-                &pipe,
+                pipe,
                 env,
                 expected,
                 Self::result_block_expected_error(expected).cloned(),
@@ -1156,7 +1271,7 @@ impl<'a> TypeChecker<'a> {
         expected_error: Option<&GateType>,
         value_stack: &mut Vec<ItemId>,
     ) -> bool {
-        let ExprKind::Pipe(pipe) = self.module.exprs()[expr_id].kind.clone() else {
+        let ExprKind::Pipe(pipe) = &self.module.exprs()[expr_id].kind else {
             return self.check_expr(expr_id, env, expected, value_stack);
         };
         if !pipe.result_block_desugaring {
@@ -1164,7 +1279,7 @@ impl<'a> TypeChecker<'a> {
         }
         self.check_result_block_pipe_with_error(
             expr_id,
-            &pipe,
+            pipe,
             env,
             expected,
             expected_error.cloned(),
@@ -1319,8 +1434,12 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn result_block_value_shape(&mut self, expr_id: ExprId, env: &GateExprEnv) -> Option<GateType> {
-        match self.inferred_expr_shape(expr_id, env) {
-            Some(GateType::Result { value, .. }) => Some(*value),
+        let info = self.typing.infer_expr(expr_id, env, None);
+        self.enqueue_eq_constraints(&info.constraints);
+        match info.actual() {
+            Some(crate::typecheck_context::SourceOptionActualType::Result { value, .. }) => {
+                value.to_gate_type()
+            }
             _ => self
                 .builtin_constructor_argument(expr_id, BuiltinTerm::Ok)
                 .and_then(|argument| self.inferred_expr_shape(argument, env)),
@@ -1415,25 +1534,39 @@ impl<'a> TypeChecker<'a> {
         expected: &GateType,
         value_stack: &mut Vec<ItemId>,
     ) -> Option<bool> {
-        let kind = self.module.exprs()[expr_id].kind.clone();
+        let kind = &self.module.exprs()[expr_id].kind;
+        // Expose aliases only where literal/callback shape checking needs the
+        // structure. Class selection still needs the original carrier identity.
+        let expanded = matches!(
+            kind,
+            ExprKind::Record(_)
+                | ExprKind::Tuple(_)
+                | ExprKind::List(_)
+                | ExprKind::Map(_)
+                | ExprKind::Set(_)
+                | ExprKind::Lambda(_)
+        )
+        .then(|| expected.expand_transparent_import_alias())
+        .flatten();
+        let expected = expanded.as_ref().unwrap_or(expected);
         match kind {
             ExprKind::Name(reference) => self
-                .check_constructor_name(&reference, expected)
-                .or_else(|| self.check_domain_member_name(&reference, expected))
-                .or_else(|| self.check_class_member_name(&reference, expected))
+                .check_constructor_name(reference, expected)
+                .or_else(|| self.check_domain_member_name(reference, expected))
+                .or_else(|| self.check_class_member_name(reference, expected))
                 .or_else(|| self.check_signal_payload_name(expr_id, env, expected))
                 .or_else(|| {
-                    self.check_unannotated_value_name(&reference, env, expected, value_stack)
+                    self.check_unannotated_value_name(reference, env, expected, value_stack)
                 })
                 .or_else(|| {
-                    self.check_unannotated_function_name(&reference, env, expected, value_stack)
+                    self.check_unannotated_function_name(reference, env, expected, value_stack)
                 }),
             ExprKind::Apply { callee, arguments } => {
-                let callee_kind = self.module.exprs()[callee].kind.clone();
+                let callee_kind = &self.module.exprs()[*callee].kind;
                 if let ExprKind::Name(reference) = callee_kind {
                     if let Some(result) = self.check_builtin_constructor_apply(
-                        &reference,
-                        &arguments,
+                        reference,
+                        arguments,
                         env,
                         expected,
                         value_stack,
@@ -1441,8 +1574,8 @@ impl<'a> TypeChecker<'a> {
                         return Some(result);
                     }
                     if let Some(result) = self.check_domain_member_apply(
-                        &reference,
-                        &arguments,
+                        reference,
+                        arguments,
                         env,
                         expected,
                         value_stack,
@@ -1450,8 +1583,8 @@ impl<'a> TypeChecker<'a> {
                         return Some(result);
                     }
                     if let Some(result) = self.check_class_member_apply(
-                        &reference,
-                        &arguments,
+                        reference,
+                        arguments,
                         env,
                         expected,
                         value_stack,
@@ -1459,8 +1592,8 @@ impl<'a> TypeChecker<'a> {
                         return Some(result);
                     }
                     if let Some(result) = self.check_function_apply_with_context(
-                        &reference,
-                        &arguments,
+                        reference,
+                        arguments,
                         env,
                         expected,
                         value_stack,
@@ -1468,7 +1601,7 @@ impl<'a> TypeChecker<'a> {
                         return Some(result);
                     }
                 }
-                self.check_expected_apply(expr_id, callee, &arguments, env, expected, value_stack)
+                self.check_expected_apply(expr_id, *callee, arguments, env, expected, value_stack)
             }
             ExprKind::Record(record) => match expected {
                 GateType::Record(fields) => {
@@ -1476,7 +1609,7 @@ impl<'a> TypeChecker<'a> {
                     let mut constraints = Vec::new();
                     let ok = self.check_record_expr(
                         self.module.exprs()[expr_id].span,
-                        &record,
+                        record,
                         fields,
                         env,
                         value_stack,
@@ -1493,13 +1626,14 @@ impl<'a> TypeChecker<'a> {
                     Some(ok && no_new_diagnostics)
                 }
                 GateType::OpaqueImport { import, .. } => {
-                    if let Some(GateType::Record(fields)) = expected.expand_transparent_import_alias()
+                    if let Some(GateType::Record(fields)) =
+                        expected.expand_transparent_import_alias()
                     {
                         let checkpoint = self.diagnostics.len();
                         let mut constraints = Vec::new();
                         let ok = self.check_record_expr(
                             self.module.exprs()[expr_id].span,
-                            &record,
+                            record,
                             &fields,
                             env,
                             value_stack,
@@ -1570,7 +1704,7 @@ impl<'a> TypeChecker<'a> {
             ExprKind::Tuple(elements) => match expected {
                 GateType::Tuple(expected_elements) => Some(self.check_tuple_expr(
                     self.module.exprs()[expr_id].span,
-                    &elements,
+                    elements,
                     expected_elements,
                     env,
                     value_stack,
@@ -1579,7 +1713,7 @@ impl<'a> TypeChecker<'a> {
             },
             ExprKind::List(elements) => match expected {
                 GateType::List(element) => Some(self.check_homogeneous_collection_expr(
-                    &elements,
+                    elements,
                     element.as_ref(),
                     env,
                     value_stack,
@@ -1588,13 +1722,13 @@ impl<'a> TypeChecker<'a> {
             },
             ExprKind::Map(map) => match expected {
                 GateType::Map { key, value } => {
-                    Some(self.check_map_expr(&map, key.as_ref(), value.as_ref(), env, value_stack))
+                    Some(self.check_map_expr(map, key.as_ref(), value.as_ref(), env, value_stack))
                 }
                 _ => None,
             },
             ExprKind::Set(elements) => match expected {
                 GateType::Set(element) => Some(self.check_homogeneous_collection_expr(
-                    &elements,
+                    elements,
                     element.as_ref(),
                     env,
                     value_stack,
@@ -1602,21 +1736,43 @@ impl<'a> TypeChecker<'a> {
                 _ => None,
             },
             ExprKind::Projection { base, path } => {
-                self.check_projection_expr(expr_id, &base, &path, env, expected, value_stack)
+                self.check_projection_expr(expr_id, base, path, env, expected, value_stack)
             }
-            ExprKind::SuffixedInteger(literal) => Some(self.check_suffixed_integer_expr(&literal, expected)),
+            ExprKind::Pipe(pipe) => self
+                .check_expected_case_pipe(pipe, env, expected, value_stack)
+                .or_else(|| {
+                    self.check_expected_truthy_falsy_pipe(pipe, env, expected, value_stack)
+                }),
+            ExprKind::SuffixedInteger(literal) => {
+                Some(self.check_suffixed_integer_expr(literal, expected))
+            }
             ExprKind::PatchApply { target, patch } => Some(self.check_patch_apply_expr(
                 expr_id,
-                target,
-                &patch,
+                *target,
+                patch,
                 env,
                 Some(expected),
                 value_stack,
             )),
             ExprKind::PatchLiteral(patch) => {
-                Some(self.check_patch_literal_expr(expr_id, &patch, env, expected, value_stack))
+                Some(self.check_patch_literal_expr(expr_id, patch, env, expected, value_stack))
             }
-            ExprKind::Lambda(_) => None,
+            ExprKind::Lambda(lambda) => {
+                let (parameters, result) =
+                    self.expected_function_signature(expected, lambda.parameters.len())?;
+                let mut lambda_env = env.clone();
+                for (parameter, ty) in lambda.parameters.iter().zip(parameters) {
+                    if let Some(annotation) = parameter.annotation {
+                        let declared = self.typing.lower_open_annotation(annotation)?;
+                        if !self.typing.types_match(&declared, &ty) {
+                            self.emit_type_mismatch(parameter.span, &ty, &declared);
+                            return Some(false);
+                        }
+                    }
+                    lambda_env.locals.insert(parameter.binding, ty);
+                }
+                Some(self.check_expected_expr(lambda.body, &lambda_env, &result, value_stack))
+            }
             ExprKind::AmbientSubject => None,
             ExprKind::Integer(_)
             | ExprKind::Float(_)
@@ -1626,10 +1782,174 @@ impl<'a> TypeChecker<'a> {
             | ExprKind::Regex(_)
             | ExprKind::Unary { .. }
             | ExprKind::Binary { .. }
-            | ExprKind::Pipe(_)
             | ExprKind::Cluster(_)
             | ExprKind::Markup(_) => None,
         }
+    }
+
+    fn check_expected_case_pipe(
+        &mut self,
+        pipe: &PipeExpr,
+        env: &GateExprEnv,
+        expected: &GateType,
+        value_stack: &mut Vec<ItemId>,
+    ) -> Option<bool> {
+        // A case continuation is checked against the enclosing contract, so
+        // class evidence and rigid binders remain available inside each branch.
+        let case_run = pipe.case_stage_run(0)?;
+        if case_run.stages().count() != pipe.stages.len() {
+            return None;
+        }
+        let mut head = self.typing.infer_expr(pipe.head, env, None);
+        self.emit_expr_issues(&head.issues);
+        self.handle_constraints(&head.constraints);
+        if !head.issues.is_empty() {
+            return Some(false);
+        }
+        let subject = head.take_inferred_type()?;
+        // Establish the canonical cross-branch error owner before contextual
+        // proofs. A failed unification already rejects the case expression;
+        // checking each branch first would produce proofs discarded afterward.
+        let inferred = self
+            .typing
+            .infer_case_stage_run_info(&case_run, env, &subject);
+        if expected.has_type_params() || !inferred.issues.is_empty() {
+            self.emit_expr_issues(&inferred.issues);
+            self.handle_constraints(&inferred.constraints);
+        }
+        if !inferred.issues.is_empty() {
+            return Some(false);
+        }
+        let mut ok = true;
+        for stage in case_run.stages() {
+            let PipeStageKind::Case { pattern, body } = stage.kind else {
+                unreachable!()
+            };
+            let mut branch_env = env.clone();
+            branch_env.locals.extend(
+                self.typing
+                    .case_pattern_bindings(pattern, subject.gate_payload())
+                    .locals,
+            );
+            let result = match (&subject, expected) {
+                (GateType::Signal(_), GateType::Signal(payload)) => payload.as_ref(),
+                _ => expected,
+            };
+            ok &= self.check_pipe_continuation(
+                body,
+                &branch_env,
+                Some(subject.gate_payload()),
+                result,
+                value_stack,
+            );
+        }
+        Some(ok)
+    }
+
+    fn check_expected_truthy_falsy_pipe(
+        &mut self,
+        pipe: &PipeExpr,
+        env: &GateExprEnv,
+        expected: &GateType,
+        value_stack: &mut Vec<ItemId>,
+    ) -> Option<bool> {
+        let pair = pipe.truthy_falsy_pair(0)?;
+        if pipe.stages.len() != 2 {
+            return None;
+        }
+        let mut head = self.typing.infer_expr(pipe.head, env, None);
+        self.emit_expr_issues(&head.issues);
+        self.handle_constraints(&head.constraints);
+        let subject = head.take_inferred_type()?;
+        let plan = self.typing.truthy_falsy_subject_plan(&subject)?;
+        let result = match (&subject, expected) {
+            (GateType::Signal(_), GateType::Signal(payload)) => payload.as_ref(),
+            _ => expected,
+        };
+        let mut ok = head.issues.is_empty();
+        ok &= self.check_pipe_continuation(
+            pair.truthy_expr,
+            env,
+            plan.truthy_payload.as_ref(),
+            result,
+            value_stack,
+        );
+        ok &= self.check_pipe_continuation(
+            pair.falsy_expr,
+            env,
+            plan.falsy_payload.as_ref(),
+            result,
+            value_stack,
+        );
+        Some(ok)
+    }
+
+    fn check_pipe_continuation(
+        &mut self,
+        expr: ExprId,
+        env: &GateExprEnv,
+        ambient: Option<&GateType>,
+        expected: &GateType,
+        value_stack: &mut Vec<ItemId>,
+    ) -> bool {
+        if let Some(ambient) = ambient {
+            // These forms always produce values. Their nested expressions still
+            // need the contextual check below, but cannot make the outer form
+            // callable. Other forms retain the canonical signature probe.
+            let produces_value = matches!(
+                &self.module.exprs()[expr].kind,
+                ExprKind::Integer(_)
+                    | ExprKind::Float(_)
+                    | ExprKind::Decimal(_)
+                    | ExprKind::BigInt(_)
+                    | ExprKind::Text(_)
+                    | ExprKind::Regex(_)
+                    | ExprKind::Tuple(_)
+                    | ExprKind::List(_)
+                    | ExprKind::Map(_)
+                    | ExprKind::Set(_)
+                    | ExprKind::Record(_)
+            );
+            if !produces_value {
+                if let Some(plan) =
+                    self.typing
+                        .match_pipe_function_signature(expr, env, ambient, Some(expected))
+                {
+                    let signature = self.arrow_type(&plan.parameter_types, &plan.result_type);
+                    let mut ok =
+                        self.check_expected_expr(plan.callee_expr, env, &signature, value_stack);
+                    for (argument, parameter) in
+                        plan.explicit_arguments.iter().zip(&plan.parameter_types)
+                    {
+                        ok &= self.check_expected_expr(*argument, env, parameter, value_stack);
+                    }
+                    return ok;
+                }
+                let inferred = self.typing.infer_expr(expr, env, Some(ambient));
+                if matches!(inferred.ty, Some(GateType::Arrow { .. })) {
+                    let signature = GateType::Arrow {
+                        parameter: Box::new(ambient.clone()),
+                        result: Box::new(expected.clone()),
+                    };
+                    return self.check_expected_expr(expr, env, &signature, value_stack);
+                }
+            }
+            let mut needs_ambient = false;
+            crate::validate::walk_expr_tree(self.module, expr, |_, node, _| {
+                needs_ambient |= matches!(
+                    node.kind,
+                    ExprKind::AmbientSubject
+                        | ExprKind::Projection {
+                            base: ProjectionBase::Ambient,
+                            ..
+                        }
+                );
+            });
+            if needs_ambient {
+                return self.check_expr_with_ambient(expr, env, Some(expected), ambient);
+            }
+        }
+        self.check_expected_expr(expr, env, expected, value_stack)
     }
 
     fn check_suffixed_integer_expr(
@@ -1803,16 +2123,25 @@ impl<'a> TypeChecker<'a> {
         expected: &GateType,
         arity: usize,
     ) -> Option<(Vec<GateType>, GateType)> {
-        let mut current = expected;
+        let mut current = std::borrow::Cow::Borrowed(expected);
         let mut parameter_types = Vec::with_capacity(arity);
         for _ in 0..arity {
-            let GateType::Arrow { parameter, result } = current else {
-                return None;
+            if let Some(expanded) = current.expand_transparent_import_alias() {
+                current = std::borrow::Cow::Owned(expanded);
+            }
+            current = match current {
+                std::borrow::Cow::Borrowed(GateType::Arrow { parameter, result }) => {
+                    parameter_types.push(parameter.as_ref().clone());
+                    std::borrow::Cow::Borrowed(result.as_ref())
+                }
+                std::borrow::Cow::Owned(GateType::Arrow { parameter, result }) => {
+                    parameter_types.push(*parameter);
+                    std::borrow::Cow::Owned(*result)
+                }
+                _ => return None,
             };
-            parameter_types.push(parameter.as_ref().clone());
-            current = result.as_ref();
         }
-        Some((parameter_types, current.clone()))
+        Some((parameter_types, current.into_owned()))
     }
 
     fn contextual_same_module_function_signature(
@@ -1869,9 +2198,10 @@ impl<'a> TypeChecker<'a> {
         let Item::Function(function) = &self.module.items()[item_id] else {
             return;
         };
-        if parameter_types.iter().any(|ty| {
-            !crate::function_inference::function_accepts_inference_type(function, ty)
-        }) {
+        if parameter_types
+            .iter()
+            .any(|ty| !crate::function_inference::function_accepts_inference_type(function, ty))
+        {
             return;
         }
         self.typing
@@ -1946,12 +2276,12 @@ impl<'a> TypeChecker<'a> {
             _ => {
                 // Constructor references have a complete arity and carrier
                 // contract even when ordinary inference has no payload evidence.
-                let info = self.typing.infer_name_with_expected(
+                let mut info = self.typing.infer_name_with_expected(
                     reference,
                     &GateExprEnv::default(),
                     expected_shape,
                 );
-                let actual = info.ty.clone().or_else(|| info.actual_gate_type());
+                let actual = info.take_inferred_type();
                 if actual
                     .as_ref()
                     .is_some_and(|actual| self.typing.types_match(actual, expected))
@@ -2036,10 +2366,10 @@ impl<'a> TypeChecker<'a> {
         let labels = self.typing.domain_member_candidate_labels(reference)?;
         let mut argument_types = Vec::with_capacity(arguments.len());
         for argument in arguments.iter() {
-            let info = self.typing.infer_expr(*argument, env, None);
+            let mut info = self.typing.infer_expr(*argument, env, None);
             self.emit_expr_issues(&info.issues);
             self.handle_constraints(&info.constraints);
-            let argument_ty = info.ty.clone().or_else(|| info.actual_gate_type())?;
+            let argument_ty = info.take_inferred_type()?;
             argument_types.push(argument_ty);
         }
         match self
@@ -2161,10 +2491,10 @@ impl<'a> TypeChecker<'a> {
         let labels = self.typing.class_member_candidate_labels(reference)?;
         let mut argument_types = Vec::with_capacity(arguments.len());
         for argument in arguments.iter() {
-            let info = self.typing.infer_expr(*argument, env, None);
+            let mut info = self.typing.infer_expr(*argument, env, None);
             self.emit_expr_issues(&info.issues);
             self.handle_constraints(&info.constraints);
-            argument_types.push(info.ty.clone().or_else(|| info.actual_gate_type()));
+            argument_types.push(info.take_inferred_type());
         }
         let selection = self.typing.select_class_member_call_with_argument_hints(
             reference,
@@ -2301,19 +2631,41 @@ impl<'a> TypeChecker<'a> {
         value_stack: &mut Vec<ItemId>,
     ) -> Option<bool> {
         let checkpoint = self.diagnostics.len();
-        let callee_info = self.typing.infer_expr(callee, env, None);
+        let mut callee_info = self.typing.infer_expr(callee, env, None);
         self.emit_expr_issues(&callee_info.issues);
         self.handle_constraints(&callee_info.constraints);
         if self.diagnostics.len() != checkpoint {
             return Some(false);
         }
-        let callee_ty = callee_info
-            .ty
-            .clone()
-            .or_else(|| callee_info.actual_gate_type());
+        let mut callee_ty = callee_info.take_inferred_type();
+
+        if callee_ty.is_none()
+            && let ExprKind::Name(reference) = &self.module.exprs()[callee].kind
+            && matches!(
+                reference.resolution.as_ref(),
+                crate::ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(_))
+            )
+        {
+            callee_ty = self
+                .typing
+                .hoisted_application_signature(reference, arguments, env);
+            if callee_ty.is_none() {
+                // An inferred application result cannot prove an unresolved
+                // callee's callback obligations. Keep this failure definitive.
+                self.emit_type_mismatch_or_unresolved(
+                    self.module.exprs()[expr_id].span,
+                    expected,
+                    None,
+                );
+                return Some(false);
+            }
+        }
 
         let parameter_types = match callee_ty {
             Some(callee_ty) => {
+                let callee_ty = self
+                    .typing
+                    .application_callee_type(&callee_ty, arguments, env, None);
                 let (parameter_types, result_ty) =
                     self.expected_function_signature(&callee_ty, arguments.len())?;
                 let has_poly = result_ty.has_type_params()
@@ -2572,7 +2924,7 @@ impl<'a> TypeChecker<'a> {
         };
 
         let checkpoint = self.diagnostics.len();
-        let base_info = self.typing.infer_expr(*base_expr, env, None);
+        let mut base_info = self.typing.infer_expr(*base_expr, env, None);
         self.emit_expr_issues(&base_info.issues);
         self.handle_constraints(&base_info.constraints);
         if self.diagnostics.len() != checkpoint {
@@ -2580,9 +2932,7 @@ impl<'a> TypeChecker<'a> {
         }
 
         let subject = base_info
-            .ty
-            .clone()
-            .or_else(|| base_info.actual_gate_type())
+            .take_inferred_type()
             .or_else(|| self.infer_apply_result_type(*base_expr, env));
         if self.diagnostics.len() != checkpoint {
             return Some(false);
@@ -2610,7 +2960,13 @@ impl<'a> TypeChecker<'a> {
         value_stack: &mut Vec<ItemId>,
     ) -> bool {
         let checkpoint = self.diagnostics.len();
-        let ok = self.check_expr(expr_id, env, Some(expected), value_stack);
+        let ok = self.check_expr_with_mode(
+            expr_id,
+            env,
+            Some(expected),
+            value_stack,
+            ContractCheckMode::Definitive,
+        );
         if !ok && self.diagnostics.len() == checkpoint {
             let actual = self.inferred_expr_shape(expr_id, env);
             self.emit_type_mismatch_or_unresolved(
@@ -2628,14 +2984,11 @@ impl<'a> TypeChecker<'a> {
             return None;
         };
 
-        let callee_info = self.typing.infer_expr(callee, env, None);
+        let mut callee_info = self.typing.infer_expr(callee, env, None);
         self.emit_expr_issues(&callee_info.issues);
         self.handle_constraints(&callee_info.constraints);
 
-        let mut current = callee_info
-            .ty
-            .clone()
-            .or_else(|| callee_info.actual_gate_type())?;
+        let mut current = callee_info.take_inferred_type()?;
         for _ in arguments.iter() {
             let GateType::Arrow { result, .. } = current else {
                 return None;
@@ -3138,7 +3491,7 @@ impl<'a> TypeChecker<'a> {
                             *span,
                             "this suffixed literal does not match any visible domain suffix",
                         )
-                }
+                    }
                 GateIssue::AmbiguousLiteralSuffix {
                     span,
                     suffix,
@@ -3379,11 +3732,11 @@ impl<'a> TypeChecker<'a> {
             }
             BinaryOperatorExpectation::MatchingNumeric => {
                 if let (Some(l), Some(r)) = (left, right)
-                    && l != r {
-                        diag = diag.with_help(
-                            "convert one operand so both sides share the same numeric type",
-                        );
-                    }
+                    && l != r
+                {
+                    diag = diag
+                        .with_help("convert one operand so both sides share the same numeric type");
+                }
             }
             BinaryOperatorExpectation::MatchingOrdered => {
                 if let (Some(l), Some(r)) = (left, right)
@@ -3395,7 +3748,7 @@ impl<'a> TypeChecker<'a> {
                         diag = diag.with_help(
                             "comparison operators `>`, `<`, `>=`, `<=` require one shared type with `Ord`",
                         );
-                    }
+                }
             }
             BinaryOperatorExpectation::CommonType => {}
         }
@@ -3504,16 +3857,14 @@ impl<'a> TypeChecker<'a> {
         if let ExprKind::Name(reference) = &self.module.exprs()[callee].kind
             && let Some(named_parameter_types) =
                 self.named_function_parameter_types(reference, arguments.len())
+        {
+            for (slot, named_parameter_ty) in parameter_types.iter_mut().zip(named_parameter_types)
             {
-                for (slot, named_parameter_ty) in parameter_types
-                    .iter_mut()
-                    .zip(named_parameter_types)
-                {
-                    if named_parameter_ty.is_some() {
-                        *slot = named_parameter_ty;
-                    }
+                if named_parameter_ty.is_some() {
+                    *slot = named_parameter_ty;
                 }
             }
+        }
         parameter_types.into_iter().collect()
     }
 
@@ -3793,6 +4144,8 @@ impl<'a> TypeChecker<'a> {
         })
     }
 
+
+
     fn class_member_implementation(
         &mut self,
         resolution: ClassMemberResolution,
@@ -3922,6 +4275,7 @@ impl<'a> TypeChecker<'a> {
             else {
                 continue;
             };
+
             let ImportBindingMetadata::InstanceMember { head, context, .. } = &import.metadata
             else {
                 unreachable!();
@@ -4075,8 +4429,6 @@ impl<'a> TypeChecker<'a> {
         })
     }
 
-
-
     fn has_builtin_class_instance(&self, class_name: &str, ty: &GateType) -> bool {
         match class_name {
             "Functor" | "Applicative" => matches!(
@@ -4207,7 +4559,6 @@ impl<'a> TypeChecker<'a> {
         Ok(Some(instance.clone()))
     }
 
-
     fn resolve_same_module_instance_binding_with_id(
         &mut self,
         class_item_id: ItemId,
@@ -4292,6 +4643,12 @@ impl<'a> TypeChecker<'a> {
     }
 
     fn emit_type_mismatch(&mut self, span: SourceSpan, expected: &GateType, actual: &GateType) {
+        self.type_mismatch_reports.push(TypeMismatchReport {
+            diagnostic_index: self.diagnostics.len(),
+            span,
+            expected: expected.clone(),
+            actual: Some(crate::typecheck_context::SourceOptionActualType::from_gate_type(actual)),
+        });
         let mut diag = Diagnostic::error(format!("expected `{expected}` but found `{actual}`"))
             .with_code(code("type-mismatch"))
             .with_primary_label(
@@ -4323,6 +4680,28 @@ impl<'a> TypeChecker<'a> {
         self.diagnostics.push(diag);
     }
 
+    fn emit_partial_type_mismatch(
+        &mut self,
+        span: SourceSpan,
+        expected: &GateType,
+        actual: &crate::typecheck_context::SourceOptionActualType,
+    ) {
+        self.type_mismatch_reports.push(TypeMismatchReport {
+            diagnostic_index: self.diagnostics.len(),
+            span,
+            expected: expected.clone(),
+            actual: Some(actual.clone()),
+        });
+        self.diagnostics.push(
+            Diagnostic::error(format!("expected `{expected}` but found `{actual}`"))
+                .with_code(code("type-mismatch"))
+                .with_primary_label(
+                    span,
+                    format!("found `{actual}` here, expected `{expected}`"),
+                ),
+        );
+    }
+
     fn emit_type_mismatch_or_unresolved(
         &mut self,
         span: SourceSpan,
@@ -4331,17 +4710,25 @@ impl<'a> TypeChecker<'a> {
     ) {
         match actual {
             Some(actual) => self.emit_type_mismatch(span, expected, actual),
-            None => self.diagnostics.push(
-                Diagnostic::error(format!(
-                    "expected `{expected}` but found {}",
-                    describe_inferred_type(None)
-                ))
-                .with_code(code("type-mismatch"))
-                .with_primary_label(
+            None => {
+                self.type_mismatch_reports.push(TypeMismatchReport {
+                    diagnostic_index: self.diagnostics.len(),
                     span,
-                    format!("expected `{expected}` but the type could not be inferred"),
-                ),
-            ),
+                    expected: expected.clone(),
+                    actual: None,
+                });
+                self.diagnostics.push(
+                    Diagnostic::error(format!(
+                        "expected `{expected}` but found {}",
+                        describe_inferred_type(None)
+                    ))
+                    .with_code(code("type-mismatch"))
+                    .with_primary_label(
+                        span,
+                        format!("expected `{expected}` but the type could not be inferred"),
+                    ),
+                );
+            }
         }
     }
 

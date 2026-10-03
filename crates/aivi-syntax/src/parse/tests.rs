@@ -1432,11 +1432,12 @@ fn parser_builds_provider_contract_members_from_fixture() {
     let parsed = parse_fixture("valid/top-level/provider_contracts.aivi");
 
     assert!(!parsed.has_errors());
-    assert_eq!(
-        parsed.module.items[0].kind(),
-        ItemKind::SourceProviderContract
-    );
-    match &parsed.module.items[0] {
+    let feed = parsed.module.items.iter().find(|item| {
+        matches!(item, Item::SourceProviderContract(provider)
+            if provider.provider.as_ref().map(QualifiedName::as_dotted).as_deref() == Some("custom.feed"))
+    }).expect("fixture must contain the custom.feed provider");
+    assert_eq!(feed.kind(), ItemKind::SourceProviderContract);
+    match feed {
         Item::SourceProviderContract(item) => {
             assert_eq!(
                 item.provider
@@ -1502,6 +1503,39 @@ fn parser_builds_provider_contract_members_from_fixture() {
         }
         other => panic!("expected provider contract item, got {other:?}"),
     }
+    let timer = parsed
+        .module
+        .items
+        .iter()
+        .find_map(|item| match item {
+            Item::SourceProviderContract(provider)
+                if provider
+                    .provider
+                    .as_ref()
+                    .map(QualifiedName::as_dotted)
+                    .as_deref()
+                    == Some("custom.timer") =>
+            {
+                Some(provider)
+            }
+            _ => None,
+        })
+        .expect("fixture must contain the custom.timer provider");
+    let members = &timer
+        .body
+        .as_ref()
+        .expect("timer provider must have a body")
+        .members;
+    assert_eq!(members.len(), 2);
+    assert!(
+        matches!(&members[0], SourceProviderContractMember::OptionSchema(member)
+        if member.name.as_ref().map(|name| name.text.as_str()) == Some("activeWhen"))
+    );
+    assert!(
+        matches!(&members[1], SourceProviderContractMember::FieldValue(member)
+        if member.name.as_ref().map(|name| name.text.as_str()) == Some("wakeup")
+            && member.value.as_ref().map(|value| value.text.as_str()) == Some("timer"))
+    );
 }
 
 #[test]

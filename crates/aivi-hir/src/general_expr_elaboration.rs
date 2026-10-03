@@ -3965,7 +3965,14 @@ impl<'a> GeneralExprElaborator<'a> {
         result_ty: &GateType,
     ) -> Result<GateRuntimeExprKind, Vec<GeneralExprBlocker>> {
         let constructor_expectations = self.argument_expectations_from_result(callee, result_ty);
-        let inferred_callee_ty = self.visible_callee_type_for_apply(callee, env, ambient);
+        let mut inferred_callee_ty = self.visible_callee_type_for_apply(callee, env, ambient);
+        if let Some(ty) = inferred_callee_ty.as_ref()
+            && let std::borrow::Cow::Owned(specialized) = self
+                .typing
+                .application_callee_type(ty, arguments, env, ambient)
+        {
+            inferred_callee_ty = Some(specialized);
+        }
         // Signal lifting belongs to the application, not the pure callee's
         // polymorphic signature. Specializing A to Signal Text would turn
         // getOrElse into Signal Text -> Option (Signal Text) -> Signal Text.
@@ -4046,6 +4053,44 @@ impl<'a> GeneralExprElaborator<'a> {
         let mut lowered_arguments = Vec::with_capacity(arguments.len());
         let mut argument_types = Vec::with_capacity(arguments.len());
         let mut accumulated_subs: HashMap<TypeParameterId, GateType> = HashMap::new();
+        // A later value can establish a callback's input type. Collect that
+        // evidence before lowering callbacks, whose class dictionaries require
+        // concrete types even when the enclosing call is partially applied.
+        if let Some(parameters) = &inferred_parameter_types {
+            for (argument, parameter) in arguments.iter().zip(parameters) {
+                if !parameter.has_type_params() {
+                    continue;
+                }
+                let mut actual = self.typing.infer_expr(*argument, env, ambient);
+                if lifted && !parameter.is_signal() {
+                    actual.ty = actual.ty.map(|ty| match ty {
+                        GateType::Signal(payload) => *payload,
+                        other => other,
+                    });
+                    actual.actual = actual.actual.map(|ty| match ty {
+                        crate::typecheck_context::SourceOptionActualType::Signal(payload) => {
+                            *payload
+                        }
+                        other => other,
+                    });
+                }
+                if !actual.issues.is_empty()
+                    || actual
+                        .ty
+                        .as_ref()
+                        .is_some_and(|ty| matches!(ty, GateType::Arrow { .. }))
+                {
+                    continue;
+                }
+                let mut candidate = accumulated_subs.clone();
+                if self
+                    .typing
+                    .match_gate_expr_template(parameter, &actual, &mut candidate)
+                {
+                    accumulated_subs = candidate;
+                }
+            }
+        }
         for (index, argument) in arguments.iter().enumerate() {
             let base_expected = argument_expectations
                 .as_ref()
@@ -6143,6 +6188,44 @@ mod tests {
         typecheck::resolve_class_member_dispatch,
         validate::{GateExprEnv, GateType, GateTypeContext, gate_env_for_function},
     };
+
+    #[test]
+    fn returned_function_applications_lower_with_argument_evidence() {
+        let lowered = lower_text_with_stdlib(
+            "returned-function.aivi",
+            r#"
+use aivi.core.fn (flip, identity)
+use aivi.math (clamp)
+value flipped : Int = flip clamp 100 0 150
+value partial : Int -> Int = flip clamp 100 0
+value identityReturned : Int = identity clamp 0 100 150
+"#,
+        );
+        assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+        let checked = crate::typecheck_module(lowered.module());
+        assert!(checked.is_ok(), "{:?}", checked.diagnostics());
+        let report = elaborate_general_expressions(lowered.module());
+        let blocked = report
+            .items()
+            .iter()
+            .filter_map(|item| match &item.outcome {
+                GeneralExprOutcome::Blocked(blocked) => {
+                    Some((item_name(lowered.module(), item.owner), blocked))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert!(blocked.is_empty(), "{blocked:#?}");
+
+        for argument in ["\"wrong\"", "[]"] {
+            let source = format!(
+                "use aivi.core.fn (flip)\nuse aivi.math (clamp)\nvalue wrong : Int = flip clamp 100 0 {argument}\n"
+            );
+            let lowered = lower_text_with_stdlib("returned-function-mismatch.aivi", &source);
+            assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+            assert!(!crate::typecheck_module(lowered.module()).is_ok());
+        }
+    }
 
     #[test]
     fn authored_class_names_do_not_select_the_standard_dictionary_layout() {

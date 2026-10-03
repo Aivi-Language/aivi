@@ -200,6 +200,13 @@ argument fixes that result element type. Generic constructor callbacks instantia
 and captured values keep their lexical types; an expected callback type cannot specialize a
 caller's generic parameter to a concrete type.
 
+Declaration annotations are checked against the complete expression. An empty collection
+keeps its collection shape even when its element type is unknown, and a lambda keeps its
+function shape. Neither can satisfy an `Int` annotation. Transparent type aliases supply
+the same callback or collection context as their definitions; class selection retains the
+alias's carrier identity. A callback contract mismatch is reported once at the failing
+expression, even when the compiler also checks its hoisted function body.
+
 Unary constructors are ordinary callbacks. Their input determines the payload, while the result
 annotation supplies any unused parameters, such as a `Result` error type:
 

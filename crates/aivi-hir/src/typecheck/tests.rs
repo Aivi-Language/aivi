@@ -2,7 +2,8 @@ use aivi_base::{FileId, SourceDatabase, SourceSpan};
 use aivi_syntax::parse_module;
 
 use crate::{
-    BuiltinType, Item, PipeTransformMode, RecordFieldSurface, TypeParameterId, lower_module,
+    BuiltinType, ClassIdentity, Item, PipeTransformMode, RecordFieldSurface, TypeParameterId,
+    lower_module,
 };
 
 use super::*;
@@ -25,6 +26,52 @@ fn typecheck_text(path: &str, text: &str) -> TypeCheckReport {
         lowered.diagnostics()
     );
     typecheck_module(lowered.module())
+}
+
+#[test]
+fn definitive_contracts_report_unknown_evidence_without_changing_quiet_probes() {
+    let module = lowered_module_text(
+        "unknown-contract-evidence.aivi",
+        "fun undecided = input => input\n",
+    );
+    let body = module
+        .items()
+        .iter()
+        .find_map(|(_, item)| match item {
+            Item::Function(function) if function.name.text() == "undecided" => Some(function.body),
+            _ => None,
+        })
+        .expect("undecided function");
+    let ExprKind::Name(reference) = &module.exprs()[body].kind else {
+        panic!("expected parameter reference");
+    };
+    let ResolutionState::Resolved(TermResolution::Local(binding)) = reference.resolution.as_ref()
+    else {
+        panic!("expected resolved lexical binding");
+    };
+    let expected = GateType::Primitive(BuiltinType::Int);
+    let mut checker = TypeChecker::new(&module);
+    let mut stack = Vec::new();
+    let mut env = GateExprEnv::default();
+    assert!(!checker.check_expr(body, &env, Some(&expected), &mut stack));
+    assert!(
+        checker.diagnostics.is_empty(),
+        "a quiet probe must not publish a failure"
+    );
+    assert!(!checker.check_expected_expr(body, &env, &expected, &mut stack));
+    assert_eq!(checker.diagnostics.len(), 1);
+    assert_eq!(
+        checker.diagnostics[0].code,
+        Some(crate::codes::TYPE_MISMATCH)
+    );
+    assert_eq!(checker.type_mismatch_reports[0].actual, None);
+    env.locals.insert(*binding, expected.clone());
+    assert!(checker.check_expected_expr(body, &env, &expected, &mut stack));
+    assert_eq!(
+        checker.diagnostics.len(),
+        1,
+        "proven evidence must not add a failure"
+    );
 }
 
 #[test]
@@ -2020,6 +2067,366 @@ fn typecheck_reports_value_annotation_mismatch() {
 }
 
 #[test]
+fn closed_value_annotations_reject_incompatible_partial_shapes() {
+    for body in ["x => x", "[]", "[None]", "None", "Some []"] {
+        for used in [false, true] {
+            let source = format!(
+                "value bad : Int = {body}\n{}",
+                if used {
+                    "value observed : Int = bad + 1\n"
+                } else {
+                    ""
+                }
+            );
+            let report = typecheck_text("closed-value-shape.aivi", &source);
+            assert!(
+                report
+                    .diagnostics()
+                    .iter()
+                    .any(|d| d.code == Some(crate::codes::TYPE_MISMATCH)),
+                "incompatible {body:?}, used={used}, was accepted: {:?}",
+                report.diagnostics()
+            );
+        }
+    }
+}
+
+#[test]
+fn callback_contract_mismatches_have_one_diagnostic_owner() {
+    for source in [
+        "value bad : Int -> Text = x => x\n",
+        "value bad : List Text = map (n => n) [1]\n",
+        "type Functor F => F A -> F Text\nfunc bad = xs => map (x => x) xs\n",
+    ] {
+        let report = typecheck_text("single-contract-error.aivi", source);
+        let errors = report
+            .diagnostics()
+            .iter()
+            .filter(|d| d.code == Some(crate::codes::TYPE_MISMATCH))
+            .collect::<Vec<_>>();
+        assert_eq!(errors.len(), 1, "{source}: {:?}", report.diagnostics());
+    }
+    let report = typecheck_text(
+        "distinct-contract-errors.aivi",
+        "value first : Int -> Text = x => x\nvalue second : Int -> Text = y => y\n",
+    );
+    assert_eq!(
+        report
+            .diagnostics()
+            .iter()
+            .filter(|d| d.code == Some(crate::codes::TYPE_MISMATCH))
+            .count(),
+        2,
+        "distinct source failures must survive: {:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
+fn diagnostic_ownership_preserves_distinct_contracts_and_binder_identities_at_one_span() {
+    let module = lowered_module_text("distinct-contract-proof.aivi", "value subject = 1\n");
+    let span = module.exprs()[value_body(&module, "subject")].span;
+    let mut checker = TypeChecker::new(&module);
+    let actual = GateType::Primitive(BuiltinType::Int);
+    let contracts = [
+        GateType::Primitive(BuiltinType::Text),
+        GateType::Primitive(BuiltinType::Bool),
+        GateType::TypeParameter {
+            parameter: TypeParameterId::from_raw(7),
+            name: "A".to_owned(),
+        },
+        GateType::TypeParameter {
+            parameter: TypeParameterId::from_raw(8),
+            name: "A".to_owned(),
+        },
+    ];
+    for expected in &contracts {
+        checker.emit_type_mismatch(span, expected, &actual);
+        checker.emit_type_mismatch(span, expected, &actual);
+    }
+    checker.publish_unique_type_mismatches();
+    assert_eq!(checker.diagnostics.len(), contracts.len());
+}
+
+#[test]
+fn indexed_class_scope_matches_declaration_order_aliases_and_ambient_fallback() {
+    fn scanned_scope(module: &Module, name: &str) -> Vec<ClassMemberResolution> {
+        let mut classes = module
+            .root_items()
+            .iter()
+            .copied()
+            .filter(|id| matches!(module.items()[*id], Item::Class(_)))
+            .collect::<Vec<_>>();
+        for (_, import) in module.imports().iter() {
+            let class = module.items().iter().find_map(|(id, item)| {
+                let Item::Class(class) = item else { return None; };
+                match &import.metadata {
+                    ImportBindingMetadata::Class { identity } if &class.identity == identity => Some(id),
+                    ImportBindingMetadata::AmbientType if matches!(&class.identity, ClassIdentity::Standard(name) if name.as_ref() == import.imported_name.text()) => Some(id),
+                    _ => None,
+                }
+            });
+            if let Some(class) = class
+                && !classes.contains(&class)
+            {
+                classes.push(class);
+            }
+        }
+        let members = |classes: &[ItemId]| {
+            classes
+                .iter()
+                .flat_map(|id| {
+                    let Item::Class(class) = &module.items()[*id] else {
+                        return Vec::new();
+                    };
+                    class
+                        .members
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(member_index, member)| {
+                            (member.name.text() == name).then_some(ClassMemberResolution {
+                                class: *id,
+                                member_index,
+                            })
+                        })
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>()
+        };
+        let explicit = members(&classes);
+        if explicit.is_empty() {
+            members(module.ambient_items())
+        } else {
+            explicit
+        }
+    }
+    for source in [
+        "value subject = 1\n",
+        "class Same A = { equals : A -> A -> Bool }\n",
+        "class First A = { (==) : A -> A -> Bool }\nclass Second A = { (==) : A -> A -> Bool }\n",
+        "use aivi.prelude (Eq as Equality, Ord as Order)\nvalue subject = 1\n",
+        "use aivi.prelude (Eq as First, Eq as Second)\nvalue subject = 1\n",
+        "use aivi.core.dict (Dict)\nvalue subject = 1\n",
+    ] {
+        let lowered = crate::test_support::lower_text_with_stdlib("class-scope-index.aivi", source);
+        assert!(
+            !lowered.has_errors(),
+            "{source}: {:?}",
+            lowered.diagnostics()
+        );
+        let module = lowered.module();
+        let mut names = std::collections::BTreeSet::from(["unknown_member"]);
+        for (_, item) in module.items().iter() {
+            if let Item::Class(class) = item {
+                names.extend(class.members.iter().map(|member| member.name.text()));
+            }
+        }
+        for name in names {
+            assert_eq!(
+                module.class_members_in_scope(name),
+                scanned_scope(module, name),
+                "{source}: {name}"
+            );
+        }
+    }
+}
+
+#[test]
+fn borrowed_nominal_identities_preserve_origin_arguments_and_rigid_binders() {
+    let module = lowered_module_text("borrowed-nominal-identity.aivi", "type Box A = Box A\n");
+    let item = module
+        .items()
+        .iter()
+        .find_map(|(id, item)| match item {
+            Item::Type(item) if item.name.text() == "Box" => Some(id),
+            _ => None,
+        })
+        .expect("Box declaration");
+    let local = |argument| GateType::OpaqueItem {
+        item,
+        name: "Box".to_owned(),
+        arguments: vec![argument],
+    };
+    let imported = |identity, argument| GateType::OpaqueImport {
+        origin: Some(Box::new(identity)),
+        import: ImportId::from_raw(u32::MAX),
+        name: "Alias".to_owned(),
+        arguments: vec![argument],
+        definition: None,
+    };
+    let origin = crate::TypeIdentity::Source {
+        file: module.file(),
+        name: "Box".into(),
+    };
+    let int = GateType::Primitive(BuiltinType::Int);
+    let mut typing = GateTypeContext::new(&module);
+    assert!(typing.types_match(&local(int.clone()), &imported(origin.clone(), int.clone())));
+    for other in [
+        crate::TypeIdentity::Source {
+            file: FileId::new(1000),
+            name: "Box".into(),
+        },
+        crate::TypeIdentity::Standard("Box".into()),
+        crate::TypeIdentity::Source {
+            file: module.file(),
+            name: "Other".into(),
+        },
+    ] {
+        assert!(!typing.types_match(&local(int.clone()), &imported(other, int.clone())));
+    }
+    assert!(!typing.types_match(
+        &local(int.clone()),
+        &imported(origin.clone(), GateType::Primitive(BuiltinType::Bool))
+    ));
+    let left = TypeParameterId::from_raw(7);
+    let right = TypeParameterId::from_raw(8);
+    typing.replace_rigid_type_parameters(vec![left, right]);
+    assert!(!typing.types_match(
+        &local(GateType::TypeParameter {
+            parameter: left,
+            name: "A".to_owned()
+        }),
+        &imported(
+            origin,
+            GateType::TypeParameter {
+                parameter: right,
+                name: "A".to_owned()
+            }
+        ),
+    ));
+}
+
+#[test]
+fn closed_value_annotations_accept_contextual_alias_shapes() {
+    let report = typecheck_text(
+        "closed-value-aliases.aivi",
+        "type Callback = (Int -> Int)\ntype Numbers = (List Int)\n\
+         value direct : Int -> Int = x => x\n\
+         value callback : Callback = x => x\n\
+         value empty : Numbers = []\n\
+         value nested : List (Option Int) = [None]\n\
+         value mapped : Numbers = map callback [1, 2]\n",
+    );
+    assert!(
+        report.is_ok(),
+        "valid contextual shapes rejected: {:?}",
+        report.diagnostics()
+    );
+}
+
+#[test]
+fn definitive_contracts_preserve_structural_callbacks_and_record_patterns() {
+    let lowered = crate::test_support::lower_text_with_stdlib(
+        "structural-contracts.aivi",
+        r#"
+use aivi.list (Partition, partition)
+type Todo = { done: Bool }
+type Todo -> Bool
+func isOpen = |> not .done
+value items : List Todo = filter isOpen [{ done: False }]
+value filtered : List Int = filter (n => n > 0) [1, -1]
+value flattened : List Int = flatMap (n => [n]) [1]
+type State = { items: List Todo }
+type State -> State
+func clear = state => state <| { items: filter isOpen state.items }
+type Text -> List Todo -> Int -> List Todo
+func row = label todos n => todos
+value rows : List Todo = flatMap (row "" [{ done: False }]) [1]
+value groups : Partition Int = partition (n => n > 0) [1, -1]
+value positive : List Int = groups ||> { matched, unmatched } -> matched
+"#,
+    );
+    assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+    let checked = typecheck_module(lowered.module());
+    assert!(checked.is_ok(), "{:?}", checked.diagnostics());
+    for source in [
+        "value wrong : List Int = filter (n => \"wrong\") [1]\n",
+        "value wrong : List Int = flatMap (n => n) [1]\n",
+        "type Int -> List Int -> List Int\nfunc insertOrdered = n items => items\nvalue wrong : List Int = [1] |> reduce insertOrdered []\n",
+    ] {
+        let lowered = crate::test_support::lower_text_with_stdlib("hoisted-mismatch.aivi", source);
+        assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+        let checked = typecheck_module(lowered.module());
+        assert!(!checked.is_ok(), "{source}: {:?}", checked.diagnostics());
+    }
+}
+
+#[test]
+fn definitive_contracts_accept_snake_callbacks() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../demos/snake.aivi");
+    let source = std::fs::read_to_string(&path).unwrap();
+    let lowered = crate::test_support::lower_text_with_stdlib("snake.aivi", &source);
+    assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+    let checked = typecheck_module(lowered.module());
+    assert!(checked.is_ok(), "{:?}", checked.diagnostics());
+}
+
+#[test]
+fn closed_value_annotations_preserve_result_and_recurrence_evidence() {
+    for path in ["result-block", "pipe-explicit-recurrence-wakeups"] {
+        let text = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(
+            format!("../../fixtures/frontend/milestone-2/valid/{path}/main.aivi"),
+        ))
+        .unwrap();
+        let module = lowered_module_text(path, &text);
+        let mut typing = GateTypeContext::new(&module);
+        for (_, item) in module.items().iter() {
+            if let Item::Value(value) = item {
+                let expected = typing.lower_annotation(value.annotation.unwrap()).unwrap();
+                let info = typing.infer_expr_with_expected(
+                    value.body,
+                    &GateExprEnv::default(),
+                    None,
+                    &expected,
+                );
+                assert!(info.issues.is_empty(), "{path}: {:?}", info.issues);
+                assert!(
+                    typing.match_gate_expr_template(&expected, &info, &mut HashMap::new()),
+                    "{path}: {info:?}"
+                );
+            }
+        }
+        let checked = typecheck_module(&module);
+        assert!(checked.is_ok(), "{path}: {:?}", checked.diagnostics());
+    }
+}
+
+#[test]
+fn definitive_declaration_contracts_reject_partial_wrong_payloads() {
+    for source in [
+        "type Int -> Int\nfunc wrong = n => []\n",
+        "signal wrong : Signal Int = []\n",
+        "class Scalar A = { scalar : A -> Int }\ninstance Scalar Int = { scalar = n => [] }\n",
+        "domain Scalar over Int = { type scalar : Int -> Int\nscalar = n => [] }\n",
+        "@recur.backoff 3times\nvalue wrong : Task Int Text = 0\n @|> . + 1\n <|@ . + 1\n",
+        "value wrong : Int = True\n ||> True -> []\n ||> False -> 1\n",
+        "type Int -> Int\nfunc accept = n => n\nvalue wrong : Int = True\n ||> True -> accept []\n ||> False -> 1\n",
+        "value wrong : Int = True\n T|> 1\n F|> []\n",
+    ] {
+        let report = typecheck_text("definitive-declaration.aivi", source);
+        assert!(!report.is_ok(), "{source}: {:?}", report.diagnostics());
+    }
+}
+
+#[test]
+fn partial_shape_diagnostics_retain_known_outer_heads() {
+    for (body, shape) in [("[]", "List _"), ("x => x", "_ -> _")] {
+        let report = typecheck_text(
+            "known-partial-shape.aivi",
+            &format!("value bad : Int = {body}\n"),
+        );
+        assert!(
+            report
+                .diagnostics()
+                .iter()
+                .any(|d| d.message.contains(shape)),
+            "{:?}",
+            report.diagnostics()
+        );
+    }
+}
+
+#[test]
 fn exported_constructor_signatures_retain_provenance() {
     let module = lowered_module_text(
         "constructor-exports.aivi",
@@ -2338,6 +2745,255 @@ fn contextual_callbacks_preserve_present_generic_payload_contracts() {
         &GateType::Option(Box::new(GateType::Primitive(BuiltinType::Int))),
         &info,
         &mut HashMap::new()
+    ));
+}
+
+#[test]
+fn exact_shape_proofs_preserve_holes_binders_carriers_and_canonical_fallback() {
+    let int = GateType::Primitive(BuiltinType::Int);
+    let text = GateType::Primitive(BuiltinType::Text);
+    let parameter = GateType::TypeParameter {
+        parameter: TypeParameterId::from_raw(29),
+        name: "A".to_owned(),
+    };
+    let record = GateType::Record(vec![GateRecordField {
+        name: "value".to_owned(),
+        ty: int.clone(),
+    }]);
+    let imported = GateType::OpaqueImport {
+        origin: Some(Box::new(crate::TypeIdentity::Source {
+            file: FileId::new(7),
+            name: "Carrier".into(),
+        })),
+        import: ImportId::from_raw(9),
+        name: "Carrier".to_owned(),
+        arguments: vec![int.clone()],
+        definition: None,
+    };
+    let types = vec![
+        int.clone(),
+        parameter.clone(),
+        record.clone(),
+        GateType::TypeApplication {
+            parameter: TypeParameterId::from_raw(30),
+            name: "F".to_owned(),
+            arguments: vec![parameter.clone()],
+        },
+        GateType::Tuple(vec![record.clone(), parameter.clone()]),
+        GateType::Arrow {
+            parameter: Box::new(parameter),
+            result: Box::new(record),
+        },
+        GateType::List(Box::new(int.clone())),
+        GateType::Set(Box::new(int.clone())),
+        GateType::Option(Box::new(int.clone())),
+        GateType::Signal(Box::new(int.clone())),
+        GateType::Map {
+            key: Box::new(text.clone()),
+            value: Box::new(int.clone()),
+        },
+        GateType::Result {
+            error: Box::new(text.clone()),
+            value: Box::new(int.clone()),
+        },
+        GateType::Validation {
+            error: Box::new(text.clone()),
+            value: Box::new(int.clone()),
+        },
+        GateType::Task {
+            error: Box::new(text.clone()),
+            value: Box::new(int.clone()),
+        },
+        GateType::Domain {
+            item: ItemId::from_raw(3),
+            name: "Wrapper".to_owned(),
+            arguments: vec![int.clone()],
+        },
+        GateType::OpaqueItem {
+            item: ItemId::from_raw(4),
+            name: "Wrapper".to_owned(),
+            arguments: vec![int.clone()],
+        },
+        imported.clone(),
+    ];
+    for ty in &types {
+        let actual = SourceOptionActualType::from_gate_type(ty);
+        assert!(actual.has_exact_gate_shape(ty), "{ty}");
+        assert!(!actual.has_exact_gate_shape(&text), "{ty}");
+        assert!(!SourceOptionActualType::Hole.has_exact_gate_shape(ty));
+    }
+    let distinct = GateType::TypeParameter {
+        parameter: TypeParameterId::from_raw(31),
+        name: "A".to_owned(),
+    };
+    assert!(!SourceOptionActualType::from_gate_type(&types[1]).has_exact_gate_shape(&distinct));
+    let mut distinct_import = imported.clone();
+    let GateType::OpaqueImport { import, .. } = &mut distinct_import else {
+        unreachable!()
+    };
+    *import = ImportId::from_raw(10);
+    assert!(
+        !SourceOptionActualType::from_gate_type(&imported).has_exact_gate_shape(&distinct_import)
+    );
+    let partial = SourceOptionActualType::List(Box::new(SourceOptionActualType::Hole));
+    assert!(!partial.has_exact_gate_shape(&GateType::List(Box::new(int.clone()))));
+
+    let fields = vec![
+        GateRecordField {
+            name: "a".to_owned(),
+            ty: int,
+        },
+        GateRecordField {
+            name: "b".to_owned(),
+            ty: text,
+        },
+    ];
+    let actual = SourceOptionActualType::from_gate_type(&GateType::Record(fields.clone()));
+    let reversed = GateType::Record(fields.into_iter().rev().collect());
+    assert!(!actual.has_exact_gate_shape(&reversed));
+    let module = lowered_module_text("exact-shape-canonical-fallback.aivi", "");
+    let typing = GateTypeContext::new(&module);
+    assert!(typing.types_match(&imported, &distinct_import));
+    let actual = SourceOptionActualType::from_gate_type(&imported);
+    let info = typing.finalize_expr_info(GateExprInfo {
+        ty: Some(distinct_import),
+        actual: Some(actual.clone()),
+        ..GateExprInfo::default()
+    });
+    assert_eq!(
+        info.actual,
+        Some(actual),
+        "canonical nominal matching must preserve equivalent stored evidence"
+    );
+}
+
+#[test]
+fn actual_gate_type_preserves_partial_evidence_and_exact_identity() {
+    let payload = GateType::TypeParameter {
+        parameter: TypeParameterId::from_raw(29),
+        name: "A".to_owned(),
+    };
+    let applied = GateType::TypeApplication {
+        parameter: TypeParameterId::from_raw(30),
+        name: "F".to_owned(),
+        arguments: vec![payload.clone()],
+    };
+    for ty in [
+        payload,
+        applied.clone(),
+        GateType::Task {
+            error: Box::new(GateType::Primitive(BuiltinType::Text)),
+            value: Box::new(applied),
+        },
+        GateType::OpaqueItem {
+            item: ItemId::from_raw(12),
+            name: "Carrier".to_owned(),
+            arguments: vec![GateType::Primitive(BuiltinType::Int)],
+        },
+    ] {
+        let mut info = GateExprInfo {
+            ty: Some(ty.clone()),
+            ..GateExprInfo::default()
+        };
+        assert_eq!(info.actual_gate_type(), Some(ty.clone()));
+        info.actual = Some(SourceOptionActualType::from_gate_type(&ty));
+        info.ty = None;
+        assert_eq!(info.actual_gate_type(), Some(ty.clone()));
+        let actual = info.actual.clone();
+        assert_eq!(info.take_inferred_type(), Some(ty.clone()));
+        assert_eq!(
+            info.actual, actual,
+            "taking a type must retain partial evidence"
+        );
+        info.ty = Some(ty);
+        info.contains_signal = true;
+        assert_eq!(info.take_actual(), actual);
+        assert!(info.actual.is_none());
+        assert!(info.ty.is_some());
+        assert!(
+            info.contains_signal,
+            "taking evidence must preserve metadata"
+        );
+    }
+    let hinted = GateType::List(Box::new(GateType::Primitive(BuiltinType::Int)));
+    let partial = GateExprInfo {
+        ty: Some(hinted),
+        actual: Some(SourceOptionActualType::List(Box::new(
+            SourceOptionActualType::Hole,
+        ))),
+        ..GateExprInfo::default()
+    };
+    assert_eq!(partial.actual_gate_type(), None);
+    let conflicting = GateExprInfo {
+        ty: Some(GateType::Primitive(BuiltinType::Text)),
+        actual: Some(SourceOptionActualType::Primitive(BuiltinType::Int)),
+        ..GateExprInfo::default()
+    };
+    assert_eq!(
+        conflicting.actual_gate_type(),
+        Some(GateType::Primitive(BuiltinType::Int))
+    );
+}
+
+#[test]
+fn partial_structural_constructor_mismatches_preserve_existing_bindings() {
+    let module = lowered_module_text("partial-structural-constructor.aivi", "");
+    let typing = GateTypeContext::new(&module);
+    let int = GateType::Primitive(BuiltinType::Int);
+    let hole = || Box::new(SourceOptionActualType::Hole);
+    for actual in [
+        SourceOptionActualType::Tuple(vec![
+            SourceOptionActualType::Hole,
+            SourceOptionActualType::Hole,
+        ]),
+        SourceOptionActualType::Record(vec![
+            crate::typecheck_context::SourceOptionActualRecordField {
+                name: "field".to_owned(),
+                ty: SourceOptionActualType::Hole,
+            },
+        ]),
+        SourceOptionActualType::Arrow {
+            parameter: hole(),
+            result: hole(),
+        },
+        SourceOptionActualType::List(hole()),
+        SourceOptionActualType::Map {
+            key: hole(),
+            value: hole(),
+        },
+        SourceOptionActualType::Set(hole()),
+        SourceOptionActualType::Option(hole()),
+        SourceOptionActualType::Result {
+            error: hole(),
+            value: hole(),
+        },
+        SourceOptionActualType::Validation {
+            error: hole(),
+            value: hole(),
+        },
+        SourceOptionActualType::Signal(hole()),
+        SourceOptionActualType::Task {
+            error: hole(),
+            value: hole(),
+        },
+    ] {
+        let info = GateExprInfo {
+            actual: Some(actual),
+            ..GateExprInfo::default()
+        };
+        let mut bindings = HashMap::from([(TypeParameterId::from_raw(7), int.clone())]);
+        let before = bindings.clone();
+        assert!(!typing.match_gate_expr_template(&int, &info, &mut bindings));
+        assert_eq!(bindings, before);
+    }
+    let mut bindings = HashMap::new();
+    assert!(typing.match_gate_expr_template(
+        &GateType::List(Box::new(int)),
+        &GateExprInfo {
+            actual: Some(SourceOptionActualType::List(hole())),
+            ..GateExprInfo::default()
+        },
+        &mut bindings,
     ));
 }
 
@@ -3149,6 +3805,35 @@ value x:Int =
         "expected applied calls in case branches to typecheck, got diagnostics: {:?}",
         report.diagnostics()
     );
+}
+
+#[test]
+fn literal_case_continuations_check_nested_callbacks_and_captured_values() {
+    let report = typecheck_text(
+        "literal-case-continuations.aivi",
+        r#"type Payload = { number: Int, callback: Int -> Int }
+value good:Payload =
+    2
+     ||> subject -> { number: subject, callback: n => n + 1 }
+fun increment:Int = n:Int => n + 1
+value called:Int =
+    2
+     ||> _ -> increment
+"#,
+    );
+    assert!(report.is_ok(), "{:?}", report.diagnostics());
+    for body in [
+        "{ number: subject, callback: n => \"wrong\" }",
+        "{ number: \"wrong\", callback: n => n }",
+    ] {
+        let report = typecheck_text(
+            "invalid-literal-continuation.aivi",
+            &format!(
+                "type Payload = {{ number: Int, callback: Int -> Int }}\nvalue wrong:Payload = 2\n ||> subject -> {body}\n"
+            ),
+        );
+        assert!(!report.is_ok(), "{body}: {:?}", report.diagnostics());
+    }
 }
 
 #[test]

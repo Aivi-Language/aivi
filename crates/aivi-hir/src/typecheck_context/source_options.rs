@@ -474,6 +474,112 @@ impl SourceOptionActualType {
         }
     }
 
+    /// Prove exact equality without materializing a second type tree. This is
+    /// deliberately stricter than alias normalization or nominal equivalence.
+    /// Structural traversal uses a worklist so nesting does not consume stack.
+    pub(crate) fn has_exact_gate_shape(&self, expected: &GateType) -> bool {
+        match (self, expected) {
+            (Self::Primitive(actual), GateType::Primitive(expected)) => return actual == expected,
+            (Self::KnownAbstract(actual), expected) => return actual.as_ref() == expected,
+            (Self::Hole, _) => return false,
+            _ => {}
+        }
+        let mut pending = vec![(self, expected)];
+        while let Some((actual, expected)) = pending.pop() {
+            match (actual, expected) {
+                (Self::Primitive(actual), GateType::Primitive(expected)) if actual == expected => {}
+                (Self::KnownAbstract(actual), expected) if actual.as_ref() == expected => {}
+                (Self::Tuple(actual), GateType::Tuple(expected))
+                    if actual.len() == expected.len() =>
+                {
+                    pending.extend(actual.iter().zip(expected));
+                }
+                (Self::Record(actual), GateType::Record(expected))
+                    if actual.len() == expected.len() =>
+                {
+                    for (actual, expected) in actual.iter().zip(expected) {
+                        if actual.name != expected.name {
+                            return false;
+                        }
+                        pending.push((&actual.ty, &expected.ty));
+                    }
+                }
+                (
+                    Self::Arrow {
+                        parameter: a,
+                        result: b,
+                    },
+                    GateType::Arrow {
+                        parameter: x,
+                        result: y,
+                    },
+                )
+                | (Self::Map { key: a, value: b }, GateType::Map { key: x, value: y })
+                | (Self::Result { error: a, value: b }, GateType::Result { error: x, value: y })
+                | (
+                    Self::Validation { error: a, value: b },
+                    GateType::Validation { error: x, value: y },
+                )
+                | (Self::Task { error: a, value: b }, GateType::Task { error: x, value: y }) => {
+                    pending.push((a, x));
+                    pending.push((b, y));
+                }
+                (Self::List(actual), GateType::List(expected))
+                | (Self::Set(actual), GateType::Set(expected))
+                | (Self::Option(actual), GateType::Option(expected))
+                | (Self::Signal(actual), GateType::Signal(expected)) => {
+                    pending.push((actual, expected))
+                }
+                (
+                    Self::Domain {
+                        item: a,
+                        name: an,
+                        arguments: aa,
+                    },
+                    GateType::Domain {
+                        item: b,
+                        name: bn,
+                        arguments: ba,
+                    },
+                )
+                | (
+                    Self::OpaqueItem {
+                        item: a,
+                        name: an,
+                        arguments: aa,
+                    },
+                    GateType::OpaqueItem {
+                        item: b,
+                        name: bn,
+                        arguments: ba,
+                    },
+                ) if a == b && an == bn && aa.len() == ba.len() => {
+                    pending.extend(aa.iter().zip(ba))
+                }
+                (
+                    Self::OpaqueImport {
+                        origin: a,
+                        import: ai,
+                        name: an,
+                        arguments: aa,
+                        definition: ad,
+                    },
+                    GateType::OpaqueImport {
+                        origin: b,
+                        import: bi,
+                        name: bn,
+                        arguments: ba,
+                        definition: bd,
+                    },
+                ) if a == b && ai == bi && an == bn && ad == bd && aa.len() == ba.len() => {
+                    pending.extend(aa.iter().zip(ba))
+                }
+                _ => return false,
+            }
+        }
+        true
+    }
+
     pub(crate) fn to_gate_type(&self) -> Option<GateType> {
         match self {
             Self::Hole => None,

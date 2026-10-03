@@ -394,6 +394,62 @@ pub(crate) struct GateExprInfo {
     pub(crate) constraints: Vec<TypeConstraint>,
 }
 
+/// A known structural constructor can disprove a match without inspecting
+/// children. Nominal and open heads need the canonical identity/binder proof.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum StructuralTypeHead {
+    Builtin(BuiltinType),
+    Tuple,
+    Record,
+    Arrow,
+}
+
+fn gate_structural_head(ty: &GateType) -> Option<StructuralTypeHead> {
+    Some(match ty {
+        GateType::Primitive(builtin) => StructuralTypeHead::Builtin(*builtin),
+        GateType::Tuple(_) => StructuralTypeHead::Tuple,
+        GateType::Record(_) => StructuralTypeHead::Record,
+        GateType::Arrow { .. } => StructuralTypeHead::Arrow,
+        GateType::List(_) => StructuralTypeHead::Builtin(BuiltinType::List),
+        GateType::Map { .. } => StructuralTypeHead::Builtin(BuiltinType::Map),
+        GateType::Set(_) => StructuralTypeHead::Builtin(BuiltinType::Set),
+        GateType::Option(_) => StructuralTypeHead::Builtin(BuiltinType::Option),
+        GateType::Result { .. } => StructuralTypeHead::Builtin(BuiltinType::Result),
+        GateType::Validation { .. } => StructuralTypeHead::Builtin(BuiltinType::Validation),
+        GateType::Signal(_) => StructuralTypeHead::Builtin(BuiltinType::Signal),
+        GateType::Task { .. } => StructuralTypeHead::Builtin(BuiltinType::Task),
+        GateType::TypeParameter { .. }
+        | GateType::TypeApplication { .. }
+        | GateType::Domain { .. }
+        | GateType::OpaqueItem { .. }
+        | GateType::OpaqueImport { .. } => return None,
+    })
+}
+
+fn actual_structural_head(ty: &SourceOptionActualType) -> Option<StructuralTypeHead> {
+    Some(match ty {
+        SourceOptionActualType::Primitive(builtin) => StructuralTypeHead::Builtin(*builtin),
+        SourceOptionActualType::KnownAbstract(ty) => return gate_structural_head(ty),
+        SourceOptionActualType::Tuple(_) => StructuralTypeHead::Tuple,
+        SourceOptionActualType::Record(_) => StructuralTypeHead::Record,
+        SourceOptionActualType::Arrow { .. } => StructuralTypeHead::Arrow,
+        SourceOptionActualType::List(_) => StructuralTypeHead::Builtin(BuiltinType::List),
+        SourceOptionActualType::Map { .. } => StructuralTypeHead::Builtin(BuiltinType::Map),
+        SourceOptionActualType::Set(_) => StructuralTypeHead::Builtin(BuiltinType::Set),
+        SourceOptionActualType::Option(_) => StructuralTypeHead::Builtin(BuiltinType::Option),
+        SourceOptionActualType::Result { .. } => StructuralTypeHead::Builtin(BuiltinType::Result),
+        SourceOptionActualType::Validation { .. } => {
+            StructuralTypeHead::Builtin(BuiltinType::Validation)
+        }
+        SourceOptionActualType::Signal(_) => StructuralTypeHead::Builtin(BuiltinType::Signal),
+        SourceOptionActualType::Task { .. } => StructuralTypeHead::Builtin(BuiltinType::Task),
+        SourceOptionActualType::Hole
+        | SourceOptionActualType::Domain { .. }
+        | SourceOptionActualType::OpaqueItem { .. }
+        | SourceOptionActualType::OpaqueImport { .. } => return None,
+    })
+}
+
 impl GateExprInfo {
     pub(crate) fn merge(&mut self, other: Self) {
         self.contains_signal |= other.contains_signal;
@@ -407,8 +463,27 @@ impl GateExprInfo {
             .or_else(|| self.ty.as_ref().map(SourceOptionActualType::from_gate_type))
     }
 
+    /// Transfer shape evidence when the caller will only merge the remaining
+    /// signal, issue and constraint metadata.
+    pub(crate) fn take_actual(&mut self) -> Option<SourceOptionActualType> {
+        self.actual
+            .take()
+            .or_else(|| self.ty.as_ref().map(SourceOptionActualType::from_gate_type))
+    }
+
+    /// Transfer the complete inferred type, retaining partial shape evidence
+    /// when no complete type is available.
+    pub(crate) fn take_inferred_type(&mut self) -> Option<GateType> {
+        self.ty.take().or_else(|| self.actual_gate_type())
+    }
+
     pub(crate) fn actual_gate_type(&self) -> Option<GateType> {
-        self.actual().and_then(|actual| actual.to_gate_type())
+        match self.actual.as_ref() {
+            // Stored partial evidence is authoritative: a hole must not fall
+            // through to an unrelated complete type hint.
+            Some(actual) => actual.to_gate_type(),
+            None => self.ty.clone(),
+        }
     }
 
     pub(crate) fn set_actual(&mut self, actual: SourceOptionActualType) {

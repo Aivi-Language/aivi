@@ -481,8 +481,9 @@ fn source_run_cache_discards_images_without_current_type_and_equality_contracts(
     let requested_view = Some("main");
     // Reconstruct the historical keys exactly. Revision 20 lacked executable
     // payload equality; revision 21 preceded contextual callback body checking;
-    // revision 22 preceded constructor provenance and reference validation.
-    for revision in ["20", "21", "22"] {
+    // revision 22 preceded constructor provenance and reference validation;
+    // revision 23 preceded definitive declaration annotation checking.
+    for revision in ["20", "21", "22", "23"] {
         let mut legacy = DefaultHasher::new();
         "aivi.source-run-cache".hash(&mut legacy);
         5_u32.hash(&mut legacy);
@@ -587,13 +588,15 @@ export Found
     );
     workspace.write(
         "aliases.aivi",
-        "use maybe (Missing as Absent, Found as Present)\nexport Absent\nexport Present\n",
+        "use maybe (Missing as Absent, Found as Present)\ntype Callback = (Int -> Int)\ntype Numbers = (List Int)\nexport Absent\nexport Present\nexport Callback\nexport Numbers\n",
     );
     let entry = workspace.write(
         "main.aivi",
         r#"
 use maybe (Maybe, Missing, Found)
-use aliases (Absent, Present)
+use aliases (Absent, Present, Callback, Numbers)
+use aivi.core.fn (flip, identity)
+use aivi.math (clamp)
 type (Traversable F, Applicative G) => (Int -> G Int) -> F Int -> G (F Int)
 func visit = transform values => traverse transform values
 value options : List (Option Int) = map Some [1, 2]
@@ -603,6 +606,12 @@ value valid : List (Validation Text Int) = map Valid [1]
 value invalid : List (Validation Text Int) = map Invalid ["missing"]
 value wrapped : List (Maybe Int) = [1] |> map Present
 value absent : Maybe (List Int) = visit (n => Absent) [1]
+value callback : Callback = n => n
+value empty : Numbers = []
+value mapped : Numbers = map callback [1, 2]
+value flipped : Int = flip clamp 100 0 150
+value partial : Int -> Int = flip clamp 100 0
+value identityReturned : Int = identity clamp 0 100 150
 value main : Task Text Bool = pure (
     options == [Some 1, Some 2]
     and successes == [Ok 1]
@@ -611,6 +620,11 @@ value main : Task Text Bool = pure (
     and invalid == [Invalid "missing"]
     and wrapped == [Found 1]
     and absent == Missing
+    and empty == []
+    and mapped == [1, 2]
+    and flipped == 100
+    and partial 150 == 100
+    and identityReturned == 100
 )
 "#,
     );

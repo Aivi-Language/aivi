@@ -1548,6 +1548,90 @@ fn check_reports_type_mismatch_from_hir_typechecker() {
 }
 
 #[test]
+fn check_rejects_incompatible_closed_annotations_and_preserves_error_ownership() {
+    let dir = TempDir::new("closed-annotation-contracts");
+    for (name, source, errors) in [
+        (
+            "lambda",
+            "value bad : Int = x => x\nvalue observed : Int = bad + 1\n",
+            1,
+        ),
+        (
+            "empty",
+            "value bad : Int = []\nvalue observed : Int = bad + 1\n",
+            1,
+        ),
+        ("lambda-result", "value bad : Int -> Text = x => x\n", 1),
+        (
+            "map-result",
+            "value bad : List Text = map (n => n) [1]\n",
+            1,
+        ),
+        (
+            "generic-map",
+            "type Functor F => F A -> F Text\nfunc bad = xs => map (x => x) xs\n",
+            1,
+        ),
+        (
+            "distinct",
+            "value first : Int -> Text = x => x\nvalue second : Int -> Text = y => y\n",
+            2,
+        ),
+    ] {
+        let path = dir.write(&format!("{name}/main.aivi"), source);
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("check")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "{name}: {stderr}");
+        assert_eq!(
+            stderr.matches("error[hir::type-mismatch]").count(),
+            errors,
+            "{name}: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn check_closed_annotations_preserve_imported_aliases_and_returned_functions() {
+    let dir = TempDir::new("closed-annotation-aliases");
+    dir.write("models.aivi", "type Callback = (Int -> Int)\ntype Numbers = (List Int)\nexport Callback\nexport Numbers\n");
+    let path = dir.write("main.aivi", "use models (Callback, Numbers)\nuse aivi.core.fn (flip)\nuse aivi.math (clamp)\nvalue callback : Callback = x => x\nvalue empty : Numbers = []\nvalue numbers : Numbers = map callback [1, 2]\nvalue flipped : Int = flip clamp 100 0 150\nvalue observed : Int = callback 41\n");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    for (name, body) in [("callback", "[]"), ("numbers", "x => x")] {
+        let ty = if name == "callback" {
+            "Callback"
+        } else {
+            "Numbers"
+        };
+        let path = dir.write(
+            &format!("bad-{name}.aivi"),
+            &format!("use models (Callback, Numbers)\nvalue bad : {ty} = {body}\n"),
+        );
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("check")
+            .arg(&path)
+            .output()
+            .unwrap();
+        assert!(
+            !output.status.success(),
+            "{name} alias accepted an incompatible shape"
+        );
+    }
+}
+
+#[test]
 fn check_reports_noninteger_literal_type_mismatches_from_hir_typechecker() {
     let path = fixture_path("milestone-2/invalid/noninteger-literal-type-mismatch/main.aivi");
     let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
@@ -2311,7 +2395,7 @@ fn check_accepts_request_resource_companion_surface_without_hidden_unused_warnin
 }
 
 #[test]
-fn check_underconstrained_collection_comparison_reports_error_without_stack_overflow() {
+fn check_collection_comparison_uses_context_without_restarting_inference() {
     let dir = TempDir::new("check-collection-comparison-inference");
     let path = dir.write(
         "main.aivi",
@@ -2328,10 +2412,25 @@ fn check_underconstrained_collection_comparison_reports_error_without_stack_over
         .output()
         .expect("check command should run");
     assert!(
-        output.status.code() == Some(1),
-        "an underconstrained collection comparison must report an error without restarting inference: {}",
+        output.status.success(),
+        "the collection must supply callback input types while preserving the lexical capture: {}",
         String::from_utf8_lossy(&output.stderr)
     );
+    let invalid = dir.write(
+        "invalid.aivi",
+        concat!(
+            "type Stock = { sku: Text }\n",
+            "type List Stock -> Stock -> Bool\n",
+            "func uniqueSku = items item => length (filter (other => other.missing == item.sku) items) == 1\n",
+            "export uniqueSku\n",
+        ),
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(&invalid)
+        .output()
+        .expect("check command should run");
+    assert_eq!(output.status.code(), Some(1), "{:?}", output);
     assert!(String::from_utf8_lossy(&output.stderr).contains("hir::invalid-projection"));
 }
 

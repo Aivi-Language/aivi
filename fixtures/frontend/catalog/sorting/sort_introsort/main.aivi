@@ -1,3 +1,5 @@
+use aivi.core.fn (flip)
+
 use aivi.list (
     length
     partition
@@ -78,7 +80,7 @@ func insertOrdered = x items => items
 
 type List Int -> (List Int)
 func insertionSort = items => items
-  |> reduce insertOrdered []
+  |> reduce (flip insertOrdered) []
 
 type Int -> Int -> Bool
 func lowerThan = pivot x =>

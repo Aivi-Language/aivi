@@ -1,5 +1,25 @@
 use std::sync::Arc;
 
+/// A comparison borrows declaration identity; it does not need an owned
+/// portable origin or the origin's source-module metadata.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum NominalIdentityRef<'a> {
+    Standard(&'a str),
+    Source {
+        file: aivi_base::FileId,
+        name: &'a str,
+    },
+}
+
+impl<'a> From<&'a crate::TypeIdentity> for NominalIdentityRef<'a> {
+    fn from(identity: &'a crate::TypeIdentity) -> Self {
+        match identity {
+            crate::TypeIdentity::Standard(name) => Self::Standard(name),
+            crate::TypeIdentity::Source { file, name } => Self::Source { file: *file, name },
+        }
+    }
+}
+
 pub(crate) struct GateTypeContext<'a> {
     module: &'a Module,
     // Probes share immutable cache snapshots. Every cache write uses make_mut,
@@ -109,21 +129,24 @@ impl<'a> GateTypeContext<'a> {
             return true;
         }
         left.same_shape_with_nominal_identity(right, &self.rigid_type_parameters, &|left, right| {
-            let identity = |ty: &GateType| match ty {
-                GateType::Domain { item, .. } | GateType::OpaqueItem { item, .. } => self
-                    .module
-                    .type_origin(*item)
-                    .map(|origin| Box::new(origin.identity)),
-                GateType::OpaqueImport { origin, import, .. } => origin.clone().or_else(|| {
-                    self.module
-                        .imports()
-                        .get(*import)
-                        .and_then(|binding| binding.metadata.type_origin())
-                        .map(|origin| Box::new(origin.identity.clone()))
-                }),
-                _ => None,
-            };
-            match (identity(left), identity(right)) {
+            // An immutable item ID already identifies its declaration. The
+            // enclosing shape matcher still checks every argument and binder.
+            if let (
+                GateType::Domain { item: left, .. } | GateType::OpaqueItem { item: left, .. },
+                GateType::Domain { item: right, .. } | GateType::OpaqueItem { item: right, .. },
+            ) = (left, right)
+                && left == right
+                && matches!(
+                    self.module.items().get(*left),
+                    Some(Item::Type(_) | Item::Domain(_))
+                )
+            {
+                return true;
+            }
+            match (
+                self.nominal_type_identity(left),
+                self.nominal_type_identity(right),
+            ) {
                 (Some(left), Some(right)) => left == right,
                 _ => match (left, right) {
                     (
@@ -132,6 +155,41 @@ impl<'a> GateTypeContext<'a> {
                     ) => self.import_type_identities_match(*left, *right),
                     _ => false,
                 },
+            }
+        })
+    }
+
+    fn nominal_type_identity<'b>(&'b self, ty: &'b GateType) -> Option<NominalIdentityRef<'b>> {
+        match ty {
+            GateType::Domain { item, .. } | GateType::OpaqueItem { item, .. } => {
+                self.item_type_identity(*item)
+            }
+            GateType::OpaqueImport { origin, import, .. } => origin
+                .as_deref()
+                .or_else(|| {
+                    self.module
+                        .imports()
+                        .get(*import)
+                        .and_then(|binding| binding.metadata.type_origin())
+                        .map(|origin| &origin.identity)
+                })
+                .map(NominalIdentityRef::from),
+            _ => None,
+        }
+    }
+
+    fn item_type_identity(&self, id: ItemId) -> Option<NominalIdentityRef<'_>> {
+        let name = match self.module.items().get(id)? {
+            Item::Type(item) => item.name.text(),
+            Item::Domain(item) => item.name.text(),
+            _ => return None,
+        };
+        Some(if self.module.ambient_items().contains(&id) {
+            NominalIdentityRef::Standard(name)
+        } else {
+            NominalIdentityRef::Source {
+                file: self.module.file(),
+                name,
             }
         })
     }
@@ -193,9 +251,8 @@ impl<'a> GateTypeContext<'a> {
             .metadata
             .type_origin()
             .is_some_and(|origin| {
-                self.module
-                    .type_origin(item)
-                    .is_some_and(|actual| actual.identity == origin.identity)
+                self.item_type_identity(item)
+                    .is_some_and(|actual| actual == NominalIdentityRef::from(&origin.identity))
             })
         {
             return true;
@@ -587,8 +644,10 @@ impl<'a> GateTypeContext<'a> {
                     }
                 }
                 PatternKind::Record(fields) => {
+                    let expanded = subject_ty.expand_transparent_import_alias();
+                    let subject_shape = expanded.as_ref().unwrap_or(&subject_ty);
                     // Collect (name, type) pairs from either a local record or an imported one.
-                    let record_pairs: Option<Vec<(String, GateType)>> = match &subject_ty {
+                    let record_pairs: Option<Vec<(String, GateType)>> = match subject_shape {
                         GateType::Record(subject_fields) => Some(
                             subject_fields
                                 .iter()
@@ -1146,9 +1205,28 @@ impl<'a> GateTypeContext<'a> {
                     self.infer_expr(item.body, &GateExprEnv::default(), None)
                         .actual()
                 }),
-            Item::Function(_) => self
+            Item::Function(function) => self
                 .item_value_type(item_id)
-                .map(|ty| SourceOptionActualType::from_gate_type(&ty)),
+                .map(|ty| SourceOptionActualType::from_gate_type(&ty))
+                .or_else(|| {
+                    let mut actual = function
+                        .annotation
+                        .and_then(|annotation| self.lower_open_annotation(annotation))
+                        .map(|ty| SourceOptionActualType::from_gate_type(&ty))
+                        .unwrap_or(SourceOptionActualType::Hole);
+                    for parameter in function.parameters.iter().rev() {
+                        let parameter = parameter
+                            .annotation
+                            .and_then(|annotation| self.lower_open_annotation(annotation))
+                            .map(|ty| SourceOptionActualType::from_gate_type(&ty))
+                            .unwrap_or(SourceOptionActualType::Hole);
+                        actual = SourceOptionActualType::Arrow {
+                            parameter: Box::new(parameter),
+                            result: Box::new(actual),
+                        };
+                    }
+                    Some(actual)
+                }),
             Item::Signal(item) => item
                 .annotation
                 .and_then(|annotation| self.lower_annotation(annotation))
@@ -1186,11 +1264,12 @@ impl<'a> GateTypeContext<'a> {
 
     pub(crate) fn finalize_expr_info(&self, mut info: GateExprInfo) -> GateExprInfo {
         if let Some(ty) = info.ty.as_ref() {
-            let actual_matches_ty = info
-                .actual
-                .as_ref()
-                .and_then(SourceOptionActualType::to_gate_type)
-                .is_some_and(|actual| self.types_match(&actual, ty));
+            let actual_matches_ty = info.actual.as_ref().is_some_and(|actual| {
+                actual.has_exact_gate_shape(ty)
+                    || actual
+                        .to_gate_type()
+                        .is_some_and(|actual| self.types_match(&actual, ty))
+            });
             if !actual_matches_ty {
                 info.actual = Some(SourceOptionActualType::from_gate_type(ty));
             }
@@ -1214,10 +1293,14 @@ impl<'a> GateTypeContext<'a> {
                 self.module.exprs()[expr_id].kind,
                 ExprKind::Name(_) | ExprKind::Apply { .. }
             )
-            && let Some(GateType::Signal(payload)) = info.ty.clone() {
-                info.ty = Some(*payload);
-                info.actual = None;
-            }
+            && matches!(info.ty, Some(GateType::Signal(_)))
+        {
+            let Some(GateType::Signal(payload)) = info.ty.take() else {
+                unreachable!("signal type was checked before taking its payload")
+            };
+            info.ty = Some(*payload);
+            info.actual = None;
+        }
         info
     }
 
@@ -1337,7 +1420,7 @@ impl<'a> GateTypeContext<'a> {
                 .iter()
                 .chain(self.module.ambient_items().iter())
                 .copied()
-                .find(|&id| matches!(&self.module.items()[id], Item::Domain(d) if binding.metadata.type_origin().map_or(d.name.text() == name, |origin| self.module.type_origin(id).is_some_and(|candidate| candidate.identity == origin.identity))));
+                .find(|&id| matches!(&self.module.items()[id], Item::Domain(d) if binding.metadata.type_origin().map_or(d.name.text() == name, |origin| self.item_type_identity(id).is_some_and(|candidate| candidate == NominalIdentityRef::from(&origin.identity)))));
             if let Some(item_id) = domain_item {
                 return GateType::Domain {
                     item: item_id,
@@ -1427,9 +1510,9 @@ impl<'a> GateTypeContext<'a> {
                     .collect();
                 if let Some(origin) = origin
                     && let Some((item, _)) = self.module.items().iter().find(|(id, _)| {
-                        self.module
-                            .type_origin(*id)
-                            .is_some_and(|candidate| candidate.identity == origin.identity)
+                        self.item_type_identity(*id).is_some_and(|candidate| {
+                            candidate == NominalIdentityRef::from(&origin.identity)
+                        })
                     })
                     && let Some(ty) = self.contextual_probe().apply_type_constructor(
                         TypeConstructorHead::Item(item),
@@ -2639,6 +2722,12 @@ impl<'a> GateTypeContext<'a> {
         let Some(actual) = info.actual.as_ref() else {
             return true;
         };
+        if let (Some(expected), Some(actual)) =
+            (gate_structural_head(template), actual_structural_head(actual))
+            && expected != actual
+        {
+            return false;
+        }
         let mut candidate = substitutions.clone();
         // Only binding expansions consume this budget. Structural traversal uses
         // the worklist, and a cyclic substitution cannot revisit more binders than exist.
@@ -4566,6 +4655,10 @@ impl<'a> GateTypeContext<'a> {
         bindings: &mut PolyTypeBindings,
         item_stack: &mut Vec<ItemId>,
     ) -> bool {
+        let expanded = matches!(self.module.types()[type_id].kind, TypeKind::Arrow { .. })
+            .then(|| actual.expand_transparent_import_alias())
+            .flatten();
+        let actual = expanded.as_ref().unwrap_or(actual);
         if let Some(lowered) = self.lower_poly_type(type_id, bindings, item_stack) {
             return self.types_match(&lowered, actual);
         }
@@ -4668,6 +4761,8 @@ impl<'a> GateTypeContext<'a> {
         bindings: &mut PolyTypeBindings,
         item_stack: &mut Vec<ItemId>,
     ) -> bool {
+        // constructor_view supplies an alias's structural constructor when it
+        // has one, and otherwise retains the nominal instance-owning carrier.
         let TypeKind::Name(reference) = &self.module.types()[callee].kind else {
             return false;
         };
@@ -4902,9 +4997,9 @@ impl<'a> GateTypeContext<'a> {
         env: &GateExprEnv,
         ambient: Option<&GateType>,
     ) -> GateExprInfo {
-        let expr = self.module.exprs()[expr_id].clone();
-        let info = match expr.kind {
-            ExprKind::Name(reference) => self.infer_name(&reference, env),
+        let expr = &self.module.exprs()[expr_id];
+        let info = match &expr.kind {
+            ExprKind::Name(reference) => self.infer_name(reference, env),
             ExprKind::Integer(_) => GateExprInfo {
                 ty: Some(GateType::Primitive(BuiltinType::Int)),
                 ..GateExprInfo::default()
@@ -4921,41 +5016,41 @@ impl<'a> GateTypeContext<'a> {
                 ty: Some(GateType::Primitive(BuiltinType::BigInt)),
                 ..GateExprInfo::default()
             },
-            ExprKind::SuffixedInteger(literal) => match self
-                .select_suffixed_integer_candidate(&literal, None)
-            {
-                LiteralSuffixSelection::Unique { result, .. } => GateExprInfo {
-                    ty: Some(result),
-                    ..GateExprInfo::default()
-                },
-                LiteralSuffixSelection::Ambiguous { candidates } => GateExprInfo {
-                    issues: vec![GateIssue::AmbiguousLiteralSuffix {
-                        span: literal.suffix.span(),
-                        suffix: literal.suffix.text().to_owned(),
-                        candidates,
-                    }],
-                    ..GateExprInfo::default()
-                },
-                LiteralSuffixSelection::NoMatch { candidates } => {
-                    if candidates.is_empty() {
-                        GateExprInfo {
-                            issues: vec![GateIssue::UnknownLiteralSuffix {
-                                span: literal.suffix.span(),
-                                suffix: literal.suffix.text().to_owned(),
-                            }],
-                            ..GateExprInfo::default()
+            ExprKind::SuffixedInteger(literal) => {
+                match self.select_suffixed_integer_candidate(literal, None) {
+                    LiteralSuffixSelection::Unique { result, .. } => GateExprInfo {
+                        ty: Some(result),
+                        ..GateExprInfo::default()
+                    },
+                    LiteralSuffixSelection::Ambiguous { candidates } => GateExprInfo {
+                        issues: vec![GateIssue::AmbiguousLiteralSuffix {
+                            span: literal.suffix.span(),
+                            suffix: literal.suffix.text().to_owned(),
+                            candidates,
+                        }],
+                        ..GateExprInfo::default()
+                    },
+                    LiteralSuffixSelection::NoMatch { candidates } => {
+                        if candidates.is_empty() {
+                            GateExprInfo {
+                                issues: vec![GateIssue::UnknownLiteralSuffix {
+                                    span: literal.suffix.span(),
+                                    suffix: literal.suffix.text().to_owned(),
+                                }],
+                                ..GateExprInfo::default()
+                            }
+                        } else {
+                            GateExprInfo::default()
                         }
-                    } else {
-                        GateExprInfo::default()
                     }
                 }
-            },
+            }
             ExprKind::Text(text) => {
                 let mut info = GateExprInfo {
                     ty: Some(GateType::Primitive(BuiltinType::Text)),
                     ..GateExprInfo::default()
                 };
-                for segment in text.segments {
+                for segment in &text.segments {
                     if let TextSegment::Interpolation(interpolation) = segment {
                         info.merge(self.infer_expr(interpolation.expr, env, ambient));
                     }
@@ -4971,11 +5066,17 @@ impl<'a> GateTypeContext<'a> {
                 let mut lowered = Vec::with_capacity(elements.len());
                 let mut types = Vec::with_capacity(elements.len());
                 for element in elements.iter() {
-                    let child = self.infer_expr(*element, env, ambient);
-                    if let Some(ty) = child.ty.clone().or_else(|| child.actual_gate_type()) {
+                    let mut child = self.infer_expr(*element, env, ambient);
+                    let actual = child.take_actual();
+                    let ty = child.ty.take().or_else(|| {
+                        actual
+                            .as_ref()
+                            .and_then(SourceOptionActualType::to_gate_type)
+                    });
+                    if let Some(ty) = ty {
                         types.push(ty);
                     }
-                    if let Some(ty) = child.actual() {
+                    if let Some(ty) = actual {
                         lowered.push(ty);
                     }
                     info.merge(child);
@@ -4995,37 +5096,35 @@ impl<'a> GateTypeContext<'a> {
                 let mut element_type = None::<SourceOptionActualType>;
                 let mut element_gate_type = None::<GateType>;
                 let mut consistent = true;
-                for element in &elements {
-                    let child = self.infer_expr(*element, env, ambient);
+                for element in elements {
+                    let mut child = self.infer_expr(*element, env, ambient);
                     if consistent
-                        && let Some(child_ty) = child.actual_gate_type().or(child.ty.clone()) {
-                            element_gate_type = match element_gate_type.take() {
-                                None => Some(child_ty),
-                                Some(current) => {
-                                    if self.types_match(&current, &child_ty) {
-                                        Some(current)
-                                    } else {
-                                        consistent = false;
-                                        None
-                                    }
+                        && let Some(child_ty) =
+                            child.actual_gate_type().or_else(|| child.ty.clone())
+                    {
+                        element_gate_type = match element_gate_type.take() {
+                            None => Some(child_ty),
+                            Some(current) => {
+                                if self.types_match(&current, &child_ty) {
+                                    Some(current)
+                                } else {
+                                    consistent = false;
+                                    None
                                 }
-                            };
-                        }
-                    if consistent {
-                        if let Some(child_ty) = child.actual() {
-                            element_type = match element_type.take() {
-                                None => Some(child_ty),
-                                Some(current) => match current.unify(&child_ty) {
-                                    Some(unified) => Some(unified),
-                                    None => {
-                                        consistent = false;
-                                        None
-                                    }
-                                },
-                            };
-                        }
-                    } else {
-                        let _ = child.actual();
+                            }
+                        };
+                    }
+                    if consistent && let Some(child_ty) = child.take_actual() {
+                        element_type = match element_type.take() {
+                            None => Some(child_ty),
+                            Some(current) => match current.unify(&child_ty) {
+                                Some(unified) => Some(unified),
+                                None => {
+                                    consistent = false;
+                                    None
+                                }
+                            },
+                        };
                     }
                     info.merge(child);
                 }
@@ -5037,9 +5136,10 @@ impl<'a> GateTypeContext<'a> {
                     } else if let Some(element_type) = element_type {
                         info.set_actual(SourceOptionActualType::List(Box::new(element_type)));
                         if info.ty.is_none()
-                            && let Some(element_gate_type) = element_gate_type {
-                                info.ty = Some(GateType::List(Box::new(element_gate_type)));
-                            }
+                            && let Some(element_gate_type) = element_gate_type
+                        {
+                            info.ty = Some(GateType::List(Box::new(element_gate_type)));
+                        }
                     } else if let Some(element_gate_type) = element_gate_type {
                         info.ty = Some(GateType::List(Box::new(element_gate_type)));
                     }
@@ -5053,45 +5153,45 @@ impl<'a> GateTypeContext<'a> {
                 let mut keys_consistent = true;
                 let mut values_consistent = true;
                 for entry in &map.entries {
-                    let key = self.infer_expr(entry.key, env, ambient);
-                    if keys_consistent
-                        && let Some(child_ty) = key.actual() {
-                            key_type = match key_type.take() {
-                                None => Some(child_ty),
-                                Some(current) => match current.unify(&child_ty) {
-                                    Some(unified) => Some(unified),
-                                    None => {
-                                        keys_consistent = false;
-                                        None
-                                    }
-                                },
-                            };
-                        }
+                    let mut key = self.infer_expr(entry.key, env, ambient);
+                    if keys_consistent && let Some(child_ty) = key.take_actual() {
+                        key_type = match key_type.take() {
+                            None => Some(child_ty),
+                            Some(current) => match current.unify(&child_ty) {
+                                Some(unified) => Some(unified),
+                                None => {
+                                    keys_consistent = false;
+                                    None
+                                }
+                            },
+                        };
+                    }
                     info.merge(key);
 
-                    let value = self.infer_expr(entry.value, env, ambient);
-                    if values_consistent
-                        && let Some(child_ty) = value.actual() {
-                            value_type = match value_type.take() {
-                                None => Some(child_ty),
-                                Some(current) => match current.unify(&child_ty) {
-                                    Some(unified) => Some(unified),
-                                    None => {
-                                        values_consistent = false;
-                                        None
-                                    }
-                                },
-                            };
-                        }
+                    let mut value = self.infer_expr(entry.value, env, ambient);
+                    if values_consistent && let Some(child_ty) = value.take_actual() {
+                        value_type = match value_type.take() {
+                            None => Some(child_ty),
+                            Some(current) => match current.unify(&child_ty) {
+                                Some(unified) => Some(unified),
+                                None => {
+                                    values_consistent = false;
+                                    None
+                                }
+                            },
+                        };
+                    }
                     info.merge(value);
                 }
-                if keys_consistent && values_consistent
-                    && let (Some(key), Some(value)) = (key_type, value_type) {
-                        info.set_actual(SourceOptionActualType::Map {
-                            key: Box::new(key),
-                            value: Box::new(value),
-                        });
-                    }
+                if keys_consistent
+                    && values_consistent
+                    && let (Some(key), Some(value)) = (key_type, value_type)
+                {
+                    info.set_actual(SourceOptionActualType::Map {
+                        key: Box::new(key),
+                        value: Box::new(value),
+                    });
+                }
                 info
             }
             ExprKind::Set(elements) => {
@@ -5099,26 +5199,24 @@ impl<'a> GateTypeContext<'a> {
                 let mut element_type = None::<SourceOptionActualType>;
                 let mut consistent = true;
                 for element in elements {
-                    let child = self.infer_expr(element, env, ambient);
-                    if consistent
-                        && let Some(child_ty) = child.actual() {
-                            element_type = match element_type.take() {
-                                None => Some(child_ty),
-                                Some(current) => match current.unify(&child_ty) {
-                                    Some(unified) => Some(unified),
-                                    None => {
-                                        consistent = false;
-                                        None
-                                    }
-                                },
-                            };
-                        }
+                    let mut child = self.infer_expr(*element, env, ambient);
+                    if consistent && let Some(child_ty) = child.take_actual() {
+                        element_type = match element_type.take() {
+                            None => Some(child_ty),
+                            Some(current) => match current.unify(&child_ty) {
+                                Some(unified) => Some(unified),
+                                None => {
+                                    consistent = false;
+                                    None
+                                }
+                            },
+                        };
+                    }
                     info.merge(child);
                 }
-                if consistent
-                    && let Some(element_type) = element_type {
-                        info.set_actual(SourceOptionActualType::Set(Box::new(element_type)));
-                    }
+                if consistent && let Some(element_type) = element_type {
+                    info.set_actual(SourceOptionActualType::Set(Box::new(element_type)));
+                }
                 info
             }
             ExprKind::Lambda(_) => GateExprInfo::default(),
@@ -5127,15 +5225,21 @@ impl<'a> GateTypeContext<'a> {
                 let field_count = record.fields.len();
                 let mut fields = Vec::with_capacity(field_count);
                 let mut types = Vec::with_capacity(field_count);
-                for field in record.fields {
-                    let child = self.infer_expr(field.value, env, ambient);
-                    if let Some(ty) = child.ty.clone().or_else(|| child.actual_gate_type()) {
+                for field in &record.fields {
+                    let mut child = self.infer_expr(field.value, env, ambient);
+                    let actual = child.take_actual();
+                    let ty = child.ty.take().or_else(|| {
+                        actual
+                            .as_ref()
+                            .and_then(SourceOptionActualType::to_gate_type)
+                    });
+                    if let Some(ty) = ty {
                         types.push(GateRecordField {
                             name: field.label.text().to_owned(),
                             ty,
                         });
                     }
-                    if let Some(ty) = child.actual() {
+                    if let Some(ty) = actual {
                         fields.push(SourceOptionActualRecordField {
                             name: field.label.text().to_owned(),
                             ty,
@@ -5156,21 +5260,21 @@ impl<'a> GateTypeContext<'a> {
                 let subject = match base {
                     crate::hir::ProjectionBase::Ambient => ambient.cloned(),
                     crate::hir::ProjectionBase::Expr(base) => {
-                        let base_info = self.infer_expr(base, env, ambient);
-                        let ty = base_info.ty.clone();
+                        let mut base_info = self.infer_expr(*base, env, ambient);
+                        let ty = base_info.ty.take();
                         info.merge(base_info);
                         ty
                     }
                 };
                 if let Some(subject) = subject {
-                    match self.project_type(&subject, &path, env.current_domain) {
+                    match self.project_type(&subject, path, env.current_domain) {
                         Ok(projected) => info.ty = Some(projected),
                         Err(issue) => info.issues.push(issue),
                     }
                 } else {
                     info.issues.push(GateIssue::InvalidProjection {
                         span: path.span(),
-                        path: name_path_text(&path),
+                        path: name_path_text(path),
                         subject: "unknown subject".to_owned(),
                     });
                 }
@@ -5188,37 +5292,37 @@ impl<'a> GateTypeContext<'a> {
             }
             ExprKind::Apply { callee, arguments } => {
                 let mut same_module_function_item = None;
-                if let ExprKind::Name(reference) = &self.module.exprs()[callee].kind {
+                if let ExprKind::Name(reference) = &self.module.exprs()[*callee].kind {
                     if let Some(info) = self
-                        .infer_builtin_constructor_apply_expr(reference, &arguments, env, ambient)
+                        .infer_builtin_constructor_apply_expr(reference, arguments, env, ambient)
+                    {
+                        return self.finalize_expr_info(
+                            self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
+                        );
+                    }
+                    if let Some(info) = self.infer_domain_constructor_apply_expr(
+                        reference, arguments, env, ambient, None,
+                    ) {
+                        return self.finalize_expr_info(
+                            self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
+                        );
+                    }
+                    if let Some(info) =
+                        self.infer_domain_member_apply(reference, arguments, env, ambient)
                     {
                         return self.finalize_expr_info(
                             self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
                         );
                     }
                     if let Some(info) =
-                        self.infer_domain_constructor_apply_expr(reference, &arguments, env, ambient)
-                    {
-                        return self.finalize_expr_info(
-                            self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
-                        );
-                    }
-                    if let Some(info) =
-                        self.infer_domain_member_apply(reference, &arguments, env, ambient)
-                    {
-                        return self.finalize_expr_info(
-                            self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
-                        );
-                    }
-                    if let Some(info) =
-                        self.infer_class_member_apply_expr(reference, &arguments, env, ambient)
+                        self.infer_class_member_apply_expr(reference, arguments, env, ambient)
                     {
                         return self.finalize_expr_info(
                             self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
                         );
                     }
                     if let Some(info) = self.infer_same_module_constructor_apply_expr(
-                        reference, &arguments, env, ambient,
+                        reference, arguments, env, ambient,
                     ) {
                         return self.finalize_expr_info(
                             self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
@@ -5232,21 +5336,21 @@ impl<'a> GateTypeContext<'a> {
                         same_module_function_item = Some(*item_id);
                     }
                     if let Some(info) = self
-                        .infer_polymorphic_function_apply_expr(reference, &arguments, env, ambient)
+                        .infer_polymorphic_function_apply_expr(reference, arguments, env, ambient)
                     {
                         return self.finalize_expr_info(
                             self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
                         );
                     }
                     if let Some(info) =
-                        self.infer_import_function_apply_expr(reference, &arguments, env, ambient)
+                        self.infer_import_function_apply_expr(reference, arguments, env, ambient)
                     {
                         return self.finalize_expr_info(
                             self.maybe_use_ambient_signal_payload(expr_id, ambient, info),
                         );
                     }
                 }
-                let mut info = self.infer_expr(callee, env, ambient);
+                let mut info = self.infer_expr(*callee, env, ambient);
                 let mut current = info.ty.clone();
                 for argument in arguments.iter() {
                     // Extract the expected parameter type from the current Arrow type.
@@ -5265,7 +5369,7 @@ impl<'a> GateTypeContext<'a> {
                     // Arrow chain can still be advanced (same strategy as import path).
                     let argument_ty = argument_info
                         .actual_gate_type()
-                        .or(argument_info.ty.clone())
+                        .or_else(|| argument_info.ty.clone())
                         .or_else(|| param_ty.clone());
                     info.merge(argument_info);
                     current = match (current.as_ref(), argument_ty.as_ref()) {
@@ -5301,8 +5405,8 @@ impl<'a> GateTypeContext<'a> {
                 info
             }
             ExprKind::Unary { operator, expr } => {
-                let mut info = self.infer_expr(expr, env, ambient);
-                let operand_ty = info.actual_gate_type().or(info.ty.clone());
+                let mut info = self.infer_expr(*expr, env, ambient);
+                let operand_ty = info.actual_gate_type().or_else(|| info.ty.clone());
                 info.ty = match (operator, operand_ty.as_ref()) {
                     (crate::hir::UnaryOperator::Not, Some(ty)) if ty.is_bool() => {
                         Some(GateType::Primitive(BuiltinType::Bool))
@@ -5316,25 +5420,29 @@ impl<'a> GateTypeContext<'a> {
                 operator,
                 right,
             } => {
-                let mut left_info = self.infer_expr(left, env, ambient);
-                let mut left_ty = left_info.actual_gate_type().or(left_info.ty.clone());
-                let mut right_info = self.infer_expr(right, env, ambient);
-                let mut right_ty = right_info.actual_gate_type().or(right_info.ty.clone());
+                let mut left_info = self.infer_expr(*left, env, ambient);
+                let mut left_ty = left_info
+                    .actual_gate_type()
+                    .or_else(|| left_info.ty.clone());
+                let mut right_info = self.infer_expr(*right, env, ambient);
+                let mut right_ty = right_info
+                    .actual_gate_type()
+                    .or_else(|| right_info.ty.clone());
 
                 if right_ty.is_none()
                     && let Some(left) = left_ty.as_ref()
                     && let Some(refined) =
-                        self.infer_binary_operand_against_peer(right, env, ambient, left)
+                        self.infer_binary_operand_against_peer(*right, env, ambient, left)
                 {
-                    right_ty = refined.actual_gate_type().or(refined.ty.clone());
+                    right_ty = refined.actual_gate_type().or_else(|| refined.ty.clone());
                     right_info = refined;
                 }
                 if left_ty.is_none()
                     && let Some(right) = right_ty.as_ref()
                     && let Some(refined) =
-                        self.infer_binary_operand_against_peer(left, env, ambient, right)
+                        self.infer_binary_operand_against_peer(*left, env, ambient, right)
                 {
-                    left_ty = refined.actual_gate_type().or(refined.ty.clone());
+                    left_ty = refined.actual_gate_type().or_else(|| refined.ty.clone());
                     left_info = refined;
                 }
 
@@ -5345,7 +5453,7 @@ impl<'a> GateTypeContext<'a> {
                 // actual type of this expression.
                 info.actual = None;
                 info.ty = if let (Some(left), Some(right)) = (left_ty.as_ref(), right_ty.as_ref()) {
-                    match select_domain_binary_operator(self.module, self, operator, left, right) {
+                    match select_domain_binary_operator(self.module, self, *operator, left, right) {
                         Ok(maybe_matched) => maybe_matched.map(|matched| matched.result_type),
                         Err(candidates) => {
                             // Multiple domain operator implementations match: emit an ambiguity
@@ -5353,7 +5461,7 @@ impl<'a> GateTypeContext<'a> {
                             // can continue without cascading false errors.
                             info.issues.push(GateIssue::AmbiguousDomainOperator {
                                 span: expr.span,
-                                operator: binary_operator_text(operator).to_owned(),
+                                operator: binary_operator_text(*operator).to_owned(),
                                 candidates: candidates
                                     .into_iter()
                                     .map(|c| {
@@ -5406,10 +5514,10 @@ impl<'a> GateTypeContext<'a> {
                 };
                 info
             }
-            ExprKind::Pipe(pipe) => self.infer_pipe_expr(&pipe, env),
-            ExprKind::Cluster(cluster) => self.infer_cluster_expr(cluster, env),
+            ExprKind::Pipe(pipe) => self.infer_pipe_expr_with_target(pipe, env, None, ambient),
+            ExprKind::Cluster(cluster) => self.infer_cluster_expr(*cluster, env),
             ExprKind::PatchApply { target, patch } => {
-                let mut info = self.infer_expr(target, env, ambient);
+                let mut info = self.infer_expr(*target, env, ambient);
                 info.actual = info
                     .actual
                     .clone()
@@ -5460,12 +5568,31 @@ impl<'a> GateTypeContext<'a> {
         ambient: Option<&GateType>,
         expected: &GateType,
     ) -> GateExprInfo {
-        let expr = self.module.exprs()[expr_id].clone();
-        let mut info = match expr.kind {
+        let expr = &self.module.exprs()[expr_id];
+        let mut info = match &expr.kind {
             ExprKind::SuffixedInteger(literal) => {
-                self.infer_suffixed_integer_expr_with_expected(&literal, expected)
+                self.infer_suffixed_integer_expr_with_expected(literal, expected)
             }
-            ExprKind::Name(reference) => self.infer_name_with_expected(&reference, env, expected),
+            ExprKind::Name(reference) => self.infer_name_with_expected(reference, env, expected),
+            ExprKind::Apply { callee, arguments }
+                if matches!(&self.module.exprs()[*callee].kind, ExprKind::Name(reference)
+                    if matches!(reference.resolution.as_ref(), ResolutionState::Resolved(TermResolution::DomainConstructor(_)))) =>
+            {
+                let ExprKind::Name(reference) = &self.module.exprs()[*callee].kind else {
+                    unreachable!()
+                };
+                self.infer_domain_constructor_apply_expr(
+                    reference,
+                    arguments,
+                    env,
+                    ambient,
+                    Some(expected),
+                )
+                .unwrap_or_default()
+            }
+            ExprKind::Pipe(pipe) => {
+                self.infer_pipe_expr_with_target(pipe, env, Some(expected), ambient)
+            }
             _ => self.infer_expr(expr_id, env, ambient),
         };
         // Expressions can retain declaration-owned quantifiers, including
@@ -5494,7 +5621,7 @@ impl<'a> GateTypeContext<'a> {
         ambient: Option<&GateType>,
         peer: &GateType,
     ) -> Option<GateExprInfo> {
-        let expr = self.module.exprs()[expr_id].clone();
+        let expr = &self.module.exprs()[expr_id];
         if matches!(expr.kind, ExprKind::SuffixedInteger(_)) {
             return Some(self.infer_expr_with_expected(expr_id, env, ambient, peer));
         }
@@ -5594,8 +5721,16 @@ impl<'a> GateTypeContext<'a> {
             }
             ResolutionState::Resolved(TermResolution::Import(import_id)) => {
                 let ty = self.import_value_type(*import_id);
-                if matches!(self.module.imports()[*import_id].metadata, ImportBindingMetadata::ConstructorValue { .. })
-                    && let Some(GateType::OpaqueImport { origin, import, name, arguments, definition }) = &ty
+                if matches!(
+                    self.module.imports()[*import_id].metadata,
+                    ImportBindingMetadata::ConstructorValue { .. }
+                ) && let Some(GateType::OpaqueImport {
+                    origin,
+                    import,
+                    name,
+                    arguments,
+                    definition,
+                }) = &ty
                     && !arguments.is_empty()
                 {
                     return GateExprInfo {
@@ -5756,6 +5891,17 @@ impl<'a> GateTypeContext<'a> {
                     })
                     .unwrap_or_else(|| self.infer_name(reference, env))
             }
+            ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(_)) => self
+                .select_hoisted_import(reference, Some(expected))
+                .and_then(|import| self.import_value_type_with_ambient(import))
+                .and_then(|template| self.specialize_gate_type_template(&template, expected))
+                .map(|ty| GateExprInfo {
+                    contains_signal: ty.is_signal(),
+                    actual: Some(SourceOptionActualType::from_gate_type(&ty)),
+                    ty: Some(ty),
+                    ..GateExprInfo::default()
+                })
+                .unwrap_or_else(|| self.infer_name(reference, env)),
             _ => self.infer_name(reference, env),
         };
         if let Some(specialized) = info
@@ -5849,8 +5995,29 @@ impl<'a> GateTypeContext<'a> {
         };
         let mut substitutions = HashMap::new();
         let mut item_stack = Vec::new();
-        if !self.match_hir_type(domain.carrier, argument_ty, &mut substitutions, &mut item_stack) {
+        if !self.match_hir_type(
+            domain.carrier,
+            argument_ty,
+            &mut substitutions,
+            &mut item_stack,
+        ) {
             return None;
+        }
+        if let Some(GateType::Domain {
+            item, arguments, ..
+        }) = expected_result
+            && *item == item_id
+            && arguments.len() == domain.parameters.len()
+        {
+            for (parameter, expected) in domain.parameters.iter().zip(arguments) {
+                if let Some(known) = substitutions.get(parameter) {
+                    if !self.types_match(known, expected) {
+                        return None;
+                    }
+                } else {
+                    substitutions.insert(*parameter, expected.clone());
+                }
+            }
         }
         let result = self.domain_constructor_type(item_id, &substitutions)?;
         if let Some(expected) = expected_result
@@ -5867,6 +6034,7 @@ impl<'a> GateTypeContext<'a> {
         arguments: &crate::NonEmpty<ExprId>,
         env: &GateExprEnv,
         ambient: Option<&GateType>,
+        expected_result: Option<&GateType>,
     ) -> Option<GateExprInfo> {
         let ResolutionState::Resolved(TermResolution::DomainConstructor(item_id)) =
             reference.resolution.as_ref()
@@ -5883,7 +6051,7 @@ impl<'a> GateTypeContext<'a> {
         let Some(argument_types) = argument_types.into_iter().collect::<Option<Vec<_>>>() else {
             return Some(info);
         };
-        info.ty = self.infer_domain_constructor_apply(*item_id, &argument_types, None);
+        info.ty = self.infer_domain_constructor_apply(*item_id, &argument_types, expected_result);
         Some(info)
     }
 
@@ -6010,19 +6178,20 @@ impl<'a> GateTypeContext<'a> {
                         ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Int)) => {
                             Some(LiteralSuffixBase::Int)
                         }
-                        ResolutionState::Resolved(TypeResolution::Builtin(BuiltinType::Decimal)) => {
-                            Some(LiteralSuffixBase::Decimal)
-                        }
+                        ResolutionState::Resolved(TypeResolution::Builtin(
+                            BuiltinType::Decimal,
+                        )) => Some(LiteralSuffixBase::Decimal),
                         _ => None,
                     },
                     _ => None,
                 }
             }
-            LiteralSuffixResolution::Import(import_id) => match &self.module.imports()[import_id].metadata
-            {
-                ImportBindingMetadata::DomainSuffix { base, .. } => Some(*base),
-                _ => None,
-            },
+            LiteralSuffixResolution::Import(import_id) => {
+                match &self.module.imports()[import_id].metadata {
+                    ImportBindingMetadata::DomainSuffix { base, .. } => Some(*base),
+                    _ => None,
+                }
+            }
         }
     }
 
@@ -6158,8 +6327,12 @@ impl<'a> GateTypeContext<'a> {
                 };
                 let mut substitutions = HashMap::new();
                 let mut item_stack = Vec::new();
-                if !self.match_hir_type(*result, expected_result, &mut substitutions, &mut item_stack)
-                {
+                if !self.match_hir_type(
+                    *result,
+                    expected_result,
+                    &mut substitutions,
+                    &mut item_stack,
+                ) {
                     return None;
                 }
                 let mut lower_stack = Vec::new();
@@ -6449,7 +6622,9 @@ impl<'a> GateTypeContext<'a> {
             if !argument_types
                 .iter()
                 .zip(&parameters)
-                .all(|(actual, template)| self.match_gate_type_template(template, actual, &mut substitutions))
+                .all(|(actual, template)| {
+                    self.match_gate_type_template(template, actual, &mut substitutions)
+                })
             {
                 return None;
             }
@@ -6540,6 +6715,46 @@ impl<'a> GateTypeContext<'a> {
             current = result.as_ref();
         }
         Some((parameters, current.clone()))
+    }
+
+    /// An argument may instantiate an open result as another callable. Expose
+    /// those returned arrows before consumers count parameters or lower callbacks.
+    /// Ordinary calls retain their open signature for contextual phantom payloads.
+    pub(crate) fn application_callee_type<'t>(
+        &mut self,
+        ty: &'t GateType,
+        arguments: &crate::NonEmpty<ExprId>,
+        env: &GateExprEnv,
+        ambient: Option<&GateType>,
+    ) -> std::borrow::Cow<'t, GateType> {
+        let mut current = ty;
+        let complete = arguments.iter().all(|_| {
+            if let GateType::Arrow { result, .. } = current {
+                current = result;
+                true
+            } else {
+                false
+            }
+        });
+        if complete {
+            return std::borrow::Cow::Borrowed(ty);
+        }
+        let mut bindings = HashMap::new();
+        let mut current = ty.clone();
+        for argument in arguments.iter() {
+            let GateType::Arrow { parameter, result } = current else {
+                break;
+            };
+            if parameter.has_type_params() {
+                let actual = self.infer_expr(*argument, env, ambient);
+                let mut candidate = bindings.clone();
+                if self.match_gate_expr_template(&parameter, &actual, &mut candidate) {
+                    bindings = candidate;
+                }
+            }
+            current = result.substitute_type_parameters(&bindings);
+        }
+        std::borrow::Cow::Owned(ty.substitute_type_parameters(&bindings))
     }
 
     pub(crate) fn flatten_apply_expr(&self, expr_id: ExprId) -> (ExprId, Vec<ExprId>) {
@@ -6886,7 +7101,7 @@ impl<'a> GateTypeContext<'a> {
                     );
                     let arg_ty = argument_info
                         .actual_gate_type()
-                        .or(argument_info.ty.clone());
+                        .or_else(|| argument_info.ty.clone());
                     // If we have no type information for the argument, we can't prove it
                     // doesn't match — accept it and let downstream lowering verify.
                     arg_ty.is_none()
@@ -7189,6 +7404,13 @@ impl<'a> GateTypeContext<'a> {
         env: &GateExprEnv,
         _ambient: Option<&GateType>,
     ) -> Option<GateExprInfo> {
+        if matches!(
+            reference.resolution.as_ref(),
+            ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(_))
+        ) {
+            let signature = self.hoisted_application_signature(reference, arguments, env)?;
+            return Some(self.infer_contextual_function_arguments(signature, arguments, env));
+        }
         let ResolutionState::Resolved(TermResolution::Import(import_id)) =
             reference.resolution.as_ref()
         else {
@@ -7200,6 +7422,36 @@ impl<'a> GateTypeContext<'a> {
             return None;
         }
         Some(self.infer_contextual_function_arguments(import_ty, arguments, env))
+    }
+
+    /// Select a declared import contract without publishing speculative callback
+    /// evidence. The checker must still check every argument against this contract.
+    pub(crate) fn hoisted_application_signature(
+        &mut self,
+        reference: &TermReference,
+        arguments: &crate::NonEmpty<ExprId>,
+        env: &GateExprEnv,
+    ) -> Option<GateType> {
+        let ResolutionState::Resolved(TermResolution::AmbiguousHoistedImports(candidates)) =
+            reference.resolution.as_ref()
+        else {
+            return None;
+        };
+        let mut selected = None;
+        for import in candidates.iter() {
+            let Some(signature) = self.import_value_type_with_ambient(*import) else {
+                continue;
+            };
+            let mut probe = self.contextual_probe();
+            let info = probe.infer_contextual_function_arguments(signature.clone(), arguments, env);
+            if info.ty.is_some() && info.issues.is_empty() {
+                if selected.is_some() {
+                    return None;
+                }
+                selected = Some(signature);
+            }
+        }
+        selected
     }
 
     fn infer_contextual_function_arguments(
@@ -7457,7 +7709,10 @@ impl<'a> GateTypeContext<'a> {
         if let Some(function_body) = self.infer_function_pipe_body(expr_id, env, &ambient, None) {
             info = function_body;
             transform_mode = PipeTransformMode::Apply;
-        } else if let Some(GateType::Arrow { parameter, result }) = info.ty.clone() {
+        } else if matches!(info.ty, Some(GateType::Arrow { .. })) {
+            let Some(GateType::Arrow { parameter, result }) = info.ty.take() else {
+                unreachable!("arrow type was checked before taking its result")
+            };
             if self.types_match(&parameter, &ambient) {
                 info.ty = Some(*result);
                 transform_mode = PipeTransformMode::Apply;
@@ -7573,9 +7828,12 @@ impl<'a> GateTypeContext<'a> {
         let step_info = self.infer_expr(step_expr, env, Some(input_payload.as_ref()));
         let expected_step = GateType::Arrow {
             parameter: Box::new(input_payload.as_ref().clone()),
-            result: Box::new(GateType::Arrow { parameter: Box::new(seed_ty.clone()), result: Box::new(seed_ty.clone()) }),
+            result: Box::new(GateType::Arrow {
+                parameter: Box::new(seed_ty.clone()),
+                result: Box::new(seed_ty.clone()),
+            }),
         };
-        let step_ty = step_info.actual_gate_type().or(step_info.ty.clone()).map(|ty| {
+        let step_ty = step_info.actual_gate_type().or_else(|| step_info.ty.clone()).map(|ty| {
             self.specialize_gate_type_template(&ty, &expected_step).unwrap_or(ty)
         });
         info.merge(step_info);
@@ -7627,7 +7885,7 @@ impl<'a> GateTypeContext<'a> {
         };
 
         let seed_info = self.infer_expr(seed_expr, env, None);
-        let seed_ty = seed_info.actual_gate_type().or(seed_info.ty.clone());
+        let seed_ty = seed_info.actual_gate_type().or_else(|| seed_info.ty.clone());
         info.merge(seed_info);
         let Some(seed_ty) = seed_ty else {
             return self.finalize_expr_info(info);
@@ -7664,7 +7922,7 @@ impl<'a> GateTypeContext<'a> {
         };
 
         let stage_info = self.infer_expr(diff_expr, env, None);
-        let stage_ty = stage_info.actual_gate_type().or(stage_info.ty.clone());
+        let stage_ty = stage_info.actual_gate_type().or_else(|| stage_info.ty.clone());
         info.merge(stage_info);
         let Some(stage_ty) = stage_ty else {
             return self.finalize_expr_info(info);
@@ -7732,7 +7990,7 @@ impl<'a> GateTypeContext<'a> {
         let duration_info = self.infer_expr(duration_expr, env, None);
         let duration_ty = duration_info
             .actual_gate_type()
-            .or(duration_info.ty.clone());
+            .or_else(|| duration_info.ty.clone());
         info.merge(duration_info);
         let Some(duration_ty) = duration_ty else {
             return self.finalize_expr_info(info);
@@ -7770,7 +8028,7 @@ impl<'a> GateTypeContext<'a> {
         };
 
         let every_info = self.infer_expr(every_expr, env, None);
-        let every_ty = every_info.actual_gate_type().or(every_info.ty.clone());
+        let every_ty = every_info.actual_gate_type().or_else(|| every_info.ty.clone());
         info.merge(every_info);
         let Some(every_ty) = every_ty else {
             return self.finalize_expr_info(info);
@@ -7786,7 +8044,7 @@ impl<'a> GateTypeContext<'a> {
         }
 
         let count_info = self.infer_expr(count_expr, env, None);
-        let count_ty = count_info.actual_gate_type().or(count_info.ty.clone());
+        let count_ty = count_info.actual_gate_type().or_else(|| count_info.ty.clone());
         info.merge(count_info);
         let Some(count_ty) = count_ty else {
             return self.finalize_expr_info(info);
@@ -7981,7 +8239,11 @@ impl<'a> GateTypeContext<'a> {
             &mapped_collection_type,
         );
         for stage in segment.filter_stages() {
-            extend_pipe_env_with_stage_result_memo(&mut segment_env, stage, &mapped_collection_type);
+            extend_pipe_env_with_stage_result_memo(
+                &mut segment_env,
+                stage,
+                &mapped_collection_type,
+            );
         }
         if let Some(join_expr) = segment.join_expr() {
             let join_env = pipe_stage_expr_env(
@@ -8041,7 +8303,7 @@ impl<'a> GateTypeContext<'a> {
             mut info,
             transform_mode: _,
         } = self.infer_pipe_body_inference(expr_id, env, subject);
-        let body_ty = info.actual_gate_type().or(info.ty.clone());
+        let body_ty = info.actual_gate_type().or_else(|| info.ty.clone());
         info.ty = body_ty.map(|body_ty| match subject {
             GateType::Signal(_) => GateType::Signal(Box::new(body_ty)),
             _ => body_ty,
@@ -8057,7 +8319,7 @@ impl<'a> GateTypeContext<'a> {
     ) -> GateExprInfo {
         let plan = subject.validate_stage_subject();
         let mut info = self.infer_pipe_body(expr_id, env, plan.input_subject());
-        let Some(body_ty) = info.actual_gate_type().or(info.ty.clone()) else {
+        let Some(body_ty) = info.actual_gate_type().or_else(|| info.ty.clone()) else {
             return self.finalize_expr_info(info);
         };
         if !plan.accepts_result(&body_ty) {
@@ -8295,20 +8557,36 @@ impl<'a> GateTypeContext<'a> {
         self.finalize_expr_info(info)
     }
 
-    pub(crate) fn infer_pipe_expr(
+    fn infer_pipe_expr_with_target(
         &mut self,
         pipe: &crate::hir::PipeExpr,
         env: &GateExprEnv,
+        expected_target: Option<&GateType>,
+        ambient: Option<&GateType>,
     ) -> GateExprInfo {
-        let mut info = self.infer_expr(pipe.head, env, None);
-        let mut current = info.ty.clone();
+        let mut info = self.infer_expr(pipe.head, env, ambient);
+        if pipe.result_block_desugaring
+            && let Some(GateType::Result {
+                error: expected_error,
+                ..
+            }) = expected_target
+            && let Some(SourceOptionActualType::Result { error, value }) = info.actual()
+            && matches!(error.as_ref(), SourceOptionActualType::Hole)
+        {
+            info.set_actual(SourceOptionActualType::Result {
+                error: Box::new(SourceOptionActualType::from_gate_type(expected_error)),
+                value,
+            });
+        }
+        let mut current = info.ty.take();
         let mut pipe_env = env.clone();
+        let mut recurrence_state = None;
         for semantic_stage in pipe.semantic_stages() {
             let stage = semantic_stage.start_stage();
-            let Some(subject) = current.clone() else {
+            let Some(subject) = current.take() else {
                 break;
             };
-            let stage_info = match semantic_stage {
+            let mut stage_info = match semantic_stage {
                 crate::PipeSemanticStage::Single { stage, .. } => match &stage.kind {
                     PipeStageKind::Transform { expr } => {
                         let stage_env = pipe_stage_expr_env(&pipe_env, stage, &subject);
@@ -8353,6 +8631,20 @@ impl<'a> GateTypeContext<'a> {
                     PipeStageKind::Apply { .. } => {
                         unreachable!("semantic stage iterator groups apply runs")
                     }
+                    PipeStageKind::RecurStart { expr } | PipeStageKind::RecurStep { expr }
+                        if matches!(
+                            expected_target,
+                            Some(GateType::Task { .. } | GateType::Signal(_))
+                        ) =>
+                    {
+                        let stage_env = pipe_stage_expr_env(&pipe_env, stage, &subject);
+                        let stage_info =
+                            self.infer_transform_stage_info(*expr, &stage_env, &subject);
+                        if matches!(stage.kind, PipeStageKind::RecurStart { .. }) {
+                            recurrence_state = stage_info.ty.clone();
+                        }
+                        stage_info
+                    }
                     PipeStageKind::RecurStart { .. } | PipeStageKind::RecurStep { .. } => {
                         GateExprInfo::default()
                     }
@@ -8363,7 +8655,9 @@ impl<'a> GateTypeContext<'a> {
                     PipeStageKind::Truthy { .. }
                     | PipeStageKind::Falsy { .. }
                     | PipeStageKind::Case { .. } => {
-                        unreachable!("semantic stage iterator groups truthy/falsy pairs and case runs")
+                        unreachable!(
+                            "semantic stage iterator groups truthy/falsy pairs and case runs"
+                        )
                     }
                 },
                 crate::PipeSemanticStage::ApplyRun(_) => GateExprInfo::default(),
@@ -8375,16 +8669,56 @@ impl<'a> GateTypeContext<'a> {
                     self.infer_case_stage_run_info(&case_run, &pipe_env, &subject)
                 }
             };
-            let result_subject = stage_info.actual_gate_type().or(stage_info.ty.clone());
+            let result_subject = stage_info
+                .actual
+                .as_ref()
+                .and_then(SourceOptionActualType::to_gate_type)
+                .or_else(|| stage_info.ty.take());
             if let Some(result_subject) = result_subject.as_ref() {
                 extend_pipe_env_with_stage_memos(&mut pipe_env, stage, &subject, result_subject);
             }
+            // Partial evidence must describe this stage's result, never a
+            // preceding subject whose inference happened to be complete.
+            // Move the completed stage evidence instead of copying its tree.
+            info.actual = stage_info.actual.take().or_else(|| {
+                result_subject
+                    .as_ref()
+                    .map(SourceOptionActualType::from_gate_type)
+            });
             current = result_subject;
             info.merge(stage_info);
+        }
+        if let (Some(state), Some(result)) = (&recurrence_state, &current)
+            && !self.types_match(state, result)
+        {
+            info.issues.push(GateIssue::InvalidPipeStageInput {
+                span: pipe.stages.last().span,
+                stage: "<|@",
+                expected: state.to_string(),
+                actual: result.to_string(),
+            });
+            current = None;
+        }
+        // The declaration supplies the scheduler-owned carrier; pure recurrence
+        // stages must still establish its payload independently. Wakeup and
+        // lowering-target legality remain owned by recurrence validation.
+        if recurrence_state.is_some() {
+            current = current.map(|payload| match expected_target {
+                Some(GateType::Task { error, .. }) => GateType::Task {
+                    error: error.clone(),
+                    value: Box::new(payload),
+                },
+                Some(GateType::Signal(_)) if !payload.is_signal() => {
+                    GateType::Signal(Box::new(payload))
+                }
+                _ => payload,
+            });
+            info.actual = current.as_ref().map(SourceOptionActualType::from_gate_type);
         }
         info.ty = current;
         info
     }
+
 
     pub(crate) fn project_type(
         &mut self,
@@ -8417,23 +8751,22 @@ impl<'a> GateTypeContext<'a> {
                 GateType::Record(fields) => {
                     self.project_record_field_step(fields, true, subject, segment, path)
                 }
-                GateType::OpaqueImport { .. } => match self.project_type_step(
-                    payload,
-                    segment,
-                    path,
-                    current_domain,
-                )? {
-                    GateProjectionStep::RecordField { result } => Ok(
-                        GateProjectionStep::RecordField {
-                            result: GateType::Signal(Box::new(result)),
-                        },
-                    ),
-                    GateProjectionStep::DomainMember { .. } => Err(GateIssue::InvalidProjection {
-                        span: path.span(),
-                        path: name_path_text(path),
-                        subject: subject.to_string(),
-                    }),
-                },
+                GateType::OpaqueImport { .. } => {
+                    match self.project_type_step(payload, segment, path, current_domain)? {
+                        GateProjectionStep::RecordField { result } => {
+                            Ok(GateProjectionStep::RecordField {
+                                result: GateType::Signal(Box::new(result)),
+                            })
+                        }
+                        GateProjectionStep::DomainMember { .. } => {
+                            Err(GateIssue::InvalidProjection {
+                                span: path.span(),
+                                path: name_path_text(path),
+                                subject: subject.to_string(),
+                            })
+                        }
+                    }
+                }
                 _ => Err(GateIssue::InvalidProjection {
                     span: path.span(),
                     path: name_path_text(path),
@@ -8481,13 +8814,8 @@ impl<'a> GateTypeContext<'a> {
                     let lowered =
                         lower_import_value_type_with_substitutions(self.module, alias, arguments);
                     if let GateType::Record(fields) = lowered {
-                        return self.project_record_field_step(
-                            &fields,
-                            false,
-                            subject,
-                            segment,
-                            path,
-                        );
+                        return self
+                            .project_record_field_step(&fields, false, subject, segment, path);
                     }
                 }
                 Err(GateIssue::InvalidProjection {
@@ -8647,7 +8975,9 @@ impl<'a> GateTypeContext<'a> {
 
         match (callee, argument) {
             (GateType::Signal(callee_payload), GateType::Signal(argument_payload)) => {
-                return Some(wrap_signal(self.apply_function(callee_payload, argument_payload)?));
+                return Some(wrap_signal(
+                    self.apply_function(callee_payload, argument_payload)?,
+                ));
             }
             (GateType::Signal(callee_payload), other) => {
                 return Some(wrap_signal(self.apply_function(callee_payload, other)?));

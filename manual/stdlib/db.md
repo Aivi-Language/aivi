@@ -394,6 +394,8 @@ After the commit succeeds, `db.live` signals with `refreshOn: database` automati
 ### Updating and deleting
 
 ```aivi
+use aivi.db (DbParam, DbStatement)
+
 type Int -> DbParam
 func intParam = value =>
     {

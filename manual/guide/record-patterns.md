@@ -106,6 +106,11 @@ func isTopScore = { score: . } >= 100
 This is sugar for:
 
 ```aivi
+type Profile = {
+    name: Text,
+    score: Int
+}
+
 type Profile -> Bool
 func isTopScore = profile => profile
  ||> { score } -> score >= 100
