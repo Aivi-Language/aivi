@@ -275,6 +275,104 @@ fn user_value(active: bool, email: &str) -> DetachedRuntimeValue {
 }
 
 #[test]
+fn linked_runtime_executes_inferred_payload_operators_transactionally_on_native_lanes() {
+    let lowered = lower_text(
+        "runtime-startup-inferred-payload-operators.aivi",
+        r#"
+provider custom.number
+    wakeup: providerTrigger
+provider custom.ready
+    wakeup: providerTrigger
+@source custom.number
+signal n : Signal Int
+@source custom.ready
+signal ready : Signal Bool
+signal other = 2
+signal enabled = True
+signal sum = n + other
+signal chained = sum * 2
+signal difference = n - other
+signal quotient = n / other
+signal remainder = n % other
+signal both = ready and enabled
+signal either = ready or False
+signal inverse = not ready
+signal less = n < other
+signal equal = n == other
+"#,
+    );
+    let assembly = crate::assemble_hir_runtime(lowered.hir.module()).unwrap();
+    let mut linked =
+        link_backend_runtime(assembly, &lowered.core, Arc::new(lowered.backend.clone())).unwrap();
+    let names = [
+        "sum",
+        "chained",
+        "difference",
+        "quotient",
+        "remainder",
+        "both",
+        "either",
+        "inverse",
+        "less",
+        "equal",
+    ];
+    for name in names {
+        let derived = linked
+            .assembly()
+            .signal(item_id(lowered.hir.module(), name))
+            .unwrap()
+            .derived()
+            .unwrap();
+        assert!(
+            matches!(
+                linked.derived_signal(derived).unwrap().eval_lane,
+                LinkedEvalLane::Native(_)
+            ),
+            "{name} must execute natively"
+        );
+    }
+    let first = linked.tick_with_source_lifecycle().unwrap();
+    let number = activation_port_for_owner(&linked, lowered.hir.module(), &first, "n");
+    let ready = activation_port_for_owner(&linked, lowered.hir.module(), &first, "ready");
+    for (n, flag) in [(8, false), (1, true), (2, false)] {
+        number
+            .publish(DetachedRuntimeValue::from_runtime_owned(RuntimeValue::Int(
+                n,
+            )))
+            .unwrap();
+        ready
+            .publish(DetachedRuntimeValue::from_runtime_owned(
+                RuntimeValue::Bool(flag),
+            ))
+            .unwrap();
+        linked.tick().unwrap();
+        for (name, expected) in names.into_iter().zip([
+            RuntimeValue::Int(n + 2),
+            RuntimeValue::Int((n + 2) * 2),
+            RuntimeValue::Int(n - 2),
+            RuntimeValue::Int(n / 2),
+            RuntimeValue::Int(n % 2),
+            RuntimeValue::Bool(flag),
+            RuntimeValue::Bool(flag),
+            RuntimeValue::Bool(!flag),
+            RuntimeValue::Bool(n < 2),
+            RuntimeValue::Bool(n == 2),
+        ]) {
+            let handle = signal_handle(&linked, lowered.hir.module(), name);
+            assert_eq!(
+                linked.runtime().current_value(handle).unwrap(),
+                Some(&expected),
+                "{name} at n={n}"
+            );
+        }
+        assert!(
+            linked.tick().unwrap().committed().is_empty(),
+            "idle ticks must preserve committed values"
+        );
+    }
+}
+
+#[test]
 fn linked_runtime_ticks_simple_signals_and_evaluates_source_config() {
     let lowered = lower_text(
         "runtime-startup-basic.aivi",

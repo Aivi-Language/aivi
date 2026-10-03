@@ -9,7 +9,8 @@ const SOURCE_RUN_CACHE_VERSION: u32 = 5;
 // Revision 26 specializes value class members at their selected use contracts.
 // Revision 27 preserves ambient carrier origins and contextual class callbacks.
 // Revision 28 preserves canonical constructor identity across facade aliases.
-const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "28";
+// Revision 29 gives reactive operators payload contracts and result-owned evidence.
+const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "29";
 const SOURCE_RUN_CACHE_DIR: &str = "run-cache";
 const SOURCE_RUN_CACHE_METADATA_FILE_NAME: &str = "source-run-cache.json";
 const MAX_BINARY_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;

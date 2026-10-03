@@ -5397,7 +5397,8 @@ impl<'a> GateTypeContext<'a> {
             }
             ExprKind::Unary { operator, expr } => {
                 let mut info = self.infer_expr(*expr, env, ambient);
-                let operand_ty = info.actual_gate_type().or_else(|| info.ty.clone());
+                let operand_ty = info.operator_payload_type();
+                info.actual = None;
                 info.ty = match (operator, operand_ty.as_ref()) {
                     (crate::hir::UnaryOperator::Not, Some(ty)) if ty.is_bool() => {
                         Some(GateType::Primitive(BuiltinType::Bool))
@@ -5412,20 +5413,16 @@ impl<'a> GateTypeContext<'a> {
                 right,
             } => {
                 let mut left_info = self.infer_expr(*left, env, ambient);
-                let mut left_ty = left_info
-                    .actual_gate_type()
-                    .or_else(|| left_info.ty.clone());
+                let mut left_ty = left_info.operator_payload_type();
                 let mut right_info = self.infer_expr(*right, env, ambient);
-                let mut right_ty = right_info
-                    .actual_gate_type()
-                    .or_else(|| right_info.ty.clone());
+                let mut right_ty = right_info.operator_payload_type();
 
                 if right_ty.is_none()
                     && let Some(left) = left_ty.as_ref()
                     && let Some(refined) =
                         self.infer_binary_operand_against_peer(*right, env, ambient, left)
                 {
-                    right_ty = refined.actual_gate_type().or_else(|| refined.ty.clone());
+                    right_ty = refined.operator_payload_type();
                     right_info = refined;
                 }
                 if left_ty.is_none()
@@ -5433,7 +5430,7 @@ impl<'a> GateTypeContext<'a> {
                     && let Some(refined) =
                         self.infer_binary_operand_against_peer(*left, env, ambient, right)
                 {
-                    left_ty = refined.actual_gate_type().or_else(|| refined.ty.clone());
+                    left_ty = refined.operator_payload_type();
                     left_info = refined;
                 }
 

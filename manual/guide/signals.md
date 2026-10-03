@@ -33,6 +33,27 @@ signal doubledCount = count
   |> double
 ```
 
+## Operators on signals
+
+Arithmetic, Boolean operators, equality, and ordering read the current payloads
+of their signal inputs. Their result type is inferred from the operation:
+
+```aivi
+signal count = 21
+signal enabled = True
+signal next = count + 1
+signal doubled = next * 2
+signal ready = enabled and count < doubled
+signal disabled = not enabled
+signal unchanged = next == count
+```
+
+Here `next` and `doubled` have type `Signal Int`; the other derived signals have
+type `Signal Bool`. Equality and ordering use the payload's `Eq` and `Ord`
+instances. Incompatible payloads, such as adding an `Int` to a `Bool`, are type
+errors. Each declaration creates one signal node, and the runtime recomputes its
+body when an input changes.
+
 ## Grouping derivations with `from`
 
 When several reactive projections all hang off the same upstream signal, group

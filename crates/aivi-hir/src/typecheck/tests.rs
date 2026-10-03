@@ -4790,3 +4790,134 @@ value identityArrow : Arrow Text Text = id
         );
     }
 }
+
+#[test]
+fn reactive_operators_infer_result_owned_payload_contracts() {
+    let module = lowered_module_text(
+        "reactive-operator-contracts.aivi",
+        r#"
+signal n = 7
+signal other = 3
+signal ready = True
+signal enabled = False
+signal sum = n + 1
+signal both = ready and enabled
+signal inverse = not ready
+signal less = n < other
+signal equal = n == other
+signal chained = sum * 2
+"#,
+    );
+    let report = typecheck_module(&module);
+    assert!(report.is_ok(), "{:?}", report.diagnostics());
+    let mut typing = GateTypeContext::new(&module);
+    for (name, expected) in [
+        ("sum", BuiltinType::Int),
+        ("both", BuiltinType::Bool),
+        ("inverse", BuiltinType::Bool),
+        ("less", BuiltinType::Bool),
+        ("equal", BuiltinType::Bool),
+        ("chained", BuiltinType::Int),
+    ] {
+        let (id, signal) = module
+            .items()
+            .iter()
+            .find_map(|(id, item)| match item {
+                Item::Signal(signal) if signal.name.text() == name => Some((id, signal)),
+                _ => None,
+            })
+            .unwrap();
+        let info = typing.infer_expr(signal.body.unwrap(), &GateExprEnv::default(), None);
+        let payload = GateType::Primitive(expected);
+        assert_eq!(info.ty, Some(payload.clone()), "{name}: {info:?}");
+        assert_eq!(
+            info.actual_gate_type(),
+            Some(payload.clone()),
+            "result evidence for {name}"
+        );
+        assert!(info.contains_signal, "preserve dependencies for {name}");
+        assert!(info.issues.is_empty(), "{name}: {:?}", info.issues);
+        assert_eq!(
+            typing.item_value_type(id),
+            Some(GateType::Signal(Box::new(payload))),
+            "one wrapper for {name}"
+        );
+    }
+}
+
+#[test]
+fn reactive_operators_check_explicit_payload_contracts() {
+    let report = typecheck_text(
+        "reactive-operator-annotations.aivi",
+        r#"
+signal n : Signal Int = 7
+signal other : Signal Int = 3
+signal ready : Signal Bool = True
+signal enabled : Signal Bool = False
+signal sum : Signal Int = n + 1
+signal both : Signal Bool = ready and enabled
+signal inverse : Signal Bool = not ready
+signal less : Signal Bool = n < other
+signal equal : Signal Bool = n == other
+signal chained : Signal Int = sum * 2
+"#,
+    );
+    assert!(report.is_ok(), "{:?}", report.diagnostics());
+}
+
+#[test]
+fn reactive_operators_reject_incompatible_payloads() {
+    for expression in [
+        "n + ready",
+        "ready and n",
+        "not n",
+        "n < ready",
+        "n == ready",
+    ] {
+        let report = typecheck_text(
+            "reactive-operator-invalid.aivi",
+            &format!("signal n = 7\nsignal ready = True\nsignal invalid = {expression}\n"),
+        );
+        assert!(
+            !report.is_ok(),
+            "accepted {expression}: {:?}",
+            report.diagnostics()
+        );
+    }
+}
+
+#[test]
+fn operator_payload_contracts_preserve_holes_and_other_carriers() {
+    let int = GateType::Primitive(BuiltinType::Int);
+    let partial = GateExprInfo {
+        ty: Some(GateType::Signal(Box::new(int.clone()))),
+        actual: Some(SourceOptionActualType::Signal(Box::new(
+            SourceOptionActualType::Hole,
+        ))),
+        contains_signal: true,
+        ..GateExprInfo::default()
+    };
+    assert_eq!(
+        partial.operator_payload_type(),
+        None,
+        "a partial payload cannot use a complete hint"
+    );
+    for ty in [
+        GateType::Signal(Box::new(int.clone())),
+        GateType::Option(Box::new(int.clone())),
+        GateType::Task {
+            error: Box::new(GateType::Primitive(BuiltinType::Text)),
+            value: Box::new(int),
+        },
+    ] {
+        let info = GateExprInfo {
+            ty: Some(GateType::Signal(Box::new(ty.clone()))),
+            ..GateExprInfo::default()
+        };
+        assert_eq!(
+            info.operator_payload_type(),
+            Some(ty),
+            "unwrap exactly one signal"
+        );
+    }
+}

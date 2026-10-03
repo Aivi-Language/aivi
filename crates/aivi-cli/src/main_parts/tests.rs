@@ -649,11 +649,8 @@ value main : Task Text Bool = pure (
     }
 }
 
-fn evaluate_pure_headless_result(artifact: &super::RunArtifact) -> RuntimeValue {
-    let super::RunArtifactKind::HeadlessTask { task_owner } = artifact.kind else {
-        panic!("expected headless entry");
-    };
-    let linked = if let Some(tables) = &artifact.runtime_tables {
+fn link_test_run_artifact(artifact: &super::RunArtifact) -> aivi_runtime::BackendLinkedRuntime {
+    if let Some(tables) = &artifact.runtime_tables {
         aivi_runtime::link_backend_runtime_with_tables_and_native_kernels_from_payload(
             artifact.runtime_assembly.clone(),
             artifact.backend.clone(),
@@ -668,7 +665,14 @@ fn evaluate_pure_headless_result(artifact: &super::RunArtifact) -> RuntimeValue 
             &artifact.runtime_link,
         )
     }
-    .unwrap();
+    .unwrap()
+}
+
+fn evaluate_pure_headless_result(artifact: &super::RunArtifact) -> RuntimeValue {
+    let super::RunArtifactKind::HeadlessTask { task_owner } = artifact.kind else {
+        panic!("expected headless entry");
+    };
+    let linked = link_test_run_artifact(artifact);
     let value = linked.evaluate_task_value_by_owner(task_owner).unwrap();
     let RuntimeValue::Task(RuntimeTaskPlan::Pure { value }) = value.into_runtime() else {
         panic!("expected pure task result");
@@ -1942,6 +1946,132 @@ value main : Task Text Unit =
         super::RunArtifactKind::HeadlessTask { .. }
     ));
     assert!(reloaded.gtk().is_none());
+}
+
+#[test]
+fn cached_and_frozen_images_preserve_imported_reactive_operator_payloads() {
+    const NATIVE_CHILD: &str = "AIVI_REACTIVE_OPERATOR_NATIVE_TEST";
+    if env::var_os(NATIVE_CHILD).is_none() {
+        // Native planning is process-global. Keep this test isolated from the
+        // other CLI unit tests, which deliberately disable it.
+        let output = std::process::Command::new(env::current_exe().unwrap())
+            .args([
+                "tests::cached_and_frozen_images_preserve_imported_reactive_operator_payloads",
+                "--exact",
+                "--test-threads=1",
+                "--nocapture",
+            ])
+            .env(NATIVE_CHILD, "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+    ensure_interpreted_main_parts_tests();
+    set_native_kernel_plans_enabled(true);
+    let workspace = TempDir::new("reactive-operator-roundtrip");
+    workspace.write(
+        "inputs.aivi",
+        "signal number : Signal Int\nsignal ready : Signal Bool\nexport (number, ready)\n",
+    );
+    workspace.write(
+        "facade.aivi",
+        "use inputs (number as count, ready as enabled)\nexport (count, enabled)\n",
+    );
+    let entry = workspace.write(
+        "main.aivi",
+        r#"
+use facade (count, enabled)
+type Tag = Tag Int
+instance Eq Tag = { (==) = left right => True }
+signal firstTag = Tag 1
+signal secondTag = Tag 2
+signal customEqual : Signal Bool = firstTag == secondTag
+signal next = count + 1
+signal chained = next * 2
+signal inverse = not enabled
+signal less : Signal Bool = count < next
+signal equal : Signal Bool = count == next
+signal both = enabled and less
+value main = <Window title="Reactive operators" />
+"#,
+    );
+    let snapshot = WorkspaceHirSnapshot::load(&entry).unwrap();
+    let artifact = prepare_run_from_workspace(&workspace, "main.aivi", None).unwrap();
+    let cache_home = workspace.path().join("cache-home");
+    super::store_cached_source_run_artifact(&cache_home, &entry, None, &snapshot, &artifact)
+        .unwrap();
+    let cached = super::load_cached_source_run_artifact(&cache_home, &entry, None).unwrap();
+    let frozen = super::encode_frozen_run_image_bytes_with_options(&artifact, true, true).unwrap();
+    let reloaded = super::load_frozen_run_image_from_bytes(&frozen, None).unwrap();
+    assert!(cached.sources.is_none());
+    assert!(reloaded.sources.is_none());
+    for relative in ["main.aivi", "inputs.aivi", "facade.aivi"] {
+        fs::remove_file(workspace.path().join(relative)).unwrap();
+    }
+    for candidate in [&artifact, &cached, &reloaded] {
+        let mut linked = link_test_run_artifact(candidate);
+        for name in [
+            "next",
+            "chained",
+            "inverse",
+            "less",
+            "equal",
+            "both",
+            "customEqual",
+        ] {
+            let derived = linked
+                .assembly()
+                .signals()
+                .iter()
+                .find(|binding| binding.name.as_ref() == name)
+                .unwrap()
+                .derived()
+                .unwrap();
+            assert!(
+                linked
+                    .derived_signal(derived)
+                    .unwrap()
+                    .eval_lane
+                    .as_native()
+                    .is_some(),
+                "{name} must replay on its native lane"
+            );
+        }
+        for (number, ready) in [(7, false), (2, true)] {
+            publish_input_value_by_signal_name(&mut linked, "number", RuntimeValue::Int(number));
+            publish_input_value_by_signal_name(&mut linked, "ready", RuntimeValue::Bool(ready));
+            linked.tick().unwrap();
+            for (name, expected) in [
+                ("next", RuntimeValue::Int(number + 1)),
+                ("chained", RuntimeValue::Int((number + 1) * 2)),
+                ("inverse", RuntimeValue::Bool(!ready)),
+                ("less", RuntimeValue::Bool(true)),
+                ("equal", RuntimeValue::Bool(false)),
+                ("both", RuntimeValue::Bool(ready)),
+                ("customEqual", RuntimeValue::Bool(true)),
+            ] {
+                let signal = linked
+                    .assembly()
+                    .signals()
+                    .iter()
+                    .find(|binding| binding.name.as_ref() == name)
+                    .unwrap()
+                    .signal();
+                assert_eq!(
+                    linked.runtime().current_value(signal).unwrap(),
+                    Some(&expected),
+                    "{name}"
+                );
+            }
+            assert!(linked.tick().unwrap().committed().is_empty());
+        }
+    }
 }
 
 #[test]

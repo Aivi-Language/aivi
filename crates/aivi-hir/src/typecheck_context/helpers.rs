@@ -486,6 +486,15 @@ impl GateExprInfo {
         }
     }
 
+    /// Operators consume the current payload of reactive inputs. Dependency
+    /// metadata stays on this expression; it does not become result evidence.
+    pub(crate) fn operator_payload_type(&self) -> Option<GateType> {
+        self.actual_gate_type().map(|ty| match ty {
+            GateType::Signal(payload) => *payload,
+            other => other,
+        })
+    }
+
     pub(crate) fn set_actual(&mut self, actual: SourceOptionActualType) {
         self.contains_signal |= actual.is_signal();
         self.ty = actual.to_gate_type();

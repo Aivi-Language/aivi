@@ -3481,7 +3481,12 @@ impl<'a> GeneralExprElaborator<'a> {
                 expr: inner,
             } => GateRuntimeExprKind::Unary {
                 operator,
-                expr: Box::new(self.lower_expr(inner, env, ambient, None)?),
+                expr: Box::new(self.lower_expr(
+                    inner,
+                    env,
+                    ambient,
+                    Some(&GateType::Primitive(crate::BuiltinType::Bool)),
+                )?),
             },
             ExprKind::Binary {
                 left,
@@ -3500,8 +3505,12 @@ impl<'a> GeneralExprElaborator<'a> {
                     crate::BinaryOperator::GreaterThan
                     | crate::BinaryOperator::LessThan
                     | crate::BinaryOperator::GreaterThanOrEqual
-                    | crate::BinaryOperator::LessThanOrEqual => None,
-                    crate::BinaryOperator::Equals | crate::BinaryOperator::NotEquals => None,
+                    | crate::BinaryOperator::LessThanOrEqual
+                    | crate::BinaryOperator::Equals
+                    | crate::BinaryOperator::NotEquals => self
+                        .typing
+                        .infer_expr(left, env, ambient)
+                        .operator_payload_type(),
                 };
                 let left = self.lower_expr(left, env, ambient, expected_operand.as_ref())?;
                 let right = self.lower_expr(right, env, ambient, Some(&left.ty))?;
@@ -7273,6 +7282,61 @@ fun appendOne:(List A) = items:(List A) item:A=>    append items [item]
                 "expected generic append body to lower, found {:?}; argument_types={argument_types:?}; expected={expected:?}; dispatch={dispatch:?}",
                 append_one.outcome
             );
+        }
+    }
+
+    #[test]
+    fn elaborates_reactive_operators_with_payload_operands() {
+        let lowered = lower_text(
+            "general-expr-reactive-operators.aivi",
+            r#"
+signal n = 7
+signal other = 3
+signal ready = True
+signal enabled = False
+signal sum = n + 1
+signal both = ready and enabled
+signal inverse = not ready
+signal less = n < other
+signal equal = n == other
+signal chained = sum * 2
+"#,
+        );
+        assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+        let report = elaborate_general_expressions(lowered.module());
+        for (name, result, operand) in [
+            ("sum", BuiltinType::Int, BuiltinType::Int),
+            ("both", BuiltinType::Bool, BuiltinType::Bool),
+            ("inverse", BuiltinType::Bool, BuiltinType::Bool),
+            ("less", BuiltinType::Bool, BuiltinType::Int),
+            ("equal", BuiltinType::Bool, BuiltinType::Int),
+            ("chained", BuiltinType::Int, BuiltinType::Int),
+        ] {
+            let item = report.items().iter().find(|item| {
+                matches!(&lowered.module().items()[item.owner], crate::Item::Signal(signal) if signal.name.text() == name)
+            }).unwrap();
+            let GeneralExprOutcome::Lowered(expr) = &item.outcome else {
+                panic!("{name}: {:?}", item.outcome);
+            };
+            assert_eq!(expr.ty, GateType::Primitive(result), "{name}");
+            let operands: Vec<_> = match &expr.kind {
+                GateRuntimeExprKind::Unary { expr, .. } => vec![expr.as_ref()],
+                GateRuntimeExprKind::Binary { left, right, .. } => {
+                    vec![left.as_ref(), right.as_ref()]
+                }
+                GateRuntimeExprKind::Apply { arguments, .. } if name == "less" => {
+                    let GateRuntimeExprKind::Apply { arguments, .. } = &arguments[0].kind else {
+                        panic!("ordering must apply the selected compare member");
+                    };
+                    arguments.iter().collect()
+                }
+                GateRuntimeExprKind::Apply { arguments, .. } => arguments.iter().collect(),
+                other => panic!("{name}: {other:?}"),
+            };
+            assert!(!operands.is_empty(), "{name}");
+            for expr in operands {
+                assert_eq!(expr.ty, GateType::Primitive(operand), "{name}: {expr:?}");
+            }
         }
     }
 

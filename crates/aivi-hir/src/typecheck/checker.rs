@@ -342,7 +342,7 @@ impl<'a> TypeChecker<'a> {
                     self.check_signal_reactive_updates(item, None);
                 }
                 None => {
-                    self.check_inferred_expr(body, &GateExprEnv::default(), None);
+                    self.check_expr(body, &GateExprEnv::default(), None, &mut Vec::new());
                     let inferred_payload = self.inferred_expr_type(body, &GateExprEnv::default());
                     self.check_signal_reactive_updates(item, inferred_payload.as_ref());
                 }
@@ -893,7 +893,7 @@ impl<'a> TypeChecker<'a> {
         value_stack: &mut Vec<ItemId>,
     ) -> bool {
         let bool_ty = GateType::Primitive(BuiltinType::Bool);
-        let actual = self.inferred_expr_type(expr, env);
+        let actual = self.inferred_operator_payload_type(expr, env);
         let checkpoint = self.diagnostics.len();
         let operand_ok = self.check_expr(expr, env, Some(&bool_ty), value_stack);
         if !operand_ok {
@@ -953,8 +953,8 @@ impl<'a> TypeChecker<'a> {
             right,
         } = binary;
         let bool_ty = GateType::Primitive(BuiltinType::Bool);
-        let left_actual = self.inferred_expr_type(left, env);
-        let right_actual = self.inferred_expr_type(right, env);
+        let left_actual = self.inferred_operator_payload_type(left, env);
+        let right_actual = self.inferred_operator_payload_type(right, env);
         let checkpoint = self.diagnostics.len();
         let left_ok = self.check_expr(left, env, Some(&bool_ty), value_stack);
         let right_ok = self.check_expr(right, env, Some(&bool_ty), value_stack);
@@ -986,8 +986,8 @@ impl<'a> TypeChecker<'a> {
             operator,
             right,
         } = binary;
-        let left_actual = self.inferred_expr_type(left, env);
-        let right_actual = self.inferred_expr_type(right, env);
+        let left_actual = self.inferred_operator_payload_type(left, env);
+        let right_actual = self.inferred_operator_payload_type(right, env);
         if let (Some(left_actual), Some(right_actual)) =
             (left_actual.as_ref(), right_actual.as_ref())
             && let Some(domain_operator) = select_domain_binary_operator(
@@ -1077,8 +1077,8 @@ impl<'a> TypeChecker<'a> {
             operator,
             right,
         } = binary;
-        let left_actual = self.inferred_expr_type(left, env);
-        let right_actual = self.inferred_expr_type(right, env);
+        let left_actual = self.inferred_operator_payload_type(left, env);
+        let right_actual = self.inferred_operator_payload_type(right, env);
         let Some(operand_ty) = left_actual.as_ref().zip(right_actual.as_ref()).and_then(
             |(left_actual, right_actual)| {
                 self.typing
@@ -1151,8 +1151,8 @@ impl<'a> TypeChecker<'a> {
             operator,
             right,
         } = binary;
-        let left_actual = self.inferred_expr_type(left, env);
-        let right_actual = self.inferred_expr_type(right, env);
+        let left_actual = self.inferred_operator_payload_type(left, env);
+        let right_actual = self.inferred_operator_payload_type(right, env);
         let Some(operand_ty) = left_actual.clone().or_else(|| right_actual.clone()) else {
             let checkpoint = self.diagnostics.len();
             self.check_expr(left, env, None, value_stack);
@@ -1194,6 +1194,16 @@ impl<'a> TypeChecker<'a> {
         let info = self.typing.infer_expr(expr_id, env, None);
         self.enqueue_eq_constraints(&info.constraints);
         info.ty
+    }
+
+    fn inferred_operator_payload_type(
+        &mut self,
+        expr_id: ExprId,
+        env: &GateExprEnv,
+    ) -> Option<GateType> {
+        let info = self.typing.infer_expr(expr_id, env, None);
+        self.enqueue_eq_constraints(&info.constraints);
+        info.operator_payload_type()
     }
 
     fn inferred_expr_shape(&mut self, expr_id: ExprId, env: &GateExprEnv) -> Option<GateType> {
