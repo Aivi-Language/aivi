@@ -3051,7 +3051,7 @@ impl<'a> ModuleLowerer<'a> {
             | ImportBindingMetadata::BuiltinType(_)
             | ImportBindingMetadata::BuiltinTerm(_)
             | ImportBindingMetadata::Class { .. }
-            | ImportBindingMetadata::AmbientType
+            | ImportBindingMetadata::AmbientType { .. }
             | ImportBindingMetadata::Bundle(_) => {
                 return Err(unsupported(
                     "non-value imports cannot be lowered as typed-core item references",

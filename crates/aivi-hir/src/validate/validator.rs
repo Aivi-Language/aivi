@@ -63,7 +63,7 @@ impl Validator<'_> {
                     | ImportBindingMetadata::TypeConstructor { .. }
                     | ImportBindingMetadata::BuiltinType(_)
                     | ImportBindingMetadata::BuiltinTerm(_)
-                    | ImportBindingMetadata::AmbientType
+                    | ImportBindingMetadata::AmbientType { .. }
                     | ImportBindingMetadata::Bundle(_),
                 ) => {
                     self.diagnostics.push(
@@ -8057,7 +8057,7 @@ impl Validator<'_> {
             | ImportBindingMetadata::AmbientValue { .. }
             | ImportBindingMetadata::BuiltinTerm(_)
             | ImportBindingMetadata::Class { .. }
-            | ImportBindingMetadata::AmbientType
+            | ImportBindingMetadata::AmbientType { .. }
             | ImportBindingMetadata::Bundle(_)
             | ImportBindingMetadata::DomainSuffix { .. }
             | ImportBindingMetadata::InstanceMember { .. }

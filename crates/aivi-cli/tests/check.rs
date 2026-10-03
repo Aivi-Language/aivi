@@ -257,6 +257,57 @@ fn check_requires_typed_comparison_evidence() {
 }
 
 #[test]
+fn check_preserves_nonempty_instance_and_capability_boundaries() {
+    for (name, source, diagnostic) in [
+        (
+            "nel-orphan",
+            "use aivi.nonEmpty (NonEmptyList, head)\ninstance Comonad NonEmptyList = { extract = head }\n",
+            "orphan-instance",
+        ),
+        (
+            "nel-default",
+            "use aivi.nonEmpty (NonEmptyList)\nvalue invalid : NonEmptyList Int = default\n",
+            "missing-class-instance",
+        ),
+        (
+            "nel-filterable",
+            "use aivi.nonEmpty (NonEmptyList, singleton)\nvalue invalid : NonEmptyList Int = filterMap (n => Some n) (singleton 1)\n",
+            "missing-class-instance",
+        ),
+        (
+            "list-comonad",
+            "value invalid : Int = extract [1]\n",
+            "missing-class-instance",
+        ),
+    ] {
+        let dir = TempDir::new(name);
+        let path = dir.write("main.aivi", source);
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("check")
+            .arg(path)
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!output.status.success(), "{name}: {stderr}");
+        assert!(stderr.contains(diagnostic), "{name}: {stderr}");
+    }
+    let dir = TempDir::new("spoofed-nonempty-provider");
+    dir.write("aivi/nonEmpty.aivi", "instance Comonad NonEmptyList = { extract = items => 1 }\nvalue invalid : NonEmptyList Int -> Int = extract\nexport invalid\n");
+    let path = dir.write(
+        "main.aivi",
+        "use aivi.nonEmpty (invalid)\nvalue result : Int = invalid (pure 1)\n",
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("check")
+        .arg(path)
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success(), "{stderr}");
+    assert!(stderr.contains("orphan-instance"), "{stderr}");
+}
+
+#[test]
 fn check_rejects_unused_overlapping_and_orphan_instances() {
     for (name, source, diagnostic) in [
         (

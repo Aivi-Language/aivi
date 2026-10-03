@@ -21,7 +21,8 @@ use aivi.nonEmpty (
 
 ## Type class operations
 
-`NonEmptyList` implements `Functor`, `Apply`, `Applicative`, `Chain`, `Monad`, `Foldable`, and `Traversable`.
+`NonEmptyList` implements `Functor`, `Apply`, `Applicative`, `Chain`, `Monad`, `Foldable`,
+`Traversable`, `Extend`, and `Comonad`.
 Use ambient `map` and `reduce` for generic code; `mapNel` remains the explicitly named mapping
 helper. `pure` creates a singleton. `apply` applies each function to every input, in function-major
 order. `chain` concatenates non-empty results in input order, and `join` flattens one layer.
@@ -30,6 +31,28 @@ order. `chain` concatenates non-empty results in input order, and `join` flatten
 `traverse transform items` sequences effects from head to tail through any `Applicative G`,
 producing `G (NonEmptyList B)`. Each successful result keeps the input length and its non-empty
 guarantee. Traversing into `Task` builds a deferred plan whose effects run in that order.
+
+`extend observe items` observes every non-empty suffix, in input order, and preserves length.
+For `[1, 2, 3]`, those contexts are `[1, 2, 3]`, `[2, 3]`, and `[3]`.
+`extract items` reads the first item, equivalent to `head`. These operations satisfy the
+Comonad identities: `extend extract items` preserves the input, and
+`extract (extend observe items)` agrees with `observe items`.
+
+```aivi
+use aivi.nonEmpty (NonEmptyList, fromHeadTail, toList, length)
+
+value items : NonEmptyList Int = fromHeadTail 1 [2, 3]
+value suffixLengths : List Int = toList (extend length items)
+value firstItem : Int = extract items
+
+type Comonad W => W A -> W A
+func preserve = values => extend extract values
+```
+
+`suffixLengths` is `[3, 2, 1]`, and `firstItem` is `1`. The implementation uses list folds,
+so it does not recurse once per item. Constructing suffix contexts copies a quadratic number
+of list elements in the current list representation; add the cost of each observer call.
+Use `map` when the callback needs only the current item.
 
 There is no `Monoid`, `Default`, or `Filterable` instance: none can promise to retain at least one
 item for every input allowed by its class signature.

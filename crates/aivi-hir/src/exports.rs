@@ -376,7 +376,7 @@ fn re_exported_import_name(
         ImportBindingMetadata::TypeConstructor { .. }
         | ImportBindingMetadata::Domain { .. }
         | ImportBindingMetadata::BuiltinType(_)
-        | ImportBindingMetadata::AmbientType => ExportedNameKind::Type,
+        | ImportBindingMetadata::AmbientType { .. } => ExportedNameKind::Type,
         _ => ExportedNameKind::Value,
     };
     Some(ExportedName {
@@ -403,7 +403,11 @@ fn explicit_item_exported_name(
         Item::Type(item) => {
             if item.name.text() == exported_name {
                 let metadata = if ambient {
-                    ImportBindingMetadata::AmbientType
+                    ImportBindingMetadata::AmbientType {
+                        origin: module
+                            .type_origin(item_id)
+                            .expect("ambient data declaration origin"),
+                    }
                 } else {
                     let fields = extract_type_record_fields(module, item_id, item);
                     let definition = extract_type_definition(module, item_id, item);
@@ -508,12 +512,8 @@ fn explicit_item_exported_name(
         Item::Class(item) => Some(ExportedName {
             name: exported_name.to_owned(),
             kind: ExportedNameKind::Class,
-            metadata: if ambient {
-                ImportBindingMetadata::AmbientType
-            } else {
-                ImportBindingMetadata::Class {
-                    identity: item.identity.clone(),
-                }
+            metadata: ImportBindingMetadata::Class {
+                identity: item.identity.clone(),
             },
             callable_type: None,
             deprecation,
@@ -522,7 +522,11 @@ fn explicit_item_exported_name(
             name: exported_name.to_owned(),
             kind: ExportedNameKind::Domain,
             metadata: if ambient {
-                ImportBindingMetadata::AmbientType
+                ImportBindingMetadata::AmbientType {
+                    origin: module
+                        .type_origin(item_id)
+                        .expect("ambient domain declaration origin"),
+                }
             } else {
                 let literal_suffixes = item
                     .members
@@ -2040,7 +2044,7 @@ fn resolve_type_constructor(
             ImportBindingMetadata::Bundle(bundle) => Some(ResolvedTypeConstructor::Bundle(*bundle)),
             ImportBindingMetadata::TypeConstructor { .. }
             | ImportBindingMetadata::Domain { .. }
-            | ImportBindingMetadata::AmbientType => {
+            | ImportBindingMetadata::AmbientType { .. } => {
                 Some(ResolvedTypeConstructor::Import(*import_id))
             }
             ImportBindingMetadata::Unknown

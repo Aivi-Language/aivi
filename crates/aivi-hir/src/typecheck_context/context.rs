@@ -1327,7 +1327,7 @@ impl<'a> GateTypeContext<'a> {
             | ImportBindingMetadata::BuiltinType(_)
             | ImportBindingMetadata::BuiltinTerm(_)
             | ImportBindingMetadata::Class { .. }
-            | ImportBindingMetadata::AmbientType
+            | ImportBindingMetadata::AmbientType { .. }
             | ImportBindingMetadata::Bundle(_)
             | ImportBindingMetadata::Unknown => None,
         }
@@ -1537,24 +1537,15 @@ impl<'a> GateTypeContext<'a> {
                             && matches!(
                                 &binding.metadata,
                                 ImportBindingMetadata::TypeConstructor { .. }
-                                    | ImportBindingMetadata::AmbientType
+                                    | ImportBindingMetadata::AmbientType { .. }
                                     | ImportBindingMetadata::BuiltinType(_)
                                     | ImportBindingMetadata::Domain { .. }
                             )
                     })
                     .map(|(id, _)| id);
                 if let Some(import) = import_id {
-                    if matches!(
-                        self.module.imports()[import].metadata,
-                        ImportBindingMetadata::AmbientType
-                    ) && let Some(item) =
-                        self.module.ambient_items().iter().copied().find(|item| {
-                            match &self.module.items()[*item] {
-                                Item::Type(ty) => ty.name.text() == type_name,
-                                Item::Domain(domain) => domain.name.text() == type_name,
-                                _ => false,
-                            }
-                        })
+                    if let ImportBindingMetadata::AmbientType { origin } = &self.module.imports()[import].metadata
+                        && let Some(item) = self.module.ambient_data_item(&origin.identity)
                         && let Some(ty) = self.contextual_probe().apply_type_constructor(
                             TypeConstructorHead::Item(item),
                             &lowered_args,
@@ -5831,6 +5822,11 @@ impl<'a> GateTypeContext<'a> {
         expected: &GateType,
     ) -> GateExprInfo {
         let mut info = match reference.resolution.as_ref() {
+            ResolutionState::Resolved(TermResolution::ClassMember(_))
+            | ResolutionState::Resolved(TermResolution::AmbiguousClassMembers(_)) => self
+                .infer_class_member_callable(reference, expected)
+                .map(|ty| GateExprInfo { ty: Some(ty), ..GateExprInfo::default() })
+                .unwrap_or_default(),
             ResolutionState::Resolved(TermResolution::Builtin(builtin)) => self
                 .infer_builtin_constructor_callable(*builtin, expected)
                 .unwrap_or_else(|| self.infer_name(reference, env)),
@@ -5914,6 +5910,55 @@ impl<'a> GateTypeContext<'a> {
             info.ty = Some(specialized);
         }
         info
+    }
+
+    /// Member-local quantifiers are instantiated from the callback's known
+    /// inputs. An unresolved result variable belongs to the enclosing call;
+    /// the checker still checks the inferred output against that obligation.
+    fn infer_class_member_callable(
+        &mut self,
+        reference: &TermReference,
+        expected: &GateType,
+    ) -> Option<GateType> {
+        let candidates = self.class_member_candidates(reference)?;
+        for use_result in [true, false] {
+            let mut selected = None;
+            for candidate in &candidates {
+                let (_, mut annotation, _) = self.class_member_signature(*candidate)?;
+                let mut current = expected;
+                let mut inputs = Vec::new();
+                while let TypeKind::Arrow { result, .. } = self.module.types()[annotation].kind {
+                    let GateType::Arrow { parameter, result: expected_result } = current else {
+                        break;
+                    };
+                    inputs.push(parameter.as_ref().clone());
+                    current = expected_result;
+                    annotation = result;
+                }
+                // A bare value has no input evidence to improve on contextual
+                // member selection; preserve its existing selection path.
+                if inputs.is_empty() {
+                    continue;
+                }
+                let Some(matched) = self.match_class_member_call_candidate_with_hints(
+                    *candidate,
+                    inputs.iter().map(Some),
+                    use_result.then_some(current),
+                ) else {
+                    continue;
+                };
+                let ty = matched.parameters.into_iter().rev().fold(matched.result, |result, parameter| {
+                    GateType::Arrow { parameter: Box::new(parameter), result: Box::new(result) }
+                });
+                if selected.replace(ty).is_some() {
+                    return None;
+                }
+            }
+            if selected.is_some() {
+                return selected;
+            }
+        }
+        None
     }
 
     pub(crate) fn same_module_constructor(
@@ -7476,11 +7521,9 @@ impl<'a> GateTypeContext<'a> {
             };
             if expected.has_type_params() && !matches!(expected.as_ref(), GateType::Arrow { .. }) {
                 let observed = self.infer_expr(*argument, env, None);
-                if observed.ty.as_ref().is_none_or(|ty| !ty.has_type_params()) {
-                    let mut candidate = bindings.clone();
-                    if self.match_gate_expr_template(expected, &observed, &mut candidate) {
-                        bindings = candidate;
-                    }
+                let mut candidate = bindings.clone();
+                if self.match_gate_expr_template(expected, &observed, &mut candidate) {
+                    bindings = candidate;
                 }
             }
             parameter = result;
@@ -7543,7 +7586,7 @@ impl<'a> GateTypeContext<'a> {
                     ..GateExprInfo::default()
                 }
             } else {
-                self.infer_expr(*argument, env, Some(&param))
+                self.infer_expr_with_expected(*argument, env, Some(&param), &param)
             };
             let argument_type = arg_info.ty.clone().or_else(|| arg_info.actual_gate_type());
             let next = argument_type
@@ -7642,7 +7685,7 @@ impl<'a> GateTypeContext<'a> {
         env: &GateExprEnv,
         ambient: Option<&GateType>,
     ) -> Option<GateExprInfo> {
-        self.class_member_candidates(reference)?;
+        let candidates = self.class_member_candidates(reference)?;
         let mut info = GateExprInfo::default();
         let mut argument_types = Vec::with_capacity(arguments.len());
         for argument in arguments.iter() {
@@ -7650,13 +7693,52 @@ impl<'a> GateTypeContext<'a> {
             argument_types.push(argument_info.ty.clone());
             info.merge(argument_info);
         }
-        let Some(argument_types) = argument_types.into_iter().collect::<Option<Vec<_>>>() else {
+        if argument_types.iter().all(Option::is_some) {
+            let argument_types = argument_types.iter().flatten().cloned().collect::<Vec<_>>();
+            if let DomainMemberSelection::Unique(matched) =
+                self.select_class_member_call(reference, &argument_types, None)?
+            {
+                info.ty = Some(matched.result);
+            }
             return Some(info);
-        };
-        if let DomainMemberSelection::Unique(matched) =
-            self.select_class_member_call(reference, &argument_types, None)?
-        {
-            info.ty = Some(matched.result);
+        }
+        let mut selected = None;
+        for candidate in candidates {
+            let (_, annotation, _) = self.class_member_signature(candidate)?;
+            // Context can improve a missing callback only when another input
+            // supplies evidence. A constructor-only call such as `pure None`
+            // still needs its enclosing carrier; probing it cannot discover one.
+            let mut current = annotation;
+            let mut has_missing_callback = false;
+            for argument in &argument_types {
+                let TypeKind::Arrow { parameter, result } = self.module.types()[current].kind else { break; };
+                has_missing_callback |= argument.is_none() && matches!(self.module.types()[parameter].kind, TypeKind::Arrow { .. });
+                current = result;
+            }
+            if !has_missing_callback || !argument_types.iter().any(Option::is_some) {
+                continue;
+            }
+            let signature = self.lower_open_annotation(annotation)?;
+            let mut probe = self.contextual_probe();
+            let contextual = probe.infer_contextual_function_arguments(signature, arguments, env);
+            let Item::Class(class) = &self.module.items()[candidate.class] else {
+                return None;
+            };
+            let owned_parameters = class.parameters.iter()
+                .chain(&class.members[candidate.member_index].type_parameters)
+                .filter(|id| !self.rigid_type_parameters.contains(id))
+                .copied().collect::<HashSet<_>>();
+            // Input evidence may bind a member result to a caller's rigid
+            // quantifier. Unbound declaration quantifiers are not evidence:
+            // e.g. `pure (Left error)` still needs its enclosing carrier.
+            if contextual.ty.as_ref().is_some_and(|ty| !ty.any_type_parameter(|id| owned_parameters.contains(&id)))
+                && contextual.issues.is_empty()
+                && selected.replace(contextual).is_some() {
+                return Some(info);
+            }
+        }
+        if let Some(contextual) = selected {
+            return Some(contextual);
         }
         Some(info)
     }

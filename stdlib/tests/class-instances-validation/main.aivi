@@ -78,6 +78,33 @@ value items : NonEmptyList Int =
 
 value mappedItems : NonEmptyList Int = map increment items
 
+type Comonad W => W A -> W A
+func preserveContext = values => extend extract values
+
+type Comonad W => (W A -> B) -> W A -> B
+func observeFirstContext = observe values => extract (extend observe values)
+
+type Int -> Int -> Int
+func sumStep = total item => total + item
+
+type NonEmptyList Int -> Int
+func sumContext = values => reduce sumStep 0 values
+
+type NonEmptyList Int -> Int
+func sumExtendedContext = values => sumContext (extend sumContext values)
+
+@test
+value nonEmptyExtendContexts : Task Text Bool = pure (nelToList (extend nelToList items) == [[1, 2, 3], [2, 3], [3]])
+
+@test
+value nonEmptyComonadPreservesInput : Task Text Bool = pure (nelToList (preserveContext items) == [1, 2, 3])
+
+@test
+value nonEmptyComonadObservation : Task Text Bool = pure (observeFirstContext sumContext items == sumContext items)
+
+@test
+value nonEmptyExtendAssociativity : Task Text Bool = pure (nelToList (extend sumContext (extend sumContext items)) == nelToList (extend sumExtendedContext items))
+
 value set : Set Int =
     setFromList [
         3,

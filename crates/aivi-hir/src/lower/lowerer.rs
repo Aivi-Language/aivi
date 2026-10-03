@@ -1746,7 +1746,7 @@ impl<'a> Lowerer<'a> {
                         && matches!(
                             metadata,
                             ImportBindingMetadata::AmbientValue { .. }
-                                | ImportBindingMetadata::AmbientType
+                                | ImportBindingMetadata::AmbientType { .. }
                         ) {
                             return (ImportBindingResolution::Resolved, metadata, None, None);
                         }
@@ -5052,7 +5052,7 @@ impl<'a> Lowerer<'a> {
                 ),
                 ImportBindingMetadata::TypeConstructor { .. }
                 | ImportBindingMetadata::BuiltinType(_)
-                | ImportBindingMetadata::AmbientType => insert_site(
+                | ImportBindingMetadata::AmbientType { .. } => insert_site(
                     &mut namespaces.type_imports,
                     import.local_name.text(),
                     *import_id,
@@ -5247,7 +5247,7 @@ impl<'a> Lowerer<'a> {
                 }
                 ImportBindingMetadata::TypeConstructor { .. }
                 | ImportBindingMetadata::BuiltinType(_)
-                | ImportBindingMetadata::AmbientType => insert_site(
+                | ImportBindingMetadata::AmbientType { .. } => insert_site(
                     &mut namespaces.hoisted_type_imports,
                     imported_name.text(),
                     import_id,
@@ -5432,7 +5432,7 @@ impl<'a> Lowerer<'a> {
                             binding.metadata,
                             ImportBindingMetadata::TypeConstructor { .. }
                                 | ImportBindingMetadata::Domain { .. }
-                                | ImportBindingMetadata::AmbientType
+                                | ImportBindingMetadata::AmbientType { .. }
                                 | ImportBindingMetadata::BuiltinType(_)
                         )
                 }
@@ -5447,7 +5447,7 @@ impl<'a> Lowerer<'a> {
                 }
             });
             let metadata = if let Some(
-                metadata @ (ImportBindingMetadata::AmbientType
+                metadata @ (ImportBindingMetadata::AmbientType { .. }
                 | ImportBindingMetadata::BuiltinType(_)),
             ) = known_import_metadata(source_module, name)
             {
@@ -9364,36 +9364,16 @@ impl<'a> Lowerer<'a> {
                     ImportBindingMetadata::BuiltinType(builtin) => {
                         ResolutionState::Resolved(TypeResolution::Builtin(builtin))
                     }
-                    ImportBindingMetadata::AmbientType => {
-                        match lookup_item(
-                            &namespaces.ambient_type_items,
-                            import_binding.imported_name.text(),
-                        ) {
-                            LookupResult::Unique(item) => {
-                                ResolutionState::Resolved(TypeResolution::Item(item))
-                            }
-                            LookupResult::Ambiguous => {
-                                self.emit_error(
-                                    reference.span(),
-                                    format!(
-                                        "ambient type `{}` is ambiguous",
-                                        import_binding.imported_name.text()
-                                    ),
-                                    code("ambiguous-type-name"),
-                                );
-                                ResolutionState::Unresolved
-                            }
-                            LookupResult::Missing => {
-                                self.emit_error(
-                                    reference.span(),
-                                    format!(
-                                        "import `{}` resolved without an ambient type target",
-                                        import_binding.imported_name.text()
-                                    ),
-                                    code("invalid-import-resolution"),
-                                );
-                                ResolutionState::Unresolved
-                            }
+                    ImportBindingMetadata::AmbientType { ref origin } => {
+                        if let Some(item) = self.module.ambient_data_item(&origin.identity) {
+                            ResolutionState::Resolved(TypeResolution::Item(item))
+                        } else {
+                            self.emit_error(
+                                reference.span(),
+                                format!("import `{}` resolved without an ambient type target", import_binding.imported_name.text()),
+                                code("invalid-import-resolution"),
+                            );
+                            ResolutionState::Unresolved
                         }
                     }
                     _ => ResolutionState::Resolved(TypeResolution::Import(import)),
@@ -9420,16 +9400,11 @@ impl<'a> Lowerer<'a> {
                     ImportBindingMetadata::BuiltinType(builtin) => {
                         ResolutionState::Resolved(TypeResolution::Builtin(builtin))
                     }
-                    ImportBindingMetadata::AmbientType => {
-                        match lookup_item(
-                            &namespaces.ambient_type_items,
-                            import_binding.imported_name.text(),
-                        ) {
-                            LookupResult::Unique(item) => {
-                                ResolutionState::Resolved(TypeResolution::Item(item))
-                            }
-                            _ => ResolutionState::Resolved(TypeResolution::Import(import)),
-                        }
+                    ImportBindingMetadata::AmbientType { ref origin } => {
+                        self.module.ambient_data_item(&origin.identity)
+                            .map(TypeResolution::Item)
+                            .map(ResolutionState::Resolved)
+                            .unwrap_or_else(|| ResolutionState::Resolved(TypeResolution::Import(import)))
                     }
                     _ => ResolutionState::Resolved(TypeResolution::Import(import)),
                 };

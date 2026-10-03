@@ -72,7 +72,7 @@ impl GateTypeContext<'_> {
                             binding.metadata,
                             ImportBindingMetadata::TypeConstructor { .. }
                                 | ImportBindingMetadata::Domain { .. }
-                                | ImportBindingMetadata::AmbientType
+                                | ImportBindingMetadata::AmbientType { .. }
                                 | ImportBindingMetadata::BuiltinType(_)
                         )
                 })?;
@@ -81,19 +81,8 @@ impl GateTypeContext<'_> {
                 {
                     return Some(TypeConstructorHead::Builtin(builtin));
                 }
-                if matches!(
-                    self.module.imports()[id].metadata,
-                    ImportBindingMetadata::AmbientType
-                ) {
-                    let item =
-                        self.module.ambient_items().iter().copied().find(|item| {
-                            match &self.module.items()[*item] {
-                                Item::Type(ty) => ty.name.text() == name.as_ref(),
-                                Item::Domain(domain) => domain.name.text() == name.as_ref(),
-                                _ => false,
-                            }
-                        })?;
-                    return Some(TypeConstructorHead::Item(item));
+                if let ImportBindingMetadata::AmbientType { origin } = &self.module.imports()[id].metadata {
+                    return self.module.ambient_data_item(&origin.identity).map(TypeConstructorHead::Item);
                 }
                 TypeConstructorHead::Import(id)
             }

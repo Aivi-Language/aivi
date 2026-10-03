@@ -1018,7 +1018,7 @@ impl<'a> DecodeTypeLowerer<'a> {
             | ImportBindingMetadata::Domain { carrier: None, .. }
             | ImportBindingMetadata::BuiltinTerm(_)
             | ImportBindingMetadata::Class { .. }
-            | ImportBindingMetadata::AmbientType
+            | ImportBindingMetadata::AmbientType { .. }
             | ImportBindingMetadata::Bundle(_)
             | ImportBindingMetadata::DomainSuffix { .. }
             | ImportBindingMetadata::InstanceMember { .. } => Ok(self.external_reference(name)),
@@ -1166,7 +1166,7 @@ impl<'a> DecodeTypeLowerer<'a> {
                             ImportBindingMetadata::TypeConstructor { .. }
                                 | ImportBindingMetadata::Domain { .. }
                                 | ImportBindingMetadata::BuiltinType(_)
-                                | ImportBindingMetadata::AmbientType
+                                | ImportBindingMetadata::AmbientType { .. }
                         )
                 }) {
                     self.lower_import_type_reference(import_id, &lowered_arguments, span)

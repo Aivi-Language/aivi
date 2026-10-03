@@ -1591,6 +1591,80 @@ value compared : Task Text Bool = pure (mapBoth mark double (Right 2) == Right 4
 }
 
 #[test]
+fn nonempty_comonad_instances_execute_generic_reexported_and_cached_evidence() {
+    let dir = TempDir::new("nonempty-comonad");
+    dir.write("facade.aivi", "use aivi.nonEmpty (NonEmptyList as NEL, fromHeadTail, toList, length)\nexport (NEL, fromHeadTail, toList, length)\n");
+    dir.write(
+        "operations.aivi",
+        r#"
+type Comonad W => W A -> A
+func read = values => extract values
+type Extend W => (W A -> B) -> W A -> W B
+func contexts = observe values => extend observe values
+type Comonad W => W A -> W A
+func preserve = values => extend extract values
+type Comonad W => (W A -> B) -> W A -> B
+func observeFirst = observe values => extract (extend observe values)
+type Extend W => (W B -> C) -> (W A -> B) -> W A -> C
+func observeContext = outer inner values => outer (extend inner values)
+type Extend W => (W A -> B) -> (W B -> C) -> W A -> W C
+func regroup = inner outer values => extend (observeContext outer inner) values
+type Comonad W => W A -> W B -> (A, B)
+func readBoth = left right => (extract left, extract right)
+export (read, contexts, preserve, observeFirst, regroup, readBoth)
+"#,
+    );
+    let path = dir.write("main.aivi", r#"
+use facade (NEL, fromHeadTail, toList, length)
+use operations (read, contexts, preserve, observeFirst, regroup, readBoth)
+type Int -> Int -> Int
+func add = total item => total + item
+type NEL Int -> Int
+func sum = values => reduce add 0 values
+value items : NEL Int = fromHeadTail 1 [2, 3]
+value single : NEL Int = fromHeadTail 7 []
+value firstClass : (NEL Int -> Int) -> NEL Int -> NEL Int = extend
+value partial : NEL Int -> NEL Int = contexts length
+@test
+value suffixes : Task Text Bool = pure (toList (extend toList items) == [[1, 2, 3], [2, 3], [3]])
+@test
+value genericExtract : Task Text Bool = pure (read items == 1)
+@test
+value singleton : Task Text Bool = pure (toList (contexts sum single) == [7])
+@test
+value firstClassMember : Task Text Bool = pure (toList (firstClass length items) == [3, 2, 1])
+@test
+value partialMember : Task Text Bool = pure (toList (partial items) == [3, 2, 1])
+@test
+value extractIdentity : Task Text Bool = pure (toList (preserve items) == [1, 2, 3] and toList (preserve single) == [7])
+@test
+value observationIdentity : Task Text Bool = pure (observeFirst sum items == sum items and observeFirst sum single == sum single)
+@test
+value associativity : Task Text Bool = pure (toList (contexts sum (contexts sum items)) == toList (regroup sum sum items) and toList (regroup sum sum items) == [14, 8, 3] and toList (contexts sum (contexts sum single)) == toList (regroup sum sum single) and toList (regroup sum sum single) == [7])
+@test
+value separateMemberUses : Task Text Bool = pure (readBoth (fromHeadTail "first" []) (fromHeadTail True []) == ("first", True))
+"#);
+    let tail = (1..2048)
+        .map(|n| n.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut source = std::fs::read_to_string(&path).unwrap();
+    source.push_str(&format!("\nvalue deep : NEL Int = fromHeadTail 0 [{tail}]\n@test\nvalue stackSafe : Task Text Bool = pure (length (extend extract deep) == 2048 and read deep == 0)\n"));
+    std::fs::write(&path, source).unwrap();
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("10 passed; 0 failed; 10 total"), "{stdout}");
+    }
+}
+
+#[test]
 fn binary_class_instances_execute_imported_partial_and_cached_evidence() {
     let dir = TempDir::new("binary-class-evidence");
     dir.write(

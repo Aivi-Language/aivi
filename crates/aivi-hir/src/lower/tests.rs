@@ -4644,13 +4644,17 @@ fn exports_support_builtin_and_ambient_root_surface_targets() {
     );
     assert_eq!(
         exported_names.find("Eq").map(|exported| &exported.metadata),
-        Some(&ImportBindingMetadata::AmbientType)
+        Some(&ImportBindingMetadata::Class {
+            identity: crate::ClassIdentity::Standard("Eq".into())
+        })
     );
     assert_eq!(
         exported_names
             .find("Foldable")
             .map(|exported| &exported.metadata),
-        Some(&ImportBindingMetadata::AmbientType)
+        Some(&ImportBindingMetadata::Class {
+            identity: crate::ClassIdentity::Standard("Foldable".into())
+        })
     );
 }
 

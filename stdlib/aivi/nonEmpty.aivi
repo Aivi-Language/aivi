@@ -1,5 +1,7 @@
 hoist
 
+use aivi.list (reverse)
+
 use aivi.nonEmpty (
     NonEmptyList
     singleton
@@ -117,3 +119,42 @@ func identityNel = items =>
 instance Monad NonEmptyList = {
     join = items => chainNel identityNel items
 }
+
+type (NonEmptyList A -> B) -> (List A, List B) -> A -> (List A, List B)
+func extendNelStep = observe state item => state
+ ||> (tail, results) -> (append [item] tail, append [observe (fromHeadTail item tail)] results)
+
+type (NonEmptyList A -> B) -> NonEmptyList A -> NonEmptyList B
+func extendNel = observe items => toList items
+ |> reverse
+ |> reduce (extendNelStep observe) ([], [])
+ ||> (ignored, [first, ...rest]) -> fromHeadTail first rest
+
+instance Extend NonEmptyList = {
+    extend = extendNel
+}
+
+instance Comonad NonEmptyList = {
+    extract = head
+}
+
+type Int -> Int -> Int
+func sumNelTestStep = total item => total + item
+
+type NonEmptyList Int -> Int
+func sumNelTest = items => reduce sumNelTestStep 0 items
+
+@test
+value nonEmpty_extend_suffixes : Task Text Bool = pure (toList (extend toList (fromHeadTail 1 [2, 3])) == [[1, 2, 3], [2, 3], [3]])
+
+@test
+value nonEmpty_extract : Task Text Bool = pure (extract (fromHeadTail 1 [2, 3]) == 1)
+
+@test
+value nonEmpty_extend_singleton : Task Text Bool = pure (toList (extend sumNelTest (singleton 7)) == [7])
+
+@test
+value nonEmpty_extend_extract_identity : Task Text Bool = pure (toList (extend extract (fromHeadTail 1 [2, 3])) == [1, 2, 3])
+
+@test
+value nonEmpty_extract_extend_identity : Task Text Bool = pure (extract (extend sumNelTest (fromHeadTail 1 [2, 3])) == 6)

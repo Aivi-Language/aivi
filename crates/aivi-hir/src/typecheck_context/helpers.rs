@@ -1016,7 +1016,7 @@ pub(crate) fn lower_import_value_type_with_substitutions(
                                 && matches!(
                                     &binding.metadata,
                                     ImportBindingMetadata::TypeConstructor { .. }
-                                        | ImportBindingMetadata::AmbientType
+                                        | ImportBindingMetadata::AmbientType { .. }
                                         | ImportBindingMetadata::BuiltinType(_)
                                         | ImportBindingMetadata::Domain { .. }
                                 )

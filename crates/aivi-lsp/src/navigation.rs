@@ -1261,7 +1261,7 @@ impl NavigationAnalysis {
             | ImportBindingMetadata::Class { .. }
             | ImportBindingMetadata::Domain { .. }
             | ImportBindingMetadata::BuiltinType(_)
-            | ImportBindingMetadata::AmbientType => {
+            | ImportBindingMetadata::AmbientType { .. } => {
                 imported.type_declaration_targets(import_binding.imported_name.text())
             }
             ImportBindingMetadata::Value { .. }

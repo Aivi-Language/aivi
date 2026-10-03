@@ -2,8 +2,7 @@ use aivi_base::{FileId, SourceDatabase, SourceSpan};
 use aivi_syntax::parse_module;
 
 use crate::{
-    BuiltinType, ClassIdentity, Item, PipeTransformMode, RecordFieldSurface, TypeParameterId,
-    lower_module,
+    BuiltinType, Item, PipeTransformMode, RecordFieldSurface, TypeParameterId, lower_module,
 };
 
 use super::*;
@@ -1631,6 +1630,25 @@ fn typecheck_accepts_prelude_foldable_reduce_calls() {
 }
 
 #[test]
+fn class_member_callbacks_preserve_rigid_contracts_and_contextual_carriers() {
+    for source in [
+        "type Comonad W => W A -> W A\nfunc preserve = values => extend extract values\n",
+        "type Either L R = EL L | ER R\ntype Applicative G => Either L A -> G (Either L A)\nfunc wrapEither = either => either\n ||> EL error -> pure (EL error)\n ||> ER item -> pure (ER item)\n",
+    ] {
+        let report = typecheck_text("class-callback-contract.aivi", source);
+        assert!(report.is_ok(), "{source}: {:?}", report.diagnostics());
+    }
+    for source in [
+        "type Comonad W => W A -> W Int\nfunc invalid = values => extend extract values\n",
+        "type Comonad W => W A -> Int\nfunc invalid = values => extract values\n",
+        "type Extend W => W A -> W Int\nfunc invalid = values => extend (items => extract items) values\n",
+    ] {
+        let report = typecheck_text("invalid-class-callback-contract.aivi", source);
+        assert!(!report.is_ok(), "invalid contract accepted: {source}");
+    }
+}
+
+#[test]
 fn typecheck_accepts_class_member_names_from_expected_arrow_types() {
     let report = typecheck_text(
         "class-member-name-expected-arrow.aivi",
@@ -2159,10 +2177,13 @@ fn indexed_class_scope_matches_declaration_order_aliases_and_ambient_fallback() 
             .collect::<Vec<_>>();
         for (_, import) in module.imports().iter() {
             let class = module.items().iter().find_map(|(id, item)| {
-                let Item::Class(class) = item else { return None; };
+                let Item::Class(class) = item else {
+                    return None;
+                };
                 match &import.metadata {
-                    ImportBindingMetadata::Class { identity } if &class.identity == identity => Some(id),
-                    ImportBindingMetadata::AmbientType if matches!(&class.identity, ClassIdentity::Standard(name) if name.as_ref() == import.imported_name.text()) => Some(id),
+                    ImportBindingMetadata::Class { identity } if &class.identity == identity => {
+                        Some(id)
+                    }
                     _ => None,
                 }
             });

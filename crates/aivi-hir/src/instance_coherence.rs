@@ -401,25 +401,13 @@ impl CoherenceTerms {
                                     ));
                                 }
                                 ImportBindingMetadata::Domain { .. }
-                                | ImportBindingMetadata::AmbientType => {
+                                | ImportBindingMetadata::AmbientType { .. } => {
                                     // Ambient carriers share their compiler declaration,
                                     // regardless of which stdlib facade imported them.
-                                    if matches!(import.metadata, ImportBindingMetadata::AmbientType)
-                                        && let Some((item_id, _)) =
-                                            module.items().iter().find(|(id, item)| {
-                                                module.ambient_items().contains(id)
-                                                    && match item {
-                                                        Item::Type(item) => {
-                                                            item.name.text()
-                                                                == import.imported_name.text()
-                                                        }
-                                                        Item::Domain(item) => {
-                                                            item.name.text()
-                                                                == import.imported_name.text()
-                                                        }
-                                                        _ => false,
-                                                    }
-                                            })
+                                    if let ImportBindingMetadata::AmbientType { origin } =
+                                        &import.metadata
+                                        && let Some(item_id) =
+                                            module.ambient_data_item(&origin.identity)
                                     {
                                         work.push(Work::HirReference(
                                             TypeResolution::Item(item_id),
@@ -791,6 +779,16 @@ pub(crate) fn owns_carrier(module: &Module, mut ty: TypeId) -> bool {
 }
 
 pub(crate) fn provider_owns(module: &Module, class: &ClassIdentity, argument: TypeId) -> bool {
+    // NonEmptyList is declared in the compiler prelude, but its public carrier
+    // belongs to the canonical stdlib module. Carrier ownership is independent
+    // of which class is implemented, just as for an ordinary authored domain.
+    if module.builtin_instance_provider() == Some(crate::BuiltinInstanceProvider::NonEmpty) {
+        let mut head = argument;
+        while let TypeKind::Apply { callee, .. } = &module.types()[head].kind {
+            head = *callee;
+        }
+        return matches!(&module.types()[head].kind, TypeKind::Name(reference) if matches!(reference.resolution, ResolutionState::Resolved(TypeResolution::Item(id)) if module.ambient_items().contains(&id) && matches!(&module.items()[id], Item::Domain(domain) if domain.name.text() == "NonEmptyList")));
+    }
     let ClassIdentity::Standard(class) = class else {
         return false;
     };
@@ -813,25 +811,7 @@ pub(crate) fn provider_owns(module: &Module, class: &ClassIdentity, argument: Ty
             matches!(class.as_ref(), "Default" | "Semigroup" | "Monoid")
                 && builtin == Some(BuiltinType::Bytes)
         }
-        Some(crate::BuiltinInstanceProvider::NonEmpty) => {
-            let mut head = argument;
-            while let TypeKind::Apply { callee, .. } = &module.types()[head].kind {
-                head = *callee;
-            }
-            matches!(&module.types()[head].kind, TypeKind::Name(reference) if matches!(reference.resolution, ResolutionState::Resolved(TypeResolution::Item(id)) if module.ambient_items().contains(&id) && matches!(&module.items()[id], Item::Domain(domain) if domain.name.text() == "NonEmptyList")))
-                && matches!(
-                    class.as_ref(),
-                    "Functor"
-                        | "Foldable"
-                        | "Traversable"
-                        | "Semigroup"
-                        | "Applicative"
-                        | "Apply"
-                        | "Chain"
-                        | "Monad"
-                )
-        }
-        None => false,
+        Some(crate::BuiltinInstanceProvider::NonEmpty) | None => false,
     }
 }
 
@@ -840,7 +820,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn nonempty_traversal_ownership_requires_the_provider_and_standard_identities() {
+    fn nonempty_carrier_ownership_requires_the_provider_and_ambient_identity() {
         let mut sources = aivi_base::SourceDatabase::new();
         let file = sources.add_file(
             "provider.aivi",
@@ -863,7 +843,7 @@ mod tests {
         assert!(!provider_owns(&module, &standard, head));
         module.builtin_instance_provider = Some(crate::BuiltinInstanceProvider::NonEmpty);
         assert!(provider_owns(&module, &standard, head));
-        assert!(!provider_owns(
+        assert!(provider_owns(
             &module,
             &ClassIdentity::Source {
                 file,
@@ -871,8 +851,8 @@ mod tests {
             },
             head
         ));
-        for class in ["Monoid", "Default", "Filterable"] {
-            assert!(!provider_owns(
+        for class in ["Extend", "Comonad", "Monoid", "Default", "Filterable"] {
+            assert!(provider_owns(
                 &module,
                 &ClassIdentity::Standard(class.into()),
                 head

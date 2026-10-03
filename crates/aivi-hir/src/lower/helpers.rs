@@ -1555,7 +1555,12 @@ fn known_import_metadata(module: &str, member: &str) -> Option<ImportBindingMeta
             ),
         )),
         // NonEmptyList ambient types and values
-        ("aivi.nonEmpty", "NonEmptyList") => Some(ImportBindingMetadata::AmbientType),
+        ("aivi.nonEmpty", "NonEmptyList") => Some(ImportBindingMetadata::AmbientType {
+            origin: crate::ImportedTypeOrigin {
+                identity: crate::TypeIdentity::Standard("NonEmptyList".into()),
+                source_module: Some("aivi.nonEmpty".into()),
+            },
+        }),
         ("aivi.nonEmpty", "singleton") => Some(ImportBindingMetadata::AmbientValue {
             name: "__aivi_nel_singleton".into(),
         }),

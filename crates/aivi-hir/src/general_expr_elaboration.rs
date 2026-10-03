@@ -1804,7 +1804,7 @@ pub(crate) fn lower_name_expr_with_class_evidence(
     env: &GateExprEnv,
     visible_ty: &GateType,
 ) -> Option<GateRuntimeExpr> {
-    if let Some(local) = lower_class_member_callee_with_evidence(
+    if let Some(mut local) = lower_class_member_callee_with_evidence(
         module,
         typing,
         evidence,
@@ -1812,6 +1812,15 @@ pub(crate) fn lower_name_expr_with_class_evidence(
         reference,
         visible_ty.clone(),
     ) {
+        // Passing a universally quantified member as a value instantiates its
+        // visible callback contract. Application callees retain their binding
+        // representation until application; hidden evidence was applied above.
+        if matches!(
+            local.kind,
+            GateRuntimeExprKind::Reference(GateRuntimeReference::Local(_))
+        ) {
+            local.ty = visible_ty.clone();
+        }
         return Some(local);
     }
     if matches!(
@@ -2204,9 +2213,9 @@ pub(crate) fn lower_class_member_callee_with_evidence(
         &substitutions,
         reference.span(),
     )?;
-    // Callable dictionaries retain their declaration contract; their application
-    // carries the instantiated result. A value member has no application node,
-    // so its use carries the selected member contract directly.
+    // Callable dictionaries retain their binding representation until applied.
+    // The application carries its instantiated result; a bare value member has
+    // no application, so it carries the selected use contract directly.
     let dictionary_ty = env.locals.get(&local.binding)?;
     let callee = GateRuntimeExpr {
         span: reference.span(),
@@ -7140,6 +7149,35 @@ instance Functor Box = {
         match &map.outcome {
             GeneralExprOutcome::Lowered(_) => {}
             other => panic!("expected lowered higher-kinded instance member body, found {other:?}"),
+        }
+    }
+
+    #[test]
+    fn elaborates_generic_comonad_member_callbacks() {
+        let lowered = lower_text(
+            "general-expr-comonad-callback.aivi",
+            r#"
+type Comonad W => W A -> W A
+func preserve = values => extend extract values
+type Comonad W => (W A -> B) -> W A -> B
+func observeFirst = observe values => extract (extend observe values)
+"#,
+        );
+        assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+        let checked = crate::typecheck_module(lowered.module());
+        assert!(checked.is_ok(), "{:?}", checked.diagnostics());
+        let report = elaborate_general_expressions(lowered.module());
+        for name in ["preserve", "observeFirst"] {
+            let item = report
+                .items()
+                .iter()
+                .find(|item| item_name(lowered.module(), item.owner) == Some(name))
+                .unwrap();
+            assert!(
+                matches!(item.outcome, GeneralExprOutcome::Lowered(_)),
+                "{name}: {:?}",
+                item.outcome
+            );
         }
     }
 

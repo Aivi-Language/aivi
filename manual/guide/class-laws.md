@@ -32,10 +32,18 @@ for the required signatures, dictionary precedence, and ambiguity behavior.
 | `Foldable F` | `reduce` must visit elements in the carrier's declared order and treat empty and singleton shapes consistently. |
 | `Traversable T` | Traversal must preserve shape and satisfy the standard identity, naturality, and composition laws. Use it when you are sequencing effects through a fixed structure, not when you are changing the structure itself. |
 | `Filterable F` | `filterMap` may drop or rewrite existing positions, but it must not reorder or duplicate them. `filterMap Some` should behave like the identity. |
+| `Extend W` | Associativity: `extend outer (extend inner values)` agrees with extending `values` by a callback that computes `outer (extend inner context)`. Context shape and order must be documented. |
+| `Comonad W` | Inherits `Extend`. `extend extract values` agrees with `values`, and `extract (extend observe values)` agrees with `observe values`. |
 | `Bifunctor F` | Identity and composition in both arguments: `bimap id id` is `id`, and mapping both sides composes pointwise. |
 | `Semigroupoid P` | Associativity: `compose f (compose g h)` and `compose (compose f g) h` must agree for every compatible sequence of input and output types. |
 | `Category P` | Inherits associative composition. Left and right identity require `compose id f` and `compose f id` to agree with `f`. |
 | `Profunctor P` | `dimap id id` preserves the value. Input transformations compose contravariantly and output transformations compose covariantly. |
+
+## Non-empty suffix contexts
+
+`NonEmptyList` supplies a suffix-based `Extend` and `Comonad`: observers visit the full list,
+then each successive non-empty suffix; `extract` reads the first item. Every context has a
+head, every result retains the input length, and no empty-case fallback is required.
 
 ## Why `Signal` stops at `Applicative`
 

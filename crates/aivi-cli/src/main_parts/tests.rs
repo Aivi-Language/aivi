@@ -485,7 +485,8 @@ fn source_run_cache_discards_images_without_current_type_and_equality_contracts(
     // revision 23 preceded definitive declaration annotation checking;
     // revision 24 preceded binary-class quantifiers and instance re-export owners.
     // revision 25 preceded selected use contracts for value class members.
-    for revision in ["20", "21", "22", "23", "24", "25"] {
+    // Revision 26 preceded ambient import origins and member callback inference.
+    for revision in ["20", "21", "22", "23", "24", "25", "26"] {
         let mut legacy = DefaultHasher::new();
         "aivi.source-run-cache".hash(&mut legacy);
         5_u32.hash(&mut legacy);
@@ -1941,6 +1942,34 @@ value main : Task Text Unit =
         super::RunArtifactKind::HeadlessTask { .. }
     ));
     assert!(reloaded.gtk().is_none());
+}
+
+#[test]
+fn frozen_source_image_preserves_generic_nonempty_comonad_callbacks() {
+    let workspace = TempDir::new("nonempty-comonad-roundtrip");
+    let entry = workspace.write(
+        "main.aivi",
+        r#"
+use aivi.nonEmpty (NonEmptyList, fromHeadTail, toList)
+type Comonad W => W A -> W A
+func preserve = values => extend extract values
+type Comonad W => W A -> A
+func read = values => extract values
+value items : NonEmptyList Int = fromHeadTail 1 [2, 3]
+value main : Task Text Bool = pure (toList (preserve items) == [1, 2, 3] and read items == 1)
+"#,
+    );
+    let artifact = prepare_run_from_workspace(&workspace, "main.aivi", None).unwrap();
+    let frozen = super::freeze_run_artifact(&artifact).unwrap();
+    let reloaded = super::load_frozen_run_image_from_bytes(&frozen.bytes, None).unwrap();
+    assert!(reloaded.sources.is_none());
+    fs::remove_file(entry).unwrap();
+    for candidate in [&artifact, &reloaded] {
+        assert_eq!(
+            evaluate_pure_headless_result(candidate),
+            RuntimeValue::Bool(true)
+        );
+    }
 }
 
 #[test]

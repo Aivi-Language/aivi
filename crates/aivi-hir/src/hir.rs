@@ -927,7 +927,11 @@ pub enum ImportBindingMetadata {
     },
     BuiltinType(BuiltinType),
     BuiltinTerm(BuiltinTerm),
-    AmbientType,
+    /// A compiler-declared data type, retaining its canonical identity across
+    /// local aliases and facade re-exports.
+    AmbientType {
+        origin: ImportedTypeOrigin,
+    },
     /// An imported class declaration, with a portable definition in the
     /// module's class catalog. It is not an ordinary data constructor.
     Class {
@@ -953,6 +957,7 @@ impl ImportBindingMetadata {
     pub fn type_origin(&self) -> Option<&ImportedTypeOrigin> {
         match self {
             Self::TypeConstructor { origin, .. } | Self::Domain { origin, .. } => origin.as_ref(),
+            Self::AmbientType { origin } => Some(origin),
             _ => None,
         }
     }
@@ -4214,21 +4219,14 @@ impl<S> Module<S> {
         // This query borrows an immutable module. Index declarations once,
         // retaining the first identity match and the original candidate order.
         let mut by_identity = std::collections::HashMap::new();
-        let mut by_standard_name = std::collections::HashMap::new();
         for (id, item) in self.items().iter() {
             if let Item::Class(class) = item {
                 by_identity.entry(&class.identity).or_insert(id);
-                if let ClassIdentity::Standard(name) = &class.identity {
-                    by_standard_name.entry(name.as_ref()).or_insert(id);
-                }
             }
         }
         for (_, import) in self.imports().iter() {
             let class = match &import.metadata {
                 ImportBindingMetadata::Class { identity } => by_identity.get(identity).copied(),
-                ImportBindingMetadata::AmbientType => {
-                    by_standard_name.get(import.imported_name.text()).copied()
-                }
                 _ => None,
             };
             if let Some(class) = class
@@ -4293,6 +4291,23 @@ impl<S> Module<S> {
             identity,
             source_module: self.source_module.clone(),
         })
+    }
+
+    /// Resolve an ambient data declaration by identity, independent of import
+    /// aliases or the module that re-exports it. Source declarations with the
+    /// same spelling cannot acquire a compiler-owned identity.
+    pub(crate) fn ambient_data_item(&self, identity: &TypeIdentity) -> Option<ItemId> {
+        let TypeIdentity::Standard(name) = identity else {
+            return None;
+        };
+        self.ambient_items()
+            .iter()
+            .copied()
+            .find(|id| match &self.items()[*id] {
+                Item::Type(item) => item.name.text() == name.as_ref(),
+                Item::Domain(item) => item.name.text() == name.as_ref(),
+                _ => false,
+            })
     }
 
     pub fn ambient_items(&self) -> &[ItemId] {

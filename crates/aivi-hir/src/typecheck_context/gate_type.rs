@@ -408,6 +408,40 @@ impl GateType {
         }
     }
 
+    /// Query quantifier identities without recursing through nested types.
+    pub(crate) fn any_type_parameter(
+        &self,
+        mut predicate: impl FnMut(TypeParameterId) -> bool,
+    ) -> bool {
+        let mut work = vec![self];
+        while let Some(ty) = work.pop() {
+            match ty {
+                Self::Primitive(_) => {}
+                Self::TypeParameter { parameter, .. } => {
+                    if predicate(*parameter) { return true; }
+                }
+                Self::TypeApplication { parameter, arguments, .. } => {
+                    if predicate(*parameter) { return true; }
+                    work.extend(arguments);
+                }
+                Self::Arrow { parameter, result } => {
+                    work.push(parameter);
+                    work.push(result);
+                }
+                Self::List(inner) | Self::Option(inner) | Self::Signal(inner) | Self::Set(inner) => work.push(inner),
+                Self::Tuple(elements) => work.extend(elements),
+                Self::Record(fields) => work.extend(fields.iter().map(|field| &field.ty)),
+                Self::Map { key, value } => { work.push(key); work.push(value); }
+                Self::Result { error, value } | Self::Validation { error, value } | Self::Task { error, value } => {
+                    work.push(error);
+                    work.push(value);
+                }
+                Self::Domain { arguments, .. } | Self::OpaqueItem { arguments, .. } | Self::OpaqueImport { arguments, .. } => work.extend(arguments),
+            }
+        }
+        false
+    }
+
     pub(crate) fn fits_template(&self, template: &Self) -> bool {
         if let Some(expanded_self) = self.expand_transparent_import_alias() {
             return expanded_self.fits_template(template);

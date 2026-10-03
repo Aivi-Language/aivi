@@ -113,7 +113,7 @@ make its instances available; no carrier-specific spelling of the class operatio
 | `Dict K V` | `Default` | An empty dictionary. |
 | `Set` from `aivi.core.set` | `Foldable` | Visit members once, in insertion order. |
 | `Set A` from `aivi.core.set` | `Default` | An empty set. |
-| `NonEmptyList` | `Functor`, `Apply`, `Applicative`, `Chain`, `Monad`, `Foldable`, `Traversable` | Preserve non-emptiness; application uses function-major Cartesian order, chaining concatenates results in input order, and traversal preserves length. |
+| `NonEmptyList` | `Functor`, `Apply`, `Applicative`, `Chain`, `Monad`, `Foldable`, `Traversable`, `Extend`, `Comonad` | Preserve non-emptiness; application uses function-major Cartesian order, chaining concatenates results in input order, traversal preserves length, and extension observes non-empty suffixes. Extraction reads the head. |
 | `NonEmptyList A` | `Semigroup` | Concatenate in order. |
 | `Matrix` | `Functor`, `Foldable`, `Traversable` | Preserve dimensions when mapping or traversing; visit cells in row-major order. |
 | `Bytes` from `aivi.core.bytes` | `Semigroup`, `Monoid`, `Default` | Concatenation and empty bytes. |
@@ -239,6 +239,11 @@ Shipped providers implement the standard primitive instances in `aivi.defaults` 
 Provider authority follows the registered shipped source, so overriding an `aivi.*` module in
 a project does not grant it ownership. Existing import-sensitive record defaults retain their
 scope rules.
+
+The canonical `aivi.nonEmpty` module owns the compiler-declared `NonEmptyList` carrier for
+instance coherence, regardless of class identity. The compiler still checks each instance's
+complete member contracts and superclass evidence; the author remains responsible for laws.
+Ambient carrier imports retain their declaration identity through aliases and re-exports.
 
 Imported authored classes retain their declaration identity, superclass requirements, method
 signatures, and method-local constraints. Importing a class opens its methods for type-directed
