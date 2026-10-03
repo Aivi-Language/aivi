@@ -46,7 +46,8 @@ pub(crate) use crate::typecheck_context::{
     gate_env_for_function, pipe_stage_expr_env,
 };
 pub use crate::typecheck_context::{
-    GateType, TypeBinding, TypeConstructorBinding, TypeConstructorHead, case_pattern_field_types,
+    GateAliasDefinition, GateType, TypeBinding, TypeConstructorBinding, TypeConstructorHead,
+    case_pattern_field_types,
 };
 use crate::typecheck_context::{
     PendingSourceOptionValue, SourceOptionActualRecordField, SourceOptionActualType,

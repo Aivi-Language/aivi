@@ -486,7 +486,9 @@ fn source_run_cache_discards_images_without_current_type_and_equality_contracts(
     // revision 24 preceded binary-class quantifiers and instance re-export owners.
     // revision 25 preceded selected use contracts for value class members.
     // Revision 26 preceded ambient import origins and member callback inference.
-    for revision in ["20", "21", "22", "23", "24", "25", "26"] {
+    // Revision 27 preceded constructor namespace pairs; revision 28 preceded
+    // result-owned reactive operators; revision 29 preceded local alias witnesses.
+    for revision in ["20", "21", "22", "23", "24", "25", "26", "27", "28", "29"] {
         let mut legacy = DefaultHasher::new();
         "aivi.source-run-cache".hash(&mut legacy);
         5_u32.hash(&mut legacy);
@@ -3829,6 +3831,61 @@ value main : Task Text Bool = pure (
     let reloaded = super::load_frozen_run_image_from_bytes(&frozen.bytes, None).unwrap();
     assert!(reloaded.sources.is_none());
     for source in [owner, facade, bridge, entry] {
+        fs::remove_file(source).unwrap();
+    }
+    for candidate in [&artifact, &reloaded] {
+        assert_eq!(
+            evaluate_pure_headless_result(candidate),
+            RuntimeValue::Bool(true)
+        );
+    }
+}
+
+#[test]
+fn frozen_source_image_preserves_transparent_record_alias_class_evidence() {
+    let workspace = TempDir::new("record-alias-class-roundtrip");
+    let owner = workspace.write(
+        "arrows.aivi",
+        r#"
+type Arrow A B = { run: A -> B }
+type Arrow B C -> Arrow A B -> Arrow A C
+func composeArrow = left right => { run: x => left.run (right.run x) }
+instance Semigroupoid Arrow = { compose = composeArrow }
+type A -> A
+func identity = x => x
+instance Category Arrow = { id = { run: identity } }
+type Semigroupoid P => P B C -> P A B -> P A C
+func combine = left right => compose left right
+type Int -> Int
+func increment = n => n + 1
+value localArrow : Arrow Int Int = { run: increment }
+value localComposed : Arrow Int Int = combine localArrow localArrow
+export (Arrow, localComposed)
+"#,
+    );
+    let facade = workspace.write(
+        "facade.aivi",
+        "use arrows (Arrow as Morphism, localComposed)\nexport (Morphism, localComposed)\n",
+    );
+    let entry = workspace.write(
+        "main.aivi",
+        r#"
+use facade (Morphism, localComposed)
+type Category P => P A B -> P A B
+func keep = arrow => compose id arrow
+type Int -> Int
+func increment = n => n + 1
+value arrow : Morphism Int Int = { run: increment }
+value kept : Morphism Int Int = keep arrow
+value structural : { run: Int -> Int } = kept
+value main : Task Text Bool = pure (structural.run 3 == 4 and localComposed.run 3 == 5)
+"#,
+    );
+    let artifact = prepare_run_from_workspace(&workspace, "main.aivi", None).unwrap();
+    let frozen = super::freeze_run_artifact(&artifact).unwrap();
+    let reloaded = super::load_frozen_run_image_from_bytes(&frozen.bytes, None).unwrap();
+    assert!(reloaded.sources.is_none());
+    for source in [owner, facade, entry] {
         fs::remove_file(source).unwrap();
     }
     for candidate in [&artifact, &reloaded] {

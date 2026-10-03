@@ -170,7 +170,7 @@ pub use typed_declarations::{
     TypedDeclarationInfo, TypedDeclarationKind, collect_typed_declarations,
 };
 pub use validate::{
-    GateRecordField, GateType, TypeBinding, TypeConstructorBinding, TypeConstructorHead,
-    ValidationMode, ValidationReport, case_pattern_field_types, validate_bindings, validate_module,
-    validate_structure, validate_types,
+    GateAliasDefinition, GateRecordField, GateType, TypeBinding, TypeConstructorBinding,
+    TypeConstructorHead, ValidationMode, ValidationReport, case_pattern_field_types,
+    validate_bindings, validate_module, validate_structure, validate_types,
 };

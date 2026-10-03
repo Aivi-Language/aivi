@@ -558,7 +558,9 @@ fn substitute_gate_type(
     substitutions: &HashMap<TypeParameterId, GateType>,
 ) -> GateType {
     match ty {
-        GateType::TypeApplication { .. } => ty.substitute_type_parameters(substitutions),
+        GateType::TypeApplication { .. } | GateType::TransparentAlias { .. } => {
+            ty.substitute_type_parameters(substitutions)
+        }
         GateType::Primitive(_) => ty.clone(),
         GateType::TypeParameter { parameter, .. } => substitutions
             .get(parameter)
@@ -659,6 +661,16 @@ fn collect_type_param_subs_inner(
     actual: &GateType,
     subs: &mut HashMap<TypeParameterId, GateType>,
 ) {
+    if let Some(expanded) = template.expanded_alias_type() {
+        collect_type_param_subs_inner(&expanded, actual, subs);
+        return;
+    }
+    if !matches!(template, GateType::TypeApplication { .. })
+        && let Some(expanded) = actual.expanded_alias_type()
+    {
+        collect_type_param_subs_inner(template, &expanded, subs);
+        return;
+    }
     match (template, actual) {
         (
             GateType::TypeApplication {
@@ -3225,6 +3237,13 @@ impl<'a> GeneralExprElaborator<'a> {
         expected: Option<&GateType>,
     ) -> Result<GateRuntimeExpr, Vec<GeneralExprBlocker>> {
         let expr = self.module.exprs()[expr_id].clone();
+        let expanded_expected = matches!(
+            expr.kind,
+            ExprKind::Record(_) | ExprKind::Tuple(_) | ExprKind::Lambda(_)
+        )
+        .then(|| expected.and_then(GateType::expanded_alias_type))
+        .flatten();
+        let expected = expanded_expected.as_ref().or(expected);
         if let ExprKind::Name(reference) = &expr.kind
             && let ResolutionState::Resolved(TermResolution::Local(binding)) =
                 reference.resolution.as_ref()
@@ -3724,7 +3743,9 @@ impl<'a> GeneralExprElaborator<'a> {
             return Err(vec![GeneralExprBlocker::UnknownExprType { span }]);
         };
         // Extract the record fields — either from a local Record or from an imported TypeConstructor.
-        let record_fields: Vec<GateRecordField> = match &target_gate_ty {
+        let expanded_target = target_gate_ty.expanded_alias_type();
+        let target_shape = expanded_target.as_ref().unwrap_or(&target_gate_ty);
+        let record_fields: Vec<GateRecordField> = match target_shape {
             GateType::Record(fields) => fields.clone(),
             GateType::OpaqueImport { import, .. } => {
                 match self.module.imports().get(*import).map(|b| &b.metadata) {
@@ -3827,7 +3848,9 @@ impl<'a> GeneralExprElaborator<'a> {
                     kind: GateRuntimeExprKind::Projection { base, path },
                 };
 
-                if let GateType::Record(nested_record_fields) = field_ty {
+                let expanded_field = field_ty.expanded_alias_type();
+                let field_shape = expanded_field.as_ref().unwrap_or(field_ty);
+                if let GateType::Record(nested_record_fields) = field_shape {
                     let mut nested_replace: HashMap<String, ExprId> = HashMap::new();
                     let mut nested_remove: HashSet<String> = HashSet::new();
                     for (segs, kind) in nested {
@@ -5689,7 +5712,9 @@ impl<'a> GeneralExprElaborator<'a> {
                     env.locals.insert(binding.binding, subject_ty);
                 }
                 crate::PatternKind::Tuple(elements) => {
-                    let GateType::Tuple(subject_elements) = &subject_ty else {
+                    let expanded = subject_ty.expanded_alias_type();
+                    let subject_shape = expanded.as_ref().unwrap_or(&subject_ty);
+                    let GateType::Tuple(subject_elements) = subject_shape else {
                         continue;
                     };
                     if elements.len() != subject_elements.len() {
@@ -5715,8 +5740,10 @@ impl<'a> GeneralExprElaborator<'a> {
                     }
                 }
                 crate::PatternKind::Record(fields) => {
+                    let expanded = subject_ty.expanded_alias_type();
+                    let subject_shape = expanded.as_ref().unwrap_or(&subject_ty);
                     // Collect (name, type) pairs from either a local record or an imported one.
-                    let record_pairs: Option<Vec<(String, GateType)>> = match &subject_ty {
+                    let record_pairs: Option<Vec<(String, GateType)>> = match subject_shape {
                         GateType::Record(subject_fields) => Some(
                             subject_fields
                                 .iter()
@@ -5940,16 +5967,7 @@ impl<'a> GeneralExprElaborator<'a> {
     }
 
     fn function_signature(&self, ty: &GateType, arity: usize) -> Option<(Vec<GateType>, GateType)> {
-        let mut current = ty;
-        let mut parameters = Vec::with_capacity(arity);
-        for _ in 0..arity {
-            let GateType::Arrow { parameter, result } = current else {
-                return None;
-            };
-            parameters.push(parameter.as_ref().clone());
-            current = result.as_ref();
-        }
-        Some((parameters, current.clone()))
+        self.typing.function_signature(ty, arity)
     }
 
     fn arrow_type(&self, parameters: Vec<GateType>, result: GateType) -> GateType {

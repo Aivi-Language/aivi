@@ -202,7 +202,8 @@ pub(crate) fn function_accepts_inference_type(
             | GateType::Task { error, value } => pending.extend([error.as_ref(), value.as_ref()]),
             GateType::Domain { arguments, .. }
             | GateType::OpaqueItem { arguments, .. }
-            | GateType::OpaqueImport { arguments, .. } => pending.extend(arguments),
+            | GateType::OpaqueImport { arguments, .. }
+            | GateType::TransparentAlias { arguments, .. } => pending.extend(arguments),
             GateType::Primitive(_) => {}
         }
     }

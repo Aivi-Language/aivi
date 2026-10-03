@@ -31,7 +31,8 @@ impl GateTypeContext<'_> {
                 }
                 GateType::Domain { arguments, .. }
                 | GateType::OpaqueItem { arguments, .. }
-                | GateType::OpaqueImport { arguments, .. } => pending.extend(arguments),
+                | GateType::OpaqueImport { arguments, .. }
+                | GateType::TransparentAlias { arguments, .. } => pending.extend(arguments),
                 GateType::Primitive(_) | GateType::TypeParameter { .. } => {}
             }
         }

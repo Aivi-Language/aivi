@@ -1832,3 +1832,119 @@ value genericInstance : Task Text Bool = pure (read (transform increment (Wrappe
         assert!(stdout.contains("6 passed; 0 failed; 6 total"), "{stdout}");
     }
 }
+
+#[test]
+fn transparent_record_aliases_execute_generic_class_calls_and_cached_replay() {
+    let dir = TempDir::new("transparent-record-alias-classes");
+    dir.write(
+        "arrows.aivi",
+        r#"
+type Arrow A B = { run: A -> B }
+type Arrow B C -> Arrow A B -> Arrow A C
+func composeArrow = left right => { run: x => left.run (right.run x) }
+instance Semigroupoid Arrow = { compose = composeArrow }
+type A -> A
+func identity = x => x
+instance Category Arrow = { id = { run: identity } }
+type (A2 -> A1) -> (B1 -> B2) -> Arrow A1 B1 -> Arrow A2 B2
+func dimapArrow = before after arrow => { run: x => after (arrow.run (before x)) }
+instance Profunctor Arrow = { dimap = dimapArrow }
+type Int -> Int
+func increment = n => n + 1
+type Int -> Int
+func twice = n => n * 2
+value incrementArrow : Arrow Int Int = { run: increment }
+value twiceArrow : Arrow Int Int = { run: twice }
+type Semigroupoid P => P B C -> P A B -> P A C
+func composeOwner = left right => compose left right
+value ownerComposed : Arrow Int Int = composeOwner incrementArrow twiceArrow
+value encode : Arrow Int Text = { run: n => "{n}" }
+value select : Arrow Bool Int = { run: flag => 7 }
+value heterogeneousOwner : Arrow Bool Text = composeOwner encode select
+export (Arrow, increment, incrementArrow, twiceArrow, ownerComposed, heterogeneousOwner)
+"#,
+    );
+    dir.write("facade.aivi", "use arrows (Arrow as Morphism, increment, incrementArrow, twiceArrow, ownerComposed, heterogeneousOwner)\nexport (Morphism, increment, incrementArrow, twiceArrow, ownerComposed, heterogeneousOwner)\n");
+    let path = dir.write(
+        "main.aivi",
+        r#"
+use facade (Morphism, increment, incrementArrow, twiceArrow, ownerComposed, heterogeneousOwner)
+type Semigroupoid P => P B C -> P A B -> P A C
+func combine = left right => compose left right
+type Category P => P A B -> P A B
+func keep = arrow => compose id arrow
+value composed : Morphism Int Int = combine incrementArrow twiceArrow
+value structural : { run: Int -> Int } = composed
+value method : Morphism Int Int -> Morphism Int Int -> Morphism Int Int = compose
+value partial : Morphism Int Int -> Morphism Int Int = compose incrementArrow
+value identityArrow : Morphism Int Int = id
+value mapped : Morphism Int Int = dimap increment increment twiceArrow
+value inputIdentity : Morphism Bool Bool = id
+value outputIdentity : Morphism Text Text = id
+@test
+value heterogeneousTypes : Task Text Bool = pure (heterogeneousOwner.run True == "7")
+@test
+value heterogeneousRightIdentity : Task Text Bool = pure ((compose heterogeneousOwner inputIdentity).run True == "7")
+@test
+value heterogeneousLeftIdentity : Task Text Bool = pure ((compose outputIdentity heterogeneousOwner).run True == "7")
+@test
+value ownerConstructor : Task Text Bool = pure (ownerComposed.run 3 == 7)
+@test
+value generic : Task Text Bool = pure (composed.run 3 == 7)
+@test
+value structuralLayout : Task Text Bool = pure (structural.run 3 == 7)
+@test
+value callback : Task Text Bool = pure ((method incrementArrow twiceArrow).run 3 == 7)
+@test
+value partialCall : Task Text Bool = pure ((partial twiceArrow).run 3 == 7)
+@test
+value leftIdentity : Task Text Bool = pure ((compose identityArrow incrementArrow).run 3 == 4)
+@test
+value inheritedIdentity : Task Text Bool = pure ((keep incrementArrow).run 3 == 4)
+@test
+value profunctor : Task Text Bool = pure (mapped.run 3 == 9)
+type Entry A = { payload: A }
+type Envelope A = { inner: Entry A }
+value nested : Envelope Int = { inner: { payload: 3 } }
+value patched : Envelope Int = nested <| { inner.payload: 4 }
+type Entry A -> A
+func readEntry = entry => entry ||> { payload } -> payload
+type Pair A B = (A, B)
+type Pair A B -> A
+func first = pair => pair ||> (a, b) -> a
+type Reader R A = R -> A
+value reader : Reader Int Int = increment
+@test
+value nestedAliasPatch : Task Text Bool = pure (patched.inner.payload == 4)
+@test
+value aliasPattern : Task Text Bool = pure (readEntry nested.inner == 3)
+@test
+value tupleAliasPattern : Task Text Bool = pure (first (3, True) == 3)
+@test
+value arrowAliasCall : Task Text Bool = pure (reader 3 == 4)
+type Keyed K A = { key: K, payload: A }
+type (A -> B) -> Keyed K A -> Keyed K B
+func mapKeyed = f entry => { key: entry.key, payload: f entry.payload }
+instance Functor (Keyed K) = { map = mapKeyed }
+type Functor F => (A -> B) -> F A -> F B
+func transform = f entries => map f entries
+type Int -> Bool
+func positive = n => n > 0
+value keyed : Keyed Text Int = { key: "fixed", payload: 3 }
+value transformed : Keyed Text Bool = transform positive keyed
+@test
+value fixedAliasArgument : Task Text Bool = pure (transformed.key == "fixed" and transformed.payload)
+"#,
+    );
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("16 passed; 0 failed; 16 total"), "{stdout}");
+    }
+}

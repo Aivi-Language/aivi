@@ -301,6 +301,9 @@ impl SourceOptionExpectedType {
         surface: SourceOptionTypeSurface,
     ) -> Option<Self> {
         match ty {
+            GateType::TransparentAlias { .. } => {
+                Self::from_gate_type(module, &ty.expanded_alias_type()?, surface)
+            }
             GateType::Primitive(builtin) => Some(Self::Primitive(*builtin)),
             GateType::TypeParameter { .. } | GateType::TypeApplication { .. } => None,
             GateType::Tuple(elements) => Some(Self::Tuple(
@@ -401,9 +404,9 @@ impl SourceOptionActualType {
     pub(crate) fn from_gate_type(ty: &GateType) -> Self {
         match ty {
             GateType::Primitive(builtin) => Self::Primitive(*builtin),
-            GateType::TypeParameter { .. } | GateType::TypeApplication { .. } => {
-                Self::KnownAbstract(Box::new(ty.clone()))
-            }
+            GateType::TypeParameter { .. }
+            | GateType::TypeApplication { .. }
+            | GateType::TransparentAlias { .. } => Self::KnownAbstract(Box::new(ty.clone())),
             GateType::Tuple(elements) => {
                 Self::Tuple(elements.iter().map(Self::from_gate_type).collect())
             }
@@ -670,6 +673,14 @@ impl SourceOptionActualType {
     }
 
     pub(crate) fn unify(&self, other: &Self) -> Option<Self> {
+        for (known, actual) in [(self, other), (other, self)] {
+            if let Self::KnownAbstract(alias) = known
+                && let Some(expanded) = alias.expanded_alias_type()
+            {
+                Self::from_gate_type(&expanded).unify(actual)?;
+                return Some(known.clone());
+            }
+        }
         match (self, other) {
             (Self::Hole, actual) | (actual, Self::Hole) => Some(actual.clone()),
             (Self::KnownAbstract(left), Self::KnownAbstract(right)) if left == right => {

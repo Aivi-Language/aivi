@@ -4921,3 +4921,92 @@ fn operator_payload_contracts_preserve_holes_and_other_carriers() {
         );
     }
 }
+
+#[test]
+fn local_record_aliases_retain_binary_constructor_evidence() {
+    let report = typecheck_text(
+        "record-alias-class.aivi",
+        r#"
+class Compose P = { compose : P B C -> P A B -> P A C }
+type Arrow A B = { run: A -> B }
+type Arrow B C -> Arrow A B -> Arrow A C
+func composeArrow = left right => { run: x => left.run (right.run x) }
+instance Compose Arrow = { compose = composeArrow }
+type Compose P => P B C -> P A B -> P A C
+func combine = left right => compose left right
+value encode : Arrow Int Text = { run: n => "{n}" }
+value select : Arrow Bool Int = { run: flag => 7 }
+value composed : Arrow Bool Text = combine encode select
+value structural : { run: Bool -> Text } = composed
+value result : Text = structural.run True
+"#,
+    );
+    assert!(report.is_ok(), "{:?}", report.diagnostics());
+}
+
+#[test]
+fn local_record_aliases_retain_fixed_constructor_arguments() {
+    let declarations = r#"
+type Entry K A = { key: K, value: A }
+type (A -> B) -> Entry K A -> Entry K B
+func mapEntry = f entry => { key: entry.key, value: f entry.value }
+instance Functor (Entry K) = { map = mapEntry }
+type Functor F => (A -> B) -> F A -> F B
+func transform = f values => map f values
+value entry : Entry Text Int = { key: "key", value: 3 }
+type Int -> Bool
+func positive = n => n > 0
+"#;
+    let valid = typecheck_text(
+        "fixed-record-alias.aivi",
+        &format!("{declarations}\nvalue result : Entry Text Bool = transform positive entry\n"),
+    );
+    assert!(valid.is_ok(), "{:?}", valid.diagnostics());
+    let invalid = typecheck_text(
+        "changed-fixed-record-alias.aivi",
+        &format!("{declarations}\nvalue result : Entry Int Bool = transform positive entry\n"),
+    );
+    assert!(!invalid.is_ok(), "fixed constructor argument changed");
+    assert!(
+        invalid
+            .diagnostics()
+            .iter()
+            .any(|d| d.code == Some(crate::codes::TYPE_MISMATCH)),
+        "{:?}",
+        invalid.diagnostics()
+    );
+}
+
+#[test]
+fn local_structural_aliases_keep_patterns_and_function_calls() {
+    let report = typecheck_text(
+        "structural-alias-operations.aivi",
+        r#"
+type Entry A = { value: A }
+type Entry A -> A
+func readEntry = entry => entry ||> { value } -> value
+type Pair A B = (A, B)
+type Pair A B -> A
+func first = pair => pair ||> (a, b) -> a
+type Reader R A = R -> A
+class MapReader F = { transform : (A -> B) -> F A -> F B }
+type (A -> B) -> Reader R A -> Reader R B
+func mapReader = f reader => input => f (reader input)
+instance MapReader (Reader R) = { transform = mapReader }
+type MapReader F => (A -> B) -> F A -> F B
+func transformReader = f value => transform f value
+value reader : Reader Int Bool = n => n > 0
+value convert : Bool -> Text = flag => "answer"
+value mapped : Reader Int Text = transformReader convert reader
+value answer : Text = mapped 1
+value fromRecord : Int = readEntry { value: 3 }
+value fromTuple : Int = first (3, True)
+type EntryKey K A = { key: K, value: A } |> Pick (key)
+value keyOnly : EntryKey Text Int = { key: "key" }
+type Payload A = { payload: A }
+type SelectedEntry A = Pick (payload) (Payload A)
+value selected : SelectedEntry Int = { payload: 3 }
+"#,
+    );
+    assert!(report.is_ok(), "{:?}", report.diagnostics());
+}

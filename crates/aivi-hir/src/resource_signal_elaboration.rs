@@ -720,6 +720,12 @@ fn gate_type_to_type_id(
             item,
             name: domain_name,
             arguments,
+        }
+        | GateType::TransparentAlias {
+            item,
+            name: domain_name,
+            arguments,
+            ..
         } => resolved_apply_type(
             module,
             span,

@@ -36,6 +36,8 @@ value ada : User = {
 
 Use `type` for named algebraic data types, records, and aliases.
 
+Parameterized record, tuple, and function aliases can also identify named type constructors in higher-kinded class contracts. An annotation such as `Entry Text Int` retains its constructor and fixed `Text` argument for inference. The alias remains structurally interchangeable with its expanded type.
+
 Records carry several named fields at once:
 
 ```aivi

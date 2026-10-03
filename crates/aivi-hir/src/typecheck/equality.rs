@@ -139,6 +139,10 @@ impl TypeChecker<'_> {
             ))
         };
         match ty {
+            GateType::TransparentAlias { .. } => {
+                let structural = ty.expanded_alias_type().ok_or_else(unsupported)?;
+                self.derived_equality_payloads(&structural, path)
+            }
             GateType::Primitive(BuiltinType::Bytes) => Err(unsupported()),
             GateType::Primitive(_) => Ok(Vec::new()),
             GateType::TypeParameter { name, .. } => Err(ComparisonError::Missing(format!(

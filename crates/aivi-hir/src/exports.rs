@@ -819,6 +819,15 @@ pub(crate) fn poly_gate_type_import_value_type(
             error: Box::new(poly_gate_type_import_value_type(module, error, parameters)?),
             value: Box::new(poly_gate_type_import_value_type(module, value, parameters)?),
         }),
+        crate::GateType::TransparentAlias {
+            item, arguments, ..
+        } => {
+            let arguments = arguments
+                .iter()
+                .map(|ty| poly_gate_type_import_value_type(module, ty, parameters))
+                .collect::<Option<Vec<_>>>()?;
+            named_import_value_type_from_item(module, *item, arguments, &mut Vec::new())
+        }
         crate::GateType::Domain {
             item,
             name,
@@ -1094,6 +1103,9 @@ pub(crate) fn export_type_binding(
     Some(match binding {
         TypeBinding::Type(ty) => ImportedTypeBinding::Type(match ty {
             crate::GateType::OpaqueItem {
+                item, arguments, ..
+            }
+            | crate::GateType::TransparentAlias {
                 item, arguments, ..
             }
             | crate::GateType::Domain {

@@ -1556,7 +1556,7 @@ impl<'a> TypeChecker<'a> {
                 | ExprKind::Set(_)
                 | ExprKind::Lambda(_)
         )
-        .then(|| expected.expand_transparent_import_alias())
+        .then(|| expected.expanded_alias_type())
         .flatten();
         let expected = expanded.as_ref().unwrap_or(expected);
         match kind {
@@ -1636,9 +1636,7 @@ impl<'a> TypeChecker<'a> {
                     Some(ok && no_new_diagnostics)
                 }
                 GateType::OpaqueImport { import, .. } => {
-                    if let Some(GateType::Record(fields)) =
-                        expected.expand_transparent_import_alias()
-                    {
+                    if let Some(GateType::Record(fields)) = expected.expanded_alias_type() {
                         let checkpoint = self.diagnostics.len();
                         let mut constraints = Vec::new();
                         let ok = self.check_record_expr(
@@ -2133,25 +2131,7 @@ impl<'a> TypeChecker<'a> {
         expected: &GateType,
         arity: usize,
     ) -> Option<(Vec<GateType>, GateType)> {
-        let mut current = std::borrow::Cow::Borrowed(expected);
-        let mut parameter_types = Vec::with_capacity(arity);
-        for _ in 0..arity {
-            if let Some(expanded) = current.expand_transparent_import_alias() {
-                current = std::borrow::Cow::Owned(expanded);
-            }
-            current = match current {
-                std::borrow::Cow::Borrowed(GateType::Arrow { parameter, result }) => {
-                    parameter_types.push(parameter.as_ref().clone());
-                    std::borrow::Cow::Borrowed(result.as_ref())
-                }
-                std::borrow::Cow::Owned(GateType::Arrow { parameter, result }) => {
-                    parameter_types.push(*parameter);
-                    std::borrow::Cow::Owned(*result)
-                }
-                _ => return None,
-            };
-        }
-        Some((parameter_types, current.into_owned()))
+        self.typing.function_signature(expected, arity)
     }
 
     fn contextual_same_module_function_signature(
@@ -2278,7 +2258,7 @@ impl<'a> TypeChecker<'a> {
             }
             _ => return None,
         };
-        let expanded = expected.expand_transparent_import_alias();
+        let expanded = expected.expanded_alias_type();
         let expected_shape = expanded.as_ref().unwrap_or(expected);
         match (builtin, expected_shape) {
             (Some(BuiltinTerm::None), GateType::Option(_)) => Some(true),
@@ -3072,7 +3052,11 @@ impl<'a> TypeChecker<'a> {
     /// Produce a record type with the named fields removed.  If the type is not
     /// a record or none of the named fields match, return the type unchanged.
     fn omit_fields_from_type(ty: &GateType, removed: &[String]) -> GateType {
-        match ty {
+        if removed.is_empty() {
+            return ty.clone();
+        }
+        let expanded = ty.expanded_alias_type();
+        match expanded.as_ref().unwrap_or(ty) {
             GateType::Record(fields) => GateType::Record(
                 fields
                     .iter()
@@ -3188,6 +3172,8 @@ impl<'a> TypeChecker<'a> {
         if index == segments.len() {
             return self.check_patch_instruction(instruction, current, env, value_stack);
         }
+        let expanded = current.expanded_alias_type();
+        let current = expanded.as_ref().unwrap_or(current);
         match &segments[index] {
             crate::PatchSelectorSegment::Named { name, dotted, span } => {
                 if let GateType::Record(fields) = current {
@@ -3206,7 +3192,7 @@ impl<'a> TypeChecker<'a> {
                 }
                 // Handle `<|` patching of imported record types (OpaqueImport with TypeConstructor fields).
                 if let GateType::OpaqueImport { import, .. } = current {
-                    if let Some(GateType::Record(fields)) = current.expand_transparent_import_alias() {
+                    if let Some(GateType::Record(fields)) = current.expanded_alias_type() {
                         if let Some(field) = fields.iter().find(|f| f.name == name.text()) {
                             return self.check_patch_selector_segments(
                                 segments,

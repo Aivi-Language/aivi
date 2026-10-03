@@ -56,6 +56,46 @@ pub enum GateType {
         arguments: Vec<GateType>,
         definition: Option<Box<ImportTypeDefinition>>,
     },
+    /// A named transparent type function. Its shared definition retains the
+    /// declaration's binders; substitution changes only the supplied arguments.
+    /// Structural checking expands the definition, while higher-kinded matching
+    /// can retain the declaration head when the structure has no constructor.
+    TransparentAlias {
+        item: ItemId,
+        name: String,
+        arguments: Vec<GateType>,
+        definition: std::sync::Arc<GateAliasDefinition>,
+    },
+}
+
+/// Immutable lexical binders and structural body of a transparent type function.
+/// Applications share this declaration; changing arguments never changes binders.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct GateAliasDefinition {
+    parameters: Box<[TypeParameterId]>,
+    body: GateType,
+}
+
+impl GateAliasDefinition {
+    pub fn new(parameters: Vec<TypeParameterId>, body: GateType) -> Self {
+        Self {
+            parameters: parameters.into_boxed_slice(),
+            body,
+        }
+    }
+
+    fn instantiate(&self, arguments: &[GateType]) -> Option<GateType> {
+        if arguments.len() != self.parameters.len() {
+            return None;
+        }
+        let substitutions = self
+            .parameters
+            .iter()
+            .copied()
+            .zip(arguments.iter().cloned())
+            .collect();
+        Some(self.body.substitute_type_parameters(&substitutions))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -185,6 +225,9 @@ impl GateType {
                 name, arguments, ..
             }
             | Self::OpaqueItem {
+                name, arguments, ..
+            }
+            | Self::TransparentAlias {
                 name, arguments, ..
             }
             | Self::OpaqueImport {
@@ -367,6 +410,20 @@ impl GateType {
                     .map(|a| a.substitute_type_parameters(subs))
                     .collect(),
             },
+            Self::TransparentAlias {
+                item,
+                name,
+                arguments,
+                definition,
+            } => Self::TransparentAlias {
+                item: *item,
+                name: name.clone(),
+                arguments: arguments
+                    .iter()
+                    .map(|a| a.substitute_type_parameters(subs))
+                    .collect(),
+                definition: definition.clone(),
+            },
             Self::OpaqueImport {
                 origin,
                 import,
@@ -404,7 +461,10 @@ impl GateType {
             | Self::Task { error, value } => error.has_type_params() || value.has_type_params(),
             Self::Domain { arguments, .. }
             | Self::OpaqueItem { arguments, .. }
-            | Self::OpaqueImport { arguments, .. } => arguments.iter().any(|a| a.has_type_params()),
+            | Self::OpaqueImport { arguments, .. }
+            | Self::TransparentAlias { arguments, .. } => {
+                arguments.iter().any(|a| a.has_type_params())
+            }
         }
     }
 
@@ -436,17 +496,22 @@ impl GateType {
                     work.push(error);
                     work.push(value);
                 }
-                Self::Domain { arguments, .. } | Self::OpaqueItem { arguments, .. } | Self::OpaqueImport { arguments, .. } => work.extend(arguments),
+                Self::Domain { arguments, .. }
+                | Self::OpaqueItem { arguments, .. }
+                | Self::OpaqueImport { arguments, .. }
+                | Self::TransparentAlias { arguments, .. } => work.extend(arguments),
             }
         }
         false
     }
 
     pub(crate) fn fits_template(&self, template: &Self) -> bool {
-        if let Some(expanded_self) = self.expand_transparent_import_alias() {
+        if !matches!(template, Self::TypeApplication { .. })
+            && let Some(expanded_self) = self.expanded_alias_type()
+        {
             return expanded_self.fits_template(template);
         }
-        if let Some(expanded_template) = template.expand_transparent_import_alias() {
+        if let Some(expanded_template) = template.expanded_alias_type() {
             return self.fits_template(&expanded_template);
         }
         match template {
@@ -583,6 +648,7 @@ impl GateType {
                 }
                 _ => false,
             },
+            Self::TransparentAlias { .. } => self.same_shape(template),
             Self::OpaqueImport {
                 name: tname,
                 arguments: targs,
@@ -706,17 +772,11 @@ impl GateType {
         nominals_equal: &impl Fn(&GateType, &GateType) -> bool,
     ) -> bool {
         let same_named_constructor = nominals_equal(left, right);
-        if !same_named_constructor {
-            // Expand transparent imported type aliases (e.g. `type Envelope A = A`)
-            // so that `Envelope Text` is recognised as the same shape as `Text`.
-            if let Self::OpaqueImport {
-                arguments,
-                definition: Some(def),
-                ..
-            } = left
-                && let ImportTypeDefinition::Alias(alias) = def.as_ref()
-                && let Some(expanded) = Self::expand_import_alias_type(alias, arguments)
-            {
+        if !same_named_constructor
+            || matches!(left, Self::TransparentAlias { .. })
+            || matches!(right, Self::TransparentAlias { .. })
+        {
+            if let Some(expanded) = left.expanded_alias_type() {
                 return Self::same_shape_inner(
                     &expanded,
                     right,
@@ -726,14 +786,7 @@ impl GateType {
                     nominals_equal,
                 );
             }
-            if let Self::OpaqueImport {
-                arguments,
-                definition: Some(def),
-                ..
-            } = right
-                && let ImportTypeDefinition::Alias(alias) = def.as_ref()
-                && let Some(expanded) = Self::expand_import_alias_type(alias, arguments)
-            {
+            if let Some(expanded) = right.expanded_alias_type() {
                 return Self::same_shape_inner(
                     left,
                     &expanded,
@@ -1032,6 +1085,30 @@ impl GateType {
         }
     }
 
+    /// Consume visible arrows, expanding function aliases at each step while
+    /// retaining alias evidence inside parameter and result positions.
+    pub(crate) fn callable_signature(&self, arity: usize) -> Option<(Vec<Self>, Self)> {
+        let mut current = std::borrow::Cow::Borrowed(self);
+        let mut parameters = Vec::with_capacity(arity);
+        for _ in 0..arity {
+            while let Some(expanded) = current.expanded_alias_type() {
+                current = std::borrow::Cow::Owned(expanded);
+            }
+            current = match current {
+                std::borrow::Cow::Borrowed(Self::Arrow { parameter, result }) => {
+                    parameters.push(parameter.as_ref().clone());
+                    std::borrow::Cow::Borrowed(result.as_ref())
+                }
+                std::borrow::Cow::Owned(Self::Arrow { parameter, result }) => {
+                    parameters.push(*parameter);
+                    std::borrow::Cow::Owned(*result)
+                }
+                _ => return None,
+            };
+        }
+        Some((parameters, current.into_owned()))
+    }
+
     pub(crate) fn with_applied_arguments(&self, applied: &[GateType]) -> Option<Self> {
         let (_, mut arguments) = self.constructor_view()?;
         if arguments.len() < applied.len() {
@@ -1077,6 +1154,17 @@ impl GateType {
                 name: name.clone(),
                 arguments,
             },
+            Self::TransparentAlias {
+                item,
+                name,
+                definition,
+                ..
+            } => Self::TransparentAlias {
+                item: *item,
+                name: name.clone(),
+                arguments,
+                definition: definition.clone(),
+            },
             Self::OpaqueImport {
                 origin,
                 import,
@@ -1095,7 +1183,7 @@ impl GateType {
     }
 
     pub(crate) fn constructor_view(&self) -> Option<(TypeConstructorHead, Vec<GateType>)> {
-        if let Some(expanded) = self.expand_transparent_import_alias()
+        if let Some(expanded) = self.expanded_alias_type()
             && let Some(view) = expanded.constructor_view()
         {
             return Some(view);
@@ -1149,6 +1237,9 @@ impl GateType {
             }
             | Self::OpaqueItem {
                 item, arguments, ..
+            }
+            | Self::TransparentAlias {
+                item, arguments, ..
             } => Some((TypeConstructorHead::Item(*item), arguments.clone())),
             Self::OpaqueImport {
                 import, arguments, ..
@@ -1161,7 +1252,18 @@ impl GateType {
         }
     }
 
-    pub(crate) fn expand_transparent_import_alias(&self) -> Option<GateType> {
+    /// Expand a transparent alias application without changing its structural
+    /// value representation. Named constructor evidence remains on the original
+    /// type until inference or dictionary selection explicitly requests it.
+    pub fn expanded_alias_type(&self) -> Option<GateType> {
+        if let Self::TransparentAlias {
+            arguments,
+            definition,
+            ..
+        } = self
+        {
+            return definition.instantiate(arguments);
+        }
         let Self::OpaqueImport {
             arguments,
             definition: Some(definition),
@@ -1229,6 +1331,9 @@ impl fmt::Display for GateType {
                 name, arguments, ..
             }
             | GateType::OpaqueImport {
+                name, arguments, ..
+            }
+            | GateType::TransparentAlias {
                 name, arguments, ..
             } => {
                 write!(f, "{name}")?;
@@ -1324,7 +1429,7 @@ mod higher_kinded_type_tests {
             &template,
             &mut HashMap::new()
         ));
-        let structural = input.expand_transparent_import_alias().unwrap();
+        let structural = input.expanded_alias_type().unwrap();
         assert!(!matches_template(
             &structural,
             &application(parameter(1, "A")),
@@ -1359,6 +1464,61 @@ mod higher_kinded_type_tests {
             result: Box::new(result(BuiltinType::Int, BuiltinType::Bool)),
         };
         assert!(!matches_template(&actual, &template, &mut HashMap::new()));
+    }
+
+    #[test]
+    fn local_alias_constructor_substitution_retains_definition_and_fixed_arguments() {
+        let alias = |key, value| GateType::TransparentAlias {
+            item: ItemId::from_raw(0),
+            name: "Entry".into(),
+            arguments: vec![GateType::Primitive(key), GateType::Primitive(value)],
+            definition: std::sync::Arc::new(GateAliasDefinition::new(
+                vec![TypeParameterId::from_raw(10), TypeParameterId::from_raw(11)],
+                GateType::Record(vec![
+                    GateRecordField {
+                        name: "key".into(),
+                        ty: parameter(10, "K"),
+                    },
+                    GateRecordField {
+                        name: "value".into(),
+                        ty: parameter(11, "V"),
+                    },
+                ]),
+            )),
+        };
+        let input = alias(BuiltinType::Text, BuiltinType::Int);
+        let output = alias(BuiltinType::Text, BuiltinType::Bool);
+        let template = GateType::Arrow {
+            parameter: Box::new(application(parameter(1, "A"))),
+            result: Box::new(application(parameter(2, "B"))),
+        };
+        let actual = GateType::Arrow {
+            parameter: Box::new(input.clone()),
+            result: Box::new(output.clone()),
+        };
+        let mut bindings = HashMap::new();
+        assert!(matches_template(&actual, &template, &mut bindings));
+        assert_eq!(template.substitute_type_parameters(&bindings), actual);
+        let expanded = output.expanded_alias_type().unwrap();
+        assert!(output.same_shape(&expanded));
+        assert!(expanded.same_shape(&output));
+        assert!(!matches_template(
+            &expanded,
+            &application(parameter(1, "A")),
+            &mut HashMap::new()
+        ));
+        assert!(!matches_template(
+            &GateType::Arrow {
+                parameter: Box::new(input),
+                result: Box::new(alias(BuiltinType::Int, BuiltinType::Bool)),
+            },
+            &template,
+            &mut HashMap::new()
+        ));
+        assert_eq!(
+            output.with_applied_arguments(&[GateType::Primitive(BuiltinType::Unit)]),
+            Some(alias(BuiltinType::Text, BuiltinType::Unit))
+        );
     }
 
     #[test]

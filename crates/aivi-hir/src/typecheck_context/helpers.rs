@@ -406,6 +406,9 @@ enum StructuralTypeHead {
 
 fn gate_structural_head(ty: &GateType) -> Option<StructuralTypeHead> {
     Some(match ty {
+        GateType::TransparentAlias { .. } => {
+            return gate_structural_head(&ty.expanded_alias_type()?);
+        }
         GateType::Primitive(builtin) => StructuralTypeHead::Builtin(*builtin),
         GateType::Tuple(_) => StructuralTypeHead::Tuple,
         GateType::Record(_) => StructuralTypeHead::Record,

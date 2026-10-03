@@ -175,6 +175,9 @@ fn record_members(
         return Vec::new();
     };
     for part in parts {
+        while let Some(expanded) = ty.expanded_alias_type() {
+            ty = expanded;
+        }
         let GateType::Record(fields) = ty else {
             return Vec::new();
         };
@@ -182,6 +185,9 @@ fn record_members(
             return Vec::new();
         };
         ty = field.ty;
+    }
+    while let Some(expanded) = ty.expanded_alias_type() {
+        ty = expanded;
     }
     let GateType::Record(fields) = ty else {
         return Vec::new();

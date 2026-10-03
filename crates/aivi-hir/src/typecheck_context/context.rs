@@ -25,6 +25,7 @@ pub(crate) struct GateTypeContext<'a> {
     // Probes share immutable cache snapshots. Every cache write uses make_mut,
     // preserving both completed entries and in-progress markers in the caller.
     item_types: Arc<HashMap<ItemId, Option<GateType>>>,
+    alias_definitions: Arc<HashMap<ItemId, Arc<GateAliasDefinition>>>,
     item_actuals: Arc<HashMap<ItemId, Option<SourceOptionActualType>>>,
     inferred_function_types: Option<Arc<HashMap<ItemId, GateType>>>,
     function_call_evidence: Vec<FunctionCallEvidence>,
@@ -39,6 +40,7 @@ impl<'a> GateTypeContext<'a> {
         Self {
             module,
             item_types: Arc::new(HashMap::new()),
+            alias_definitions: Arc::new(HashMap::new()),
             item_actuals: Arc::new(HashMap::new()),
             inferred_function_types: None,
             function_call_evidence: Vec::new(),
@@ -53,6 +55,7 @@ impl<'a> GateTypeContext<'a> {
         Self {
             module,
             item_types: Arc::new(HashMap::new()),
+            alias_definitions: Arc::new(HashMap::new()),
             item_actuals: Arc::new(HashMap::new()),
             inferred_function_types: Some(Arc::new(HashMap::new())),
             function_call_evidence: Vec::new(),
@@ -76,6 +79,7 @@ impl<'a> GateTypeContext<'a> {
                     .map(|(item_id, ty)| (item_id, Some(ty)))
                     .collect(),
             ),
+            alias_definitions: Arc::new(HashMap::new()),
             item_actuals: Arc::new(HashMap::new()),
             inferred_function_types: Some(Arc::new(HashMap::new())),
             function_call_evidence: Vec::new(),
@@ -114,6 +118,7 @@ impl<'a> GateTypeContext<'a> {
         Self {
             module: self.module,
             item_types: self.item_types.clone(),
+            alias_definitions: self.alias_definitions.clone(),
             item_actuals: self.item_actuals.clone(),
             inferred_function_types: self.inferred_function_types.clone(),
             function_call_evidence: Vec::new(),
@@ -409,7 +414,8 @@ impl<'a> GateTypeContext<'a> {
             | GateType::Task { .. }
             | GateType::Domain { .. }
             | GateType::OpaqueItem { .. }
-            | GateType::OpaqueImport { .. } => None,
+            | GateType::OpaqueImport { .. }
+            | GateType::TransparentAlias { .. } => None,
         }
     }
 
@@ -516,7 +522,8 @@ impl<'a> GateTypeContext<'a> {
             | GateType::Signal(_)
             | GateType::Task { .. }
             | GateType::Domain { .. }
-            | GateType::OpaqueImport { .. } => None,
+            | GateType::OpaqueImport { .. }
+            | GateType::TransparentAlias { .. } => None,
         }
     }
 
@@ -618,7 +625,9 @@ impl<'a> GateTypeContext<'a> {
                     env.locals.insert(binding.binding, subject_ty);
                 }
                 PatternKind::Tuple(elements) => {
-                    let GateType::Tuple(subject_elements) = &subject_ty else {
+                    let expanded = subject_ty.expanded_alias_type();
+                    let subject_shape = expanded.as_ref().unwrap_or(&subject_ty);
+                    let GateType::Tuple(subject_elements) = subject_shape else {
                         continue;
                     };
                     if elements.len() != subject_elements.len() {
@@ -644,7 +653,7 @@ impl<'a> GateTypeContext<'a> {
                     }
                 }
                 PatternKind::Record(fields) => {
-                    let expanded = subject_ty.expand_transparent_import_alias();
+                    let expanded = subject_ty.expanded_alias_type();
                     let subject_shape = expanded.as_ref().unwrap_or(&subject_ty);
                     // Collect (name, type) pairs from either a local record or an imported one.
                     let record_pairs: Option<Vec<(String, GateType)>> = match subject_shape {
@@ -2424,13 +2433,13 @@ impl<'a> GateTypeContext<'a> {
         actual: &GateType,
         substitutions: &mut HashMap<TypeParameterId, GateType>,
     ) -> bool {
-        if let Some(expanded_template) = template.expand_transparent_import_alias() {
+        if let Some(expanded_template) = template.expanded_alias_type() {
             return self.match_gate_type_template(&expanded_template, actual, substitutions);
         }
         // Abstract constructors need the declared alias head and fixed arguments.
         // Expanding a record alias here would erase the witness for `F A`.
         if !matches!(template, GateType::TypeApplication { .. })
-            && let Some(expanded_actual) = actual.expand_transparent_import_alias()
+            && let Some(expanded_actual) = actual.expanded_alias_type()
         {
             return self.match_gate_type_template(template, &expanded_actual, substitutions);
         }
@@ -2495,6 +2504,7 @@ impl<'a> GateTypeContext<'a> {
                     true
                 }
             },
+            GateType::TransparentAlias { .. } => self.types_match(template, actual),
             GateType::Primitive(_) => template == actual,
             GateType::Tuple(template_elements) => match actual {
                 GateType::Tuple(actual_elements) => {
@@ -2733,7 +2743,7 @@ impl<'a> GateTypeContext<'a> {
                 }
                 continue;
             }
-            if let Some(expanded) = template.expand_transparent_import_alias() {
+            if let Some(expanded) = template.expanded_alias_type() {
                 work.push((expanded, actual, expansions));
                 continue;
             }
@@ -3885,6 +3895,12 @@ impl<'a> GateTypeContext<'a> {
 
     fn rewrite_current_domain_carrier_view(&mut self, owner: ItemId, ty: &GateType) -> GateType {
         match ty {
+            GateType::TransparentAlias { .. } => {
+                let structural = ty
+                    .expanded_alias_type()
+                    .expect("local alias arguments match definition parameters");
+                self.rewrite_current_domain_carrier_view(owner, &structural)
+            }
             GateType::Primitive(_) | GateType::TypeParameter { .. } => ty.clone(),
             GateType::TypeApplication {
                 parameter,
@@ -4122,6 +4138,8 @@ impl<'a> GateTypeContext<'a> {
         transform: &crate::RecordRowTransform,
         source: &GateType,
     ) -> Option<GateType> {
+        let expanded = source.expanded_alias_type();
+        let source = expanded.as_ref().unwrap_or(source);
         let GateType::Record(fields) = source else {
             return None;
         };
@@ -4364,20 +4382,62 @@ impl<'a> GateTypeContext<'a> {
                     None
                 } else {
                     match &item.body {
-                        crate::hir::TypeItemBody::Alias(alias) => {
-                            let substitutions = item
-                                .parameters
-                                .iter()
-                                .copied()
-                                .zip(arguments.iter().cloned())
-                                .collect::<HashMap<_, _>>();
-                            self.lower_type(
-                                *alias,
-                                &substitutions,
-                                item_stack,
-                                allow_open_type_parameters,
-                            )
-                        }
+                        crate::hir::TypeItemBody::Alias(alias) => (|| {
+                            if item.parameters.is_empty() {
+                                self.lower_type(
+                                    *alias,
+                                    &HashMap::new(),
+                                    item_stack,
+                                    allow_open_type_parameters,
+                                )
+                            } else {
+                                let definition = if let Some(definition) =
+                                    self.alias_definitions.get(&item_id)
+                                {
+                                    definition.clone()
+                                } else {
+                                    let body =
+                                        self.lower_type(*alias, &HashMap::new(), item_stack, true)?;
+                                    let definition = Arc::new(GateAliasDefinition::new(
+                                        item.parameters.clone(),
+                                        body,
+                                    ));
+                                    Arc::make_mut(&mut self.alias_definitions)
+                                        .insert(item_id, definition.clone());
+                                    definition
+                                };
+                                // Record, tuple and arrow definitions already prove the shape.
+                                // Preserve their named constructor without building a second tree.
+                                let structural = if matches!(
+                                    &definition.body,
+                                    GateType::Record(_)
+                                        | GateType::Arrow { .. }
+                                        | GateType::Tuple(_)
+                                ) {
+                                    None
+                                } else {
+                                    Some(definition.instantiate(arguments)?)
+                                };
+                                if structural.as_ref().is_none_or(|ty| {
+                                    matches!(
+                                        ty,
+                                        GateType::Record(_)
+                                            | GateType::Arrow { .. }
+                                            | GateType::Tuple(_)
+                                    )
+                                }) {
+                                    Some(GateType::TransparentAlias {
+                                        item: item_id,
+                                        name: item.name.text().to_owned(),
+                                        arguments: arguments.to_vec(),
+                                        definition,
+                                    })
+                                } else {
+                                    // Existing containers, domains and sums retain their canonical head.
+                                    structural
+                                }
+                            }
+                        })(),
                         crate::hir::TypeItemBody::Sum(_) => Some(GateType::OpaqueItem {
                             item: item_id,
                             name: item.name.text().to_owned(),
@@ -4646,18 +4706,28 @@ impl<'a> GateTypeContext<'a> {
         bindings: &mut PolyTypeBindings,
         item_stack: &mut Vec<ItemId>,
     ) -> bool {
-        let expanded = matches!(self.module.types()[type_id].kind, TypeKind::Arrow { .. })
-            .then(|| actual.expand_transparent_import_alias())
-            .flatten();
+        let expanded = matches!(
+            self.module.types()[type_id].kind,
+            TypeKind::Arrow { .. } | TypeKind::Record(_) | TypeKind::Tuple(_)
+        )
+        .then(|| actual.expanded_alias_type())
+        .flatten();
         let actual = expanded.as_ref().unwrap_or(actual);
         if let Some(lowered) = self.lower_poly_type(type_id, bindings, item_stack) {
             return self.types_match(&lowered, actual);
         }
-        // Match transparent record aliases structurally even while their type
-        // arguments remain open. A record has no constructor tag to inspect.
-        if matches!(actual, GateType::Record(_))
-            && let Some(template @ GateType::Record(_)) =
-                self.lower_poly_type_partially(type_id, bindings, item_stack)
+        // Match transparent structural aliases while their arguments remain open.
+        // Records, tuples and arrows have no constructor tag to inspect.
+        if matches!(
+            actual,
+            GateType::Record(_) | GateType::Tuple(_) | GateType::Arrow { .. }
+        ) && let Some(template) = self.lower_poly_type_partially(type_id, bindings, item_stack)
+            && (matches!(
+                template.expanded_alias_type().as_ref().unwrap_or(&template),
+                GateType::Record(_)
+            ) || template
+                .expanded_alias_type()
+                .is_some_and(|ty| matches!(ty, GateType::Tuple(_) | GateType::Arrow { .. })))
         {
             let mut substitutions = HashMap::new();
             if !self.match_gate_type_template(&template, actual, &mut substitutions) {
@@ -5344,6 +5414,10 @@ impl<'a> GateTypeContext<'a> {
                 let mut info = self.infer_expr(*callee, env, ambient);
                 let mut current = info.ty.clone();
                 for argument in arguments.iter() {
+                    if let Some(expanded) = current.as_ref().and_then(GateType::expanded_alias_type)
+                    {
+                        current = Some(expanded);
+                    }
                     // Extract the expected parameter type from the current Arrow type.
                     // This lets constructors like `None` / `Some` / `Ok` resolve when
                     // the callee's parameter type is known, mirroring the import path.
@@ -6396,7 +6470,7 @@ impl<'a> GateTypeContext<'a> {
         builtin: BuiltinTerm,
         expected: &GateType,
     ) -> Option<GateExprInfo> {
-        let expanded = expected.expand_transparent_import_alias();
+        let expanded = expected.expanded_alias_type();
         let expected = expanded.as_ref().unwrap_or(expected);
         let GateType::Arrow {
             parameter,
@@ -6418,7 +6492,7 @@ impl<'a> GateTypeContext<'a> {
             parameter: parameter.clone(),
             result: Box::new(
                 expected_result
-                    .expand_transparent_import_alias()
+                    .expanded_alias_type()
                     .unwrap_or_else(|| expected_result.as_ref().clone()),
             ),
         };
@@ -6747,16 +6821,7 @@ impl<'a> GateTypeContext<'a> {
         ty: &GateType,
         arity: usize,
     ) -> Option<(Vec<GateType>, GateType)> {
-        let mut parameters = Vec::with_capacity(arity);
-        let mut current = ty;
-        for _ in 0..arity {
-            let GateType::Arrow { parameter, result } = current else {
-                return None;
-            };
-            parameters.push(parameter.as_ref().clone());
-            current = result.as_ref();
-        }
-        Some((parameters, current.clone()))
+        ty.callable_signature(arity)
     }
 
     /// An argument may instantiate an open result as another callable. Expose
@@ -8822,6 +8887,9 @@ impl<'a> GateTypeContext<'a> {
         path: &NamePath,
         current_domain: Option<ItemId>,
     ) -> Result<GateProjectionStep, GateIssue> {
+        if let Some(expanded) = subject.expanded_alias_type() {
+            return self.project_type_step(&expanded, segment, path, current_domain);
+        }
         match subject {
             GateType::Record(fields) => {
                 self.project_record_field_step(fields, false, subject, segment, path)
@@ -8830,7 +8898,7 @@ impl<'a> GateTypeContext<'a> {
                 GateType::Record(fields) => {
                     self.project_record_field_step(fields, true, subject, segment, path)
                 }
-                GateType::OpaqueImport { .. } => {
+                GateType::OpaqueImport { .. } | GateType::TransparentAlias { .. } => {
                     match self.project_type_step(payload, segment, path, current_domain)? {
                         GateProjectionStep::RecordField { result } => {
                             Ok(GateProjectionStep::RecordField {
@@ -9052,6 +9120,8 @@ impl<'a> GateTypeContext<'a> {
             }
         }
 
+        let expanded = callee.expanded_alias_type();
+        let callee = expanded.as_ref().unwrap_or(callee);
         match (callee, argument) {
             (GateType::Signal(callee_payload), GateType::Signal(argument_payload)) => {
                 return Some(wrap_signal(

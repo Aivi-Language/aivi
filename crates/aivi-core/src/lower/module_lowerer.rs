@@ -2174,7 +2174,11 @@ impl<'a> ModuleLowerer<'a> {
                         }),
                         aivi_hir::PatternKind::Tuple(elements) => {
                             let elements = elements.iter().copied().collect::<Vec<_>>();
-                            let subject_elements = match &subject {
+                            let expanded = subject
+                                .as_ref()
+                                .and_then(aivi_hir::GateType::expanded_alias_type);
+                            let subject_shape = expanded.as_ref().or(subject.as_ref());
+                            let subject_elements = match subject_shape {
                                 Some(aivi_hir::GateType::Tuple(elements)) => {
                                     Some(elements.as_slice())
                                 }
@@ -2224,7 +2228,11 @@ impl<'a> ModuleLowerer<'a> {
                             }
                         }
                         aivi_hir::PatternKind::Record(fields) => {
-                            let subject_fields = match &subject {
+                            let expanded = subject
+                                .as_ref()
+                                .and_then(aivi_hir::GateType::expanded_alias_type);
+                            let subject = expanded.as_ref().or(subject.as_ref());
+                            let subject_fields = match subject {
                                 Some(aivi_hir::GateType::Record(fields)) => Some(fields.as_slice()),
                                 _ => None,
                             };

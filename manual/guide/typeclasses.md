@@ -179,6 +179,36 @@ Keep constraints explicit. A `Functor` constraint does not imply `Monad`, and a 
 does not imply that a collection can be empty. Class resolution must select one instance; it does
 not choose between overlapping instance implementations by import order.
 
+### Transparent record constructors
+
+A named record alias can implement a higher-kinded class. Its type arguments remain available
+through annotations and generic calls, including a fixed argument in a partially applied
+constructor such as `Entry Text`:
+
+```aivi
+type Entry K A = { key: K, value: A }
+
+type (A -> B) -> Entry K A -> Entry K B
+func mapEntry = f entry => { key: entry.key, value: f entry.value }
+
+instance Functor (Entry K) = { map = mapEntry }
+
+type Functor F => (A -> B) -> F A -> F B
+func transform = f values => map f values
+
+type Int -> Bool
+func positive = n => n > 0
+
+value original : Entry Text Int = { key: "answer", value: 42 }
+value mapped : Entry Text Bool = transform positive original
+value structural : { key: Text, value: Bool } = mapped
+```
+
+`transform` preserves the fixed key type. Its result is `Entry Text Bool` and is accepted wherever
+the corresponding structural record is expected. Record fields alone do not select an arbitrary
+named constructor; use an explicit alias annotation when a generic call needs that evidence.
+Instance ownership and overlap checks continue to follow the [class resolution rules](/guide/classes).
+
 ### Contextual callback inference
 
 Arguments and the expected result constrain callbacks, including callbacks passed before the

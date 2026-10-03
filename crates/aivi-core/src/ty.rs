@@ -230,6 +230,12 @@ impl Type {
                             tasks.push(Task::Visit(argument));
                         }
                     }
+                    alias @ HirGateType::TransparentAlias { .. } => {
+                        let structural = alias
+                            .expanded_alias_type()
+                            .expect("alias application has its declared arity");
+                        tasks.push(Task::Visit(structural));
+                    }
                     HirGateType::OpaqueItem {
                         item,
                         name,
@@ -872,10 +878,37 @@ fn builtin_type_name(builtin: BuiltinType) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::Type;
+    use super::{RecordField, Type};
     use aivi_hir::{
         BuiltinType, GateType as HirGateType, ImportId, ImportTypeDefinition, ImportValueType,
     };
+
+    #[test]
+    fn local_alias_constructor_evidence_erases_without_module_context() {
+        let parameter = aivi_hir::TypeParameterId::from_raw(0);
+        let alias = HirGateType::TransparentAlias {
+            item: aivi_hir::ItemId::from_raw(0),
+            name: "Entry".into(),
+            arguments: vec![HirGateType::Primitive(BuiltinType::Int)],
+            definition: std::sync::Arc::new(aivi_hir::GateAliasDefinition::new(
+                vec![parameter],
+                HirGateType::Record(vec![aivi_hir::GateRecordField {
+                    name: "value".into(),
+                    ty: HirGateType::TypeParameter {
+                        parameter,
+                        name: "A".into(),
+                    },
+                }]),
+            )),
+        };
+        assert_eq!(
+            Type::lower(&alias),
+            Type::Record(vec![RecordField {
+                name: "value".into(),
+                ty: Type::Primitive(BuiltinType::Int),
+            }])
+        );
+    }
 
     #[test]
     fn imported_sum_keeps_unobserved_constructor_definitions() {
