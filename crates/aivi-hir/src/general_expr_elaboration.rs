@@ -7180,6 +7180,59 @@ instance Functor Box = {
     }
 
     #[test]
+    fn elaborates_inline_instance_closures_from_their_method_contracts() {
+        let lowered = lower_text(
+            "general-expr-inline-instance-closures.aivi",
+            r#"
+type Arrow A B = Arrow (A -> B)
+type Arrow A B -> A -> B
+func runArrow = arrow x => arrow ||> Arrow f -> f x
+instance Semigroupoid Arrow = {
+    compose left right = Arrow (x => runArrow left (runArrow right x))
+}
+instance Category Arrow = { id = Arrow (x => x) }
+instance Profunctor Arrow = {
+    dimap = before after arrow => Arrow (x => after (runArrow arrow (before x)))
+}
+type Box A = Box A
+class Matcher F = { matches : Eq A => A -> F A -> F Bool }
+instance Matcher Box = {
+    matches expected = box => box ||> Box actual -> Box (actual == expected)
+}
+"#,
+        );
+        assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+        let checked = crate::typecheck_module(lowered.module());
+        assert!(checked.is_ok(), "{:?}", checked.diagnostics());
+        let report = elaborate_general_expressions(lowered.module());
+        for member in report.instance_members() {
+            assert!(
+                matches!(member.outcome, GeneralExprOutcome::Lowered(_)),
+                "instance member: {:?}",
+                member.outcome
+            );
+        }
+        let mut closures = 0;
+        for item in report.items() {
+            if matches!(&lowered.module().items()[item.owner], Item::Function(function)
+                if function.origin == crate::FunctionOrigin::HoistedLambda
+                    && function.header.span.file() == lowered.module().file())
+            {
+                closures += 1;
+                assert!(
+                    matches!(item.outcome, GeneralExprOutcome::Lowered(_)),
+                    "instance closure: {:?}",
+                    item.outcome
+                );
+            }
+        }
+        assert!(
+            closures >= 4,
+            "the fixture must exercise nested and captured closures"
+        );
+    }
+
+    #[test]
     fn elaborates_generic_comonad_member_callbacks() {
         let lowered = lower_text(
             "general-expr-comonad-callback.aivi",

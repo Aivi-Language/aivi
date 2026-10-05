@@ -11,7 +11,8 @@ const SOURCE_RUN_CACHE_VERSION: u32 = 5;
 // Revision 28 preserves canonical constructor identity across facade aliases.
 // Revision 29 gives reactive operators payload contracts and result-owned evidence.
 // Revision 30 retains transparent local alias constructor evidence.
-const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "30";
+// Revision 31 retains class-method scopes in hoisted instance closures.
+const SOURCE_RUN_CACHE_NAMESPACE_REVISION: &str = "31";
 const SOURCE_RUN_CACHE_DIR: &str = "run-cache";
 const SOURCE_RUN_CACHE_METADATA_FILE_NAME: &str = "source-run-cache.json";
 const MAX_BINARY_ARTIFACT_BYTES: usize = 256 * 1024 * 1024;

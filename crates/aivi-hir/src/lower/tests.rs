@@ -60,7 +60,7 @@ fn lower_fixture(path: &str) -> super::LoweringResult {
 fn instances_preserve_class_method_context_binders() {
     for class_first in [false, true] {
         let class = "class Display A = { display : Eq B => A -> B -> Bool }\n";
-        let instances = "type Label = Label Text\ntype Tag = Tag Int\ninstance Display Label = { display = label item => item == item }\ninstance Display Tag = { display = tag item => item == item }\n";
+        let instances = "type Label = Label Text\ntype Tag = Tag Int\ninstance Display Label = { display = label item => (other => other == item) item }\ninstance Display Tag = { display = tag item => (other => other == item) item }\n";
         let text = if class_first {
             format!("{class}{instances}")
         } else {
@@ -80,6 +80,27 @@ fn instances_preserve_class_method_context_binders() {
         let method = &class.members[0];
         assert_eq!(method.type_parameters.len(), 1);
         let binder = method.type_parameters[0];
+        let mut closures = 0;
+        for (_, item) in module.items().iter() {
+            if let Item::Function(function) = item
+                && function.origin == crate::FunctionOrigin::HoistedLambda
+                && function.parameters.len() == 2
+            {
+                closures += 1;
+                assert!(
+                    function.type_parameters.contains(&binder),
+                    "instance closures must retain the method's lexical binder"
+                );
+                assert_eq!(
+                    function.context, method.context,
+                    "instance closures must retain the method's constraints"
+                );
+            }
+        }
+        assert_eq!(
+            closures, 2,
+            "both instance bodies must contain a captured closure"
+        );
         let mut roots = method.context.clone();
         roots.push(method.annotation);
         for (_, item) in module.items().iter() {
@@ -111,6 +132,121 @@ fn instances_preserve_class_method_context_binders() {
             ResolutionState::Resolved(TypeResolution::TypeParameter(parameter)) if *parameter == binder)),
             "class constraints and instantiated method signatures must share one B binder: {references:?}");
     }
+}
+
+#[test]
+fn instance_closure_constraints_substitute_the_class_head() {
+    let lowered = lower_text(
+        "instance-closure-head.aivi",
+        r#"
+class Inspector A = { inspect : Eq A => A -> Bool }
+type Tag = Tag Text
+instance Inspector Tag = { inspect item = (other => other == item) item }
+"#,
+    );
+    assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+    let module = lowered.module();
+    let (tag_id, _) = module
+        .items()
+        .iter()
+        .find(|(_, item)| matches!(item, Item::Type(ty) if ty.name.text() == "Tag"))
+        .unwrap();
+    let closure = module
+        .items()
+        .iter()
+        .find_map(|(_, item)| match item {
+            Item::Function(function)
+                if function.origin == crate::FunctionOrigin::HoistedLambda
+                    && function.parameters.len() == 2 =>
+            {
+                Some(function)
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert!(closure.type_parameters.is_empty());
+    assert_eq!(closure.context.len(), 1);
+    let TypeKind::Apply { arguments, .. } = &module.types()[closure.context[0]].kind else {
+        panic!("expected an instantiated Eq constraint");
+    };
+    let TypeKind::Name(argument) = &module.types()[*arguments.first()].kind else {
+        panic!("expected the instance head");
+    };
+    assert!(matches!(argument.resolution,
+        ResolutionState::Resolved(TypeResolution::Item(item)) if item == tag_id));
+    let capture = closure.parameters[0]
+        .annotation
+        .expect("captured header parameter type");
+    let TypeKind::Name(capture) = &module.types()[capture].kind else {
+        panic!("expected the concrete capture type");
+    };
+    assert!(matches!(capture.resolution,
+        ResolutionState::Resolved(TypeResolution::Item(item)) if item == tag_id));
+    let checked = crate::typecheck_module(module);
+    assert!(checked.is_ok(), "{:?}", checked.diagnostics());
+}
+
+#[test]
+fn instance_layout_contracts_annotate_aliases_prefixes_and_nested_captures() {
+    let lowered = lower_text(
+        "instance-layout-contracts.aivi",
+        r#"
+class Identity P = { identity : P A A }
+type RecordArrow A B = { run: A -> B }
+instance Identity RecordArrow = { identity = { run: x => x } }
+type TupleArrow A B = (A -> B, Int)
+instance Identity TupleArrow = { identity = (x => x, 0) }
+type FunctionArrow A B = A -> B
+instance Identity FunctionArrow = { identity = (x => x) }
+type Arrow A B = Arrow (A -> B)
+class Nest P = { nested : P A (P Unit A) }
+instance Nest Arrow = { nested = Arrow (outer => Arrow (inner => outer)) }
+class Seed F = { seed : A -> F A }
+type Pair K A = Pair K (Unit -> A)
+instance Seed (Pair Text) = { seed item = Pair "key" (unit => item) }
+class Optional F = { optionalIdentity : F (A -> A) }
+instance Optional Option = { optionalIdentity = Some (x => x) }
+class Success C = { success : C Int (A -> A) }
+instance Success Result = { success = Ok (x => x) }
+instance Success Validation = { success = Valid (x => x) }
+class Failure C = { failure : C (A -> A) Int }
+instance Failure Result = { failure = Err (x => x) }
+instance Failure Validation = { failure = Invalid (x => x) }
+"#,
+    );
+    assert!(!lowered.has_errors(), "{:?}", lowered.diagnostics());
+    let module = lowered.module();
+    let checked = crate::typecheck_module(module);
+    assert!(checked.is_ok(), "{:?}", checked.diagnostics());
+    let mut count = 0;
+    for (_, item) in module.items().iter() {
+        if let Item::Function(function) = item
+            && function.origin == crate::FunctionOrigin::HoistedLambda
+            && function.header.span.file() == module.file()
+        {
+            count += 1;
+            assert!(
+                function.annotation.is_some(),
+                "closure result must have its declared contract"
+            );
+            assert!(
+                function
+                    .parameters
+                    .iter()
+                    .all(|parameter| parameter.annotation.is_some()),
+                "closure parameters and nested captures must have their declared contracts"
+            );
+        }
+    }
+    assert_eq!(count, 11);
+    let inferred = crate::function_inference::infer_same_module_function_types(module);
+    assert!(
+        inferred.keys().all(
+            |item| matches!(&module.items()[*item], Item::Function(function)
+        if function.header.span.file() != module.file())
+        ),
+        "complete lexical contracts must not enter speculative inference"
+    );
 }
 
 #[test]

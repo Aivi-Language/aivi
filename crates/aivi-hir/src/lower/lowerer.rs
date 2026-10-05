@@ -36,6 +36,28 @@ struct LambdaOwnerContext {
     /// like `==` inside hoisted lambdas.
     owner_parameters: Vec<BindingId>,
     owner_annotation: Option<TypeId>,
+    closure_contracts: InstanceClosureContracts,
+}
+
+/// Contracts derived from a resolved instance method and declared data layouts.
+/// All type IDs retain the method's lexical binders; these are obligations, not
+/// guesses obtained from an unrelated polymorphic callee.
+#[derive(Clone, Default)]
+struct InstanceClosureContracts {
+    lambdas: HashMap<ExprId, LambdaSignatureContract>,
+    bindings: HashMap<BindingId, TypeId>,
+}
+
+#[derive(Clone)]
+struct LambdaSignatureContract {
+    parameters: Vec<TypeId>,
+    result: TypeId,
+}
+
+#[derive(Clone, Copy)]
+enum LambdaTypeHint<'a> {
+    Callee(TypeId),
+    Lexical(&'a LambdaSignatureContract),
 }
 
 #[derive(Clone, Default)]
@@ -5702,6 +5724,7 @@ impl<'a> Lowerer<'a> {
                         .map(|p| p.binding)
                         .collect(),
                     owner_annotation: item.annotation,
+                    closure_contracts: InstanceClosureContracts::default(),
                 };
                 for decorator_id in &item.header.decorators {
                     self.hoist_lambda_decorator(*decorator_id, &owner);
@@ -5772,8 +5795,22 @@ impl<'a> Lowerer<'a> {
                 for decorator_id in &item.header.decorators {
                     self.hoist_lambda_decorator(*decorator_id, &owner);
                 }
-                for member in &mut item.members {
-                    member.body = self.hoist_expr(member.body, &owner);
+                for index in 0..item.members.len() {
+                    let mut member_owner =
+                        self.instance_member_lambda_owner(&item, &item.members[index]);
+                    if let Some(annotation) = member_owner.owner_annotation
+                        && let Some((_, result)) = self.split_function_signature_annotation(
+                            annotation,
+                            item.members[index].parameters.len(),
+                            &HashMap::new(),
+                            &mut Vec::new(),
+                        )
+                    {
+                        member_owner.closure_contracts =
+                            self.instance_closure_contracts(item.members[index].body, result);
+                    }
+                    item.members[index].body =
+                        self.hoist_expr(item.members[index].body, &member_owner);
                 }
                 Item::Instance(item)
             }
@@ -5787,6 +5824,246 @@ impl<'a> Lowerer<'a> {
             .items
             .get_mut(item_id)
             .expect("item id should remain valid during lambda hoisting") = hoisted;
+    }
+
+    /// Instance bodies are checked against a substituted class-method contract.
+    /// Their closures share its lexical binders and constraints, including those
+    /// introduced by the method rather than the instance head. Retain that scope
+    /// so contextual inference can record types without accepting foreign binders.
+    fn instance_member_lambda_owner(
+        &mut self,
+        instance: &InstanceItem,
+        member: &InstanceMember,
+    ) -> LambdaOwnerContext {
+        let mut owner = LambdaOwnerContext {
+            type_parameters: instance.type_parameters.clone(),
+            context: instance.context.clone(),
+            owner_parameters: member
+                .parameters
+                .iter()
+                .map(|parameter| parameter.binding)
+                .collect(),
+            owner_annotation: member.annotation,
+            closure_contracts: InstanceClosureContracts::default(),
+        };
+        let ResolutionState::Resolved(TypeResolution::Item(class_id)) =
+            instance.class.resolution.as_ref()
+        else {
+            return owner;
+        };
+        let Item::Class(class) = &self.module.items()[*class_id] else {
+            return owner;
+        };
+        let Some(signature) = class
+            .members
+            .iter()
+            .find(|signature| signature.name.text() == member.name.text())
+        else {
+            return owner;
+        };
+        owner
+            .type_parameters
+            .extend(signature.type_parameters.iter().copied());
+        if signature.context.is_empty() {
+            return owner;
+        }
+        let context = signature.context.clone();
+        let substitutions = class
+            .parameters
+            .iter()
+            .zip(instance.arguments.iter())
+            .map(|(parameter, argument)| (*parameter, *argument))
+            .collect::<HashMap<_, _>>();
+        for constraint in context {
+            if let Some(constraint) = self.instantiate_signature_type(constraint, &substitutions) {
+                owner.context.push(constraint);
+            }
+        }
+        owner
+    }
+
+    /// Propagate obligations through declared layouts before closure hoisting.
+    /// Expressions with no declared layout keep using contextual inference.
+    fn instance_closure_contracts(
+        &mut self,
+        root: ExprId,
+        expected: TypeId,
+    ) -> InstanceClosureContracts {
+        let mut contracts = InstanceClosureContracts::default();
+        if !matches!(
+            &self.module.exprs()[root].kind,
+            ExprKind::Lambda(_) | ExprKind::Apply { .. } | ExprKind::Tuple(_) | ExprKind::Record(_)
+        ) {
+            return contracts;
+        }
+        let mut pending = vec![(root, expected)];
+        let mut visited = std::collections::HashSet::new();
+        while let Some((expr, expected)) = pending.pop() {
+            if !visited.insert(expr) {
+                continue;
+            }
+            let Some(expected) = self.instance_contract_layout(expected) else {
+                continue;
+            };
+            match self.module.exprs()[expr].kind.clone() {
+                ExprKind::Lambda(lambda) => {
+                    if let Some((parameters, result)) = self.split_function_signature_annotation(
+                        expected,
+                        lambda.parameters.len(),
+                        &HashMap::new(),
+                        &mut Vec::new(),
+                    ) {
+                        contracts.bindings.extend(
+                            lambda
+                                .parameters
+                                .iter()
+                                .zip(&parameters)
+                                .map(|(parameter, ty)| (parameter.binding, *ty)),
+                        );
+                        contracts
+                            .lambdas
+                            .insert(expr, LambdaSignatureContract { parameters, result });
+                        pending.push((lambda.body, result));
+                    }
+                }
+                ExprKind::Tuple(elements) => {
+                    if let TypeKind::Tuple(types) = &self.module.types()[expected].kind
+                        && elements.len() == types.len()
+                    {
+                        pending.extend(elements.iter().copied().zip(types.iter().copied()));
+                    }
+                }
+                ExprKind::Record(record) => {
+                    if let TypeKind::Record(fields) = &self.module.types()[expected].kind {
+                        for field in record.fields {
+                            if let Some(ty) = fields
+                                .iter()
+                                .find(|ty| ty.label.text() == field.label.text())
+                            {
+                                pending.push((field.value, ty.ty));
+                            }
+                        }
+                    }
+                }
+                ExprKind::Apply { callee, arguments } => {
+                    let ExprKind::Name(reference) = &self.module.exprs()[callee].kind else {
+                        continue;
+                    };
+                    let (head, type_arguments) = self.instance_contract_head(expected);
+                    let TypeKind::Name(head) = &self.module.types()[head].kind else {
+                        continue;
+                    };
+                    match (reference.resolution.as_ref(), head.resolution.as_ref()) {
+                        (
+                            ResolutionState::Resolved(TermResolution::Item(constructor)),
+                            ResolutionState::Resolved(TypeResolution::Item(carrier)),
+                        ) if constructor == carrier => {
+                            let Item::Type(item) = &self.module.items()[*carrier] else {
+                                continue;
+                            };
+                            let TypeItemBody::Sum(variants) = &item.body else {
+                                continue;
+                            };
+                            let name = reference.path.segments().last().text();
+                            let Some(variant) =
+                                variants.iter().find(|variant| variant.name.text() == name)
+                            else {
+                                continue;
+                            };
+                            if variant.fields.len() != arguments.len()
+                                || item.parameters.len() != type_arguments.len()
+                            {
+                                continue;
+                            }
+                            let fields = variant.fields.clone();
+                            let substitutions = item
+                                .parameters
+                                .iter()
+                                .copied()
+                                .zip(type_arguments)
+                                .collect::<HashMap<_, _>>();
+                            for (argument, field) in arguments.iter().zip(fields) {
+                                if let Some(ty) =
+                                    self.instantiate_signature_type(field.ty, &substitutions)
+                                {
+                                    pending.push((*argument, ty));
+                                }
+                            }
+                        }
+                        (
+                            ResolutionState::Resolved(TermResolution::Builtin(constructor)),
+                            ResolutionState::Resolved(TypeResolution::Builtin(carrier)),
+                        ) if arguments.len() == 1 => {
+                            let payload = match (constructor, carrier, type_arguments.as_slice()) {
+                                (BuiltinTerm::Some, BuiltinType::Option, [value]) => Some(*value),
+                                (BuiltinTerm::Ok, BuiltinType::Result, [_, value])
+                                | (BuiltinTerm::Valid, BuiltinType::Validation, [_, value]) => {
+                                    Some(*value)
+                                }
+                                (BuiltinTerm::Err, BuiltinType::Result, [error, _])
+                                | (BuiltinTerm::Invalid, BuiltinType::Validation, [error, _]) => {
+                                    Some(*error)
+                                }
+                                _ => None,
+                            };
+                            if let Some(payload) = payload {
+                                pending.push((*arguments.first(), payload));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+        }
+        contracts
+    }
+
+    fn instance_contract_head(&self, mut ty: TypeId) -> (TypeId, Vec<TypeId>) {
+        let mut segments = Vec::new();
+        while let TypeKind::Apply { callee, arguments } = &self.module.types()[ty].kind {
+            segments.push(arguments);
+            ty = *callee;
+        }
+        (
+            ty,
+            segments
+                .into_iter()
+                .rev()
+                .flat_map(|arguments| arguments.iter().copied())
+                .collect(),
+        )
+    }
+
+    fn instance_contract_layout(&mut self, mut ty: TypeId) -> Option<TypeId> {
+        let mut aliases = std::collections::HashSet::new();
+        loop {
+            let (head, arguments) = self.instance_contract_head(ty);
+            let TypeKind::Name(reference) = &self.module.types()[head].kind else {
+                return Some(ty);
+            };
+            let ResolutionState::Resolved(TypeResolution::Item(item_id)) =
+                reference.resolution.as_ref()
+            else {
+                return Some(ty);
+            };
+            let Item::Type(item) = &self.module.items()[*item_id] else {
+                return Some(ty);
+            };
+            let TypeItemBody::Alias(alias) = item.body else {
+                return Some(ty);
+            };
+            if !aliases.insert(*item_id) || item.parameters.len() != arguments.len() {
+                return None;
+            }
+            let substitutions = item
+                .parameters
+                .iter()
+                .copied()
+                .zip(arguments)
+                .collect::<HashMap<_, _>>();
+            ty = self.instantiate_signature_type(alias, &substitutions)?;
+        }
     }
 
     fn hoist_lambda_decorator(&mut self, decorator_id: DecoratorId, owner: &LambdaOwnerContext) {
@@ -5888,7 +6165,9 @@ impl<'a> Lowerer<'a> {
             ),
             ExprKind::Lambda(mut lambda) => {
                 lambda.body = self.hoist_expr(lambda.body, owner);
-                return self.hoist_lambda_expr(expr.span, &lambda, owner, None);
+                let contract = owner.closure_contracts.lambdas.get(&expr_id)
+                    .map(LambdaTypeHint::Lexical);
+                return self.hoist_lambda_expr(expr.span, &lambda, owner, contract);
             }
             ExprKind::Record(mut record) => {
                 for field in &mut record.fields {
@@ -5996,7 +6275,10 @@ impl<'a> Lowerer<'a> {
         let expr = self.module.exprs()[expr_id].clone();
         if let ExprKind::Lambda(mut lambda) = expr.kind {
             lambda.body = self.hoist_expr(lambda.body, owner);
-            return self.hoist_lambda_expr(expr.span, &lambda, owner, lambda_hint);
+            let hint = owner.closure_contracts.lambdas.get(&expr_id)
+                .map(LambdaTypeHint::Lexical)
+                .or_else(|| lambda_hint.map(LambdaTypeHint::Callee));
+            return self.hoist_lambda_expr(expr.span, &lambda, owner, hint);
         }
         self.hoist_expr(expr_id, owner)
     }
@@ -6212,17 +6494,17 @@ impl<'a> Lowerer<'a> {
         span: SourceSpan,
         lambda: &crate::hir::LambdaExpr,
         owner: &LambdaOwnerContext,
-        // Expected type for the entire lambda (e.g. `Int -> Bool`),
-        // derived from the callee's annotation at the call site.
-        callee_hint: Option<TypeId>,
+        // A callee hint supplies concrete inputs; a lexical contract supplies
+        // both inputs and the result in the closure's own quantifier scope.
+        hint: Option<LambdaTypeHint<'_>>,
     ) -> ExprId {
         if matches!(
             lambda.surface_form,
             crate::hir::LambdaSurfaceForm::SubjectShorthand
-        )
-            && let Some(parameter) = lambda.parameters.first() {
-                self.rewrite_subject_shorthand_expr(lambda.body, parameter.binding, false);
-            }
+        ) && let Some(parameter) = lambda.parameters.first()
+        {
+            self.rewrite_subject_shorthand_expr(lambda.body, parameter.binding, false);
+        }
 
         let lambda_bindings = lambda
             .parameters
@@ -6254,19 +6536,28 @@ impl<'a> Lowerer<'a> {
         }
 
         let mut parameters = capture_parameters;
-        // Propagate parameter types from the callee's expected argument type
-        // so the typechecker can resolve operators inside the hoisted body.
-        // Skip polymorphic (type-parameter-containing) types — they would
-        // conflict with the concrete types inferred later.
         let mut lambda_params = lambda.parameters.clone();
-        if let Some(hint) = callee_hint {
-            for (index, param) in lambda_params.iter_mut().enumerate() {
-                if param.annotation.is_none()
-                    && let Some(ty) = self.arrow_at_position(hint, index)
-                        && !self.type_contains_type_params(ty) {
-                            param.annotation = Some(ty);
-                        }
+        let mut result_annotation = None;
+        match hint {
+            Some(LambdaTypeHint::Lexical(contract)) => {
+                for (parameter, ty) in lambda_params.iter_mut().zip(&contract.parameters) {
+                    parameter.annotation.get_or_insert(*ty);
+                }
+                result_annotation = Some(contract.result);
             }
+            Some(LambdaTypeHint::Callee(hint)) => {
+                // A callee's uninstantiated quantifiers are foreign to this
+                // closure. Only concrete hints may annotate its parameters.
+                for (index, param) in lambda_params.iter_mut().enumerate() {
+                    if param.annotation.is_none()
+                        && let Some(ty) = self.arrow_at_position(hint, index)
+                        && !self.type_contains_type_params(ty)
+                    {
+                        param.annotation = Some(ty);
+                    }
+                }
+            }
+            None => {}
         }
         parameters.extend(lambda_params);
 
@@ -6281,7 +6572,7 @@ impl<'a> Lowerer<'a> {
             type_parameters: owner.type_parameters.clone(),
             context: owner.context.clone(),
             parameters,
-            annotation: None,
+            annotation: result_annotation,
             body: lambda.body,
         }));
 
@@ -6343,11 +6634,11 @@ impl<'a> Lowerer<'a> {
         capture: BindingId,
         owner: &LambdaOwnerContext,
     ) -> Option<TypeId> {
+        if let Some(annotation) = owner.closure_contracts.bindings.get(&capture) {
+            return Some(*annotation);
+        }
         let annotation = owner.owner_annotation?;
-        let position = owner
-            .owner_parameters
-            .iter()
-            .position(|b| *b == capture)?;
+        let position = owner.owner_parameters.iter().position(|b| *b == capture)?;
         self.arrow_at_position(annotation, position)
     }
 

@@ -488,7 +488,10 @@ fn source_run_cache_discards_images_without_current_type_and_equality_contracts(
     // Revision 26 preceded ambient import origins and member callback inference.
     // Revision 27 preceded constructor namespace pairs; revision 28 preceded
     // result-owned reactive operators; revision 29 preceded local alias witnesses.
-    for revision in ["20", "21", "22", "23", "24", "25", "26", "27", "28", "29"] {
+    // Revision 30 preceded class-method scopes in hoisted instance closures.
+    for revision in [
+        "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30",
+    ] {
         let mut legacy = DefaultHasher::new();
         "aivi.source-run-cache".hash(&mut legacy);
         5_u32.hash(&mut legacy);
@@ -3879,6 +3882,71 @@ value arrow : Morphism Int Int = { run: increment }
 value kept : Morphism Int Int = keep arrow
 value structural : { run: Int -> Int } = kept
 value main : Task Text Bool = pure (structural.run 3 == 4 and localComposed.run 3 == 5)
+"#,
+    );
+    let artifact = prepare_run_from_workspace(&workspace, "main.aivi", None).unwrap();
+    let frozen = super::freeze_run_artifact(&artifact).unwrap();
+    let reloaded = super::load_frozen_run_image_from_bytes(&frozen.bytes, None).unwrap();
+    assert!(reloaded.sources.is_none());
+    for source in [owner, facade, entry] {
+        fs::remove_file(source).unwrap();
+    }
+    for candidate in [&artifact, &reloaded] {
+        assert_eq!(
+            evaluate_pure_headless_result(candidate),
+            RuntimeValue::Bool(true)
+        );
+    }
+}
+
+#[test]
+fn frozen_source_image_preserves_inline_instance_closure_scopes() {
+    let workspace = TempDir::new("inline-instance-closure-roundtrip");
+    let owner = workspace.write(
+        "owner.aivi",
+        r#"
+type Arrow A B = Arrow (A -> B)
+type Arrow A B -> A -> B
+func run = arrow x => arrow ||> Arrow f -> f x
+instance Semigroupoid Arrow = {
+    compose left right = Arrow (x => run left (run right x))
+}
+instance Category Arrow = { id = Arrow (x => x) }
+instance Profunctor Arrow = {
+    dimap before after arrow = Arrow (x => after (run arrow (before x)))
+}
+type Category P => P A B -> P A B
+func keep = arrow => compose id arrow
+type Box A = Box A
+class Matcher F = { matches : Eq A => A -> F A -> F Bool }
+instance Matcher Box = {
+    matches expected = box => box ||> Box actual -> Box (actual == expected)
+}
+type Box A -> A
+func unbox = box => box ||> Box x -> x
+export (Arrow, run, keep, Box, Matcher, unbox)
+"#,
+    );
+    let facade = workspace.write("facade.aivi",
+        "use owner (Arrow as Morphism, run, keep, Box, Matcher as Matching, unbox)\nexport (Morphism, run, keep, Box, Matching, unbox)\n");
+    let entry = workspace.write(
+        "main.aivi",
+        r#"
+use facade (Morphism, run, keep, Box, Matching, unbox)
+type Bool -> Int
+func number = flag => 3
+type Int -> Text
+func label = n => "label"
+value input : Morphism Bool Int = Morphism number
+value output : Morphism Int Text = Morphism label
+value composed : Morphism Bool Text = compose output input
+type Int -> Int
+func increment = n => n + 1
+value mapped : Morphism Bool Text = dimap number label (Morphism increment)
+value main : Task Text Bool = pure (
+    run (keep composed) True == "label"
+    and run mapped False == "label"
+    and unbox (matches "same" (Box "same")))
 "#,
     );
     let artifact = prepare_run_from_workspace(&workspace, "main.aivi", None).unwrap();

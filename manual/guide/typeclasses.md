@@ -449,8 +449,6 @@ subject to the limits below.
 An authored ADT can carry ordinary functions and supply this evidence:
 
 ```aivi
-use aivi.core.fn (identity)
-
 type Arrow A B = Arrow (A -> B)
 type Arrow A B -> A -> B
 func runArrow = arrow x => arrow
@@ -459,7 +457,10 @@ type Arrow B C -> Arrow A B -> Arrow A C
 func composeArrow = left right => Arrow (x => runArrow left (runArrow right x))
 
 instance Semigroupoid Arrow = { compose = composeArrow }
-instance Category Arrow = { id = Arrow identity }
+instance Category Arrow = { id = Arrow (x => x) }
+instance Profunctor Arrow = {
+    dimap before after arrow = Arrow (x => after (runArrow arrow (before x)))
+}
 
 value increment : Arrow Int Int = Arrow (n => n + 1)
 value identityArrow : Arrow Int Int = id
@@ -472,7 +473,13 @@ func keepRight = arrow => compose arrow id
 value kept : Arrow Int Int = keepLeft increment
 ```
 
-These instances use authored executable evidence and explicitly typed helpers.
+These instances use authored executable evidence. Inline instance closures obtain
+their parameter and result types from the class method's contract. Nested closures
+retain its method-local type parameters, constraints, and captured parameter types;
+they do not need separate helper signatures. Method-local constraints apply only
+to that method, and its type parameters remain universally quantified. The contract
+also reaches closures inside declared constructor payloads, record aliases, and
+tuple aliases, including constructor heads with a fixed type prefix.
 The builtin carrier registry above retains its existing scope. The ordinary
 function combinator `aivi.core.fn.compose` is available through its module import.
 Re-exporting a class or nominal carrier also forwards its instance evidence,

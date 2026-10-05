@@ -1149,6 +1149,7 @@ fn typecheck_accepts_polymorphic_instance_member_constraints() {
 class Display A = {
     display : Eq B => A -> B -> Bool
 }
+
 type Label = Label Text
 instance Display Label = {
     display = label item => item == item
@@ -1160,6 +1161,60 @@ instance Display Label = {
         "method-local constraints must be available while checking its universally quantified body: {:?}",
         report.diagnostics()
     );
+}
+
+#[test]
+fn inline_instance_closures_preserve_rigidity_and_constraint_scope() {
+    for (name, source) in [
+        (
+            "rigid-inline-identity.aivi",
+            r#"
+type Arrow A B = Arrow (A -> B)
+type Arrow A B -> A -> B
+func runArrow = arrow x => arrow ||> Arrow f -> f x
+instance Semigroupoid Arrow = { compose left right = Arrow (x => runArrow left (runArrow right x)) }
+instance Category Arrow = { id = Arrow (x => 1) }
+"#,
+        ),
+        (
+            "inline-method-constraint-leak.aivi",
+            r#"
+class Matcher F = {
+    matches : Eq A => A -> F A -> Bool
+    unchecked : A -> F A -> Bool
+}
+type Box A = Box A
+instance Matcher Box = {
+    matches expected box = (actual => actual == expected) expected
+    unchecked expected box = (actual => actual == expected) expected
+}
+"#,
+        ),
+        (
+            "inline-constructor-owner-mismatch.aivi",
+            r#"
+class Identity P = { identity : P A A }
+type Arrow A B = Arrow (A -> B)
+type Other A B = Other (A -> B)
+instance Identity Arrow = { identity = Other (x => x) }
+"#,
+        ),
+        (
+            "inline-explicit-parameter-mismatch.aivi",
+            r#"
+class Identity P = { identity : P A A }
+type Arrow A B = Arrow (A -> B)
+instance Identity Arrow = { identity = Arrow (x:Int => x) }
+"#,
+        ),
+    ] {
+        let report = typecheck_text(name, source);
+        assert!(
+            !report.is_ok(),
+            "{name} must reject an invalid instance closure"
+        );
+        assert!(!report.diagnostics().is_empty());
+    }
 }
 
 fn typecheck_and_elaborate_text(path: &str, text: &str) -> (TypeCheckReport, Module) {

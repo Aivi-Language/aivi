@@ -225,11 +225,20 @@ fn accepts_signature_evidence(module: &Module, evidence: &FunctionSignatureEvide
 }
 
 pub(crate) fn infer_same_module_function_types(module: &Module) -> HashMap<ItemId, GateType> {
+    // A complete declaration or lexical contract already defines its signature.
+    // Keep it out of speculative slots; ordinary checking still verifies its body.
     let function_ids = module
         .items()
         .iter()
         .filter_map(|(item_id, item)| match item {
-            Item::Function(function) if supports_same_module_function_inference(function) => {
+            Item::Function(function)
+                if supports_same_module_function_inference(function)
+                    && (function.annotation.is_none()
+                        || function
+                            .parameters
+                            .iter()
+                            .any(|parameter| parameter.annotation.is_none())) =>
+            {
                 Some(item_id)
             }
             _ => None,

@@ -37,6 +37,119 @@ impl Drop for TempDir {
 }
 
 #[test]
+fn inline_instance_closures_execute_through_facades_and_method_dictionaries() {
+    let dir = TempDir::new("inline-instance-closures");
+    dir.write(
+        "classes.aivi",
+        r#"
+class Matcher F = {
+    matches : Eq A => A -> F A -> F Bool
+    traverseBox : Applicative G => (A -> G B) -> F A -> G (F B)
+}
+class Nest P = { nested : P A (P Bool A) }
+export (Matcher, Nest)
+"#,
+    );
+    dir.write(
+        "owner.aivi",
+        r#"
+use classes (Matcher, Nest)
+type Arrow A B = Arrow (A -> B)
+type Arrow A B -> A -> B
+func runArrow = arrow x => arrow ||> Arrow f -> f x
+instance Semigroupoid Arrow = {
+    compose left right = Arrow (x => runArrow left (runArrow right x))
+}
+instance Category Arrow = { id = Arrow (x => x) }
+instance Profunctor Arrow = {
+    dimap = before after arrow => Arrow (x => after (runArrow arrow (before x)))
+}
+instance Nest Arrow = { nested = Arrow (outer => Arrow (inner => outer)) }
+type Category P => P A B -> P A B
+func keepLeft = arrow => compose id arrow
+type Category P => P A B -> P A B
+func keepRight = arrow => compose arrow id
+type Box A = Box A
+instance Functor Box = { map transform box = box ||> Box x -> Box (transform x) }
+instance Matcher Box = {
+    matches expected = box => box ||> Box actual -> Box (actual == expected)
+    traverseBox transform box = box ||> Box x -> map (item => Box item) (transform x)
+}
+type Box A -> A
+func unbox = box => box ||> Box x -> x
+export (Arrow, runArrow, keepLeft, keepRight, Box, unbox)
+"#,
+    );
+    dir.write("facade.aivi", "use owner (Arrow as Morphism, runArrow as run, keepLeft, keepRight, Box, unbox)\nuse classes (Matcher as Matching, Nest)\nexport (Morphism, run, keepLeft, keepRight, Box, unbox, Matching, Nest)\n");
+    let path = dir.write("main.aivi", r#"
+use facade (Morphism, run, keepLeft, keepRight, Box, unbox, Matching, Nest)
+type Bool -> Int
+func number = flag => flag
+ ||> True -> 3
+ ||> False -> 1
+type Int -> Text
+func label = n => n
+ ||> 3 -> "three"
+ ||> 4 -> "four"
+ ||> _ -> "other"
+type Int -> Int
+func increment = n => n + 1
+type Int -> Option Text
+func optional = n => Some "present"
+value nesting : Morphism Int (Morphism Bool Int) = nested
+value first : Morphism Bool Int = Morphism number
+value second : Morphism Int Text = Morphism label
+value pipeline : Morphism Bool Text = compose second first
+value composeValue : Morphism Int Text -> Morphism Bool Int -> Morphism Bool Text = compose
+value partial : Morphism Bool Int -> Morphism Bool Text = compose second
+value inputIdentity : Morphism Bool Bool = id
+value outputIdentity : Morphism Text Text = id
+value mapped : Morphism Bool Text = dimap number label (Morphism increment)
+value method : Bool -> Box Bool -> Box Bool = matches
+value optionalBox : Option (Box Text) = traverseBox optional (Box 3)
+value listBox : List (Box Int) = traverseBox (n => [n, n + 1]) (Box 3)
+value optionMatches : Bool = optionalBox
+ ||> Some box -> unbox box == "present"
+ ||> None -> False
+@test
+value nestedCapture : Task Text Bool = pure (run (run nesting 7) False == 7)
+@test
+value composition : Task Text Bool = pure (run pipeline True == "three")
+@test
+value firstClass : Task Text Bool = pure (run (composeValue second first) False == "other")
+@test
+value partialComposition : Task Text Bool = pure (run (partial first) True == "three")
+@test
+value leftIdentity : Task Text Bool = pure (run (keepLeft first) True == 3)
+@test
+value rightIdentity : Task Text Bool = pure (run (keepRight second) 3 == "three")
+@test
+value identities : Task Text Bool = pure (run inputIdentity True and run outputIdentity "same" == "same")
+@test
+value profunctor : Task Text Bool = pure (run mapped True == "four")
+@test
+value constrainedMethod : Task Text Bool = pure (unbox (matches "same" (Box "same")))
+@test
+value methodValue : Task Text Bool = pure (unbox (method True (Box True)))
+@test
+value applicativeOption : Task Text Bool = pure optionMatches
+@test
+value applicativeList : Task Text Bool = pure (map unbox listBox == [3, 4])
+"#);
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("12 passed; 0 failed; 12 total"), "{stdout}");
+    }
+}
+
+#[test]
 fn imported_authored_classes_execute_through_aliases_and_reexports() {
     let dir = TempDir::new("imported-authored-classes");
     dir.write(
