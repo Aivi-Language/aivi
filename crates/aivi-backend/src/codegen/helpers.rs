@@ -34,18 +34,7 @@ fn static_builtin_class_member_arity(
 }
 
 fn builtin_wrapper_intrinsic(kernel: &crate::Kernel) -> Option<crate::BuiltinClassMemberIntrinsic> {
-    match &kernel.exprs()[kernel.root].kind {
-        crate::KernelExprKind::BuiltinClassMember(intrinsic) => Some(intrinsic.clone()),
-        crate::KernelExprKind::Apply { callee, arguments } => {
-            let crate::KernelExprKind::BuiltinClassMember(intrinsic) =
-                &kernel.exprs()[*callee].kind
-            else {
-                return None;
-            };
-            (arguments.len() == kernel.convention.parameters.len()).then_some(intrinsic.clone())
-        }
-        _ => None,
-    }
+    crate::callable_adapters::builtin_wrapper_intrinsic(kernel)
 }
 
 fn static_evaluate_builtin_class_member_call(
@@ -362,10 +351,7 @@ fn opaque_layout_identity_matches(
     right_item: Option<aivi_hir::ItemId>,
     right_name: &str,
 ) -> bool {
-    match (left_item, right_item) {
-        (Some(left_item), Some(right_item)) => left_item == right_item,
-        _ => left_name == right_name,
-    }
+    crate::native_abi::opaque_layout_identity_matches(left_item, left_name, right_item, right_name)
 }
 
 fn sum_variant_tag_for_opaque(variant_name: &str) -> i64 {
@@ -379,6 +365,7 @@ fn kernel_symbol_for(program: &Program, kernel_id: KernelId, kernel: &Kernel) ->
         kernel_id.as_raw(),
         match kernel.origin.kind {
             KernelOriginKind::ItemBody { .. } => "item_body".to_owned(),
+            KernelOriginKind::CallableAdapter { .. } => "callable_adapter".to_owned(),
             KernelOriginKind::SignalBody { .. } => "signal_body".to_owned(),
             KernelOriginKind::GateTrue { stage_index, .. } => format!("gate_true_s{stage_index}"),
             KernelOriginKind::GateFalse { stage_index, .. } => format!("gate_false_s{stage_index}"),

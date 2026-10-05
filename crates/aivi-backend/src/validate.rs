@@ -1,3 +1,4 @@
+use aivi_base::ArenaId;
 use std::{collections::HashMap, fmt};
 
 use crate::{
@@ -13,6 +14,19 @@ use crate::{
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ValidationError {
+    InvalidCallableAdapterItem {
+        item: ItemId,
+        reason: &'static str,
+    },
+    KernelExpressionCycle {
+        kernel: KernelId,
+        expr: KernelExprId,
+    },
+    InvalidCallableAdapter {
+        kernel: KernelId,
+        expr: KernelExprId,
+        reason: &'static str,
+    },
     UnitLiteralLayoutMismatch {
         kernel: KernelId,
         expr: KernelExprId,
@@ -261,6 +275,21 @@ pub enum ValidationError {
 impl fmt::Display for ValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidCallableAdapterItem { item, reason } => {
+                write!(f, "callable adapter item {item} is invalid: {reason}")
+            }
+            Self::KernelExpressionCycle { kernel, expr } => write!(
+                f,
+                "backend kernel {kernel} has an expression cycle through expr{expr}"
+            ),
+            Self::InvalidCallableAdapter {
+                kernel,
+                expr,
+                reason,
+            } => write!(
+                f,
+                "callable adapter at kernel {kernel} expression {expr} is invalid: {reason}"
+            ),
             Self::UnitLiteralLayoutMismatch {
                 kernel,
                 expr,
@@ -618,6 +647,22 @@ pub fn validate_program(program: &Program) -> Result<(), ValidationErrors> {
     validate_layouts(program, &mut errors);
 
     for (item_id, item) in program.items().iter() {
+        if matches!(item.kind, ItemKind::CallableAdapter)
+            && item
+                .body
+                .and_then(|body| program.kernels().get(body))
+                .is_none_or(|kernel| {
+                    !matches!(
+                        kernel.origin.kind,
+                        crate::KernelOriginKind::CallableAdapter { .. }
+                    )
+                })
+        {
+            errors.push(ValidationError::InvalidCallableAdapterItem {
+                item: item_id,
+                reason: "synthetic helper item requires explicit adapter provenance",
+            });
+        }
         for (parameter_index, layout) in item.parameters.iter().enumerate() {
             if !program.layouts().contains(*layout) {
                 errors.push(ValidationError::ItemUnknownParameterLayout {
@@ -630,6 +675,17 @@ pub fn validate_program(program: &Program) -> Result<(), ValidationErrors> {
         if let Some(kernel_id) = item.body {
             match program.kernels().get(kernel_id) {
                 Some(kernel) => {
+                    if matches!(
+                        kernel.origin.kind,
+                        crate::KernelOriginKind::CallableAdapter { .. }
+                    ) && !matches!(item.kind, ItemKind::CallableAdapter)
+                    {
+                        errors.push(ValidationError::InvalidCallableAdapter {
+                            kernel: kernel_id,
+                            expr: kernel.root,
+                            reason: "adapter body must belong to a synthetic helper item",
+                        });
+                    }
                     if kernel.origin.item != item_id {
                         errors.push(ValidationError::ItemBodyOwnerMismatch {
                             item: item_id,
@@ -908,8 +964,9 @@ pub fn validate_program(program: &Program) -> Result<(), ValidationErrors> {
         }
     }
 
+    let mut kernel_scratch = KernelValidationScratch::default();
     for (kernel_id, kernel) in program.kernels().iter() {
-        validate_kernel(program, kernel_id, kernel, &mut errors);
+        validate_kernel(program, kernel_id, kernel, &mut kernel_scratch, &mut errors);
     }
 
     validate_no_item_dep_cycles(program, &mut errors);
@@ -1345,12 +1402,32 @@ fn validate_source_kernel(
     Ok(())
 }
 
+#[derive(Clone, Copy)]
+enum ExprValidationTask {
+    Enter(KernelExprId),
+    Exit(KernelExprId),
+}
+
+#[derive(Default)]
+struct KernelValidationScratch {
+    work: Vec<ExprValidationTask>,
+    colors: Vec<u8>,
+}
+
 fn validate_kernel(
     program: &Program,
     kernel_id: KernelId,
     kernel: &crate::Kernel,
+    scratch: &mut KernelValidationScratch,
     errors: &mut Vec<ValidationError>,
 ) {
+    if let Err(reason) = crate::callable_adapters::validate_helper(program, kernel) {
+        errors.push(ValidationError::InvalidCallableAdapter {
+            kernel: kernel_id,
+            expr: kernel.root,
+            reason,
+        });
+    }
     if let Some(layout) = kernel.input_subject
         && !program.layouts().contains(layout)
     {
@@ -1401,8 +1478,19 @@ fn validate_kernel(
         return;
     }
 
-    let mut work = vec![kernel.root];
-    while let Some(expr_id) = work.pop() {
+    let KernelValidationScratch { work, colors } = scratch;
+    work.clear();
+    colors.clear();
+    colors.resize(kernel.exprs().len(), 0);
+    work.push(ExprValidationTask::Enter(kernel.root));
+    while let Some(task) = work.pop() {
+        let expr_id = match task {
+            ExprValidationTask::Exit(expr) => {
+                colors[expr.index()] = 2;
+                continue;
+            }
+            ExprValidationTask::Enter(expr) => expr,
+        };
         let Some(expr) = kernel.exprs().get(expr_id) else {
             errors.push(ValidationError::KernelUnknownExpr {
                 kernel: kernel_id,
@@ -1410,6 +1498,19 @@ fn validate_kernel(
             });
             continue;
         };
+        match colors[expr_id.index()] {
+            1 => {
+                errors.push(ValidationError::KernelExpressionCycle {
+                    kernel: kernel_id,
+                    expr: expr_id,
+                });
+                return;
+            }
+            2 => continue,
+            _ => {}
+        }
+        colors[expr_id.index()] = 1;
+        work.push(ExprValidationTask::Exit(expr_id));
         if !program.layouts().contains(expr.layout) {
             errors.push(ValidationError::KernelUnknownLayout {
                 kernel: kernel_id,
@@ -1447,7 +1548,7 @@ fn validate_kernel(
                 }
             }
             KernelExprKind::OptionSome { payload } => {
-                push_expr(kernel_id, *payload, kernel, &mut work, errors)
+                push_expr(kernel_id, *payload, kernel, work, errors)
             }
             KernelExprKind::OptionNone => {}
             KernelExprKind::Environment(slot) => match kernel.environment.get(slot.index()) {
@@ -1529,24 +1630,24 @@ fn validate_kernel(
             KernelExprKind::Text(text) => {
                 for segment in &text.segments {
                     if let crate::TextSegment::Interpolation { expr, .. } = segment {
-                        push_expr(kernel_id, *expr, kernel, &mut work, errors);
+                        push_expr(kernel_id, *expr, kernel, work, errors);
                     }
                 }
             }
             KernelExprKind::Tuple(elements)
             | KernelExprKind::List(elements)
             | KernelExprKind::Set(elements) => {
-                push_exprs(kernel_id, elements, kernel, &mut work, errors)
+                push_exprs(kernel_id, elements, kernel, work, errors)
             }
             KernelExprKind::Map(entries) => {
                 for entry in entries {
-                    push_expr(kernel_id, entry.key, kernel, &mut work, errors);
-                    push_expr(kernel_id, entry.value, kernel, &mut work, errors);
+                    push_expr(kernel_id, entry.key, kernel, work, errors);
+                    push_expr(kernel_id, entry.value, kernel, work, errors);
                 }
             }
             KernelExprKind::Record(fields) => {
                 for field in fields {
-                    push_expr(kernel_id, field.value, kernel, &mut work, errors);
+                    push_expr(kernel_id, field.value, kernel, work, errors);
                 }
             }
             KernelExprKind::Projection { base, .. } => match base {
@@ -1567,23 +1668,54 @@ fn validate_kernel(
                         });
                     }
                 }
-                ProjectionBase::Expr(base) => {
-                    push_expr(kernel_id, *base, kernel, &mut work, errors)
-                }
+                ProjectionBase::Expr(base) => push_expr(kernel_id, *base, kernel, work, errors),
             },
             KernelExprKind::Apply { callee, arguments } => {
-                push_expr(kernel_id, *callee, kernel, &mut work, errors);
-                push_exprs(kernel_id, arguments, kernel, &mut work, errors);
+                push_expr(kernel_id, *callee, kernel, work, errors);
+                push_exprs(kernel_id, arguments, kernel, work, errors);
             }
-            KernelExprKind::Unary { expr, .. } => {
-                push_expr(kernel_id, *expr, kernel, &mut work, errors)
+            KernelExprKind::CallableAdapter { value, adapter } => {
+                push_expr(kernel_id, *value, kernel, work, errors);
+                if let Err(reason) = crate::callable_adapters::validate_bridge(
+                    program, kernel, expr_id, *value, *adapter,
+                ) {
+                    errors.push(ValidationError::InvalidCallableAdapter {
+                        kernel: kernel_id,
+                        expr: expr_id,
+                        reason,
+                    });
+                }
+                if !kernel.global_items.contains(adapter) {
+                    errors.push(ValidationError::KernelGlobalDependencyMissing {
+                        kernel: kernel_id,
+                        item: *adapter,
+                    });
+                }
             }
+            KernelExprKind::Repack { value } => {
+                push_expr(kernel_id, *value, kernel, work, errors);
+                if let Some(child) = kernel.exprs().get(*value)
+                    && !crate::native_abi::layouts_compatible(
+                        program,
+                        expr.layout,
+                        child.layout,
+                        crate::native_abi::LayoutCompatibility::Repack,
+                    )
+                {
+                    errors.push(ValidationError::InvalidCallableAdapter {
+                        kernel: kernel_id,
+                        expr: expr_id,
+                        reason: "explicit representation conversion has incompatible layouts",
+                    });
+                }
+            }
+            KernelExprKind::Unary { expr, .. } => push_expr(kernel_id, *expr, kernel, work, errors),
             KernelExprKind::Binary { left, right, .. } => {
-                push_expr(kernel_id, *left, kernel, &mut work, errors);
-                push_expr(kernel_id, *right, kernel, &mut work, errors);
+                push_expr(kernel_id, *left, kernel, work, errors);
+                push_expr(kernel_id, *right, kernel, work, errors);
             }
             KernelExprKind::Pipe(pipe) => {
-                push_expr(kernel_id, pipe.head, kernel, &mut work, errors);
+                push_expr(kernel_id, pipe.head, kernel, work, errors);
                 for stage in &pipe.stages {
                     if !program.layouts().contains(stage.input_layout) {
                         errors.push(ValidationError::KernelUnknownLayout {
@@ -1651,11 +1783,11 @@ fn validate_kernel(
                         InlinePipeStageKind::Transform { expr, .. }
                         | InlinePipeStageKind::Tap { expr }
                         | InlinePipeStageKind::FanOut { map_expr: expr } => {
-                            push_expr(kernel_id, *expr, kernel, &mut work, errors)
+                            push_expr(kernel_id, *expr, kernel, work, errors)
                         }
                         InlinePipeStageKind::Debug { .. } => {}
                         InlinePipeStageKind::Gate { predicate, .. } => {
-                            push_expr(kernel_id, *predicate, kernel, &mut work, errors);
+                            push_expr(kernel_id, *predicate, kernel, work, errors);
                             if let Some(pred_expr) = kernel.exprs().get(*predicate)
                                 && !is_bool_layout(program, pred_expr.layout)
                             {
@@ -1667,7 +1799,7 @@ fn validate_kernel(
                         }
                         InlinePipeStageKind::Case { arms } => {
                             for arm in arms {
-                                push_expr(kernel_id, arm.body, kernel, &mut work, errors);
+                                push_expr(kernel_id, arm.body, kernel, work, errors);
                                 validate_inline_pipe_pattern(
                                     kernel_id,
                                     expr_id,
@@ -1678,8 +1810,8 @@ fn validate_kernel(
                             }
                         }
                         InlinePipeStageKind::TruthyFalsy { truthy, falsy } => {
-                            push_expr(kernel_id, truthy.body, kernel, &mut work, errors);
-                            push_expr(kernel_id, falsy.body, kernel, &mut work, errors);
+                            push_expr(kernel_id, truthy.body, kernel, work, errors);
+                            push_expr(kernel_id, falsy.body, kernel, work, errors);
                             for branch in [truthy, falsy] {
                                 if let Some(subject) = branch.payload_subject {
                                     match kernel.inline_subjects.get(subject.index()) {
@@ -1790,11 +1922,11 @@ fn push_expr(
     kernel_id: KernelId,
     expr: KernelExprId,
     kernel: &crate::Kernel,
-    work: &mut Vec<KernelExprId>,
+    work: &mut Vec<ExprValidationTask>,
     errors: &mut Vec<ValidationError>,
 ) {
     if kernel.exprs().contains(expr) {
-        work.push(expr);
+        work.push(ExprValidationTask::Enter(expr));
     } else {
         errors.push(ValidationError::KernelUnknownExpr {
             kernel: kernel_id,
@@ -1807,7 +1939,7 @@ fn push_exprs(
     kernel_id: KernelId,
     exprs: &[KernelExprId],
     kernel: &crate::Kernel,
-    work: &mut Vec<KernelExprId>,
+    work: &mut Vec<ExprValidationTask>,
     errors: &mut Vec<ValidationError>,
 ) {
     for expr in exprs {

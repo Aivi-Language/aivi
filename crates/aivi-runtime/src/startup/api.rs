@@ -28,6 +28,11 @@ pub fn derive_backend_runtime_link_seed(
         core_to_hir.insert(core_id, item.origin);
     }
     for (backend_item, item) in backend.items().iter() {
+        // ABI helpers retain target provenance for diagnostics and native
+        // dependencies, but introduce no additional semantic declaration.
+        if matches!(item.kind, BackendItemKind::CallableAdapter) {
+            continue;
+        }
         let Some(&hir_item) = core_to_hir.get(&item.origin) else {
             errors.push(BackendRuntimeLinkError::MissingCoreItemOrigin {
                 backend_item,

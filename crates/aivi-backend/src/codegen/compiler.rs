@@ -25,11 +25,7 @@ struct RepackShape<'a, Field> {
     target_fields: &'a [Field],
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-enum LayoutCompatibility {
-    Repack,
-    CallableRepresentation,
-}
+use crate::native_abi::LayoutCompatibility;
 
 #[derive(Clone, Copy)]
 struct InlinePipeStageLocation {
@@ -158,6 +154,17 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     }
                 }
                 match &expr.kind {
+                    KernelExprKind::Repack { value } => {
+                        work.push(*value);
+                        self.require_layout_match(
+                            kernel_id,
+                            expr_id,
+                            expr.layout,
+                            kernel.exprs()[*value].layout,
+                            "explicit callable ABI repack",
+                        )
+                        .unwrap_or_else(|error| errors.push(error));
+                    }
                     KernelExprKind::Subject(SubjectRef::Input)
                     | KernelExprKind::Subject(SubjectRef::Inline(_))
                     | KernelExprKind::Environment(_) => {}
@@ -543,6 +550,19 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 ItemReferencePlan::SignalSlot { .. }
                                 | ItemReferencePlan::ImportedSlot { .. },
                             ) => {}
+                            Err(error) => errors.push(error),
+                        }
+                    }
+                    KernelExprKind::CallableAdapter { adapter, .. } => {
+                        match self.plan_item_reference(kernel_id, expr_id, *adapter) {
+                            Ok(ItemReferencePlan::CallableDescriptor { body, .. }) => {
+                                dependencies.insert(body);
+                            }
+                            Ok(_) => errors.push(self.unsupported_expression(
+                                kernel_id,
+                                expr_id,
+                                "callable adapter requires a native function descriptor",
+                            )),
                             Err(error) => errors.push(error),
                         }
                     }
@@ -965,6 +985,10 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         enum Task {
             Visit(KernelExprId),
             BuildOptionSome(KernelExprId),
+            BuildRepack {
+                expr: KernelExprId,
+                value: KernelExprId,
+            },
             BuildProjection(KernelExprId),
             BuildDirectApply {
                 expr: KernelExprId,
@@ -1139,6 +1163,27 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         continue;
                     }
                     match &expr.kind {
+                        KernelExprKind::CallableAdapter { adapter, .. } => {
+                            let ItemReferencePlan::CallableDescriptor { item, body, arity } =
+                                self.plan_item_reference(kernel_id, expr_id, *adapter)?
+                            else {
+                                return Err(self.unsupported_expression(
+                                    kernel_id,
+                                    expr_id,
+                                    "callable adapter requires a native function descriptor",
+                                ));
+                            };
+                            values.push(self.lower_item_callable_descriptor(
+                                kernel_id, item, body, arity, builder,
+                            )?);
+                        }
+                        KernelExprKind::Repack { value } => {
+                            tasks.push(Task::BuildRepack {
+                                expr: expr_id,
+                                value: *value,
+                            });
+                            tasks.push(Task::Visit(*value));
+                        }
                         KernelExprKind::Item(item) | KernelExprKind::ExecutableEvidence(item) => {
                             match self.plan_item_reference(kernel_id, expr_id, *item)? {
                                 ItemReferencePlan::DirectValue { body, result } => {
@@ -1641,6 +1686,18 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             ));
                         }
                     }
+                }
+                Task::BuildRepack { expr, value } => {
+                    let native = values
+                        .pop()
+                        .expect("repack child must produce a native value");
+                    values.push(self.repack_value(
+                        kernel_id,
+                        native,
+                        kernel.exprs()[value].layout,
+                        kernel.exprs()[expr].layout,
+                        builder,
+                    )?);
                 }
                 Task::BuildOptionSome(expr_id) => {
                     let expr = &kernel.exprs()[expr_id];
@@ -3354,6 +3411,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             .get(body)
             .expect("validated backend programs keep item body kernels aligned with codegen");
         if item_decl.name.starts_with("builtin-evidence#")
+            && !matches!(kernel.origin.kind, KernelOriginKind::CallableAdapter { .. })
             && let Some(intrinsic) = builtin_wrapper_intrinsic(body_kernel)
         {
             return self
@@ -3738,18 +3796,26 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         kernel: &Kernel,
         expr_id: KernelExprId,
     ) -> Option<(ItemId, Vec<KernelExprId>)> {
-        match &kernel.exprs()[expr_id].kind {
-            KernelExprKind::Item(item) | KernelExprKind::ExecutableEvidence(item) => {
-                Some((*item, Vec::new()))
+        let mut cursor = expr_id;
+        let mut visited = HashSet::new();
+        let mut prefixes = Vec::new();
+        while visited.insert(cursor) {
+            match &kernel.exprs().get(cursor)?.kind {
+                KernelExprKind::Item(item) | KernelExprKind::ExecutableEvidence(item) => {
+                    let arguments = prefixes.into_iter().rev().flatten().collect();
+                    return Some((*item, arguments));
+                }
+                KernelExprKind::Apply { callee, arguments } => {
+                    prefixes.push(arguments.iter().copied());
+                    cursor = *callee;
+                }
+                // Specialized list operations call the original item directly
+                // and already repack its visible arguments and result.
+                KernelExprKind::CallableAdapter { value, .. } => cursor = *value,
+                _ => return None,
             }
-            KernelExprKind::Apply { callee, arguments } => {
-                let (item, mut prefix_arguments) =
-                    self.resolve_item_partial_application(kernel, *callee)?;
-                prefix_arguments.extend(arguments.iter().copied());
-                Some((item, prefix_arguments))
-            }
-            _ => None,
         }
+        None
     }
 
     fn resolve_item_partial_call(
@@ -7840,16 +7906,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         ))
     }
 
-    fn runtime_payload_layout(&self, mut layout: LayoutId) -> Option<LayoutId> {
-        // Native kernels receive committed values. Signal has the ABI of its
-        // payload here. Bound traversal so malformed cycles cannot spin forever.
-        for _ in 0..self.program.layouts().len() {
-            match &self.program.layouts()[layout].kind {
-                LayoutKind::Signal { element } => layout = *element,
-                _ => return Some(layout),
-            }
-        }
-        None
+    fn runtime_payload_layout(&self, layout: LayoutId) -> Option<LayoutId> {
+        crate::native_abi::runtime_payload_layout(self.program, layout)
     }
 
     fn layouts_call_compatible(&self, expected: LayoutId, found: LayoutId) -> bool {
@@ -7865,203 +7923,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         found: LayoutId,
         mode: LayoutCompatibility,
     ) -> bool {
-        if expected == found {
-            return true;
-        }
-        let mut pending = vec![(expected, found, mode)];
-        let mut visited = HashSet::new();
-        while let Some((expected, found, mode)) = pending.pop() {
-            let (Some(expected), Some(found)) = (
-                self.runtime_payload_layout(expected),
-                self.runtime_payload_layout(found),
-            ) else {
-                return false;
-            };
-            if expected == found || !visited.insert((expected, found, mode)) {
-                continue;
-            }
-            let left = &self.program.layouts()[expected];
-            let right = &self.program.layouts()[found];
-            if matches!(left.kind, LayoutKind::Domain { .. })
-                || matches!(right.kind, LayoutKind::Domain { .. })
-            {
-                if mode == LayoutCompatibility::Repack {
-                    continue;
-                }
-                if left.abi != AbiPassMode::ByReference || right.abi != AbiPassMode::ByReference {
-                    return false;
-                }
-                let carrier = |id, layout: &Layout| match &layout.kind {
-                    LayoutKind::Domain { .. } => self.program.named_domain_carrier(id),
-                    _ => Some(id),
-                };
-                let (Some(left), Some(right)) = (carrier(expected, left), carrier(found, right))
-                else {
-                    // An erased generic domain is an uninterpreted reference.
-                    continue;
-                };
-                if left != expected || right != found {
-                    pending.push((left, right, mode));
-                    continue;
-                }
-                return false;
-            }
-            if left.abi != right.abi {
-                return false;
-            }
-            match (&left.kind, &right.kind) {
-                (LayoutKind::Primitive(left), LayoutKind::Primitive(right)) if left == right => {}
-                (LayoutKind::Tuple(left), LayoutKind::Tuple(right))
-                    if left.len() == right.len() =>
-                {
-                    pending.extend(
-                        left.iter()
-                            .zip(right)
-                            .map(|(left, right)| (*left, *right, mode)),
-                    )
-                }
-                (LayoutKind::Record(left), LayoutKind::Record(right))
-                    if left.len() == right.len()
-                        && left
-                            .iter()
-                            .zip(right)
-                            .all(|(left, right)| left.name == right.name) =>
-                {
-                    pending.extend(
-                        left.iter()
-                            .zip(right)
-                            .map(|(left, right)| (left.layout, right.layout, mode)),
-                    )
-                }
-                (
-                    LayoutKind::Arrow {
-                        parameter: left_parameter,
-                        result: left_result,
-                    },
-                    LayoutKind::Arrow {
-                        parameter: right_parameter,
-                        result: right_result,
-                    },
-                ) => {
-                    pending.push((
-                        *left_parameter,
-                        *right_parameter,
-                        LayoutCompatibility::CallableRepresentation,
-                    ));
-                    pending.push((
-                        *left_result,
-                        *right_result,
-                        LayoutCompatibility::CallableRepresentation,
-                    ));
-                }
-                (LayoutKind::List { element: left }, LayoutKind::List { element: right })
-                | (LayoutKind::Set { element: left }, LayoutKind::Set { element: right })
-                | (LayoutKind::Option { element: left }, LayoutKind::Option { element: right })
-                | (
-                    LayoutKind::AnonymousDomain { carrier: left, .. },
-                    LayoutKind::AnonymousDomain { carrier: right, .. },
-                ) => pending.push((*left, *right, mode)),
-                (
-                    LayoutKind::Map {
-                        key: left_key,
-                        value: left_value,
-                    },
-                    LayoutKind::Map {
-                        key: right_key,
-                        value: right_value,
-                    },
-                )
-                | (
-                    LayoutKind::Result {
-                        error: left_key,
-                        value: left_value,
-                    },
-                    LayoutKind::Result {
-                        error: right_key,
-                        value: right_value,
-                    },
-                )
-                | (
-                    LayoutKind::Validation {
-                        error: left_key,
-                        value: left_value,
-                    },
-                    LayoutKind::Validation {
-                        error: right_key,
-                        value: right_value,
-                    },
-                )
-                | (
-                    LayoutKind::Task {
-                        error: left_key,
-                        value: left_value,
-                    },
-                    LayoutKind::Task {
-                        error: right_key,
-                        value: right_value,
-                    },
-                ) => {
-                    pending.push((*left_key, *right_key, mode));
-                    pending.push((*left_value, *right_value, mode));
-                }
-                (LayoutKind::Sum(left), LayoutKind::Sum(right)) => {
-                    if !Self::append_compatible_variants(left, right, mode, &mut pending) {
-                        return false;
-                    }
-                }
-                (
-                    LayoutKind::Opaque {
-                        item: left_item,
-                        name: left_name,
-                        variants: left,
-                        ..
-                    },
-                    LayoutKind::Opaque {
-                        item: right_item,
-                        name: right_name,
-                        variants: right,
-                        ..
-                    },
-                ) if opaque_layout_identity_matches(
-                    *left_item,
-                    left_name,
-                    *right_item,
-                    right_name,
-                ) =>
-                {
-                    if !left.is_empty()
-                        && !right.is_empty()
-                        && !Self::append_compatible_variants(left, right, mode, &mut pending)
-                    {
-                        return false;
-                    }
-                }
-                _ => return false,
-            }
-        }
-        true
-    }
-
-    fn append_compatible_variants(
-        left: &[crate::VariantLayout],
-        right: &[crate::VariantLayout],
-        mode: LayoutCompatibility,
-        pending: &mut Vec<(LayoutId, LayoutId, LayoutCompatibility)>,
-    ) -> bool {
-        if left.len() != right.len() {
-            return false;
-        }
-        for (left, right) in left.iter().zip(right) {
-            if left.name != right.name || left.field_count != right.field_count {
-                return false;
-            }
-            match (left.payload, right.payload) {
-                (None, None) => {}
-                (Some(left), Some(right)) => pending.push((left, right, mode)),
-                _ => return false,
-            }
-        }
-        true
+        crate::native_abi::layouts_compatible(self.program, expected, found, mode)
     }
 
     fn unsupported_inline_pipe_stage(
@@ -12269,6 +12131,8 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         | KernelExprKind::Environment(_)
                         | KernelExprKind::Item(_)
                         | KernelExprKind::ExecutableEvidence(_)
+                        | KernelExprKind::CallableAdapter { .. }
+                        | KernelExprKind::Repack { .. }
                         | KernelExprKind::DomainMember(_)
                         | KernelExprKind::BuiltinClassMember(_)
                         | KernelExprKind::Projection { .. }

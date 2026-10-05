@@ -200,7 +200,9 @@ func identity = item => item
 value done : Unit = identity ()
 value present : Option Unit = Some ()
 value lifted : Option Unit = pure ()
-value same : Bool = done == () and present == lifted
+type Eq A => A -> A -> Bool
+func agrees = left right => left == right
+value same : Bool = agrees done () and agrees True True and agrees 1 1 and agrees "done" "done" and present == lifted
 
 type Unit -> Text
 func inspect = unit => unit ||> () -> "done"

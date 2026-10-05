@@ -280,6 +280,7 @@ impl<'a> ProgramLowerer<'a> {
         self.lower_pipelines().map_err(wrap_one)?;
         self.lower_sources().map_err(wrap_one)?;
         self.attach_opaque_variants().map_err(wrap_one)?;
+        crate::callable_adapters::adapt_closed_callables(&mut self.program).map_err(wrap_one)?;
         if let Err(errors) = validate_program(&self.program) {
             return Err(LoweringErrors::new(
                 errors

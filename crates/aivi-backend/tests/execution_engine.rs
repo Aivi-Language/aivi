@@ -63,6 +63,93 @@ fn find_item(program: &aivi_backend::Program, name: &str) -> aivi_backend::ItemI
         .unwrap_or_else(|| panic!("expected backend item `{name}`"))
 }
 
+#[test]
+fn native_callable_adapters_survive_binary_cache_and_source_free_replay() {
+    let backend = lower_text(
+        "native-callable-adapter-replay.aivi",
+        r#"
+type Wrap A = Wrap A
+type Tag = Tag Int | Other Int
+instance Eq Tag = { (==) left right = True }
+fun same:Eq A => A -> A -> Bool = left right => left == right
+fun withValue:(A -> A) -> A -> A = callback item => callback item
+fun increment:Int -> Int = item => item + 1
+fun withPredicate:(A -> Bool) -> A -> Bool = callback item => callback item
+fun isSeven:Int -> Bool = item => item == 7
+fun bind:(Int -> Bool) -> Int -> Bool = callback item => callback item
+value unit:Bool = same () ()
+value bool:Bool = same True False
+value int:Bool = same 1 2
+value float:Bool = same 1.5 1.5
+value text:Bool = same "one" "two"
+value reference:Bool = same (Tag 1) (Other 2)
+value wrapped:Bool = same (Wrap 1) (Wrap 2)
+value partial:Bool = withPredicate (bind isSeven) 7
+value result:Int = withValue increment 7
+"#,
+    );
+    compile_program(&backend).expect("adapter helpers emit native object code");
+    let encoded = postcard::to_stdvec(&backend).unwrap();
+    let replay: aivi_backend::Program = postcard::from_bytes(&encoded).unwrap();
+    validate_program(&replay).expect("adapter provenance survives backend serialization");
+    assert_eq!(backend, replay);
+    let expected = [
+        ("unit", RuntimeValue::Bool(true)),
+        ("bool", RuntimeValue::Bool(false)),
+        ("int", RuntimeValue::Bool(false)),
+        ("float", RuntimeValue::Bool(true)),
+        ("text", RuntimeValue::Bool(false)),
+        ("reference", RuntimeValue::Bool(true)),
+        ("wrapped", RuntimeValue::Bool(false)),
+        ("partial", RuntimeValue::Bool(true)),
+        ("result", RuntimeValue::Int(8)),
+    ];
+    let meta = BackendRuntimeMeta::from(&replay);
+    let catalog = aivi_backend::FrozenBackendCatalog::from(&meta);
+    let mut artifacts = NativeKernelArtifactSet::default();
+    for (name, _) in &expected {
+        let item = find_item(&replay, name);
+        let body = replay.items()[item].body.unwrap();
+        let artifact = compile_native_kernel_artifact(&replay, body)
+            .unwrap()
+            .unwrap_or_else(|| panic!("strict native plan for {name}"));
+        let artifact = attach_frozen_native_kernel_abi(&meta, &artifact).unwrap();
+        let bytes = encode_native_kernel_artifact_binary(&artifact);
+        let decoded = decode_native_kernel_artifact_binary(&bytes).unwrap();
+        artifacts.insert(compute_kernel_fingerprint(&replay, body), decoded);
+    }
+    let mut interpreted = KernelEvaluator::new(&replay);
+    let executable =
+        BackendExecutableProgram::from_runtime_meta(&meta).with_native_kernels(&artifacts);
+    let frozen =
+        BackendExecutableProgram::from_frozen_catalog(&catalog).with_native_kernels(&artifacts);
+    let mut native = executable.create_engine();
+    let mut source_free = frozen.create_engine();
+    for (name, expected) in expected {
+        let item = find_item(&replay, name);
+        let body = replay.items()[item].body.unwrap();
+        assert_eq!(
+            interpreted.evaluate_item(item, &BTreeMap::new()).unwrap(),
+            expected,
+            "interpreter {name}"
+        );
+        assert_eq!(
+            native
+                .evaluate_kernel(body, None, &[], &BTreeMap::new())
+                .unwrap(),
+            expected,
+            "cached native {name}"
+        );
+        assert_eq!(
+            source_free
+                .evaluate_kernel(body, None, &[], &BTreeMap::new())
+                .unwrap(),
+            expected,
+            "frozen native {name}"
+        );
+    }
+}
+
 fn apply_callable_item(
     engine: &mut dyn BackendExecutionEngine,
     program: &aivi_backend::Program,

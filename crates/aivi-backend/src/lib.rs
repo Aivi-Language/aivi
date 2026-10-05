@@ -17,6 +17,7 @@
 //! are already backend-owned into real Cranelift functions and object bytes.
 
 pub mod cache;
+mod callable_adapters;
 mod codegen;
 mod engine;
 mod fingerprint;
@@ -26,6 +27,7 @@ mod jit;
 mod kernel;
 mod layout;
 mod lower;
+mod native_abi;
 mod numeric;
 mod program;
 mod runtime;

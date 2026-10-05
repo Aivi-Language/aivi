@@ -797,6 +797,9 @@ pub enum ItemKind {
     Function,
     Signal(SignalInfo),
     Instance,
+    /// Synthetic native ABI helper, with provenance in its body kernel. It
+    /// does not introduce a second semantic HIR declaration for its target.
+    CallableAdapter,
 }
 
 impl ItemKind {
@@ -806,6 +809,7 @@ impl ItemKind {
             Self::Function => "func",
             Self::Signal(_) => "signal",
             Self::Instance => "instance",
+            Self::CallableAdapter => "callable-adapter",
         }
     }
 }

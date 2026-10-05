@@ -290,6 +290,14 @@ pub enum KernelOriginKind {
         source: SourceId,
         index: usize,
     },
+    /// A native ABI bridge for a statically known callable. The helper owns no
+    /// captures: its prefix arguments are closed item/evidence references.
+    CallableAdapter {
+        target: ItemId,
+        callable_layout: LayoutId,
+        use_layout: LayoutId,
+        bound_arguments: u32,
+    },
 }
 
 impl fmt::Display for KernelOriginKind {
@@ -363,6 +371,15 @@ impl fmt::Display for KernelOriginKind {
             Self::SourceOption { source, index } => {
                 write!(f, "source-option source{source}[{index}]")
             }
+            Self::CallableAdapter {
+                target,
+                callable_layout,
+                use_layout,
+                bound_arguments,
+            } => write!(
+                f,
+                "callable-adapter item{target} layout{callable_layout} use=layout{use_layout} bound={bound_arguments}"
+            ),
         }
     }
 }
@@ -484,6 +501,16 @@ pub enum KernelExprKind {
         right: KernelExprId,
     },
     Pipe(InlinePipeExpr),
+    /// Representation-only annotation. The interpreter evaluates `value`
+    /// unchanged; native code materializes the statically validated helper.
+    CallableAdapter {
+        value: KernelExprId,
+        adapter: ItemId,
+    },
+    /// Explicit representation conversion; the language value is unchanged.
+    Repack {
+        value: KernelExprId,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -910,6 +937,10 @@ pub fn describe_expr_kind(kind: &KernelExprKind) -> String {
             )
         }
         KernelExprKind::ExecutableEvidence(item) => format!("executable-evidence item{item}"),
+        KernelExprKind::CallableAdapter { value, adapter } => {
+            format!("callable-adapter expr{value} native=item{adapter}")
+        }
+        KernelExprKind::Repack { value } => format!("repack expr{value}"),
         KernelExprKind::BuiltinClassMember(intrinsic) => {
             format!("builtin-class-member {intrinsic:?}")
         }

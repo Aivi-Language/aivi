@@ -505,6 +505,10 @@ impl<'a> KernelEvaluator<'a> {
                         KernelExprKind::ExecutableEvidence(evidence) => {
                             values.push(self.runtime_executable_evidence_value(*evidence, globals)?)
                         }
+                        KernelExprKind::CallableAdapter { value, .. }
+                        | KernelExprKind::Repack { value } => {
+                            tasks.push(Task::Visit(*value));
+                        }
                         KernelExprKind::BuiltinClassMember(intrinsic) => {
                             values.push(runtime_class_member_value(intrinsic.clone()))
                         }

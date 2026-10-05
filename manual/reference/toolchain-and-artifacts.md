@@ -77,6 +77,15 @@ to 256 MiB, trailing bytes are rejected, and unknown formats or versions fail wi
 to rebuild. Serialized artifacts are therefore build outputs, not a long-term interchange format.
 Do not edit them or commit compatibility assumptions about their internal version numbers.
 
+Native calls preserve each function's declaration ABI. A concrete class dictionary or a
+known callback passed to a generic function receives a typed adapter when its representation
+differs. The adapter converts arguments and results explicitly, including nested supported
+aggregate representations, and travels with cached and source-free native artifacts. Physically
+compatible callbacks share their original descriptor. These bridges do not change the callable
+seen by the interpreter. Partial applications can bind closed item or dictionary references.
+Other captured callbacks and native callable result marshaling
+remain outside the current native execution slice; incompatible descriptors are rejected.
+
 ## Caches
 
 Live source runs use a versioned cache below the platform cache home, normally

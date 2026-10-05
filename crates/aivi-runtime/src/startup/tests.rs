@@ -108,6 +108,50 @@ fn backend_item_id(program: &BackendProgram, name: &str) -> BackendItemId {
         .unwrap_or_else(|| panic!("expected backend item named {name}"))
 }
 
+#[test]
+fn native_callable_helpers_preserve_unique_semantic_origins_in_runtime_link_seeds() {
+    let lowered = lower_text(
+        "runtime-callable-adapter-origins.aivi",
+        r#"
+fun same:Eq A => A -> A -> Bool = left right => left == right
+value result:Bool = same () ()
+"#,
+    );
+    let helper = lowered
+        .backend
+        .items()
+        .iter()
+        .find(|(_, item)| matches!(item.kind, BackendItemKind::CallableAdapter))
+        .expect("generic Unit evidence requires an ABI helper")
+        .0;
+    let seed = derive_backend_runtime_link_seed(&lowered.core, &lowered.backend)
+        .expect("synthetic helpers must not duplicate their semantic targets");
+    assert!(seed.hir_to_backend.iter().all(|(_, item)| *item != helper));
+    assert_eq!(
+        seed.hir_to_backend.len(),
+        lowered
+            .backend
+            .items()
+            .iter()
+            .filter(|(_, item)| !matches!(item.kind, BackendItemKind::CallableAdapter))
+            .count()
+    );
+    let mut malformed = lowered.backend.clone();
+    let original = malformed.items()[backend_item_id(&malformed, "result")].clone();
+    malformed.items_mut().alloc(original).unwrap();
+    assert!(
+        derive_backend_runtime_link_seed(&lowered.core, &malformed)
+            .unwrap_err()
+            .errors()
+            .iter()
+            .any(|error| matches!(
+                error,
+                BackendRuntimeLinkError::DuplicateBackendOrigin { .. }
+            )),
+        "duplicate semantic declarations remain an error"
+    );
+}
+
 fn text_ptr(value: &RuntimeValue) -> *const u8 {
     let RuntimeValue::Text(text) = value else {
         panic!("expected text runtime value");

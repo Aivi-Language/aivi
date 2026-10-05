@@ -185,32 +185,244 @@ value referenceCallback:Bool = callbackSame tagSame (Tag 1) (Other 2)
 }
 
 #[test]
-fn native_equality_rejects_callable_conversion_without_a_generic_adapter() {
+fn native_callable_adapters_preserve_generic_dictionaries_and_callbacks() {
     let backend = lower_text(
         "generic-equality-abi.aivi",
         r#"
 fun same:Eq A => A -> A -> Bool = left right => left == right
+type Wrap A = Wrap A
+type Tag = Tag Int | Other Int
+instance Eq Tag = { (==) left right = True }
 value equal:Bool = same 1 1
 value different:Bool = same 1 2
+value unitEqual:Bool = same () ()
+value boolEqual:Bool = same True True
+value boolDifferent:Bool = same True False
+value floatEqual:Bool = same 1.5 1.5
+value floatDifferent:Bool = same 1.5 2.5
+value textEqual:Bool = same "one" "one"
+value textDifferent:Bool = same "one" "two"
+value referenceEqual:Bool = same (Tag 1) (Other 2)
+value wrappedEqual:Bool = same (Wrap 1) (Wrap 1)
+value wrappedDifferent:Bool = same (Wrap 1) (Wrap 2)
 fun withList:(List A -> Bool) -> List A -> Bool = callback items => callback items
-fun accepts:List Int -> Bool = items => True
+fun accepts:List Int -> Bool = items => items
+  ||> [first, second, ...rest] -> first == 1 and second == 2
+  ||> _ -> False
 value nested:Bool = withList accepts [1, 2]
+value nestedDifferent:Bool = withList accepts [2, 1]
+fun withValue:(A -> Bool) -> A -> Bool = callback item => callback item
+fun isSeven:Int -> Bool = item => item == 7
+value callbackEqual:Bool = withValue isSeven 7
+value callbackDifferent:Bool = withValue isSeven 8
+fun partiallyBound:(Int -> Bool) -> Int -> Bool = callback item => callback item
+value closedPartial:Bool = withValue (partiallyBound isSeven) 7
+fun withResult:(A -> A) -> A -> A = callback item => callback item
+fun increment:Int -> Int = item => item + 1
+value callbackResult:Int = withResult increment 7
 "#,
     );
-    let errors =
-        compile_program(&backend).expect_err("boxed generic evidence requires a callable adapter");
-    assert!(errors.errors().iter().any(|error| matches!(error, CodegenError::UnsupportedExpression { detail, .. } if detail.contains("callable adapter"))));
+    compile_program(&backend).expect("generic callable adapters compile to native object code");
     let executable = aivi_backend::BackendExecutableProgram::interpreted(&backend);
     let mut engine = executable.create_engine();
-    for (name, expected) in [("equal", true), ("different", false), ("nested", true)] {
+    let mut evaluator = KernelEvaluator::new(&backend);
+    for (name, expected) in [
+        ("equal", true),
+        ("different", false),
+        ("unitEqual", true),
+        ("boolEqual", true),
+        ("boolDifferent", false),
+        ("floatEqual", true),
+        ("floatDifferent", false),
+        ("textEqual", true),
+        ("textDifferent", false),
+        ("referenceEqual", true),
+        ("wrappedEqual", true),
+        ("wrappedDifferent", false),
+        ("nested", true),
+        ("nestedDifferent", false),
+        ("callbackEqual", true),
+        ("callbackDifferent", false),
+        ("closedPartial", true),
+    ] {
         let item = find_item(&backend, name);
         assert!(
             aivi_backend::NativeKernelPlan::compile(&backend, backend.items()[item].body.unwrap())
-                .is_none()
+                .is_some(),
+            "native plan for {name}"
+        );
+        assert_eq!(
+            evaluator.evaluate_item(item, &BTreeMap::new()).unwrap(),
+            RuntimeValue::Bool(expected),
+            "interpreted {name}"
         );
         assert_eq!(
             engine.evaluate_item(item, &BTreeMap::new()).unwrap(),
-            RuntimeValue::Bool(expected)
+            RuntimeValue::Bool(expected),
+            "native {name}"
+        );
+    }
+    assert_eq!(
+        engine
+            .evaluate_item(find_item(&backend, "callbackResult"), &BTreeMap::new())
+            .unwrap(),
+        RuntimeValue::Int(8)
+    );
+}
+
+#[test]
+fn native_callable_adapter_annotations_preserve_interpreter_callable_identity() {
+    let backend = lower_text(
+        "callable-adapter-identity.aivi",
+        r#"
+fun isSeven:Int -> Bool = item => item == 7
+fun retain:(A -> Bool) -> (A -> Bool) = callback => callback
+value retained:Int -> Bool = retain isSeven
+"#,
+    );
+    let mut evaluator = KernelEvaluator::new(&backend);
+    let item = find_item(&backend, "retained");
+    let retained = evaluator.evaluate_item(item, &BTreeMap::new()).unwrap();
+    assert!(
+        matches!(retained, RuntimeValue::Callable(aivi_backend::RuntimeCallable::ItemBody { item, .. }) if item == find_item(&backend, "isSeven")),
+        "ABI annotation must preserve the original callable identity"
+    );
+    assert!(
+        aivi_backend::NativeKernelPlan::compile(&backend, backend.items()[item].body.unwrap())
+            .is_none(),
+        "native callable result marshaling remains explicitly unsupported"
+    );
+}
+
+#[test]
+fn native_callable_adapters_retain_rejection_of_unsupported_dynamic_captures() {
+    let backend = lower_text(
+        "dynamic-callable-adapter.aivi",
+        r#"
+fun withValue:(A -> Bool) -> A -> Bool = callback item => callback item
+fun above:Int -> Int -> Bool = limit item => item > limit
+fun result:Int -> Bool = limit => withValue (above limit) 7
+"#,
+    );
+    let item = find_item(&backend, "result");
+    let body = backend.items()[item].body.unwrap();
+    assert!(
+        compile_program(&backend).is_err(),
+        "an incompatible captured descriptor must not be forwarded unchanged"
+    );
+    assert!(aivi_backend::NativeKernelPlan::compile(&backend, body).is_none());
+    assert_eq!(
+        KernelEvaluator::new(&backend)
+            .evaluate_kernel(body, None, &[RuntimeValue::Int(3)], &BTreeMap::new())
+            .unwrap(),
+        RuntimeValue::Bool(true)
+    );
+}
+
+#[test]
+fn native_callable_adapter_validation_rejects_changed_provenance_and_cyclic_values() {
+    let backend = lower_text(
+        "invalid-callable-adapter.aivi",
+        r#"
+fun same:Eq A => A -> A -> Bool = left right => left == right
+value result:Bool = same () ()
+"#,
+    );
+    let (kernel, expr, value, adapter) = backend
+        .kernels()
+        .iter()
+        .find_map(|(kernel, body)| {
+            body.exprs()
+                .iter()
+                .find_map(|(expr, node)| match node.kind {
+                    aivi_backend::KernelExprKind::CallableAdapter { value, adapter } => {
+                        Some((kernel, expr, value, adapter))
+                    }
+                    _ => None,
+                })
+        })
+        .expect("Unit dictionary requires an adapter");
+    for mutation in 0..8 {
+        let mut malformed = backend.clone();
+        match mutation {
+            0 => {
+                malformed
+                    .kernels_mut()
+                    .get_mut(kernel)
+                    .unwrap()
+                    .exprs_mut()
+                    .get_mut(expr)
+                    .unwrap()
+                    .kind = aivi_backend::KernelExprKind::CallableAdapter {
+                    value: expr,
+                    adapter,
+                }
+            }
+            1 => {
+                malformed
+                    .kernels_mut()
+                    .get_mut(kernel)
+                    .unwrap()
+                    .exprs_mut()
+                    .get_mut(expr)
+                    .unwrap()
+                    .kind = aivi_backend::KernelExprKind::CallableAdapter {
+                    value,
+                    adapter: find_item(&backend, "same"),
+                }
+            }
+            2 => {
+                let body = malformed.items()[adapter].body.unwrap();
+                if let aivi_backend::KernelOriginKind::CallableAdapter {
+                    bound_arguments, ..
+                } = &mut malformed.kernels_mut().get_mut(body).unwrap().origin.kind
+                {
+                    *bound_arguments = u32::MAX;
+                }
+            }
+            3 => {
+                let body = malformed.items()[adapter].body.unwrap();
+                if let aivi_backend::KernelOriginKind::CallableAdapter { target, .. } =
+                    &mut malformed.kernels_mut().get_mut(body).unwrap().origin.kind
+                {
+                    *target = adapter;
+                }
+            }
+            4 => {
+                let body = malformed.items()[adapter].body.unwrap();
+                let kernel = malformed.kernels_mut().get_mut(body).unwrap();
+                let root = kernel.root;
+                if let aivi_backend::KernelExprKind::Apply { arguments, .. } =
+                    &mut kernel.exprs_mut().get_mut(root).unwrap().kind
+                {
+                    arguments.swap(0, 1);
+                }
+            }
+            5 => {
+                let body = malformed.items()[adapter].body.unwrap();
+                let kernel = malformed.kernels_mut().get_mut(body).unwrap();
+                let layout = kernel.environment[0];
+                let root = kernel.root;
+                kernel.exprs_mut().get_mut(root).unwrap().layout = layout;
+            }
+            6 => {
+                malformed.items_mut().get_mut(adapter).unwrap().kind =
+                    aivi_backend::ItemKind::Function;
+            }
+            7 => malformed.items_mut().get_mut(adapter).unwrap().body = None,
+            _ => unreachable!(),
+        }
+        assert!(
+            validate_program(&malformed)
+                .unwrap_err()
+                .errors()
+                .iter()
+                .any(|error| matches!(
+                    error,
+                aivi_backend::ValidationError::InvalidCallableAdapter { .. }
+                | aivi_backend::ValidationError::InvalidCallableAdapterItem { .. }
+                )),
+            "malformed adapter case {mutation}"
         );
     }
 }
