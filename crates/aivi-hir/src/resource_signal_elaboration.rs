@@ -907,6 +907,7 @@ fn builtin_term_name(builtin: BuiltinTerm) -> &'static str {
         BuiltinTerm::Err => "Err",
         BuiltinTerm::Valid => "Valid",
         BuiltinTerm::Invalid => "Invalid",
+        BuiltinTerm::Unit => "()",
     }
 }
 

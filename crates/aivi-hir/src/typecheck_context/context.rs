@@ -442,7 +442,17 @@ impl<'a> GateTypeContext<'a> {
     }
 
     pub(crate) fn case_subject_shape(&mut self, subject: &GateType) -> Option<CaseSubjectShape> {
+        let expanded = subject.expanded_alias_type();
+        let subject = expanded.as_ref().unwrap_or(subject);
         match subject {
+            GateType::Primitive(BuiltinType::Unit) => Some(CaseSubjectShape {
+                constructors: vec![CaseConstructorShape {
+                    key: CaseConstructorKey::Builtin(BuiltinTerm::Unit),
+                    display: "()".to_owned(),
+                    span: None,
+                    field_types: Some(Vec::new()),
+                }],
+            }),
             GateType::Primitive(BuiltinType::Bool) => Some(CaseSubjectShape {
                 constructors: vec![
                     CaseConstructorShape {
@@ -610,7 +620,16 @@ impl<'a> GateTypeContext<'a> {
         pattern_id: PatternId,
         subject: &GateType,
     ) -> GateExprEnv {
+        self.case_pattern_info(pattern_id, subject).0
+    }
+
+    pub(crate) fn case_pattern_info(
+        &mut self,
+        pattern_id: PatternId,
+        subject: &GateType,
+    ) -> (GateExprEnv, Vec<GateIssue>) {
         let mut env = GateExprEnv::default();
+        let mut issues = Vec::new();
         let mut work = vec![(pattern_id, subject.clone())];
         while let Some((pattern_id, subject_ty)) = work.pop() {
             let Some(pattern) = self.module.patterns().get(pattern_id).cloned() else {
@@ -642,7 +661,9 @@ impl<'a> GateTypeContext<'a> {
                     }
                 }
                 PatternKind::List { elements, rest } => {
-                    let GateType::List(element_ty) = &subject_ty else {
+                    let expanded = subject_ty.expanded_alias_type();
+                    let subject_shape = expanded.as_ref().unwrap_or(&subject_ty);
+                    let GateType::List(element_ty) = subject_shape else {
                         continue;
                     };
                     for element in elements.into_iter().rev() {
@@ -701,6 +722,17 @@ impl<'a> GateTypeContext<'a> {
                 PatternKind::Constructor { callee, arguments } => {
                     let Some(field_types) = self.case_pattern_field_types(&callee, &subject_ty)
                     else {
+                        if matches!(
+                            callee.resolution.as_ref(),
+                            ResolutionState::Resolved(TermResolution::Builtin(BuiltinTerm::Unit))
+                        ) {
+                            issues.push(GateIssue::InvalidPipeStageInput {
+                                span: pattern.span,
+                                stage: "Unit pattern",
+                                expected: "Unit".to_owned(),
+                                actual: subject_ty.to_string(),
+                            });
+                        }
                         continue;
                     };
                     if field_types.len() != arguments.len() {
@@ -712,7 +744,7 @@ impl<'a> GateTypeContext<'a> {
                 }
             }
         }
-        env
+        (env, issues)
     }
 
     pub(crate) fn case_pattern_field_types(
@@ -5418,6 +5450,19 @@ impl<'a> GateTypeContext<'a> {
                     {
                         current = Some(expanded);
                     }
+                    if let Some(callee_ty) = &current
+                        && !matches!(callee_ty, GateType::Arrow { .. })
+                        && !callee_ty.has_type_params()
+                    {
+                        info.issues.push(GateIssue::NonCallableApplication {
+                            span: expr.span,
+                            actual: callee_ty.to_string(),
+                        });
+                        // A rejected callee's shape cannot prove the result.
+                        // Continue inferring arguments so their diagnostics survive.
+                        info.actual = None;
+                        current = None;
+                    }
                     // Extract the expected parameter type from the current Arrow type.
                     // This lets constructors like `None` / `Some` / `Ok` resolve when
                     // the callee's parameter type is known, mirroring the import path.
@@ -5864,6 +5909,9 @@ impl<'a> GateTypeContext<'a> {
                 let (ty, actual) = match builtin {
                     crate::hir::BuiltinTerm::True | crate::hir::BuiltinTerm::False => {
                         (Some(GateType::Primitive(BuiltinType::Bool)), None)
+                    }
+                    crate::hir::BuiltinTerm::Unit => {
+                        (Some(GateType::Primitive(BuiltinType::Unit)), None)
                     }
                     crate::hir::BuiltinTerm::None => (
                         None,
@@ -6510,6 +6558,7 @@ impl<'a> GateTypeContext<'a> {
         arguments: &[SourceOptionActualType],
     ) -> Option<SourceOptionActualType> {
         match (builtin, arguments) {
+            (BuiltinTerm::Unit, []) => Some(SourceOptionActualType::Primitive(BuiltinType::Unit)),
             (BuiltinTerm::True | BuiltinTerm::False, []) => {
                 Some(SourceOptionActualType::Primitive(BuiltinType::Bool))
             }
@@ -8557,9 +8606,9 @@ impl<'a> GateTypeContext<'a> {
                 continue;
             };
             let mut branch_env = case_env.clone();
-            branch_env
-                .locals
-                .extend(self.case_pattern_bindings(*pattern, &branch_subject).locals);
+            let (pattern_env, pattern_issues) = self.case_pattern_info(*pattern, &branch_subject);
+            branch_env.locals.extend(pattern_env.locals);
+            info.issues.extend(pattern_issues);
             let branch = self.infer_pipe_body(*body, &branch_env, &branch_subject);
             let branch_ty = branch.actual();
             info.merge(branch);

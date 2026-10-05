@@ -1239,6 +1239,22 @@ fn resolved_validation_rejects_invalid_record_row_transforms() {
 }
 
 #[test]
+fn unit_case_patterns_cover_the_only_unit_constructor() {
+    let report = validate_resolved_text(
+        "unit-cases.aivi",
+        r#"
+type Unit -> Int
+func inspect = unit => unit ||> () -> 7
+type Option Unit -> Int
+func inspectOption = option => option
+ ||> Some () -> 7
+ ||> None -> 0
+"#,
+    );
+    assert!(report.is_ok(), "{:?}", report.diagnostics());
+}
+
+#[test]
 fn case_exhaustiveness_reports_missing_same_module_sum_constructors() {
     let report = validate_resolved_text(
         "pattern_non_exhaustive_sum.aivi",

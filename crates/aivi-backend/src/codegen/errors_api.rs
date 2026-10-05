@@ -503,6 +503,7 @@ enum ScalarOptionKind {
     Int,
     Float,
     Bool,
+    Unit,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -546,6 +547,7 @@ enum NativeArithmeticKind {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum NativeEqualityShape {
+    Unit,
     Evidence {
         slot: usize,
         callable_layout: LayoutId,
@@ -583,6 +585,7 @@ struct NativeEqualityVariant {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum StaticMaterializationPlan {
+    Unit,
     Int(i64),
     Float(RuntimeFloat),
     Bool(bool),

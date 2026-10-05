@@ -13,6 +13,11 @@ use crate::{
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ValidationError {
+    UnitLiteralLayoutMismatch {
+        kernel: KernelId,
+        expr: KernelExprId,
+        layout: LayoutId,
+    },
     InvalidDerivedEquality {
         kernel: KernelId,
         expr: KernelExprId,
@@ -256,6 +261,14 @@ pub enum ValidationError {
 impl fmt::Display for ValidationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::UnitLiteralLayoutMismatch {
+                kernel,
+                expr,
+                layout,
+            } => write!(
+                f,
+                "Unit literal at kernel {kernel} expression {expr} requires a Unit layout, found layout{layout}"
+            ),
             Self::InvalidDerivedEquality {
                 kernel,
                 expr,
@@ -1493,6 +1506,17 @@ fn validate_kernel(
                 }
             }
             KernelExprKind::BuiltinClassMember(_) => {}
+            KernelExprKind::Builtin(crate::BuiltinTerm::Unit) => {
+                if !program.layouts().get(expr.layout).is_some_and(|layout| {
+                    matches!(layout.kind, LayoutKind::Primitive(PrimitiveType::Unit))
+                }) {
+                    errors.push(ValidationError::UnitLiteralLayoutMismatch {
+                        kernel: kernel_id,
+                        expr: expr_id,
+                        layout: expr.layout,
+                    });
+                }
+            }
             KernelExprKind::SumConstructor(_)
             | KernelExprKind::DomainMember(_)
             | KernelExprKind::Builtin(_)

@@ -2505,7 +2505,8 @@ fn blocker_for_issue(issue: GateIssue) -> GateElaborationBlocker {
         GateIssue::UnknownField { path, subject, .. } => {
             GateElaborationBlocker::UnknownField { path, subject }
         }
-        GateIssue::UnknownLiteralSuffix { span, .. }
+        GateIssue::NonCallableApplication { span, .. }
+        | GateIssue::UnknownLiteralSuffix { span, .. }
         | GateIssue::AmbiguousLiteralSuffix { span, .. }
         | GateIssue::AmbiguousDomainMember { span, .. }
         | GateIssue::AmbientSubjectOutsidePipe { span, .. }

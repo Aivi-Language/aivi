@@ -479,6 +479,7 @@ fn blocker_for_branch_issue(
             }
         }
         GateIssue::AmbiguousDomainMember { .. }
+        | GateIssue::NonCallableApplication { .. }
         | GateIssue::UnknownLiteralSuffix { .. }
         | GateIssue::AmbiguousLiteralSuffix { .. }
         | GateIssue::AmbientSubjectOutsidePipe { .. }

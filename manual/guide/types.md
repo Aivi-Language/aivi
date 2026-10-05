@@ -12,6 +12,19 @@ AIVI is statically typed. The compiler knows the type of every expression before
 | `Text` | UTF-8 text | `"hello"` |
 | `Unit` | A type with one value | `()` |
 
+`()` constructs the sole `Unit` value. It also matches that value in a pattern.
+Use `Unit` in type annotations; `()` is an expression or pattern spelling.
+Tuples contain at least two elements.
+
+```aivi
+value done : Unit = ()
+
+type Unit -> Int
+func inspect = unit => unit ||> () -> 7
+
+value observed : Int = inspect done
+```
+
 ## `type` for aliases and records
 
 Use `type` when you want a plain alias or a record shape:

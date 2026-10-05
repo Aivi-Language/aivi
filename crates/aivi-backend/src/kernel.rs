@@ -19,6 +19,8 @@ pub enum BuiltinTerm {
     Err,
     Valid,
     Invalid,
+    /// The sole Unit value, spelled `()` in expressions and patterns.
+    Unit,
 }
 
 pub use aivi_core::{
@@ -40,6 +42,7 @@ impl fmt::Display for BuiltinTerm {
             Self::Err => f.write_str("Err"),
             Self::Valid => f.write_str("Valid"),
             Self::Invalid => f.write_str("Invalid"),
+            Self::Unit => f.write_str("()"),
         }
     }
 }

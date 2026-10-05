@@ -37,6 +37,76 @@ impl Drop for TempDir {
 }
 
 #[test]
+fn unit_values_execute_through_class_callbacks_patterns_and_cached_sources() {
+    let dir = TempDir::new("unit-class-callbacks");
+    dir.write(
+        "owner.aivi",
+        "type Completion = Unit\nexport (Completion)\n",
+    );
+    let path = dir.write("main.aivi", r#"
+use owner (Completion)
+type Unit -> Int
+func inspect = unit => unit ||> () -> 7
+type Completion -> Int
+func inspectAlias = unit => unit ||> () -> 7
+value completed : Completion = ()
+type Eq A => A -> A -> Bool
+func same = left right => left == right
+type (A -> B) -> A -> B
+func invoke = callback item => callback item
+type A -> Unit
+func discard = item => ()
+type Wrapped = Wrapped Unit
+value pair : (Unit, Int) = ((), 7)
+value record : { done: Unit, number: Int } = { done: (), number: 7 }
+value optional : Option Unit = Some ()
+value lifted : Option Unit = pure ()
+value checked : Result Text Unit = Ok ()
+value validated : Validation Text Unit = Valid ()
+value wrapped : Wrapped = Wrapped ()
+type Option Unit -> Bool
+func optionMatches = item => item
+ ||> Some () -> True
+ ||> None -> False
+type Result Text Unit -> Bool
+func resultMatches = item => item
+ ||> Ok () -> True
+ ||> Err message -> False
+type Validation Text Unit -> Bool
+func validationMatches = item => item
+ ||> Valid () -> True
+ ||> Invalid message -> False
+type Wrapped -> Bool
+func wrappedMatches = item => item ||> Wrapped () -> True
+@test
+value classEquality : Task Text Bool = pure (same () ())
+@test
+value callback : Task Text Bool = pure (invoke inspect () == 7)
+@test
+value functor : Task Text Bool = pure (map discard [1, 2] == [(), ()])
+@test
+value applicative : Task Text Bool = pure (lifted == Some ())
+@test
+value aggregate : Task Text Bool = pure (pair == ((), 7) and record.done == ())
+@test
+value constructors : Task Text Bool = pure (optionMatches optional and resultMatches checked and validationMatches validated and wrappedMatches wrapped)
+@test
+value aliased : Task Text Bool = pure (inspectAlias completed == 7)
+"#);
+    for _ in 0..2 {
+        let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+            .arg("test")
+            .arg(&path)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        assert!(stdout.contains("7 passed; 0 failed; 7 total"), "{stdout}");
+    }
+}
+
+#[test]
 fn inline_instance_closures_execute_through_facades_and_method_dictionaries() {
     let dir = TempDir::new("inline-instance-closures");
     dir.write(

@@ -242,7 +242,10 @@ impl<'a> ProgramLowerer<'a> {
                 abi: AbiPassMode::ByValue,
                 kind:
                     LayoutKind::Primitive(
-                        PrimitiveType::Int | PrimitiveType::Float | PrimitiveType::Bool,
+                        PrimitiveType::Int
+                        | PrimitiveType::Float
+                        | PrimitiveType::Bool
+                        | PrimitiveType::Unit,
                     ),
             } => AbiPassMode::ByValue,
             _ => AbiPassMode::ByReference,
@@ -3337,6 +3340,10 @@ impl<'a> ProgramLowerer<'a> {
                                         BuiltinTerm::True | BuiltinTerm::False,
                                         LayoutKind::Primitive(PrimitiveType::Bool),
                                     ) => Vec::new(),
+                                    (
+                                        BuiltinTerm::Unit,
+                                        LayoutKind::Primitive(PrimitiveType::Unit),
+                                    ) => Vec::new(),
                                     (BuiltinTerm::None, LayoutKind::Option { .. }) => Vec::new(),
                                     (BuiltinTerm::Some, LayoutKind::Option { element }) => {
                                         vec![*element]
@@ -4277,6 +4284,7 @@ fn map_builtin_term(term: HirBuiltinTerm) -> BuiltinTerm {
         HirBuiltinTerm::Err => BuiltinTerm::Err,
         HirBuiltinTerm::Valid => BuiltinTerm::Valid,
         HirBuiltinTerm::Invalid => BuiltinTerm::Invalid,
+        HirBuiltinTerm::Unit => BuiltinTerm::Unit,
     }
 }
 

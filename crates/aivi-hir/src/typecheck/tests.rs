@@ -28,6 +28,50 @@ fn typecheck_text(path: &str, text: &str) -> TypeCheckReport {
 }
 
 #[test]
+fn unit_literal_inference_and_exhaustive_patterns_preserve_primitive_type() {
+    let report = typecheck_text(
+        "unit.aivi",
+        r#"
+value inferred = ()
+value explicit : Unit = ()
+type Unit -> Int
+func inspect = unit => unit ||> () -> 7
+type A -> A
+func identity = item => item
+value applied : Unit = identity ()
+value aggregate : (Unit, Option Unit) = ((), Some ())
+value same : Bool = () == ()
+type Completion = Unit
+value completed : Completion = ()
+type Completion -> Int
+func inspectAlias = unit => unit ||> () -> 7
+value aliasedResult : Int = inspectAlias completed
+"#,
+    );
+    assert!(report.is_ok(), "{:?}", report.diagnostics());
+}
+
+#[test]
+fn unit_literals_and_patterns_reject_non_unit_contracts_and_calls() {
+    for source in [
+        "value bad : Int = ()\n",
+        "value bad : Bool = ()\n",
+        "value bad : Unit = () 1\n",
+        "type Int -> Int\nfunc bad = number => number ||> () -> 7\n",
+        "type Bool -> Int\nfunc bad = flag => flag ||> () -> 7\n",
+        "value bad = () 1\n",
+        "value bad : Bool = True 1\n",
+        "value bad : Int = 1 2\n",
+        "type Option Int -> Int\nfunc bad = value => value ||> Some () -> 7 ||> None -> 0\n",
+        "type (Unit, Int) -> Int\nfunc bad = value => value ||> ((), ()) -> 7\n",
+        "type Items = (List Int)\ntype Items -> Int\nfunc bad = items => items ||> [()] -> 7 ||> _ -> 0\n",
+    ] {
+        let report = typecheck_text("invalid-unit.aivi", source);
+        assert!(!report.is_ok(), "invalid Unit contract accepted: {source}");
+    }
+}
+
+#[test]
 fn definitive_contracts_report_unknown_evidence_without_changing_quiet_probes() {
     let module = lowered_module_text(
         "unknown-contract-evidence.aivi",

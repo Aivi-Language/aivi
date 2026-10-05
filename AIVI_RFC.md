@@ -506,7 +506,7 @@ Full type-level lambdas are deferred.
 - `BigInt`
 - `Bool`
 - `Text`
-- `Unit`
+- `Unit` — one value, spelled `()` in expressions and patterns; annotations use `Unit`
 - `Bytes`
 - `List A`
 - `Map K V`

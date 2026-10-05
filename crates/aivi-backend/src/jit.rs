@@ -903,6 +903,33 @@ impl TaskFunctionApplier for NativeOnlyExecutionEngine<'_> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn inline_unit_options_preserve_the_two_inhabitants_and_reject_invalid_bits() {
+        use super::*;
+        for (value, bits) in [
+            (RuntimeValue::OptionNone, 0),
+            (RuntimeValue::OptionSome(Box::new(RuntimeValue::Unit)), 1),
+        ] {
+            assert_eq!(
+                pack_inline_option(ScalarOptionKind::Unit, &value),
+                Some(bits)
+            );
+            assert_eq!(
+                unpack_inline_option(ScalarOptionKind::Unit, bits),
+                Some(value)
+            );
+        }
+        assert!(
+            pack_inline_option(
+                ScalarOptionKind::Unit,
+                &RuntimeValue::OptionSome(Box::new(RuntimeValue::Bool(false)))
+            )
+            .is_none()
+        );
+        for invalid in [2, 1u128 << 64, (1u128 << 64) | 1, u128::MAX] {
+            assert!(unpack_inline_option(ScalarOptionKind::Unit, invalid).is_none());
+        }
+    }
     use super::LazyJitExecutionEngine;
     use crate::{
         BackendExecutionOptions, ItemId, ItemKind, Program, lower_module as lower_backend_module,
@@ -1244,7 +1271,7 @@ pub struct NativeKernelPlan {
     imported_item_slot_plans: Vec<MarshalPlan>,
 }
 
-const FROZEN_NATIVE_KERNEL_ABI_VERSION: u32 = 1;
+const FROZEN_NATIVE_KERNEL_ABI_VERSION: u32 = 2;
 
 fn wrap_native_one(error: CodegenError) -> CodegenErrors {
     CodegenErrors::new(vec![error])
@@ -1610,6 +1637,7 @@ pub(crate) enum ScalarOptionKind {
     Int,
     Float,
     Bool,
+    Unit,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -1824,6 +1852,9 @@ impl MarshalPlan {
                     (AbiPassMode::ByValue, LayoutKind::Primitive(PrimitiveType::Bool)) => {
                         ScalarOptionKind::Bool
                     }
+                    (AbiPassMode::ByValue, LayoutKind::Primitive(PrimitiveType::Unit)) => {
+                        ScalarOptionKind::Unit
+                    }
                     _ => return None,
                 };
                 MarshalPlanKind::InlineOption(kind)
@@ -2024,6 +2055,10 @@ impl MarshalPlan {
             ) => {
                 matches!(value.as_ref(), RuntimeValue::Bool(_))
             }
+            (
+                MarshalPlanKind::InlineOption(ScalarOptionKind::Unit),
+                RuntimeValue::OptionSome(value),
+            ) => matches!(value.as_ref(), RuntimeValue::Unit),
             (MarshalPlanKind::NicheOption { .. }, RuntimeValue::OptionNone) => true,
             (MarshalPlanKind::NicheOption { payload }, RuntimeValue::OptionSome(value)) => {
                 payload.matches(value.as_ref())
@@ -3060,6 +3095,9 @@ fn frozen_scalar_option_kind_for_layout(
         (AbiPassMode::ByValue, LayoutKind::Primitive(PrimitiveType::Bool)) => {
             Some(ScalarOptionKind::Bool)
         }
+        (AbiPassMode::ByValue, LayoutKind::Primitive(PrimitiveType::Unit)) => {
+            Some(ScalarOptionKind::Unit)
+        }
         _ => None,
     }
 }
@@ -3194,6 +3232,10 @@ fn pack_inline_option(kind: ScalarOptionKind, value: &RuntimeValue) -> Option<u1
             RuntimeValue::Float(value) => Some(encode_inline_option_bits(value.to_f64().to_bits())),
             _ => None,
         },
+        (ScalarOptionKind::Unit, RuntimeValue::OptionSome(value)) => match value.as_ref() {
+            RuntimeValue::Unit => Some(encode_inline_option_bits(0)),
+            _ => None,
+        },
         (ScalarOptionKind::Bool, RuntimeValue::OptionSome(value)) => match value.as_ref() {
             RuntimeValue::Bool(value) => Some(encode_inline_option_bits(u64::from(*value))),
             _ => None,
@@ -3207,6 +3249,11 @@ fn unpack_inline_option(kind: ScalarOptionKind, bits: u128) -> Option<RuntimeVal
         ScalarOptionKind::Int => decode_inline_int_option(bits),
         ScalarOptionKind::Float => decode_inline_float_option(bits),
         ScalarOptionKind::Bool => decode_inline_bool_option(bits),
+        ScalarOptionKind::Unit => match bits {
+            0 => Some(RuntimeValue::OptionNone),
+            1 => Some(RuntimeValue::OptionSome(Box::new(RuntimeValue::Unit))),
+            _ => None,
+        },
     }
 }
 

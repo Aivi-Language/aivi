@@ -57,6 +57,63 @@ fn lower_fixture(path: &str) -> super::LoweringResult {
 }
 
 #[test]
+fn unit_annotations_require_the_named_type() {
+    let result = lower_text("unit-type.aivi", "value wrong : () = ()\n");
+    assert!(result.has_errors());
+    assert!(result.diagnostics().iter().any(|diagnostic| diagnostic.code
+        == Some(aivi_base::DiagnosticCode::new("hir", "short-tuple-type"))));
+}
+
+#[test]
+fn unit_literals_and_patterns_are_nullary_builtins_with_whole_spans() {
+    let text =
+        "value done : Unit = ()\ntype Unit -> Int\nfunc inspect = unit => unit ||> () -> 7\n";
+    let result = lower_text("unit.aivi", text);
+    assert!(!result.has_errors(), "{:?}", result.diagnostics());
+    let module = result.module();
+    let literal = module
+        .exprs()
+        .iter()
+        .find_map(|(_, expr)| match &expr.kind {
+            ExprKind::Name(reference)
+                if reference.path.segments().iter().last().unwrap().text() == "()" =>
+            {
+                Some(expr)
+            }
+            _ => None,
+        })
+        .expect("Unit literal");
+    assert_eq!(literal.span.span().len(), 2);
+    let pattern = module
+        .patterns()
+        .iter()
+        .find_map(|(_, pattern)| match &pattern.kind {
+            crate::PatternKind::Constructor { callee, arguments }
+                if callee.path.segments().iter().last().unwrap().text() == "()" =>
+            {
+                Some((pattern, callee, arguments))
+            }
+            _ => None,
+        })
+        .expect("Unit pattern");
+    assert_eq!(pattern.0.span.span().len(), 2);
+    assert!(pattern.2.is_empty());
+    assert!(matches!(
+        pattern.1.resolution.as_ref(),
+        ResolutionState::Resolved(TermResolution::Builtin(BuiltinTerm::Unit))
+    ));
+    let ExprKind::Name(reference) = &literal.kind else {
+        unreachable!()
+    };
+    assert!(matches!(
+        reference.resolution.as_ref(),
+        ResolutionState::Resolved(TermResolution::Builtin(BuiltinTerm::Unit))
+    ));
+    assert_eq!(reference.span(), literal.span);
+    assert_eq!(pattern.1.span(), pattern.0.span);
+}
+
+#[test]
 fn instances_preserve_class_method_context_binders() {
     for class_first in [false, true] {
         let class = "class Display A = { display : Eq B => A -> B -> Bool }\n";

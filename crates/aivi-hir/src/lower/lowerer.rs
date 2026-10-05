@@ -2414,6 +2414,10 @@ impl<'a> Lowerer<'a> {
                     raw: regex.raw.clone().into_boxed_str(),
                 }),
             }),
+            syn::ExprKind::Tuple(elements) if elements.is_empty() => self.alloc_expr(Expr {
+                span: expr.span,
+                kind: ExprKind::Name(self.unit_reference(expr.span)),
+            }),
             syn::ExprKind::Tuple(elements) => {
                 let elements = elements
                     .iter()
@@ -3581,6 +3585,10 @@ impl<'a> Lowerer<'a> {
                 PatternKind::Text(self.lower_text_literal(text))
             }
             syn::PatternKind::Group(_) => unreachable!("group patterns are handled above"),
+            syn::PatternKind::Tuple(elements) if elements.is_empty() => PatternKind::Constructor {
+                callee: self.unit_reference(pattern.span),
+                arguments: Vec::new(),
+            },
             syn::PatternKind::Tuple(elements) => {
                 let elements = elements
                     .iter()
@@ -3727,6 +3735,10 @@ impl<'a> Lowerer<'a> {
                 }
                 PatternKind::Text(self.lower_text_literal(text))
             }
+            syn::ExprKind::Tuple(elements) if elements.is_empty() => PatternKind::Constructor {
+                callee: self.unit_reference(expr.span),
+                arguments: Vec::new(),
+            },
             syn::ExprKind::Tuple(elements) => {
                 let elements = elements
                     .iter()
@@ -10140,6 +10152,15 @@ impl<'a> Lowerer<'a> {
             span,
             kind: PatternKind::Wildcard,
         })
+    }
+
+    fn unit_reference(&self, span: SourceSpan) -> TermReference {
+        // This spelling cannot be bound by surface declarations. Resolution can
+        // revisit the reference without confusing Unit with a user identifier.
+        TermReference::resolved(
+            self.make_path(&[self.make_name("()", span)]),
+            TermResolution::Builtin(BuiltinTerm::Unit),
+        )
     }
 
     fn make_name(&self, text: &str, span: SourceSpan) -> Name {

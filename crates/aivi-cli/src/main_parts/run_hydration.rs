@@ -2555,7 +2555,8 @@ fn truthy_falsy_payload(
     match (constructor, strip_signal_runtime_value(value.clone())) {
         (BuiltinTerm::True, RuntimeValue::Bool(true))
         | (BuiltinTerm::False, RuntimeValue::Bool(false))
-        | (BuiltinTerm::None, RuntimeValue::OptionNone) => Some(None),
+        | (BuiltinTerm::None, RuntimeValue::OptionNone)
+        | (BuiltinTerm::Unit, RuntimeValue::Unit) => Some(None),
         (BuiltinTerm::Some, RuntimeValue::OptionSome(payload))
         | (BuiltinTerm::Ok, RuntimeValue::ResultOk(payload))
         | (BuiltinTerm::Err, RuntimeValue::ResultErr(payload))

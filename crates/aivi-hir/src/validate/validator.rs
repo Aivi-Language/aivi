@@ -3190,7 +3190,7 @@ impl Validator<'_> {
                 };
                 self.check_source_option_expr_inner(*argument, error, typing, bindings, value_stack)
             }
-            (BuiltinTerm::True | BuiltinTerm::False, _) => return None,
+            (BuiltinTerm::True | BuiltinTerm::False | BuiltinTerm::Unit, _) => return None,
             (
                 BuiltinTerm::Some
                 | BuiltinTerm::Ok
@@ -3790,6 +3790,7 @@ impl Validator<'_> {
         value_stack: &mut Vec<ItemId>,
     ) -> Option<SourceOptionActualType> {
         match (builtin, arguments) {
+            (BuiltinTerm::Unit, []) => Some(SourceOptionActualType::Primitive(BuiltinType::Unit)),
             (BuiltinTerm::True | BuiltinTerm::False, []) => {
                 Some(SourceOptionActualType::Primitive(BuiltinType::Bool))
             }
@@ -5638,6 +5639,14 @@ impl Validator<'_> {
         subject: &GateType,
         typing: &mut GateTypeContext<'_>,
     ) {
+        for case in match_node.cases.iter() {
+            if let Some(ControlNode::Case(case_node)) = self.module.control_nodes().get(*case) {
+                let (_, issues) = typing.case_pattern_info(case_node.pattern, subject);
+                for issue in issues {
+                    self.emit_gate_issue(issue);
+                }
+            }
+        }
         let Some(shape) = typing.case_subject_shape(subject) else {
             return;
         };
@@ -6849,6 +6858,16 @@ impl Validator<'_> {
 
     fn emit_gate_issue(&mut self, issue: GateIssue) {
         match issue {
+            GateIssue::NonCallableApplication { span, actual } => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!("a value of type `{actual}` is not callable"))
+                        .with_code(code("non-callable-application"))
+                        .with_label(DiagnosticLabel::primary(
+                            span,
+                            "application requires a function",
+                        )),
+                );
+            }
             GateIssue::UnknownLiteralSuffix { span, suffix } => {
                 self.diagnostics.push(
                     Diagnostic::error(format!("unknown literal suffix `{suffix}`"))
@@ -7069,6 +7088,16 @@ impl Validator<'_> {
             crate::TruthyFalsyBranchKind::Falsy => "falsy",
         };
         match issue {
+            GateIssue::NonCallableApplication { span, actual } => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!("a value of type `{actual}` is not callable"))
+                        .with_code(code("non-callable-application"))
+                        .with_label(DiagnosticLabel::primary(
+                            span,
+                            "application requires a function",
+                        )),
+                );
+            }
             GateIssue::UnknownLiteralSuffix { span, suffix } => {
                 self.diagnostics.push(
                     Diagnostic::error(format!(
@@ -7298,10 +7327,17 @@ impl Validator<'_> {
 
     fn emit_fanout_issue(&mut self, context: FanoutIssueContext, issue: GateIssue) {
         match (context, issue) {
-            (
-                context,
-                GateIssue::UnknownLiteralSuffix { span, suffix },
-            ) => {
+            (_, GateIssue::NonCallableApplication { span, actual }) => {
+                self.diagnostics.push(
+                    Diagnostic::error(format!("a value of type `{actual}` is not callable"))
+                        .with_code(code("non-callable-application"))
+                        .with_label(DiagnosticLabel::primary(
+                            span,
+                            "application requires a function",
+                        )),
+                );
+            }
+            (context, GateIssue::UnknownLiteralSuffix { span, suffix }) => {
                 let subject = match context {
                     FanoutIssueContext::MapElement => "fan-out body",
                     FanoutIssueContext::JoinCollection => "fan-in body",

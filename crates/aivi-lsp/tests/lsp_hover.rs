@@ -63,6 +63,13 @@ fn hover_markup(result: Option<Hover>) -> String {
 }
 
 #[test]
+fn hover_at_inferred_unit_value_returns_unit_type() {
+    let (state, uri) = open_inline("hover-unit.aivi", "value done = ()\n");
+    let markup = hover_markup(hover(hover_params(uri, 0, 6), state));
+    assert!(markup.contains("value done : Unit"), "{markup}");
+}
+
+#[test]
 fn hover_at_value_name_returns_kind_label() {
     // "value answer = 42" — 'answer' starts at character 6 on line 0
     let (state, uri) = open_inline("hover-value.aivi", "value answer = 42\n");

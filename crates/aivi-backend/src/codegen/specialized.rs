@@ -1726,6 +1726,9 @@ fn replay_scalar_option_kind_for_layout(
         (AbiPassMode::ByValue, LayoutKind::Primitive(PrimitiveType::Bool)) => {
             Some(ScalarOptionKind::Bool)
         }
+        (AbiPassMode::ByValue, LayoutKind::Primitive(PrimitiveType::Unit)) => {
+            Some(ScalarOptionKind::Unit)
+        }
         _ => None,
     }
 }

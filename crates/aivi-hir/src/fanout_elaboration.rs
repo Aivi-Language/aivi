@@ -552,6 +552,7 @@ fn blocker_for_map_issue(issue: GateIssue) -> FanoutElaborationBlocker {
             FanoutElaborationBlocker::MapUnknownField { path, subject }
         }
         GateIssue::AmbiguousDomainMember { .. }
+        | GateIssue::NonCallableApplication { .. }
         | GateIssue::UnknownLiteralSuffix { .. }
         | GateIssue::AmbiguousLiteralSuffix { .. }
         | GateIssue::AmbientSubjectOutsidePipe { .. }
@@ -573,6 +574,7 @@ fn blocker_for_join_issue(issue: GateIssue) -> FanoutElaborationBlocker {
             FanoutElaborationBlocker::JoinUnknownField { path, subject }
         }
         GateIssue::AmbiguousDomainMember { .. }
+        | GateIssue::NonCallableApplication { .. }
         | GateIssue::UnknownLiteralSuffix { .. }
         | GateIssue::AmbiguousLiteralSuffix { .. }
         | GateIssue::AmbientSubjectOutsidePipe { .. }
@@ -640,6 +642,7 @@ fn fanout_filter_issue_blocker(issue: GateIssue, span: SourceSpan) -> FanoutFilt
             FanoutFilterBlocker::UnknownField { path, subject }
         }
         GateIssue::AmbiguousDomainMember { .. }
+        | GateIssue::NonCallableApplication { .. }
         | GateIssue::UnknownLiteralSuffix { .. }
         | GateIssue::AmbiguousLiteralSuffix { .. }
         | GateIssue::AmbientSubjectOutsidePipe { .. }

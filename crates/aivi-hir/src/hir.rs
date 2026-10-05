@@ -259,6 +259,8 @@ pub enum BuiltinTerm {
     Err,
     Valid,
     Invalid,
+    /// The sole Unit value, spelled `()` in expressions and patterns.
+    Unit,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]

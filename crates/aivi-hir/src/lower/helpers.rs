@@ -307,6 +307,7 @@ fn domain_member_surface_key(name: &syn::DomainMemberName) -> String {
 
 fn builtin_term(name: &str) -> Option<BuiltinTerm> {
     match name {
+        "()" => Some(BuiltinTerm::Unit),
         "True" => Some(BuiltinTerm::True),
         "False" => Some(BuiltinTerm::False),
         "None" => Some(BuiltinTerm::None),

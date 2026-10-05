@@ -226,6 +226,16 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                             errors.push(error);
                         }
                     }
+                    KernelExprKind::Builtin(BuiltinTerm::Unit) => {
+                        if let Err(error) = self.require_unit_expression(
+                            kernel_id,
+                            expr_id,
+                            expr.layout,
+                            "Unit literal",
+                        ) {
+                            errors.push(error);
+                        }
+                    }
                     KernelExprKind::Builtin(BuiltinTerm::True | BuiltinTerm::False) => {
                         if let Err(error) = self.require_bool_expression(
                             kernel_id,
@@ -1420,6 +1430,15 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 tasks.push(Task::Visit(entry.key));
                             }
                         }
+                        KernelExprKind::Builtin(BuiltinTerm::Unit) => {
+                            self.require_unit_expression(
+                                kernel_id,
+                                expr_id,
+                                expr.layout,
+                                "Unit literal",
+                            )?;
+                            values.push(builder.ins().iconst(types::I8, 0));
+                        }
                         KernelExprKind::Builtin(BuiltinTerm::True) => {
                             self.require_bool_expression(kernel_id, expr_id, expr.layout, "True")?;
                             values.push(builder.ins().iconst(types::I8, 1));
@@ -2107,6 +2126,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 kernel_id, kernel, expr_id, *left, *right,
                             )?;
                             match &shape {
+                                NativeEqualityShape::Unit => builder.ins().iconst(types::I8, 0),
                                 NativeEqualityShape::Integer => {
                                     builder.ins().icmp(IntCC::NotEqual, lhs, rhs)
                                 }
@@ -4614,29 +4634,13 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         arguments: &[KernelExprId],
     ) -> Result<BuiltinCallPlan, CodegenError> {
         match term {
-            BuiltinTerm::Some => {
-                let detail = format!("builtin constructor `{term}`");
-                let (_parameters, result_layout) = self.require_saturated_callable_call(
-                    kernel_id,
-                    expr_id,
-                    callee,
-                    arguments,
-                    &detail,
-                )?;
-                let [payload] = arguments else {
-                    unreachable!("saturated `Some` call should keep exactly one payload");
-                };
-                let kernel = &self.program.kernels()[kernel_id];
-                let contract = self.require_option_codegen_contract(
-                    kernel_id,
-                    kernel,
-                    expr_id,
-                    Some(*payload),
-                    result_layout,
-                    &detail,
-                )?;
-                Ok(BuiltinCallPlan::OptionSome(contract))
-            }
+            BuiltinTerm::Some => self.require_compilable_option_some_call(
+                kernel_id,
+                expr_id,
+                callee,
+                arguments,
+                &format!("builtin constructor `{term}`"),
+            ),
             BuiltinTerm::None => Err(self.unsupported_expression(
                 kernel_id,
                 expr_id,
@@ -4650,12 +4654,36 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             | BuiltinTerm::Invalid => unreachable!(
                 "builtin constructor `{term}` should be handled as SumConstruction in resolve_direct_apply_plan"
             ),
-            BuiltinTerm::True | BuiltinTerm::False => Err(self.unsupported_expression(
+            BuiltinTerm::True | BuiltinTerm::False | BuiltinTerm::Unit => Err(self.unsupported_expression(
                 kernel_id,
                 expr_id,
-                &format!("Bool literal `{term}` is not callable"),
+                &format!("literal `{term}` is not callable"),
             )),
         }
+    }
+
+    fn require_compilable_option_some_call(
+        &self,
+        kernel_id: KernelId,
+        expr_id: KernelExprId,
+        callee: KernelExprId,
+        arguments: &[KernelExprId],
+        detail: &str,
+    ) -> Result<BuiltinCallPlan, CodegenError> {
+        let (_parameters, result_layout) =
+            self.require_saturated_callable_call(kernel_id, expr_id, callee, arguments, detail)?;
+        let [payload] = arguments else {
+            unreachable!("saturated option construction keeps exactly one payload");
+        };
+        let contract = self.require_option_codegen_contract(
+            kernel_id,
+            &self.program.kernels()[kernel_id],
+            expr_id,
+            Some(*payload),
+            result_layout,
+            detail,
+        )?;
+        Ok(BuiltinCallPlan::OptionSome(contract))
     }
 
     fn require_compilable_builtin_class_member_call(
@@ -4667,6 +4695,15 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         arguments: &[KernelExprId],
     ) -> Result<BuiltinCallPlan, CodegenError> {
         match intrinsic {
+            crate::BuiltinClassMemberIntrinsic::Pure(crate::BuiltinApplicativeCarrier::Option) => {
+                self.require_compilable_option_some_call(
+                    kernel_id,
+                    expr_id,
+                    callee,
+                    arguments,
+                    &format!("builtin class member `{intrinsic:?}`"),
+                )
+            }
             crate::BuiltinClassMemberIntrinsic::Pure(crate::BuiltinApplicativeCarrier::Signal) => {
                 let detail = format!("builtin class member `{intrinsic:?}`");
                 let (_parameters, result_layout) = self.require_saturated_callable_call(
@@ -6108,7 +6145,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     size: 8,
                     align: 8,
                 },
-                LayoutKind::Primitive(PrimitiveType::Bool) => AbiShape {
+                LayoutKind::Primitive(PrimitiveType::Bool | PrimitiveType::Unit) => AbiShape {
                     ty: types::I8,
                     size: 1,
                     align: 1,
@@ -6116,7 +6153,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 _ => return Err(self.unsupported_expression(
                     kernel_id,
                     KernelExprId::from_raw(0),
-                    "erased domain repack currently supports Int, Float, and Bool by-value leaves",
+                    "erased domain repack currently supports Int, Float, Bool, and Unit by-value leaves",
                 )),
             };
         let ptr = self.allocate_static_arena_bytes(kernel_id, abi.size, abi.align, builder)?;
@@ -8177,6 +8214,26 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         }
     }
 
+    fn require_unit_expression(
+        &self,
+        kernel_id: KernelId,
+        expr_id: KernelExprId,
+        layout: LayoutId,
+        detail: &str,
+    ) -> Result<(), CodegenError> {
+        match &self.program.layouts()[layout].kind {
+            LayoutKind::Primitive(PrimitiveType::Unit) => Ok(()),
+            _ => Err(self.unsupported_expression(
+                kernel_id,
+                expr_id,
+                &format!(
+                    "{detail} expects Unit, found `{}`",
+                    self.program.layouts()[layout]
+                ),
+            )),
+        }
+    }
+
     fn require_bool_expression(
         &self,
         kernel_id: KernelId,
@@ -8345,6 +8402,10 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 abi: AbiPassMode::ByValue,
                 kind: LayoutKind::Primitive(PrimitiveType::Bool),
             } => Some(ScalarOptionKind::Bool),
+            Layout {
+                abi: AbiPassMode::ByValue,
+                kind: LayoutKind::Primitive(PrimitiveType::Unit),
+            } => Some(ScalarOptionKind::Unit),
             _ => None,
         }
     }
@@ -8662,6 +8723,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         visited: &mut HashSet<LayoutId>,
     ) -> Result<NativeEqualityShape, CodegenError> {
         match &self.program.layouts()[layout].kind {
+            LayoutKind::Primitive(PrimitiveType::Unit) => Ok(NativeEqualityShape::Unit),
             LayoutKind::Primitive(PrimitiveType::Int)
             | LayoutKind::Primitive(PrimitiveType::Bool) => Ok(NativeEqualityShape::Integer),
             LayoutKind::Primitive(PrimitiveType::Float) => Ok(NativeEqualityShape::Float),
@@ -9029,6 +9091,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 builder.switch_to_block(merge);
                 Ok(builder.block_params(merge)[0])
             }
+            NativeEqualityShape::Unit => Ok(builder.ins().iconst(types::I8, 1)),
             NativeEqualityShape::Integer => Ok(builder.ins().icmp(IntCC::Equal, lhs, rhs)),
             NativeEqualityShape::Float => Ok(builder.ins().fcmp(FloatCC::Equal, lhs, rhs)),
             NativeEqualityShape::Decimal | NativeEqualityShape::BigInt => {
@@ -9344,7 +9407,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                 let bits = builder.ins().bitcast(types::I64, MemFlagsData::new(), payload);
                 builder.ins().uextend(types::I128, bits)
             }
-            ScalarOptionKind::Bool => builder.ins().uextend(types::I128, payload),
+            ScalarOptionKind::Bool | ScalarOptionKind::Unit => {
+                builder.ins().uextend(types::I128, payload)
+            }
         };
         let shifted = builder.ins().ishl_imm_u(payload_bits, 64);
         let tag_i64 = builder.ins().iconst(types::I64, 1);
@@ -10798,6 +10863,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                     let payload_i64 = builder.ins().ireduce(types::I64, shifted);
                     match kind {
                         ScalarOptionKind::Int => payload_i64,
+                        ScalarOptionKind::Unit => builder.ins().iconst(types::I8, 0),
                         ScalarOptionKind::Float => builder.ins().bitcast(
                             cranelift_codegen::ir::types::F64,
                             MemFlagsData::new(),
@@ -10996,6 +11062,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                                 builder.ins().ireduce(types::I64, shifted);
                                             let payload = match kind {
                                                 ScalarOptionKind::Int => payload_i64,
+                                                ScalarOptionKind::Unit => {
+                                                    builder.ins().iconst(types::I8, 0)
+                                                }
                                                 ScalarOptionKind::Float => builder.ins().bitcast(
                                                     cranelift_codegen::ir::types::F64,
                                                     MemFlagsData::new(),
@@ -11033,6 +11102,23 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                 }
                                 None => tests.push(builder.ins().iconst(types::I8, 1)),
                             }
+                        }
+                        crate::InlinePipeConstructor::Builtin(crate::BuiltinTerm::Unit) => {
+                            if !arguments.is_empty()
+                                || !matches!(
+                                    self.program.layouts()[input_layout].kind,
+                                    LayoutKind::Primitive(PrimitiveType::Unit)
+                                )
+                            {
+                                return Err(CodegenError::UnsupportedLayout {
+                                    kernel: kernel_id,
+                                    layout: input_layout,
+                                    detail:
+                                        "Unit patterns require a Unit subject and zero arguments"
+                                            .into(),
+                                });
+                            }
+                            tests.push(builder.ins().iconst(types::I8, 1));
                         }
                         crate::InlinePipeConstructor::Builtin(crate::BuiltinTerm::True) => {
                             if !arguments.is_empty() {
@@ -11388,6 +11474,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                                     let payload_i64 = builder.ins().ireduce(types::I64, shifted);
                                     match kind {
                                         ScalarOptionKind::Int => payload_i64,
+                                        ScalarOptionKind::Unit => {
+                                            builder.ins().iconst(types::I8, 0)
+                                        }
                                         ScalarOptionKind::Float => builder.ins().bitcast(
                                             cranelift_codegen::ir::types::F64,
                                             MemFlagsData::new(),
@@ -11806,6 +11895,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         value: &RuntimeValue,
     ) -> Option<StaticMaterializationPlan> {
         match (&self.program.layouts()[layout].kind, value) {
+            (LayoutKind::Primitive(PrimitiveType::Unit), RuntimeValue::Unit) => {
+                Some(StaticMaterializationPlan::Unit)
+            }
             (LayoutKind::Primitive(PrimitiveType::Int), RuntimeValue::Int(value)) => {
                 Some(StaticMaterializationPlan::Int(*value))
             }
@@ -11868,6 +11960,7 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
         builder: &mut FunctionBuilder<'_>,
     ) -> Result<Value, CodegenError> {
         match plan {
+            StaticMaterializationPlan::Unit => Ok(builder.ins().iconst(types::I8, 0)),
             StaticMaterializationPlan::Int(value) => Ok(builder.ins().iconst(types::I64, value)),
             StaticMaterializationPlan::Float(value) => {
                 Ok(builder.ins().f64const(Ieee64::with_float(value.to_f64())))
@@ -12049,11 +12142,12 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
             (LayoutKind::Primitive(PrimitiveType::Bool), RuntimeValue::Bool(value)) => {
                 Ok(vec![u8::from(*value)])
             }
+            (LayoutKind::Primitive(PrimitiveType::Unit), RuntimeValue::Unit) => Ok(vec![0]),
             _ => Err(self.unsupported_expression(
                 kernel_id,
                 expr_id,
                 &format!(
-                    "{detail} field `{label}` expects a static Int/Float/Bool value for layout{layout}=`{}`, found `{value}`",
+                    "{detail} field `{label}` expects a static Int/Float/Bool/Unit value for layout{layout}=`{}`, found `{value}`",
                     self.program.layouts()[layout]
                 ),
             )),
@@ -12142,6 +12236,9 @@ impl<'a, M: Module> CraneliftCompiler<'a, M> {
                         }
                         KernelExprKind::OptionNone => {
                             values.push(RuntimeValue::OptionNone);
+                        }
+                        KernelExprKind::Builtin(BuiltinTerm::Unit) => {
+                            values.push(RuntimeValue::Unit);
                         }
                         KernelExprKind::Builtin(BuiltinTerm::True) => {
                             values.push(RuntimeValue::Bool(true));

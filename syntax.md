@@ -452,6 +452,9 @@ Rules:
 
 ### 3.4 Records, tuples, lists, maps, sets
 
+`()` constructs the sole primitive `Unit` value and is its nullary pattern.
+Type annotations use `Unit`. Tuples contain at least two elements.
+
 ```aivi
 (1, 2)
 { name: "Ada", age: 36 }

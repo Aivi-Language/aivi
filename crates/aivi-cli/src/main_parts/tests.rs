@@ -490,7 +490,7 @@ fn source_run_cache_discards_images_without_current_type_and_equality_contracts(
     // result-owned reactive operators; revision 29 preceded local alias witnesses.
     // Revision 30 preceded class-method scopes in hoisted instance closures.
     for revision in [
-        "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30",
+        "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31",
     ] {
         let mut legacy = DefaultHasher::new();
         "aivi.source-run-cache".hash(&mut legacy);
@@ -3891,6 +3891,35 @@ value main : Task Text Bool = pure (structural.run 3 == 4 and localComposed.run 
     for source in [owner, facade, entry] {
         fs::remove_file(source).unwrap();
     }
+    for candidate in [&artifact, &reloaded] {
+        assert_eq!(
+            evaluate_pure_headless_result(candidate),
+            RuntimeValue::Bool(true)
+        );
+    }
+}
+
+#[test]
+fn frozen_source_image_preserves_unit_literals_patterns_and_class_evidence() {
+    let workspace = TempDir::new("unit-roundtrip");
+    let entry = workspace.write(
+        "main.aivi",
+        r#"
+type Unit -> Int
+func inspect = unit => unit ||> () -> 7
+type Eq A => A -> A -> Bool
+func same = left right => left == right
+type A -> Unit
+func discard = item => ()
+value main : Task Text Bool = pure (
+    inspect () == 7 and same () () and map discard [1, 2] == [(), ()])
+"#,
+    );
+    let artifact = prepare_run_from_workspace(&workspace, "main.aivi", None).unwrap();
+    let frozen = super::freeze_run_artifact(&artifact).unwrap();
+    let reloaded = super::load_frozen_run_image_from_bytes(&frozen.bytes, None).unwrap();
+    assert!(reloaded.sources.is_none());
+    fs::remove_file(entry).unwrap();
     for candidate in [&artifact, &reloaded] {
         assert_eq!(
             evaluate_pure_headless_result(candidate),

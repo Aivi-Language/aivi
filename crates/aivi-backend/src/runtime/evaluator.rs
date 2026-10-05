@@ -3360,6 +3360,7 @@ fn runtime_i64_like_value(value: i64, preserved_suffix: Option<Box<str>>) -> Run
 
 fn map_builtin(term: BuiltinTerm) -> RuntimeValue {
     match term {
+        BuiltinTerm::Unit => RuntimeValue::Unit,
         BuiltinTerm::True => RuntimeValue::Bool(true),
         BuiltinTerm::False => RuntimeValue::Bool(false),
         BuiltinTerm::None => RuntimeValue::OptionNone,

@@ -497,6 +497,7 @@ impl TruthyFalsyBranch {
             BuiltinTerm::Err => "Err",
             BuiltinTerm::Valid => "Valid",
             BuiltinTerm::Invalid => "Invalid",
+            BuiltinTerm::Unit => "()",
         }
     }
 }
@@ -1024,6 +1025,7 @@ fn constructor_name(term: BuiltinTerm) -> &'static str {
         BuiltinTerm::Err => "Err",
         BuiltinTerm::Valid => "Valid",
         BuiltinTerm::Invalid => "Invalid",
+        BuiltinTerm::Unit => "()",
     }
 }
 

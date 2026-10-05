@@ -2262,7 +2262,7 @@ impl<'a> TypeChecker<'a> {
         let expected_shape = expanded.as_ref().unwrap_or(expected);
         match (builtin, expected_shape) {
             (Some(BuiltinTerm::None), GateType::Option(_)) => Some(true),
-            (Some(BuiltinTerm::True | BuiltinTerm::False), _) => None,
+            (Some(BuiltinTerm::True | BuiltinTerm::False | BuiltinTerm::Unit), _) => None,
             _ => {
                 // Constructor references have a complete arity and carrier
                 // contract even when ordinary inference has no payload evidence.
@@ -3480,6 +3480,11 @@ impl<'a> TypeChecker<'a> {
     fn emit_expr_issues(&mut self, issues: &[GateIssue]) {
         for issue in issues {
             let diagnostic = match issue {
+                GateIssue::NonCallableApplication { span, actual } => {
+                    Diagnostic::error(format!("a value of type `{actual}` is not callable"))
+                        .with_code(code("non-callable-application"))
+                        .with_primary_label(*span, "application requires a function")
+                }
                 GateIssue::UnknownLiteralSuffix { span, suffix } => {
                     Diagnostic::error(format!("unknown literal suffix `{suffix}`"))
                         .with_code(code("unknown-literal-suffix"))

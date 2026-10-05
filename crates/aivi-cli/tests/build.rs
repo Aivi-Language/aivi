@@ -186,6 +186,55 @@ fn launch_stderr_accepts_only_the_known_mesa_dri3_warning() {
 }
 
 #[test]
+fn built_unit_program_runs_after_its_source_is_removed() {
+    let workspace = TempDir::new("build-unit-workspace");
+    workspace.write(
+        "main.aivi",
+        r#"
+type Option Unit -> Bool
+func matches = option => option
+ ||> Some () -> True
+ ||> None -> False
+type A -> A
+func identity = item => item
+value done : Unit = identity ()
+value present : Option Unit = Some ()
+value lifted : Option Unit = pure ()
+value same : Bool = done == () and present == lifted
+
+type Unit -> Text
+func inspect = unit => unit ||> () -> "done"
+type Bool -> Text
+func label = agrees => agrees
+ ||> True -> inspect done
+ ||> False -> "incorrect"
+value main = <Window title={label same} />
+"#,
+    );
+    let entry = workspace.path().join("main.aivi");
+    let output_root = TempDir::new("build-unit-output");
+    let executable = output_root.path().join("unit-app");
+    let output = Command::new(env!("CARGO_BIN_EXE_aivi"))
+        .arg("build")
+        .arg(&entry)
+        .arg("-o")
+        .arg(&executable)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let entries = read_embedded_bundle_entries(&executable);
+    assert!(entries.contains_key("frozen-run-image.bin"));
+    assert!(!entries.keys().any(|name| name.ends_with(".aivi")));
+    fs::remove_file(entry).unwrap();
+    #[cfg(unix)]
+    assert_executable_launches(&executable);
+}
+
+#[test]
 fn build_writes_a_self_contained_runnable_executable() {
     let workspace = TempDir::new("build-static-workspace");
     workspace.write(

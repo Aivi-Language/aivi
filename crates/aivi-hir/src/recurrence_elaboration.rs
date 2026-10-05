@@ -792,6 +792,7 @@ fn recurrence_guard_issue_blocker(
             RecurrenceRuntimeStageBlocker::UnknownField { path, subject }
         }
         GateIssue::AmbiguousDomainMember { .. }
+        | GateIssue::NonCallableApplication { .. }
         | GateIssue::UnknownLiteralSuffix { .. }
         | GateIssue::AmbiguousLiteralSuffix { .. }
         | GateIssue::AmbientSubjectOutsidePipe { .. }

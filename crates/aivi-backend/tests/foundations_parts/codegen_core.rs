@@ -1,4 +1,178 @@
 #[test]
+fn unit_literals_reject_malformed_non_unit_backend_layouts() {
+    let mut backend = lower_text(
+        "malformed-unit.aivi",
+        "value unit : Unit = ()\nvalue number = 7\n",
+    );
+    let int_layout = backend
+        .layouts()
+        .iter()
+        .find_map(|(id, layout)| {
+            matches!(
+                layout.kind,
+                LayoutKind::Primitive(aivi_backend::PrimitiveType::Int)
+            )
+            .then_some(id)
+        })
+        .unwrap();
+    let (kernel_id, expr_id) = backend
+        .kernels()
+        .iter()
+        .find_map(|(id, kernel)| {
+            kernel.exprs().iter().find_map(|(expr_id, expr)| {
+                matches!(
+                    expr.kind,
+                    KernelExprKind::Builtin(aivi_backend::BuiltinTerm::Unit)
+                )
+                .then_some((id, expr_id))
+            })
+        })
+        .unwrap();
+    backend
+        .kernels_mut()
+        .get_mut(kernel_id)
+        .unwrap()
+        .exprs_mut()
+        .get_mut(expr_id)
+        .unwrap()
+        .layout = int_layout;
+    assert!(
+        validate_program(&backend)
+            .unwrap_err()
+            .errors()
+            .iter()
+            .any(|error| matches!(
+                error,
+                aivi_backend::ValidationError::UnitLiteralLayoutMismatch { .. }
+            ))
+    );
+    assert!(compile_program(&backend).is_err());
+}
+
+#[test]
+fn option_pure_uses_constructor_native_contracts() {
+    let backend = lower_text(
+        "option-pure.aivi",
+        r#"
+value unit : Option Unit = pure ()
+value number : Option Int = pure 7
+value decimal : Option Float = pure 2.5
+value flag : Option Bool = pure True
+value text : Option Text = pure "done"
+"#,
+    );
+    let executable = aivi_backend::BackendExecutableProgram::interpreted(&backend);
+    let mut engine = executable.create_engine();
+    let mut evaluator = KernelEvaluator::new(&backend);
+    for (name, payload) in [
+        ("unit", RuntimeValue::Unit),
+        ("number", RuntimeValue::Int(7)),
+        (
+            "decimal",
+            RuntimeValue::Float(RuntimeFloat::parse_literal("2.5").unwrap()),
+        ),
+        ("flag", RuntimeValue::Bool(true)),
+        ("text", RuntimeValue::Text("done".into())),
+    ] {
+        let expected = RuntimeValue::OptionSome(Box::new(payload));
+        let item = find_item(&backend, name);
+        assert_eq!(
+            evaluator.evaluate_item(item, &BTreeMap::new()).unwrap(),
+            expected,
+            "interpreted {name}"
+        );
+        assert_eq!(
+            engine.evaluate_item(item, &BTreeMap::new()).unwrap(),
+            expected,
+            "native {name}"
+        );
+    }
+    compile_program(&backend).expect("Option pure kernels compile to native object code");
+}
+
+#[test]
+fn unit_literals_patterns_and_aggregates_execute_in_both_engines() {
+    let backend = lower_text(
+        "unit.aivi",
+        r#"
+value literal : Unit = ()
+type Unit -> Int
+func inspect = unit => unit ||> () -> 7
+type A -> A
+func identity = value => value
+value applied : Unit = identity ()
+value observed : Int = inspect ()
+value aggregate : (Unit, Int) = ((), 9)
+value record : { done: Unit, number: Int } = { done: (), number: 9 }
+value optional : Option Unit = Some ()
+type Option Unit -> Option Unit
+func keepOption = option => option
+value optionalCall : Option Unit = keepOption (Some ())
+type Option Unit -> Int
+func countOption = option => option
+ ||> Some () -> 1
+ ||> None -> 0
+value presentCount : Int = countOption (Some ())
+value absentCount : Int = countOption None
+value units : List Unit = [(), ()]
+value singleton : Bool = () == ()
+value unequal : Bool = () != ()
+value rendered : Text = "unit={()}"
+"#,
+    );
+    let executable = aivi_backend::BackendExecutableProgram::interpreted(&backend);
+    let mut engine = executable.create_engine();
+    let mut evaluator = KernelEvaluator::new(&backend);
+    for (name, expected) in [
+        ("literal", RuntimeValue::Unit),
+        ("applied", RuntimeValue::Unit),
+        ("observed", RuntimeValue::Int(7)),
+        (
+            "aggregate",
+            RuntimeValue::Tuple(vec![RuntimeValue::Unit, RuntimeValue::Int(9)]),
+        ),
+        (
+            "optional",
+            RuntimeValue::OptionSome(Box::new(RuntimeValue::Unit)),
+        ),
+        (
+            "optionalCall",
+            RuntimeValue::OptionSome(Box::new(RuntimeValue::Unit)),
+        ),
+        ("presentCount", RuntimeValue::Int(1)),
+        ("absentCount", RuntimeValue::Int(0)),
+        (
+            "units",
+            RuntimeValue::List(vec![RuntimeValue::Unit, RuntimeValue::Unit]),
+        ),
+        ("singleton", RuntimeValue::Bool(true)),
+        ("unequal", RuntimeValue::Bool(false)),
+        ("rendered", RuntimeValue::Text("unit=()".into())),
+    ] {
+        let item = find_item(&backend, name);
+        assert_eq!(
+            evaluator.evaluate_item(item, &BTreeMap::new()).unwrap(),
+            expected,
+            "interpreted {name}"
+        );
+        assert_eq!(
+            engine.evaluate_item(item, &BTreeMap::new()).unwrap(),
+            expected,
+            "native {name}"
+        );
+    }
+    assert_eq!(
+        evaluator
+            .evaluate_item(find_item(&backend, "record"), &BTreeMap::new())
+            .unwrap(),
+        engine
+            .evaluate_item(find_item(&backend, "record"), &BTreeMap::new())
+            .unwrap()
+    );
+    compile_program(&backend).expect("Unit kernels compile to native object code");
+}
+
+#[test]
 fn cranelift_codegen_compiles_scalar_gate_kernels() {
     let core = manual_core_gate_stage(
         CoreType::Primitive(BuiltinType::Int),

@@ -5672,7 +5672,8 @@ impl<'a> GeneralExprElaborator<'a> {
                         kind: GateRuntimeUnsupportedKind::ApplicativeCluster,
                     }
                 }
-                GateIssue::AmbiguousDomainOperator { span, .. } => {
+                GateIssue::NonCallableApplication { span, .. }
+                | GateIssue::AmbiguousDomainOperator { span, .. } => {
                     GeneralExprBlocker::UnknownExprType { span }
                 }
             })
@@ -5808,6 +5809,9 @@ impl<'a> GeneralExprElaborator<'a> {
         subject: &GateType,
     ) -> Option<Vec<GateType>> {
         match callee.resolution.as_ref() {
+            ResolutionState::Resolved(TermResolution::Builtin(BuiltinTerm::Unit)) => {
+                matches!(subject, GateType::Primitive(crate::BuiltinType::Unit)).then(Vec::new)
+            }
             ResolutionState::Resolved(TermResolution::Builtin(BuiltinTerm::True))
             | ResolutionState::Resolved(TermResolution::Builtin(BuiltinTerm::False)) => {
                 matches!(subject, GateType::Primitive(crate::BuiltinType::Bool)).then(Vec::new)
